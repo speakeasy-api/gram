@@ -34,6 +34,7 @@ trackedFiles:
   src/core.ts: {}
   src/funcs/adminAssignOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminBackfillMcpAuthGrants.ts: {}
+  src/funcs/adminBackfillMcpConnectGrants.ts: {}
   src/funcs/adminBulkUpdateAccountType.ts: {}
   src/funcs/adminCancelStripeSubscription.ts: {}
   src/funcs/adminChangeTrialEndDate.ts: {}
@@ -84,7 +85,6 @@ trackedFiles:
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminGetUpstreamOAuthMigrationStatus.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
-  src/funcs/adminListExternalMcpMigrationCandidates.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
   src/funcs/adminListOnboardingPlaybooks.ts: {}
@@ -104,9 +104,7 @@ trackedFiles:
   src/funcs/adminListUsers.ts: {}
   src/funcs/adminLogout.ts: {}
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
-  src/funcs/adminMigrateExternalMcpServers.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
-  src/funcs/adminPreviewExternalMcpMigration.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
   src/funcs/adminRefreshGlobalIssuerMetadata.ts: {}
@@ -153,6 +151,7 @@ trackedFiles:
   src/lib/url.ts: {}
   src/models/components/adminauditlog.ts: {}
   src/models/components/adminbackfillmcpauthgrantsresult.ts: {}
+  src/models/components/adminbackfillmcpconnectgrantsresult.ts: {}
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
@@ -160,10 +159,6 @@ trackedFiles:
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
   src/models/components/admindeviceagentcell.ts: {}
-  src/models/components/adminexternalmcpmigrationcandidate.ts: {}
-  src/models/components/adminexternalmcpmigrationoutcome.ts: {}
-  src/models/components/adminexternalmcpmigrationrequest.ts: {}
-  src/models/components/adminexternalmcpmigrationresult.ts: {}
   src/models/components/adminhookclientorganization.ts: {}
   src/models/components/adminhookclientsessioncell.ts: {}
   src/models/components/adminhookclientsresult.ts: {}
@@ -174,7 +169,6 @@ trackedFiles:
   src/models/components/admininferencekeyrepairresult.ts: {}
   src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
-  src/models/components/adminlistexternalmcpmigrationcandidatesresult.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
@@ -259,6 +253,7 @@ trackedFiles:
   src/models/components/adminuserorganization.ts: {}
   src/models/components/asset.ts: {}
   src/models/components/assignorganizationonboardingplaybookrequestbody.ts: {}
+  src/models/components/backfillmcpconnectgrantsrequestbody.ts: {}
   src/models/components/bulkupdateaccounttyperequestbody.ts: {}
   src/models/components/cancelstripesubscriptionrequestbody.ts: {}
   src/models/components/changetrialenddaterequestbody.ts: {}
@@ -291,10 +286,8 @@ trackedFiles:
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
   src/models/components/meterusagewindow.ts: {}
-  src/models/components/migrateexternalmcpserversrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
-  src/models/components/previewexternalmcpmigrationrequestbody.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/promoteregistrycandidaterequestbody.ts: {}
   src/models/components/rearmtrialrequestbody.ts: {}
@@ -386,6 +379,7 @@ trackedFiles:
   src/react-query/_context.tsx: {}
   src/react-query/_types.ts: {}
   src/react-query/adminBackfillMcpAuthGrants.ts: {}
+  src/react-query/adminBackfillMcpConnectGrants.ts: {}
   src/react-query/adminBulkUpdateAccountType.ts: {}
   src/react-query/adminCancelStripeSubscription.ts: {}
   src/react-query/adminChangeTrialEndDate.ts: {}
@@ -452,8 +446,6 @@ trackedFiles:
   src/react-query/adminGetUpstreamOAuthMigrationStatus.ts: {}
   src/react-query/adminListCustomerUsage.core.ts: {}
   src/react-query/adminListCustomerUsage.ts: {}
-  src/react-query/adminListExternalMcpMigrationCandidates.core.ts: {}
-  src/react-query/adminListExternalMcpMigrationCandidates.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/react-query/adminListGlobalIssuers.core.ts: {}
@@ -484,7 +476,6 @@ trackedFiles:
   src/react-query/adminListUsers.ts: {}
   src/react-query/adminLogout.ts: {}
   src/react-query/adminMarkEnterpriseTrialConverted.ts: {}
-  src/react-query/adminMigrateExternalMcpServers.ts: {}
   src/react-query/adminMigrateToGlobalIssuer.ts: {}
   src/react-query/adminOnboardingPlaybooks.core.ts: {}
   src/react-query/adminOnboardingPlaybooks.ts: {}
@@ -500,7 +491,6 @@ trackedFiles:
   src/react-query/adminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/adminOrganizationOnboardingStack.core.ts: {}
   src/react-query/adminOrganizationOnboardingStack.ts: {}
-  src/react-query/adminPreviewExternalMcpMigration.ts: {}
   src/react-query/adminPromoteRegistryCandidate.ts: {}
   src/react-query/adminRearmTrial.ts: {}
   src/react-query/adminRefreshGlobalIssuerMetadata.ts: {}
@@ -588,6 +578,17 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminBackfillMcpConnectGrants:
+    speakeasy-default-admin-backfill-mcp-connect-grants:
+      requestBody:
+        application/json: {}
+      responses:
+        "200":
+          application/json: {"extended": 131344, "inserted": 368827, "taken_over": 395451}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminBulkUpdateAccountType:
     speakeasy-default-admin-bulk-update-account-type:
       requestBody:
@@ -1208,7 +1209,7 @@ examples:
           window_days: 30
       responses:
         "200":
-          application/json: {"cells": [{"capability": "blocking", "detail": "<value>", "last_seen": "2025-05-03T07:25:53.248Z", "status": "observed", "surface": "other", "value": 527166}], "from": "2026-06-10T13:59:12.724Z", "to": "2024-07-04T20:01:31.648Z", "unmapped": [{"hook_source": "<value>", "sessions": 947494}], "window_days": 388369}
+          application/json: {"cells": [{"capability": "blocking", "detail": "<value>", "last_seen": "2025-05-03T07:25:53.248Z", "status": "observed", "surface": "other", "unit": "becquerel", "value": 527166}], "from": "2026-06-10T13:59:12.724Z", "to": "2024-07-04T20:01:31.648Z", "unmapped": [{"hook_source": "<value>", "sessions": 947494}], "window_days": 388369}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":

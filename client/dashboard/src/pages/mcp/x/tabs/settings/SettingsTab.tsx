@@ -2,6 +2,7 @@ import {
   AuthenticationSection,
   MCP_AUTHENTICATION_SECTION_ID,
 } from "./sections/authentication/AuthenticationSection";
+import { SetupStepBanner } from "./sections/authentication/SetupStepBanner";
 import {
   MCP_SERVER_URL_SECTION_ID,
   ServerUrlSection,
@@ -278,7 +279,8 @@ export function SettingsTab({
           <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
         ) : upstreamAuth === "enforced" ? (
           // Links to the legacy Identity anchor land on its replacement.
-          <div id={MCP_AUTHENTICATION_SECTION_ID}>
+          <div id={MCP_AUTHENTICATION_SECTION_ID} className="space-y-4">
+            <SetupStepBanner mcpServer={mcpServer} />
             <UpstreamCredentialsSection mcpServer={mcpServer} />
           </div>
         ) : (

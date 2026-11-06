@@ -53,7 +53,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	// agent access until this exact row is explicitly attached.
 	_, err = resolve(keyCtx)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, subject))
+	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, subject, uuid.NullUUID{UUID: uuid.Nil, Valid: false}))
 	wasUsed, err := testrepo.New(ti.conn).AttachmentSourceWasUsedFixture(ctx, source.ID)
 	require.NoError(t, err)
 	require.False(t, wasUsed, "consent availability checks must not stamp upstream usage")

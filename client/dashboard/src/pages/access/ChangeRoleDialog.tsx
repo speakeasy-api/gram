@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/Command";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import {
@@ -33,6 +34,10 @@ import {
   getUnselectedRoles,
   isUpdateDisabled,
 } from "./changeRoleState";
+import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
+import { permissionsAddedByRoles } from "./reviewGrants";
+import { RolePermissionPreview } from "./RolePermissionPreview";
+import { scopeLabel } from "./scopeCatalogue";
 
 interface ChangeRoleDialogProps {
   member: AccessMember | null;
@@ -45,8 +50,19 @@ export function ChangeRoleDialog({
 }: ChangeRoleDialogProps): JSX.Element {
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  // Sensitive permissions the new roles add must be acknowledged before the
+  // update goes through. The acknowledgement is of one set of permissions,
+  // keyed by their slugs, so any change to the selection, or to what the
+  // catalogue says is sensitive, asks again.
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
+  const {
+    catalogue,
+    isLoading: scopesLoading,
+    isError: scopesError,
+    refetch: refetchScopes,
+  } = useScopeCatalogue();
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
 
@@ -67,15 +83,18 @@ export function ChangeRoleDialog({
   useEffect(() => {
     setSelectedRoleIds(member?.roleIds ?? []);
     setSearch("");
+    setConfirmedFor(null);
   }, [member]);
 
   const addRole = (roleId: string) => {
     setSelectedRoleIds((prev) => addRoleToSelection(prev, roleId));
     setSearch("");
+    setConfirmedFor(null);
   };
 
   const removeRole = (roleId: string) => {
     setSelectedRoleIds((prev) => removeRoleFromSelection(prev, roleId));
+    setConfirmedFor(null);
   };
 
   const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
@@ -84,11 +103,34 @@ export function ChangeRoleDialog({
     return role ? [role] : [];
   });
 
-  const updateDisabled = isUpdateDisabled({
-    isPending: updateMemberRoles.isPending,
-    selectedIds: selectedRoleIds,
-    originalIds: member?.roleIds ?? [],
-  });
+  const originalRoleIds = member?.roleIds;
+  const added = useMemo(() => {
+    const toRoles = (ids: readonly string[]) =>
+      ids.flatMap((id) => {
+        const role = roleById.get(id);
+        return role ? [role] : [];
+      });
+    return permissionsAddedByRoles(
+      toRoles(originalRoleIds ?? []),
+      toRoles(selectedRoleIds),
+      catalogue,
+    );
+  }, [originalRoleIds, selectedRoleIds, roleById, catalogue]);
+  const needsConfirmation = added.sensitive.length > 0;
+  const sensitiveKey = added.sensitive.join(" ");
+  const confirmed = confirmedFor === sensitiveKey;
+
+  // Sensitivity is read off the catalogue, so until it has loaded without
+  // error nothing can be told apart from safe and the update waits.
+  const updateDisabled =
+    scopesLoading ||
+    scopesError ||
+    isUpdateDisabled({
+      isPending: updateMemberRoles.isPending,
+      selectedIds: selectedRoleIds,
+      originalIds: member?.roleIds ?? [],
+    }) ||
+    (needsConfirmation && !confirmed);
 
   const handleUpdate = () => {
     if (!member || selectedRoleIds.length === 0) return;
@@ -207,6 +249,39 @@ export function ChangeRoleDialog({
                 </span>
               )}
             </div>
+
+            {/* What the new selection gives that the member did not have. */}
+            <RolePermissionPreview
+              lead="These roles add"
+              summary={added}
+              labelFor={(scope) => scopeLabel(catalogue, scope)}
+            />
+            {scopesLoading && (
+              <Text muted small>
+                Loading permissions…
+              </Text>
+            )}
+            {scopesError && (
+              <div className="flex items-center justify-between gap-3">
+                <Text variant="body" className="text-destructive text-sm">
+                  Failed to load permissions, so roles can't be changed yet.
+                </Text>
+                <Button variant="secondary" size="sm" onClick={refetchScopes}>
+                  Retry
+                </Button>
+              </div>
+            )}
+            {needsConfirmation && (
+              <ConfirmSensitiveAccess
+                checked={confirmed}
+                onCheckedChange={(next) =>
+                  setConfirmedFor(next ? sensitiveKey : null)
+                }
+              >
+                I reviewed the sensitive permissions above and want{" "}
+                {member.name} to have them.
+              </ConfirmSensitiveAccess>
+            )}
 
             {directoryRoles.length > 0 && (
               <Text variant="body" className="text-muted-foreground text-xs">

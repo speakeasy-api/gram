@@ -33,7 +33,10 @@ type ConfigureInferenceAccessRoleOutput struct {
 	Scope             string                    `json:"scope"`
 	AllProjects       bool                      `json:"all_projects"`
 	ExactGrantPresent bool                      `json:"exact_grant_present" jsonschema:"fresh read of the exact selected inference grant on this role, not effective agent or owner access; other grants may still permit inference"`
-	Receipt           RiskMutationToolReceipt   `json:"receipt"`
+	// SensitiveScopesAdded names the sensitive permissions the write gave
+	// the role, as the audit log records them; absent when it added none.
+	SensitiveScopesAdded []string                `json:"sensitive_scopes_added,omitempty" jsonschema:"sensitive permissions this write gave the role that it did not hold before; absent when none"`
+	Receipt              RiskMutationToolReceipt `json:"receipt"`
 }
 
 func inferenceAccessRoleGrant(projectID uuid.UUID, allProjects bool) *accessgen.RoleGrant {
@@ -144,7 +147,7 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		delivery = reconciliation
-		return s.receiptResult(result.After, result.Slug, "updated", "complete")
+		return s.receiptResult(current, result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return ConfigureInferenceAccessRoleOutput{}, err
@@ -173,5 +176,5 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 	if current == nil {
 		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
 	}
-	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), AllProjects: input.AllProjects, ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID, input.AllProjects), Receipt: riskMutationToolReceipt(receipt)}, nil
+	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), AllProjects: input.AllProjects, ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID, input.AllProjects), SensitiveScopesAdded: result.SensitiveScopesAdded, Receipt: riskMutationToolReceipt(receipt)}, nil
 }

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -2565,8 +2566,9 @@ func (s *Service) GetUnproxiedMcpServerClientUsage(ctx context.Context, payload 
 	}, nil
 }
 
-// GetProjectOverview retrieves project-level overview metrics including total chats, tool calls,
-// active servers/users, and top lists. This endpoint does not support filtering.
+// GetProjectOverview retrieves project-level overview metrics: total chats, tool calls,
+// active servers, and top servers, plus the project home usage sections when
+// include_usage is set. This endpoint does not support filtering.
 func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.GetProjectOverviewPayload) (res *telem_gen.GetProjectOverviewResult, err error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -2593,42 +2595,13 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 
 	projectID := authCtx.ProjectID.String()
 
-	// Calculate comparison period (same duration as current period, ending at current period start)
-	duration := timeEnd - timeStart
-	comparisonStart := timeStart - duration
-	comparisonEnd := timeStart
-
-	// Convert timestamps for PostgreSQL queries
-	timeStartPG := conv.ToPGTimestamptz(time.Unix(0, timeStart))
-	timeEndPG := conv.ToPGTimestamptz(time.Unix(0, timeEnd))
-	comparisonStartPG := conv.ToPGTimestamptz(time.Unix(0, comparisonStart))
-	comparisonEndPG := conv.ToPGTimestamptz(time.Unix(0, comparisonEnd))
-
-	// Determine metrics mode: Check if session capture is enabled
-	sessionCaptureEnabled, err := s.sessionCaptureEnabled(ctx, authCtx.ActiveOrganizationID)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "unable to check if session capture is enabled")
-	}
-
-	sessionMode := sessionCaptureEnabled
-	metricsMode := "tool_call"
-	if sessionMode {
-		metricsMode = "session"
-	}
-
 	// These queries hit two database pools. Each pool is safe for concurrent use,
 	// so independent queries run concurrently. The ClickHouse helper keeps its
 	// orchestration and query-level tracing together.
 	var (
-		chatMetrics           chatRepo.GetChatMetricsSummaryRow
-		chatMetricsComparison chatRepo.GetChatMetricsSummaryRow
-		clickHouseResult      overview.Result
-		serverNameOverrides   []hooksRepo.ListHooksServerNameOverridesRow
-
-		// Session-mode (PostgreSQL) results; only populated when sessionMode is true.
-		activeUsersCountPG int64
-		topUsersPG         []chatRepo.GetTopUsersByMessagesRow
-		llmClientsPG       []chatRepo.GetLLMClientBreakdownByMessagesRow
+		chatMetrics         chatRepo.GetChatMetricsSummaryRow
+		clickHouseResult    overview.Result
+		serverNameOverrides []hooksRepo.ListHooksServerNameOverridesRow
 	)
 
 	eg, egCtx := errgroup.WithContext(ctx)
@@ -2647,9 +2620,6 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 			ProjectID:         projectID,
 			TimeStart:         timeStart,
 			TimeEnd:           timeEnd,
-			ComparisonStart:   comparisonStart,
-			ComparisonEnd:     comparisonEnd,
-			SessionMode:       sessionMode,
 			HostedMCPMatchers: hostedMCPMatchers,
 			MCPServerMatchers: mcpServerMatchers,
 			MetaMCPMatchers:   metaMCPMatchers,
@@ -2660,35 +2630,19 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		return nil
 	})
 
-	// PostgreSQL lanes: the pgxpool is safe for concurrent use, so fan these out.
-
-	// Chat metrics: current and comparison periods.
 	eg.Go(func() error {
 		var fetchErr error
 		chatMetrics, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
 			ProjectID: *authCtx.ProjectID,
-			TimeStart: timeStartPG,
-			TimeEnd:   timeEndPG,
+			TimeStart: conv.ToPGTimestamptz(time.Unix(0, timeStart)),
+			TimeEnd:   conv.ToPGTimestamptz(time.Unix(0, timeEnd)),
 		})
 		if fetchErr != nil {
 			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving chat metrics summary")
 		}
 		return nil
 	})
-	eg.Go(func() error {
-		var fetchErr error
-		chatMetricsComparison, fetchErr = s.chatRepo.GetChatMetricsSummary(egCtx, chatRepo.GetChatMetricsSummaryParams{
-			ProjectID: *authCtx.ProjectID,
-			TimeStart: comparisonStartPG,
-			TimeEnd:   comparisonEndPG,
-		})
-		if fetchErr != nil {
-			return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving comparison chat metrics")
-		}
-		return nil
-	})
 
-	// Server name overrides.
 	eg.Go(func() error {
 		var fetchErr error
 		serverNameOverrides, fetchErr = s.hooksRepo.ListHooksServerNameOverrides(egCtx, *authCtx.ProjectID)
@@ -2698,64 +2652,22 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 		return nil
 	})
 
-	if sessionMode {
-		// Session-based metrics come from PostgreSQL.
-		eg.Go(func() error {
-			var fetchErr error
-			activeUsersCountPG, fetchErr = s.chatRepo.GetActiveUserCountByMessages(egCtx, chatRepo.GetActiveUserCountByMessagesParams{
-				ProjectID: *authCtx.ProjectID,
-				TimeStart: timeStartPG,
-				TimeEnd:   timeEndPG,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving active user count from PG")
-			}
-			return nil
-		})
-		eg.Go(func() error {
-			var fetchErr error
-			topUsersPG, fetchErr = s.chatRepo.GetTopUsersByMessages(egCtx, chatRepo.GetTopUsersByMessagesParams{
-				ProjectID:   *authCtx.ProjectID,
-				TimeStart:   timeStartPG,
-				TimeEnd:     timeEndPG,
-				ResultLimit: 10,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving top users from PG")
-			}
-			return nil
-		})
-		eg.Go(func() error {
-			var fetchErr error
-			llmClientsPG, fetchErr = s.chatRepo.GetLLMClientBreakdownByMessages(egCtx, chatRepo.GetLLMClientBreakdownByMessagesParams{
-				ProjectID: *authCtx.ProjectID,
-				TimeStart: timeStartPG,
-				TimeEnd:   timeEndPG,
-			})
-			if fetchErr != nil {
-				return oops.E(oops.CodeUnexpected, fetchErr, "error retrieving LLM client breakdown from PG")
-			}
-			return nil
+	// The project home usage reads run alongside the overview lanes. They use
+	// the request context, not egCtx, so an overview failure does not cancel
+	// them half way, and their failures never fail the overview.
+	var usage projectHomeUsage
+	var usageWG sync.WaitGroup
+	if payload.IncludeUsage {
+		usageWG.Go(func() {
+			usage = s.fetchProjectHomeUsage(ctx, payload.From, payload.To, projectID, timeStart, timeEnd)
 		})
 	}
 
 	if err := eg.Wait(); err != nil {
+		usageWG.Wait()
 		return nil, oops.E(oops.CodeUnexpected, err, "error retrieving project overview")
 	}
-
-	// Resolve active counts and top lists now that every query has returned.
-	var activeUsersCount int64
-	var topUsers []*telem_gen.TopUser
-	var llmClientBreakdown []*telem_gen.LLMClientUsage
-	if sessionMode {
-		activeUsersCount = activeUsersCountPG
-		topUsers = toTopUsersFromPG(topUsersPG)
-		llmClientBreakdown = toLLMClientUsageFromPG(llmClientsPG)
-	} else {
-		activeUsersCount = int64(clickHouseResult.ActiveCounts.ActiveUsersCount) //nolint:gosec // Bounded count that won't overflow int64
-		topUsers = toTopUsers(clickHouseResult.TopUsers)
-		llmClientBreakdown = toLLMClientUsage(clickHouseResult.LLMClients)
-	}
+	usageWG.Wait()
 
 	// Build a map for quick lookup: raw_server_name -> display_name
 	overrideMap := make(map[string]string, len(serverNameOverrides))
@@ -2766,32 +2678,20 @@ func (s *Service) GetProjectOverview(ctx context.Context, payload *telem_gen.Get
 	// Apply overrides before trimming so alternate reported names that fold to
 	// one server do not leave the ranked list artificially short.
 	topServersWithOverrides := applyServerNameOverrides(clickHouseResult.TopServers, overrideMap)
-	activeServersCount := int64(clickHouseResult.ActiveCounts.ActiveServersCount) //nolint:gosec // Bounded count that won't overflow int64
 	if len(topServersWithOverrides) > 10 {
 		topServersWithOverrides = topServersWithOverrides[:10]
 	}
 
-	// Convert to API types - build summaries with nested fields
 	return &telem_gen.GetProjectOverviewResult{
 		Summary: buildProjectOverviewSummary(
 			chatMetrics,
 			clickHouseResult.ToolMetrics,
-			activeServersCount,
-			activeUsersCount,
-			topUsers,
+			int64(clickHouseResult.ActiveServersCount), //nolint:gosec // Bounded count that won't overflow int64
 			toTopServers(topServersWithOverrides),
-			llmClientBreakdown,
 		),
-		Comparison: buildProjectOverviewSummary(
-			chatMetricsComparison,
-			clickHouseResult.ToolMetricsComparison,
-			0, // Don't need active counts for comparison
-			0,
-			nil, // Don't need top lists for comparison
-			nil,
-			nil,
-		),
-		MetricsMode: metricsMode,
+		UsageByUser:  usage.byUser,
+		UsageByAgent: usage.byAgent,
+		McpUsage:     usage.mcpUsage,
 	}, nil
 }
 
@@ -2856,49 +2756,29 @@ func toObservabilitySummary(summary *repo.OverviewSummary) *telem_gen.Observabil
 	}
 }
 
-// buildProjectOverviewSummary builds a ProjectOverviewSummary from multiple data sources.
-// Chat metrics come from PostgreSQL, tool metrics from ClickHouse, and additional data from both.
+// buildProjectOverviewSummary builds a ProjectOverviewSummary. Chat counts come
+// from PostgreSQL; tool metrics and servers come from ClickHouse.
 func buildProjectOverviewSummary(
 	chatMetrics chatRepo.GetChatMetricsSummaryRow,
 	toolMetrics *repo.OverviewSummary,
 	activeServersCount int64,
-	activeUsersCount int64,
-	topUsers []*telem_gen.TopUser,
 	topServers []*telem_gen.TopServer,
-	llmClientBreakdown []*telem_gen.LLMClientUsage,
 ) *telem_gen.ProjectOverviewSummary {
-	// Get tool metrics from ClickHouse (or defaults if nil)
 	var totalToolCalls, failedToolCalls int64
 	if toolMetrics != nil {
 		totalToolCalls = int64(toolMetrics.TotalToolCalls)   //nolint:gosec // Bounded count that won't overflow int64
 		failedToolCalls = int64(toolMetrics.FailedToolCalls) //nolint:gosec // Bounded count that won't overflow int64
 	}
-
-	// Ensure arrays are non-nil
-	if topUsers == nil {
-		topUsers = []*telem_gen.TopUser{}
-	}
 	if topServers == nil {
 		topServers = []*telem_gen.TopServer{}
 	}
-	if llmClientBreakdown == nil {
-		llmClientBreakdown = []*telem_gen.LLMClientUsage{}
-	}
 
 	return &telem_gen.ProjectOverviewSummary{
-		// Chat metrics from PostgreSQL
-		TotalChats:    chatMetrics.TotalChats,
-		ResolvedChats: chatMetrics.ResolvedChats,
-		FailedChats:   chatMetrics.FailedChats,
-		// Tool metrics from ClickHouse
-		TotalToolCalls:  totalToolCalls,
-		FailedToolCalls: failedToolCalls,
-		// Activity counts and top lists
+		TotalChats:         chatMetrics.TotalChats,
+		TotalToolCalls:     totalToolCalls,
+		FailedToolCalls:    failedToolCalls,
 		ActiveServersCount: activeServersCount,
-		ActiveUsersCount:   activeUsersCount,
-		TopUsers:           topUsers,
 		TopServers:         topServers,
-		LlmClientBreakdown: llmClientBreakdown,
 	}
 }
 
@@ -2952,23 +2832,6 @@ func toToolMetrics(tools []repo.ToolMetric) []*telem_gen.ToolMetric {
 	return result
 }
 
-// toTopUsers converts repo top users to API type.
-func toTopUsers(users []repo.TopUser) []*telem_gen.TopUser {
-	if users == nil {
-		return []*telem_gen.TopUser{}
-	}
-	result := make([]*telem_gen.TopUser, len(users))
-	for i, u := range users {
-		//nolint:gosec // Values are bounded counts that won't overflow int64
-		result[i] = &telem_gen.TopUser{
-			UserID:        u.UserID,
-			UserType:      u.UserType,
-			ActivityCount: int64(u.ActivityCount),
-		}
-	}
-	return result
-}
-
 // applyServerNameOverrides applies display name overrides to server names.
 // Merges entries with the same display name after applying overrides and re-sorts by count.
 func applyServerNameOverrides(servers []repo.TopServer, overrideMap map[string]string) []repo.TopServer {
@@ -3014,22 +2877,6 @@ func toTopServers(servers []repo.TopServer) []*telem_gen.TopServer {
 		result[i] = &telem_gen.TopServer{
 			ServerName:    s.ServerName,
 			ToolCallCount: int64(s.ToolCallCount),
-		}
-	}
-	return result
-}
-
-// toLLMClientUsage converts repo LLM client usage to API type.
-func toLLMClientUsage(clients []repo.LLMClientUsage) []*telem_gen.LLMClientUsage {
-	if clients == nil {
-		return []*telem_gen.LLMClientUsage{}
-	}
-	result := make([]*telem_gen.LLMClientUsage, len(clients))
-	for i, c := range clients {
-		//nolint:gosec // Values are bounded counts that won't overflow int64
-		result[i] = &telem_gen.LLMClientUsage{
-			ClientName:    c.ClientName,
-			ActivityCount: int64(c.ActivityCount),
 		}
 	}
 	return result
@@ -5400,41 +5247,6 @@ func (s *Service) GetClaudeToolUsageByChatIDs(ctx context.Context, projectID str
 		return nil, fmt.Errorf("get Claude tool usage by chat ids: %w", err)
 	}
 	return result, nil
-}
-
-// toTopUsersFromPG converts PostgreSQL top users to API type.
-func toTopUsersFromPG(users []chatRepo.GetTopUsersByMessagesRow) []*telem_gen.TopUser {
-	if users == nil {
-		return []*telem_gen.TopUser{}
-	}
-	result := make([]*telem_gen.TopUser, len(users))
-	for i, u := range users {
-		userID := ""
-		if u.UserID.Valid {
-			userID = u.UserID.String
-		}
-		result[i] = &telem_gen.TopUser{
-			UserID:        userID,
-			UserType:      u.UserType,
-			ActivityCount: u.MessageCount,
-		}
-	}
-	return result
-}
-
-// toLLMClientUsageFromPG converts PostgreSQL LLM client breakdown to API type.
-func toLLMClientUsageFromPG(clients []chatRepo.GetLLMClientBreakdownByMessagesRow) []*telem_gen.LLMClientUsage {
-	if clients == nil {
-		return []*telem_gen.LLMClientUsage{}
-	}
-	result := make([]*telem_gen.LLMClientUsage, len(clients))
-	for i, c := range clients {
-		result[i] = &telem_gen.LLMClientUsage{
-			ClientName:    c.ClientName,
-			ActivityCount: c.MessageCount,
-		}
-	}
-	return result
 }
 
 // lowerAll lowercases ids so they compare equal to the stored lowercase UUIDs.

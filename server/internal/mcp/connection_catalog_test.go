@@ -31,6 +31,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -1008,12 +1010,21 @@ func TestConnectionCatalogConfigurationChangeStopsAdvertisingTools(t *testing.T)
 	status, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}}), progressive.token, nil)
 	require.NoError(t, err)
 	require.Contains(t, status.Body.String(), "configuration changed")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	beforeCode := strings.Count(logs.String(), "gateway consent validation failed")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
 	require.Equal(t, beforeCode+1, strings.Count(logs.String(), "gateway consent validation failed"), "all helpers share one diagnostic per stale member")
 	require.NotContains(t, callGatewayTool(t, ti, slug, code.token, "execute", map[string]any{"code": "discover"}), `"isError":true`)
 	require.Equal(t, beforeCode+2, strings.Count(logs.String(), "gateway consent validation failed"), "a new execution has its own diagnostic scope")
 	require.True(t, codeChecked.Load())
+	// Each execution's refused call writes one row; describe writes none.
+	require.Len(t, rec.Rows(), 2)
+	for _, row := range rec.Rows() {
+		require.Equal(t, mcpconnectionattempts.CodeConsentNotApproved.String(), row.Reason)
+		require.Equal(t, "configuration_changed", row.SubReason)
+		require.Equal(t, memberID.String(), row.MemberID)
+	}
 	require.Zero(t, replacement.calls.Load())
 }
 
@@ -1036,8 +1047,14 @@ func TestConnectionCatalogTransportChangeRequiresConsent(t *testing.T) {
 	require.NotEqual(t, "sse", remote.TransportType)
 	_, err = remotemcprepo.New(ti.conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{ID: remote.ID, ProjectID: remote.ProjectID, Name: remote.Name, Slug: remote.Slug, TransportType: "sse", Url: remote.Url})
 	require.NoError(t, err)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "configuration changed")
 	require.Zero(t, upstream.calls.Load())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
+	require.Equal(t, "configuration_changed", row.SubReason)
+	require.Equal(t, memberID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1)
 }
 
 // A cached connection reports the members its consent did not approve,

@@ -264,7 +264,7 @@ func TestCheckAccessTokens_SkipsSelfClient(t *testing.T) {
 	mgr := newClientCredentialManager(t, ti.conn, testenv.NewEncryptionClient(t), source)
 	fx := seedSelfClient(t, ctx, ti.conn, "self-check")
 
-	err := mgr.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()))
+	err := mgr.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, fx.userIssuerID, urn.NewAgentSubject(uuid.New()), uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 	require.NoError(t, err)
 
 	requests, _ := source.recorded()

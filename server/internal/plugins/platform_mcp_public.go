@@ -87,6 +87,7 @@ func platformMCPMarketplaceFiles(serverURL, marketplaceRepoURL, version string, 
 		Version:          version,
 		MarketplaceName:  PublicMarketplaceName,
 		BrowserLogin:     false,
+		InstallRoute:     InstallRouteMarketplace,
 		HooksOrgName:     "",
 		InstallFailOpen:  false,
 	}

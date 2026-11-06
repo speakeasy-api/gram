@@ -494,6 +494,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListScopes"}`)
 	})
 
+	Method("listAgentPolicyScopes", func() {
+		Description("List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAgentPolicyScopesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAgentPolicyScopes")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentPolicyScopes"}`)
+	})
+
 	Method("listMembers", func() {
 		Description("List all team members with their role assignments.")
 		Security(security.ByKey, func() {
@@ -1439,6 +1460,11 @@ var ListScopesResult = Type("ListScopesResult", func() {
 	Required("scopes", "tasks")
 	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
 	Attribute("tasks", ArrayOf(ScopeTaskModel), "Tasks that need more than one scope, so a missing scope can be explained in context.")
+})
+
+var ListAgentPolicyScopesResult = Type("ListAgentPolicyScopesResult", func() {
+	Required("scopes")
+	Attribute("scopes", ArrayOf(ScopeModel), "The scopes an agent policy may hold, in catalogue order.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {

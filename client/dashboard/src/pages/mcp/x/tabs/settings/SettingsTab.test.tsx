@@ -43,6 +43,9 @@ const productFeatures = vi.hoisted(() => ({
       | undefined,
   },
 }));
+vi.mock("./sections/authentication/SetupStepBanner", () => ({
+  SetupStepBanner: () => null,
+}));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => productFeatures.result,
 }));

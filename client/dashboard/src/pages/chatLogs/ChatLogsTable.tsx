@@ -477,13 +477,11 @@ function Cell({
   );
 }
 
-/** When the session started, when it last moved, and how long that spanned. */
+/** Latest message time (or creation time), session duration, and message count. */
 function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
   const lastActivityTimestamp = chat.lastMessageTimestamp ?? chat.createdAt;
-  // One date, not two. Both timestamps are nearly always the same minute of
-  // the same day, so printing each in full wrapped the column mid-date and
-  // read as four facts where there are two: when it started, and how long it
-  // ran. The exact pair stays in the title attribute.
+  // Show the same timestamp used by Activity sorting. Keep creation time
+  // in the tooltip without crowding the column with a second date.
   return (
     <Cell
       className="font-mono whitespace-nowrap"
@@ -495,10 +493,10 @@ function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
             "MMM d, HH:mm",
           )}`}
         >
-          {format(chat.createdAt, "MMM d, HH:mm")}
+          {format(lastActivityTimestamp, "MMM d, HH:mm")}
         </span>
       }
-      // Smaller and iconed so the start time reads as the cell's headline and
+      // Smaller and iconed so last activity reads as the cell's headline and
       // these two read as facts about it.
       secondary={
         // `leading-none` on the text: the mono face's default line box sits
@@ -686,7 +684,9 @@ export function ChatLogsTable({
   });
   const { data: ancestors } = useQuery({
     queryKey: ["chatSubsessionAncestors", chatIds, linksData?.links],
-    enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
+    enabled:
+      sort == null &&
+      !!linksData?.links.some((link) => link.kind === "subagent"),
     retry: false,
     throwOnError: false,
     queryFn: async () => {
@@ -745,14 +745,31 @@ export function ChatLogsTable({
     }
     return map;
   }, [chatIds, linksData]);
-  const groupedChats = useMemo(
-    () =>
-      groupSubsessions(
-        [...chats, ...(ancestors?.parents ?? [])],
-        ancestors?.links ?? linksData?.links ?? [],
-      ),
-    [chats, linksData, ancestors],
-  );
+  const groupedChats = useMemo(() => {
+    const links = linksData?.links ?? [];
+    if (sort != null) {
+      // The API sorts and paginates the whole result set. Keep its exact rows
+      // and order; grouping or inserting ancestors would break that contract.
+      const subagentIds = new Set(
+        links
+          .filter(
+            (link) =>
+              link.kind === "subagent" &&
+              link.parentChatId &&
+              link.parentChatId !== link.childChatId,
+          )
+          .map((link) => link.childChatId),
+      );
+      return chats.map((session) => ({
+        session,
+        depth: subagentIds.has(session.id) ? 1 : 0,
+      }));
+    }
+    return groupSubsessions(
+      [...chats, ...(ancestors?.parents ?? [])],
+      ancestors?.links ?? links,
+    );
+  }, [chats, linksData, ancestors, sort]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const columns: Column<SessionRow>[] = [

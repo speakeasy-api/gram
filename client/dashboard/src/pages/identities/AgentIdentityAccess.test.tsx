@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   identityLink: vi.fn(),
   allAuthClients: vi.fn(),
   hasScope: vi.fn(),
+  scopesError: false,
 }));
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
@@ -93,6 +94,29 @@ vi.mock("./GrantOnBehalfOf", () => ({
     <span>{`on behalf of, for ${resourceId}`}</span>
   ),
 }));
+vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
+  useListAgentPolicyScopes: () => ({
+    data: mocks.scopesError
+      ? undefined
+      : {
+          scopes: [
+            {
+              slug: "inference:execute",
+              label: "Run inference",
+              description: "Run inference in selected projects.",
+              resourceType: "inference",
+              category: "inference",
+              visibility: "user_visible",
+              agentEligible: true,
+              sensitive: false,
+              subScopes: [],
+            },
+          ],
+        },
+    isLoading: false,
+    isError: mocks.scopesError,
+  }),
+}));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
     projectMap: new Map([
@@ -142,6 +166,7 @@ beforeEach(() => {
       ? { data: authClients, isSuccess: true }
       : { data: undefined, isSuccess: false },
   );
+  mocks.scopesError = false;
   mocks.list.mockResolvedValue([]);
   mocks.listMembers.mockResolvedValue({
     members: [
@@ -172,7 +197,13 @@ describe("Agent profile permissions", () => {
       },
     ]);
     setup();
-    await screen.findByText("inference:execute");
+    const slug = await screen.findByText("inference:execute");
+    expect(slug.parentElement?.textContent).toBe(
+      "Run inference (inference:execute)",
+    );
+    expect(
+      screen.getByText("Run inference in selected projects."),
+    ).toBeTruthy();
     expect(screen.getAllByText("Agent permissions")).toHaveLength(1);
     expect(screen.queryByText("Inference access")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
@@ -501,6 +532,23 @@ describe("Agent profile permissions", () => {
       await screen.findByText("Any service account in the organization"),
     ).toBeTruthy();
     expect(mocks.allAuthClients).not.toHaveBeenCalledWith({ enabled: true });
+  });
+  it("keeps the slugs and says so when the permission catalogue fails to load", async () => {
+    mocks.scopesError = true;
+    mocks.list.mockResolvedValue([
+      {
+        id: "inference_grant",
+        scope: "inference:execute",
+        selector: { resourceKind: "inference", resourceId: "*" },
+      },
+    ]);
+    setup();
+    const slug = await screen.findByText("inference:execute");
+    expect(slug.parentElement?.textContent).toBe("inference:execute");
+    expect(screen.queryByText("Run inference")).toBeNull();
+    expect(
+      screen.getByText(/Permission names could not be loaded/),
+    ).toBeTruthy();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

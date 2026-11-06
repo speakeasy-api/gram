@@ -2349,129 +2349,6 @@ func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHo
 	return v, nil
 }
 
-// BuildListExternalMcpMigrationCandidatesPayload builds the payload for the
-// admin listExternalMcpMigrationCandidates endpoint from CLI flags.
-func BuildListExternalMcpMigrationCandidatesPayload(adminListExternalMcpMigrationCandidatesAdminSessionToken string) (*admin.ListExternalMcpMigrationCandidatesPayload, error) {
-	var adminSessionToken *string
-	{
-		if adminListExternalMcpMigrationCandidatesAdminSessionToken != "" {
-			adminSessionToken = &adminListExternalMcpMigrationCandidatesAdminSessionToken
-		}
-	}
-	v := &admin.ListExternalMcpMigrationCandidatesPayload{}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
-// BuildPreviewExternalMcpMigrationPayload builds the payload for the admin
-// previewExternalMcpMigration endpoint from CLI flags.
-func BuildPreviewExternalMcpMigrationPayload(adminPreviewExternalMcpMigrationBody string, adminPreviewExternalMcpMigrationAdminSessionToken string) (*admin.PreviewExternalMcpMigrationPayload, error) {
-	var err error
-	var body PreviewExternalMcpMigrationRequestBody
-	{
-		err = json.Unmarshal([]byte(adminPreviewExternalMcpMigrationBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
-		}
-		if body.Servers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
-		}
-		if len(body.Servers) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
-		}
-		if len(body.Servers) > 100 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
-		}
-		for _, e := range body.Servers {
-			if e != nil {
-				if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var adminSessionToken *string
-	{
-		if adminPreviewExternalMcpMigrationAdminSessionToken != "" {
-			adminSessionToken = &adminPreviewExternalMcpMigrationAdminSessionToken
-		}
-	}
-	v := &admin.PreviewExternalMcpMigrationPayload{}
-	if body.Servers != nil {
-		v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
-		for i, val := range body.Servers {
-			if val == nil {
-				v.Servers[i] = nil
-				continue
-			}
-			v.Servers[i] = marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
-		}
-	} else {
-		v.Servers = []*admin.AdminExternalMcpMigrationRequest{}
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
-// BuildMigrateExternalMcpServersPayload builds the payload for the admin
-// migrateExternalMcpServers endpoint from CLI flags.
-func BuildMigrateExternalMcpServersPayload(adminMigrateExternalMcpServersBody string, adminMigrateExternalMcpServersAdminSessionToken string) (*admin.MigrateExternalMcpServersPayload, error) {
-	var err error
-	var body MigrateExternalMcpServersRequestBody
-	{
-		err = json.Unmarshal([]byte(adminMigrateExternalMcpServersBody), &body)
-		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }'")
-		}
-		if body.Servers == nil {
-			err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
-		}
-		if len(body.Servers) < 1 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
-		}
-		if len(body.Servers) > 100 {
-			err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
-		}
-		for _, e := range body.Servers {
-			if e != nil {
-				if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
-					err = goa.MergeErrors(err, err2)
-				}
-			}
-		}
-		if err != nil {
-			return nil, err
-		}
-	}
-	var adminSessionToken *string
-	{
-		if adminMigrateExternalMcpServersAdminSessionToken != "" {
-			adminSessionToken = &adminMigrateExternalMcpServersAdminSessionToken
-		}
-	}
-	v := &admin.MigrateExternalMcpServersPayload{}
-	if body.Servers != nil {
-		v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
-		for i, val := range body.Servers {
-			if val == nil {
-				v.Servers[i] = nil
-				continue
-			}
-			v.Servers[i] = marshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
-		}
-	} else {
-		v.Servers = []*admin.AdminExternalMcpMigrationRequest{}
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v, nil
-}
-
 // BuildListRegistryPromotionCandidatesPayload builds the payload for the admin
 // listRegistryPromotionCandidates endpoint from CLI flags.
 func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesStatus string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
@@ -3617,6 +3494,31 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 		}
 	}
 	v := &admin.BackfillMcpAuthGrantsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBackfillMcpConnectGrantsPayload builds the payload for the admin
+// backfillMcpConnectGrants endpoint from CLI flags.
+func BuildBackfillMcpConnectGrantsPayload(adminBackfillMcpConnectGrantsBody string, adminBackfillMcpConnectGrantsAdminSessionToken string) (*admin.BackfillMcpConnectGrantsPayload, error) {
+	var err error
+	var body BackfillMcpConnectGrantsRequestBody
+	{
+		err = json.Unmarshal([]byte(adminBackfillMcpConnectGrantsBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"created_before\": \"1970-01-01T00:00:01Z\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminBackfillMcpConnectGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillMcpConnectGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillMcpConnectGrantsPayload{
+		CreatedBefore: body.CreatedBefore,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

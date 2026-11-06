@@ -336,8 +336,12 @@ export type UserIdentityDraft = {
   canSave: boolean;
   /** The operator changed the selection, whether or not it can be saved yet. */
   pendingChange: boolean;
-  /** Resolves true when the commit landed; failures are already on screen. */
-  save: () => Promise<boolean>;
+  /**
+   * Resolves true when the commit landed; failures are already on screen.
+   * replaceClientServerIds confirms the other servers a replacement moves, as
+   * the impact preview listed them.
+   */
+  save: (replaceClientServerIds?: string[]) => Promise<boolean>;
   saving: boolean;
 };
 
@@ -826,7 +830,13 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
-    mutationFn: async (revision: number) => {
+    mutationFn: async ({
+      revision,
+      replaceClientServerIds,
+    }: {
+      revision: number;
+      replaceClientServerIds: string[];
+    }) => {
       if (!selected) throw new Error("choose an identity provider");
       if (!choice) throw new Error("Choose a registration method.");
       const assertCurrentSelection = () => {
@@ -954,6 +964,11 @@ export function useUserIdentityDraft({
               choice === "auto" && methodChoiceAvailable
                 ? registrationMethod
                 : undefined,
+            // Clearing the connection is the administrator asking for a new
+            // client, which automatic registration would otherwise not do.
+            replaceClient: cleared && !sameAsConnected ? true : undefined,
+            replaceClientServerIds:
+              cleared && !sameAsConnected ? replaceClientServerIds : undefined,
           },
         });
       } finally {
@@ -1159,12 +1174,15 @@ export function useUserIdentityDraft({
     status,
     canSave,
     pendingChange,
-    save: async (): Promise<boolean> => {
+    save: async (replaceClientServerIds: string[] = []): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit(selectionRevision.current);
+        await runCommit({
+          revision: selectionRevision.current,
+          replaceClientServerIds,
+        });
         return true;
       } catch {
         /* reported by onError */

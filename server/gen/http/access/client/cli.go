@@ -771,6 +771,21 @@ func BuildListScopesPayload(accessListScopesApikeyToken string, accessListScopes
 	return v, nil
 }
 
+// BuildListAgentPolicyScopesPayload builds the payload for the access
+// listAgentPolicyScopes endpoint from CLI flags.
+func BuildListAgentPolicyScopesPayload(accessListAgentPolicyScopesSessionToken string) (*access.ListAgentPolicyScopesPayload, error) {
+	var sessionToken *string
+	{
+		if accessListAgentPolicyScopesSessionToken != "" {
+			sessionToken = &accessListAgentPolicyScopesSessionToken
+		}
+	}
+	v := &access.ListAgentPolicyScopesPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListMembersPayload builds the payload for the access listMembers
 // endpoint from CLI flags.
 func BuildListMembersPayload(accessListMembersApikeyToken string, accessListMembersSessionToken string) (*access.ListMembersPayload, error) {
