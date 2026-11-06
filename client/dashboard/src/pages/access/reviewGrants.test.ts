@@ -43,7 +43,9 @@ const catalogue = scopeCatalogue([
   def("org:owner", "Own organization", { subScopes: ["org:admin"] }),
   def("project:read", "View projects"),
   def("project:write", "Manage projects", { subScopes: ["project:read"] }),
-  def("mcp:connect", "Connect to MCP servers"),
+  def("mcp:connect", "Connect to MCP servers", {
+    exclusionScope: "mcp:blocked_connect" as ScopeDefinition["exclusionScope"],
+  }),
   def("mcp:read", "View MCP servers", { subScopes: ["mcp:connect"] }),
   def("mcp:write", "Manage MCP servers", { subScopes: ["mcp:read"] }),
   def("chat:read", "View agent sessions", { sensitive: true }),
@@ -256,6 +258,74 @@ describe("permissionsAddedByRoles", () => {
     expect(
       permissionsAddedByRoles([twoProjects], [oneProject], catalogue),
     ).toEqual({ scopes: [], sensitive: [] });
+  });
+
+  const admin = {
+    grants: [{ scope: "org:admin" as never, selectors: undefined }],
+  };
+  const blockedAdmin = {
+    grants: [{ scope: "org:blocked_admin" as never, selectors: undefined }],
+  };
+  const blockedAdminHere = roleWith("org:blocked_admin", "org", "org-1");
+
+  it("counts a permission an exception withheld once the exception is lifted", () => {
+    expect(
+      permissionsAddedByRoles([admin, blockedAdmin], [admin], catalogue),
+    ).toEqual({ scopes: ["org:admin"], sensitive: ["org:admin"] });
+  });
+
+  it("counts a permission withheld on one resource once the exception is lifted", () => {
+    expect(
+      permissionsAddedByRoles([admin, blockedAdminHere], [admin], catalogue),
+    ).toEqual({ scopes: ["org:admin"], sensitive: ["org:admin"] });
+  });
+
+  it("counts nothing from a permission the exception still withholds", () => {
+    expect(
+      permissionsAddedByRoles(
+        [admin, blockedAdmin],
+        [admin, blockedAdmin, viewer],
+        catalogue,
+      ),
+    ).toEqual({ scopes: ["project:read"], sensitive: [] });
+  });
+
+  it("withholds only the permission the exception is for, not what it includes", () => {
+    // The server blocks org:admin checks alone on org:blocked_admin; the
+    // org:read and chat:read an org:admin grant satisfies stay satisfied.
+    expect(
+      permissionsAddedByRoles(
+        [viewer],
+        [viewer, admin, blockedAdmin],
+        catalogue,
+      ),
+    ).toEqual({ scopes: ["org:read", "chat:read"], sensitive: ["chat:read"] });
+  });
+
+  it("takes an exception off the resources a restricted grant names", () => {
+    const twoServers = {
+      grants: [
+        {
+          scope: "mcp:connect" as never,
+          selectors: [
+            { resourceKind: "mcp" as const, resourceId: "server-a" },
+            { resourceKind: "mcp" as const, resourceId: "server-b" },
+          ],
+        },
+      ],
+    };
+    const blockedB = roleWith("mcp:blocked_connect", "mcp", "server-b");
+    const serverB = roleWith("mcp:connect", "mcp", "server-b");
+    expect(
+      permissionsAddedByRoles(
+        [twoServers, blockedB],
+        [twoServers, blockedB, serverB],
+        catalogue,
+      ),
+    ).toEqual({ scopes: [], sensitive: [] });
+    expect(
+      permissionsAddedByRoles([twoServers, blockedB], [twoServers], catalogue),
+    ).toEqual({ scopes: ["mcp:connect"], sensitive: [] });
   });
 
   it("carries breadth down what a grant includes", () => {

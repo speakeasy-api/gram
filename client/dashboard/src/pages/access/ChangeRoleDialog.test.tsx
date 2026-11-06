@@ -29,7 +29,9 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: vi.fn(),
   useRoles: () => ({
-    data: { roles: [builder, auditor, oneProject, otherProject, wide] },
+    data: {
+      roles: [builder, auditor, oneProject, otherProject, wide, admin, blocker],
+    },
   }),
 }));
 vi.mock("@gram/client/react-query/updateMemberRoles.js", () => ({
@@ -62,6 +64,18 @@ const definitions: ScopeDefinition[] = [
     agentEligible: true,
     sensitive: true,
     subScopes: [],
+  },
+  {
+    slug: "org:admin" as ScopeDefinition["slug"],
+    label: "Manage organization",
+    description: "Manage organization settings, members, roles and access.",
+    resourceType: "org",
+    category: "org" as ScopeDefinition["category"],
+    visibility: "user_visible",
+    agentEligible: false,
+    sensitive: true,
+    subScopes: [],
+    exclusionScope: "org:blocked_admin" as ScopeDefinition["exclusionScope"],
   },
 ];
 const builder = {
@@ -122,6 +136,25 @@ const wide = {
       selectors: [{ resourceKind: "project", resourceId: "*" }],
     },
   ],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+const admin = {
+  id: "admin",
+  name: "Admin",
+  description: "",
+  principalUrn: "role:organization:admin",
+  grants: [{ scope: "org:admin" }],
+  isSystem: false,
+  memberCount: 0,
+} as unknown as Role;
+// Withholds the admin role's org:admin from whoever holds both.
+const blocker = {
+  id: "blocker",
+  name: "Blocker",
+  description: "",
+  principalUrn: "role:organization:blocker",
+  grants: [{ scope: "org:blocked_admin" }],
   isSystem: false,
   memberCount: 0,
 } as unknown as Role;
@@ -206,6 +239,44 @@ describe("adding a role that widens a permission the member holds", () => {
     expect(screen.queryByText("These roles add", { exact: false })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(updateButton().disabled).toBe(false);
+  });
+});
+
+describe("removing a role that withheld a permission", () => {
+  /** The remove button on a selected role's chip: the badge's text's sibling. */
+  function removeChip(roleName: string): HTMLElement {
+    const button = screen
+      .getByText(roleName)
+      .parentElement?.querySelector("button");
+    if (!button) throw new Error(`no remove button for ${roleName}`);
+    return button;
+  }
+
+  it("asks for the acknowledgement when the exception on org:admin is lifted", () => {
+    renderDialog(["admin", "blocker"]);
+    fireEvent.click(removeChip("Blocker"));
+    expect(
+      screen.getByText("These roles add 1 permission, 1 is sensitive:"),
+    ).toBeTruthy();
+    expect(updateButton().disabled).toBe(true);
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+    );
+    expect(updateButton().disabled).toBe(false);
+    fireEvent.click(updateButton());
+    expect(
+      state.update.mock.calls[0]![0].request.updateMemberRolesForm,
+    ).toEqual({ userId: "member-1", roleIds: ["admin"] });
+  });
+
+  it("needs none while the exception stays", () => {
+    renderDialog(["admin", "blocker"]);
+    addAuditor();
+    expect(
+      screen.getByText("These roles add 1 permission, 1 is sensitive:"),
+    ).toBeTruthy();
+    expect(screen.getByText("View tool logs")).toBeTruthy();
+    expect(screen.queryByText("Manage organization")).toBeNull();
   });
 });
 

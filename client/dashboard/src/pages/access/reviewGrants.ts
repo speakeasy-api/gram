@@ -153,12 +153,14 @@ function resourceKey(selector: Selector): string {
 
 /**
  * How widely a set of roles holds one permission: everywhere, or on the
- * resources its grants name.
+ * resources its grants name, less what its exceptions withhold.
  */
 interface Coverage {
   everywhere: boolean;
   /** Keys of the resources named by grants that reach some, not every. */
   resources: Set<string>;
+  /** Keys of the resources exceptions withhold from a permission held everywhere. */
+  except: Set<string>;
 }
 
 function extendCoverage(
@@ -166,7 +168,11 @@ function extendCoverage(
   scope: string,
   selectors: SdkRoleGrant["selectors"],
 ): void {
-  const reach = held.get(scope) ?? { everywhere: false, resources: new Set() };
+  const reach = held.get(scope) ?? {
+    everywhere: false,
+    resources: new Set(),
+    except: new Set(),
+  };
   if (!selectors || selectors.length === 0) reach.everywhere = true;
   for (const selector of selectors ?? []) {
     if (coversEveryResource(selector)) reach.everywhere = true;
@@ -177,27 +183,55 @@ function extendCoverage(
 
 /** Whether everything `after` reaches, `before` reached too. */
 function covers(before: Coverage, after: Coverage): boolean {
-  if (before.everywhere) return true;
+  if (before.everywhere) {
+    if (after.everywhere) {
+      return [...before.except].every((key) => after.except.has(key));
+    }
+    return [...after.resources].every((key) => !before.except.has(key));
+  }
   if (after.everywhere) return false;
   return [...after.resources].every((key) => before.resources.has(key));
 }
 
 /**
- * How widely a set of roles holds each permission, closed over inclusion. A
- * grant of mcp:write on one server holds mcp:read on that server.
+ * How widely a set of roles holds each permission, closed over inclusion and
+ * less its exceptions. A grant of mcp:write on one server holds mcp:read on
+ * that server. An exception (`*:blocked_*`) withholds the permission it is
+ * an exception to: everywhere when it is unrestricted, otherwise on the
+ * resources it names. So a holder of org:admin and org:blocked_admin holds
+ * no org:admin, and lifting the exception gives it back.
  */
 function coverageOfRoles(
   roles: readonly Pick<Role, "grants">[],
   catalogue: ScopeCatalogue,
 ): Map<string, Coverage> {
   const held = new Map<string, Coverage>();
+  const withheld = new Map<string, Coverage>();
   for (const role of roles) {
     for (const grant of role.grants) {
+      const base = baseScopeOfException(catalogue, grant.scope as string);
+      if (base !== undefined) {
+        extendCoverage(withheld, base, grant.selectors);
+        continue;
+      }
       for (const scope of scopeClosure(catalogue, grant.scope as string)) {
         if (!isPresentableScope(catalogue, scope)) continue;
         extendCoverage(held, scope, grant.selectors);
       }
     }
+  }
+  for (const [scope, exception] of withheld) {
+    const reach = held.get(scope);
+    if (!reach) continue;
+    if (exception.everywhere) {
+      held.delete(scope);
+      continue;
+    }
+    for (const key of exception.resources) {
+      if (reach.everywhere) reach.except.add(key);
+      else reach.resources.delete(key);
+    }
+    if (!reach.everywhere && reach.resources.size === 0) held.delete(scope);
   }
   return held;
 }
