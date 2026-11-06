@@ -18,6 +18,7 @@ import (
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -131,11 +132,29 @@ func (g *authorizationGate) authorizations() []string {
 // selfClientEndpoint is an issuer-gated remote MCP endpoint whose upstream
 // is reached with a self client's credential, and a bearer for a member.
 type selfClientEndpoint struct {
-	slug  string
-	token string
+	slug        string
+	token       string
+	mcpServerID uuid.UUID
 }
 
 func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, upstreamURL string) selfClientEndpoint {
+	t.Helper()
+
+	endpoint := newSelfClientEndpointWithEmptyCatalog(t, ctx, ti, upstreamURL)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := mcpserversrepo.New(ti.conn).AddMCPServerToolMetadata(ctx, mcpserversrepo.AddMCPServerToolMetadataParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: endpoint.mcpServerID,
+		Tools:       []byte(`[{"tool_name":"ping"}]`),
+	})
+	require.NoError(t, err)
+
+	return endpoint
+}
+
+func newSelfClientEndpointWithEmptyCatalog(t *testing.T, ctx context.Context, ti *testInstance, upstreamURL string) selfClientEndpoint {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -178,7 +197,7 @@ func newSelfClientEndpoint(t *testing.T, ctx context.Context, ti *testInstance, 
 	require.NoError(t, err)
 	persistTestUserSession(t, ti, issuerID, urn.NewUserSubject(mockidp.MockUserID), jti)
 
-	return selfClientEndpoint{slug: slug, token: token}
+	return selfClientEndpoint{slug: slug, token: token, mcpServerID: mcpServer.ID}
 }
 
 func toolsCallBody(t *testing.T) []byte {
@@ -214,6 +233,64 @@ func TestServePublic_SelfClientProxiesWithClientCredential(t *testing.T) {
 	decodeMCPResult(t, callResp.Body.Bytes())
 
 	require.Equal(t, []string{"Bearer self-token", "Bearer self-token"}, gate.authorizations())
+}
+
+func TestServePublic_CallForToolMissingFromCatalogRecordsItFromTheUpstream(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	ti.clientCredentials.use(&scriptedClientCredentials{tokens: []string{"self-token"}})
+	gate := newAuthorizationGate(t, func(string) bool { return true })
+	endpoint := newSelfClientEndpointWithEmptyCatalog(t, ctx, ti, gate.URL)
+
+	callResp, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, toolsCallBody(t), endpoint.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, callResp.Code, "tools/call: %s", callResp.Body.String())
+	decodeMCPResult(t, callResp.Body.Bytes())
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	rows, err := mcpserversrepo.New(ti.conn).ListMCPServerToolMetadata(ctx, mcpserversrepo.ListMCPServerToolMetadataParams{
+		McpServerID:    endpoint.mcpServerID,
+		ProjectID:      *authCtx.ProjectID,
+		IncludeDeleted: false,
+	})
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	require.Equal(t, "ping", rows[0].ToolName)
+}
+
+func TestServePublic_CallForToolMissingFromCatalogReplacesARejectedCredential(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token", "fresh-token"}, forgettable: true}
+	ti.clientCredentials.use(source)
+	gate := newAuthorizationGate(t, func(authorization string) bool { return authorization == "Bearer fresh-token" })
+	endpoint := newSelfClientEndpointWithEmptyCatalog(t, ctx, ti, gate.URL)
+
+	callResp, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, toolsCallBody(t), endpoint.token, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, callResp.Code, "tools/call: %s", callResp.Body.String())
+	decodeMCPResult(t, callResp.Body.Bytes())
+
+	minted, forgets := source.counts()
+	require.Equal(t, 2, minted)
+	require.Equal(t, 1, forgets)
+}
+
+func TestServePublic_CallForToolMissingFromCatalogNamesAdministratorWhenRejected(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token", "also-revoked"}, forgettable: true}
+	ti.clientCredentials.use(source)
+	gate := newAuthorizationGate(t, func(string) bool { return false })
+	endpoint := newSelfClientEndpointWithEmptyCatalog(t, ctx, ti, gate.URL)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, toolsCallBody(t), endpoint.token, nil)
+	require.Equal(t, selfClientMisconfiguredDescription, requireOopsCode(t, err, oops.CodeFailedPrecondition))
+	require.Empty(t, w.Header().Get("WWW-Authenticate"))
 }
 
 func TestServePublic_SelfClientRetriesOnceWithReplacementCredential(t *testing.T) {

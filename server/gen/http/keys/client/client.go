@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	RotateKeyDoer goahttp.Doer
 
+	// ExtendAgentKeys Doer is the HTTP client used to make requests to the
+	// extendAgentKeys endpoint.
+	ExtendAgentKeysDoer goahttp.Doer
+
 	// ListKeys Doer is the HTTP client used to make requests to the listKeys
 	// endpoint.
 	ListKeysDoer goahttp.Doer
@@ -63,6 +67,7 @@ func NewClient(
 	return &Client{
 		CreateKeyDoer:       doer,
 		RotateKeyDoer:       doer,
+		ExtendAgentKeysDoer: doer,
 		ListKeysDoer:        doer,
 		RevokeKeyDoer:       doer,
 		UpdateKeyPolicyDoer: doer,
@@ -118,6 +123,30 @@ func (c *Client) RotateKey() goa.Endpoint {
 		resp, err := c.RotateKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("keys", "rotateKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ExtendAgentKeys returns an endpoint that makes HTTP requests to the keys
+// service extendAgentKeys server.
+func (c *Client) ExtendAgentKeys() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExtendAgentKeysRequest(c.encoder)
+		decodeResponse = DecodeExtendAgentKeysResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExtendAgentKeysRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExtendAgentKeysDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("keys", "extendAgentKeys", err)
 		}
 		return decodeResponse(resp)
 	}

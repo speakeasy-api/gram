@@ -35,6 +35,10 @@ vi.mock("@/components/page-layout", () => {
     },
   };
 });
+vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
+  useSkillsOverMcpStatus: () => state.flag,
+  useSkillsOverMcpEnabled: () => state.flag.status === "enabled",
+}));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => state.flag,
 }));
@@ -72,15 +76,8 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => {
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: { detail: { href: (id: string) => `/skills/${id}` } },
-    mcp: {
-      details: {
-        overview: { href: (slug: string) => `/mcp/${slug}/overview` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/skillLinks.js", () => ({
@@ -243,7 +240,7 @@ describe("RemoteSkillsTabRoute", () => {
       <RemoteSkillsTabRoute mcpServer={remote} mcpServerSlug="ticketing" />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/ticketing/overview",
+      "/org/projects/project/mcp/ticketing/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });
@@ -256,7 +253,7 @@ describe("RemoteSkillsTabRoute", () => {
       />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/ticketing/overview",
+      "/org/projects/project/mcp/ticketing/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });

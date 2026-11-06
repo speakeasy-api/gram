@@ -1,5 +1,6 @@
 import { Alert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
+import { Combobox } from "@/components/ui/Combobox";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -27,9 +28,8 @@ import {
   serverLabel,
 } from "@/lib/auth-clients";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
-import { useAllRemoteSessionClients } from "@/lib/remote-identity";
+import { IssuerLogo } from "@/lib/remote-identity";
 import { cn } from "@/lib/utils";
-import { remoteSessionClientDisplayName } from "@/pages/remote-identity-providers/clientDisplay";
 import { useRoutes } from "@/routes";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { CreateAuthClientRequestBodyClientType } from "@gram/client/models/components/createauthclientrequestbody.js";
@@ -47,6 +47,7 @@ import {
   newHeaderDraft,
   type HeaderDraft,
 } from "./credentialHeaders";
+import { useSignInChoices } from "./useSignInChoices";
 
 /** What the administrator is adding: one of the new kinds, or a reuse. */
 type Choice =
@@ -101,11 +102,14 @@ function initialHeaders(choice: Choice): HeaderDraft[] {
 export function AddCredentialSheet({
   mcpServerId,
   projectId,
+  remoteMcpServerId,
   tunneled,
   onOpenChange,
 }: {
   mcpServerId: string;
   projectId: string;
+  /** Lets the sign-in list narrow to the upstream's authorization servers. */
+  remoteMcpServerId: string | undefined;
   /** Tunneled servers are sent no credential headers. */
   tunneled: boolean;
   onOpenChange: (open: boolean) => void;
@@ -134,11 +138,19 @@ export function AddCredentialSheet({
     picked ?? (offersExisting ? "existing" : "service_account");
 
   const owner = REGISTRATION_OWNER[choice];
-  const registrations = useAllRemoteSessionClients({}, { enabled: !!owner });
-  const registrationOptions = registrations.items.filter(
-    (registration) => registration.credentialOwner === owner,
+  const signIns = useSignInChoices(owner, remoteMcpServerId);
+  const signIn = signIns.choices.find(
+    (candidate) => candidate.registration.id === registrationId,
   );
-  const registration = registrationOptions.find((r) => r.id === registrationId);
+  const registration = signIn?.registration;
+
+  // A choice the narrower list leaves out must not come back later unseen.
+  const toggleShowAll = () => {
+    if (signIns.showAll && !signIns.matching.some((c) => c === signIn)) {
+      setRegistrationId("");
+    }
+    signIns.setShowAll(!signIns.showAll);
+  };
 
   const done = (message: string) => {
     toast.success(message);
@@ -158,6 +170,7 @@ export function AddCredentialSheet({
   const choose = (next: Choice) => {
     setPicked(next);
     setRegistrationId("");
+    signIns.setShowAll(false);
     setHeaders(initialHeaders(next));
   };
 
@@ -302,20 +315,24 @@ export function AddCredentialSheet({
               {owner ? (
                 <div className="space-y-2">
                   <Label htmlFor="credential-registration">Sign-in</Label>
-                  {registrations.isLoading ? (
+                  {signIns.isLoading ? (
                     <Text muted small>
                       Loading sign-ins…
                     </Text>
-                  ) : registrations.isError ? (
+                  ) : signIns.isError ? (
                     <FieldError>
                       Sign-ins could not be loaded. Refresh the page to try
                       again.
                     </FieldError>
-                  ) : registrationOptions.length === 0 ? (
+                  ) : signIns.choices.length === 0 ? (
                     <Alert variant="info" inline>
                       {owner === "self"
-                        ? "No sign-in that gets its own token is registered yet. "
-                        : "No sign-in for people's own accounts is registered yet. "}
+                        ? "No sign-in that gets its own token is registered"
+                        : "No sign-in for people's own accounts is registered"}
+                      {signIns.upstreamIssuers
+                        ? ` with ${signIns.upstreamIssuers}`
+                        : ""}
+                      {" yet. "}
                       Register one in{" "}
                       <Link
                         className="font-medium underline underline-offset-2"
@@ -326,25 +343,68 @@ export function AddCredentialSheet({
                       , then come back.
                     </Alert>
                   ) : (
-                    <Select
-                      value={registrationId}
-                      onValueChange={setRegistrationId}
+                    <Combobox
+                      id="credential-registration"
+                      items={signIns.choices.map((choice) => ({
+                        value: choice.registration.id,
+                        label: choice.label,
+                        description: choice.description,
+                        keywords: [choice.description],
+                        icon: (
+                          <IssuerLogo
+                            logoAssetId={choice.issuer?.logoAssetId}
+                            name={choice.label}
+                            size="sm"
+                          />
+                        ),
+                      }))}
+                      selected={registrationId}
+                      onSelectionChange={(item) =>
+                        setRegistrationId(item.value)
+                      }
+                      searchPlaceholder="Search sign-ins…"
+                      emptyMessage="No sign-ins match."
+                      className="w-full justify-between"
+                      contentClassName="w-[min(500px,calc(100vw-2rem))]"
                     >
-                      <SelectTrigger
-                        id="credential-registration"
-                        className="w-full"
-                      >
-                        <SelectValue placeholder="Choose a sign-in" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {registrationOptions.map((option) => (
-                          <SelectItem key={option.id} value={option.id}>
-                            {remoteSessionClientDisplayName(option)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      {signIn ? (
+                        <span className="flex min-w-0 items-center gap-2">
+                          <IssuerLogo
+                            logoAssetId={signIn.issuer?.logoAssetId}
+                            name={signIn.label}
+                            size="sm"
+                          />
+                          <span className="truncate">{signIn.label}</span>
+                          <span className="text-muted-foreground truncate font-normal">
+                            {signIn.description}
+                          </span>
+                        </span>
+                      ) : (
+                        "Choose a sign-in"
+                      )}
+                    </Combobox>
                   )}
+                  {!signIns.isLoading &&
+                  !signIns.isError &&
+                  signIns.upstreamIssuers &&
+                  (signIns.hiddenCount > 0 || signIns.showAll) ? (
+                    <Text muted small className="block">
+                      {signIns.showAll
+                        ? "Showing every sign-in, including ones for other services. "
+                        : signIns.choices.length > 0
+                          ? `Showing sign-ins for ${signIns.upstreamIssuers}, as named by the upstream. `
+                          : ""}
+                      <button
+                        type="button"
+                        className="font-medium underline underline-offset-2"
+                        onClick={toggleShowAll}
+                      >
+                        {signIns.showAll
+                          ? `Show only ${signIns.upstreamIssuers}`
+                          : "Show all"}
+                      </button>
+                    </Text>
+                  ) : null}
                 </div>
               ) : (
                 <div className="flex items-center gap-2">

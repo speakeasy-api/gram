@@ -1,6 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
 import { Label } from "@/components/ui/Label";
 import {
   Sheet,
@@ -241,9 +241,7 @@ function ToolApprovalDetails({
             onClick={() => decide("deny")}
           >
             <Button.LeftIcon>
-              {pending === "deny" && (
-                <Icon name="loader-circle" className="animate-spin" />
-              )}
+              {pending === "deny" && <Spinner className="mr-0" />}
             </Button.LeftIcon>
             <Button.Text>Deny</Button.Text>
           </Button>
@@ -253,9 +251,7 @@ function ToolApprovalDetails({
             onClick={() => decide("approve")}
           >
             <Button.LeftIcon>
-              {pending === "approve" && (
-                <Icon name="loader-circle" className="animate-spin" />
-              )}
+              {pending === "approve" && <Spinner className="mr-0" />}
             </Button.LeftIcon>
             <Button.Text>Approve once</Button.Text>
           </Button>

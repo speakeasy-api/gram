@@ -89,6 +89,10 @@ type Client struct {
 	// endpoint.
 	ListScopesDoer goahttp.Doer
 
+	// ListAgentPolicyScopes Doer is the HTTP client used to make requests to the
+	// listAgentPolicyScopes endpoint.
+	ListAgentPolicyScopesDoer goahttp.Doer
+
 	// ListMembers Doer is the HTTP client used to make requests to the listMembers
 	// endpoint.
 	ListMembersDoer goahttp.Doer
@@ -177,6 +181,22 @@ type Client struct {
 	// listIdentityAccess endpoint.
 	ListIdentityAccessDoer goahttp.Doer
 
+	// CreateTemporaryGrant Doer is the HTTP client used to make requests to the
+	// createTemporaryGrant endpoint.
+	CreateTemporaryGrantDoer goahttp.Doer
+
+	// ListTemporaryGrants Doer is the HTTP client used to make requests to the
+	// listTemporaryGrants endpoint.
+	ListTemporaryGrantsDoer goahttp.Doer
+
+	// RenewTemporaryGrant Doer is the HTTP client used to make requests to the
+	// renewTemporaryGrant endpoint.
+	RenewTemporaryGrantDoer goahttp.Doer
+
+	// RevokeTemporaryGrant Doer is the HTTP client used to make requests to the
+	// revokeTemporaryGrant endpoint.
+	RevokeTemporaryGrantDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -215,6 +235,7 @@ func NewClient(
 		GetDirectoryReviewSettingsDoer:           doer,
 		UpdateDirectoryReviewSettingsDoer:        doer,
 		ListScopesDoer:                           doer,
+		ListAgentPolicyScopesDoer:                doer,
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
 		UpdateMemberRolesDoer:                    doer,
@@ -237,6 +258,10 @@ func NewClient(
 		ListChallengeBucketsDoer:                 doer,
 		ResolveChallengeDoer:                     doer,
 		ListIdentityAccessDoer:                   doer,
+		CreateTemporaryGrantDoer:                 doer,
+		ListTemporaryGrantsDoer:                  doer,
+		RenewTemporaryGrantDoer:                  doer,
+		RevokeTemporaryGrantDoer:                 doer,
 		RestoreResponseBody:                      restoreBody,
 		scheme:                                   scheme,
 		host:                                     host,
@@ -672,6 +697,30 @@ func (c *Client) ListScopes() goa.Endpoint {
 		resp, err := c.ListScopesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAgentPolicyScopes returns an endpoint that makes HTTP requests to the
+// access service listAgentPolicyScopes server.
+func (c *Client) ListAgentPolicyScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAgentPolicyScopesRequest(c.encoder)
+		decodeResponse = DecodeListAgentPolicyScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAgentPolicyScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAgentPolicyScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAgentPolicyScopes", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -1200,6 +1249,102 @@ func (c *Client) ListIdentityAccess() goa.Endpoint {
 		resp, err := c.ListIdentityAccessDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listIdentityAccess", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CreateTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service createTemporaryGrant server.
+func (c *Client) CreateTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCreateTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeCreateTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCreateTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CreateTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "createTemporaryGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListTemporaryGrants returns an endpoint that makes HTTP requests to the
+// access service listTemporaryGrants server.
+func (c *Client) ListTemporaryGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListTemporaryGrantsRequest(c.encoder)
+		decodeResponse = DecodeListTemporaryGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListTemporaryGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListTemporaryGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listTemporaryGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RenewTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service renewTemporaryGrant server.
+func (c *Client) RenewTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRenewTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeRenewTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRenewTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RenewTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "renewTemporaryGrant", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RevokeTemporaryGrant returns an endpoint that makes HTTP requests to the
+// access service revokeTemporaryGrant server.
+func (c *Client) RevokeTemporaryGrant() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRevokeTemporaryGrantRequest(c.encoder)
+		decodeResponse = DecodeRevokeTemporaryGrantResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRevokeTemporaryGrantRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RevokeTemporaryGrantDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "revokeTemporaryGrant", err)
 		}
 		return decodeResponse(resp)
 	}

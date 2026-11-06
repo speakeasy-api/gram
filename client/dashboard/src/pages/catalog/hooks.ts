@@ -1,43 +1,36 @@
 import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
+import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
-import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
-import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
+import {
+  catalogServerInstallState,
+  liveCatalogExternalMcp,
+  normalizedUrlSet,
+  type CatalogInstallState,
+} from "@/pages/catalog/catalogInstall";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 
 interface ServerMeta {
-  "com.pulsemcp/server"?: {
-    visitorsEstimateMostRecentWeek?: number;
-    visitorsEstimateLastFourWeeks?: number;
-    visitorsEstimateTotal?: number;
-    isOfficial?: boolean;
-  };
-  "com.pulsemcp/server-version"?: {
-    source?: string;
+  [namespace: string]: unknown;
+  "io.modelcontextprotocol.registry/official"?: {
     status?: string;
     publishedAt?: string;
     updatedAt?: string;
-    isLatest?: boolean;
-    // The catalog list response strips per-tool definitions from the meta blob
-    // to stay small; only the lightweight auth info is kept. Full tools come
-    // from getServerDetails (see `tools` below, populated by enrichment).
-    "remotes[0]"?: {
-      authOptions?: {
-        type?: string;
-      }[];
-    };
+  };
+  /** Backend-owned publication time for native catalog records. */
+  "com.speakeasy.ai/registry"?: {
+    publishedAt?: string;
   };
 }
 
-// The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
-// optional and populated client-side by enrichment (getServerDetails) for the
-// add/release flow that needs per-tool URNs.
-export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
-  meta: ServerMeta;
-  tools?: ExternalMCPTool[];
+export type CatalogServer = Omit<ExternalMCPServerEntry, "meta"> & {
+  meta?: ServerMeta;
 };
 
 // The catalog is small and the backend returns the full list in a single
@@ -46,6 +39,7 @@ export type PulseMCPServer = Omit<ExternalMCPServerEntry, "meta"> & {
 // forwarded so callers that only need a specific server (e.g. the detail page)
 // can narrow the response.
 type CatalogQueryOptions = {
+  projectSlug?: string;
   enabled?: boolean;
   throwOnError?: boolean;
 };
@@ -65,7 +59,8 @@ function useListMCPCatalogImpl(
   options?: CatalogQueryOptions,
 ) {
   const client = useSdkClient();
-  const projectSlug = useProjectSlugForRequests();
+  const currentProjectSlug = useProjectSlugForRequests();
+  const projectSlug = options?.projectSlug ?? currentProjectSlug;
 
   return useQuery({
     queryKey: queryKeyListMCPCatalog({
@@ -97,30 +92,121 @@ export function useListMCPCatalog(
 }
 
 /**
- * Informational "already installed" check for catalog entries: true when a
- * remote MCP server with one of the entry's endpoint URLs already exists in
- * the project. Installing again is always allowed and just creates another
- * server, so this only drives indicators, never blocking.
+ * Informational "already installed" check for catalog entries. Installing
+ * again is always allowed and just creates another server, so this only
+ * drives indicators, never blocking.
+ *
+ * Current installs are remote or unproxied MCP servers matched by endpoint
+ * URL. Older installs are MCP servers whose toolset records the catalog
+ * specifier, or a deployment attachment one of those servers still selects.
+ * An attachment left behind after that server is deleted does not count.
+ *
+ * Lookups are keyed by project. A lookup that is still loading or has failed
+ * leaves the state "unknown" instead of claiming the server is not added.
  */
-export function useIsCatalogServerInstalled(): (
-  server: PulseMCPServer,
-) => boolean {
-  const { data: remoteServersData } = useRemoteMcpServers();
-  const installedUrls = useMemo(
+export function useCatalogInstallations(projectSlug?: string): {
+  installState: (server: CatalogServer) => CatalogInstallState;
+  liveExternalMcp: (server: CatalogServer) => DeploymentExternalMCP | undefined;
+} {
+  const routeProject = useProjectSlugForRequests();
+  const gramProject = projectSlug || routeProject;
+  const projectRequest = gramProject ? { gramProject } : undefined;
+  const queryOptions = { throwOnError: false, enabled: !!gramProject } as const;
+  const remoteQuery = useRemoteMcpServers(
+    projectRequest,
+    undefined,
+    queryOptions,
+  );
+  const unproxiedQuery = useUnproxiedMcpServers(
+    projectRequest,
+    undefined,
+    queryOptions,
+  );
+  const deploymentQuery = useLatestDeployment(
+    projectRequest,
+    undefined,
+    queryOptions,
+  );
+  // Server summaries carry the catalog specifier and external-MCP slugs.
+  // The full toolset list includes every tool definition, which this check
+  // does not need.
+  const serversQuery = useMcpServers(projectRequest, undefined, queryOptions);
+
+  const remoteUrls = useMemo(
     () =>
-      new Set(
-        (remoteServersData?.remoteMcpServers ?? []).map((server) =>
-          normalizeRemoteUrl(server.url),
+      normalizedUrlSet(
+        (remoteQuery.data?.remoteMcpServers ?? []).map((server) => server.url),
+      ),
+    [remoteQuery.data?.remoteMcpServers],
+  );
+  const unproxiedUrls = useMemo(
+    () =>
+      normalizedUrlSet(
+        (unproxiedQuery.data?.unproxiedMcpServers ?? []).map(
+          (server) => server.url,
         ),
       ),
-    [remoteServersData?.remoteMcpServers],
+    [unproxiedQuery.data?.unproxiedMcpServers],
+  );
+  const serverEvidence = useMemo(() => {
+    const originSpecifiers = new Set<string>();
+    const referencedExternalMcpSlugs = new Set<string>();
+    for (const server of serversQuery.data?.mcpServers ?? []) {
+      const specifier = server.toolset?.registrySpecifier;
+      if (specifier) originSpecifiers.add(specifier);
+      for (const slug of server.toolset?.externalMcpSlugs ?? []) {
+        if (slug) referencedExternalMcpSlugs.add(slug);
+      }
+    }
+    return { originSpecifiers, referencedExternalMcpSlugs };
+  }, [serversQuery.data?.mcpServers]);
+
+  const externalMcps = deploymentQuery.data?.deployment?.externalMcps;
+  const ready = useMemo(
+    () => ({
+      remote: remoteQuery.data !== undefined,
+      unproxied: unproxiedQuery.data !== undefined,
+      servers: serversQuery.data !== undefined,
+      deployment: deploymentQuery.data !== undefined,
+    }),
+    [
+      remoteQuery.data,
+      unproxiedQuery.data,
+      serversQuery.data,
+      deploymentQuery.data,
+    ],
+  );
+  const evidence = useMemo(
+    () => ({
+      remoteUrls,
+      unproxiedUrls,
+      originSpecifiers: serverEvidence.originSpecifiers,
+      referencedExternalMcpSlugs: serverEvidence.referencedExternalMcpSlugs,
+    }),
+    [remoteUrls, unproxiedUrls, serverEvidence],
   );
 
-  return useCallback(
-    (server: PulseMCPServer) =>
-      (server.remotes ?? []).some((remote) =>
-        installedUrls.has(normalizeRemoteUrl(remote.url)),
-      ),
-    [installedUrls],
+  const installState = useCallback(
+    (server: CatalogServer) =>
+      catalogServerInstallState(server, evidence, externalMcps ?? [], ready),
+    [evidence, externalMcps, ready],
   );
+  const liveExternalMcp = useCallback(
+    (server: CatalogServer) => {
+      if (!ready.servers || !ready.deployment) return undefined;
+      return liveCatalogExternalMcp(
+        server,
+        externalMcps ?? [],
+        evidence.referencedExternalMcpSlugs,
+      );
+    },
+    [
+      evidence.referencedExternalMcpSlugs,
+      externalMcps,
+      ready.deployment,
+      ready.servers,
+    ],
+  );
+
+  return { installState, liveExternalMcp };
 }

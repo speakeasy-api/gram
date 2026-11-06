@@ -46,7 +46,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -277,6 +279,13 @@ func handleToolsCall(
 		}
 	}
 
+	// A gateway dispatch that fails before the telemetry row below is
+	// registered is logged by the gateway, under this resolved tool.
+	metaAttempt, _ := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt)
+	if metaAttempt != nil {
+		metaAttempt.descriptor = plan.Descriptor
+	}
+
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
@@ -367,15 +376,29 @@ func handleToolsCall(
 		return nil, err
 	}
 
-	// Assistant-initiated calls leave a durable audit trail entry on dispatch,
-	// regardless of how the tool execution turns out. Ordinary user MCP
-	// traffic is not audited here.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	if plan.Kind == gateway.ToolKindPlatform {
+		if definition, ok := platformtools.FindToolDescriptor(toolURN, platformExtras...); ok {
+			ctx, toolCallEnv, _, err = platformtools.PrepareThreadContext(ctx, definition, toolCallEnv, bytes.NewReader(params.Arguments), func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+				principal, chatID, err := threadcontext.Resolve(ctx, db, authzEngine, threadID, write)
+				if err != nil {
+					return principal, chatID, fmt.Errorf("resolve platform thread: %w", err)
+				}
+				return principal, chatID, nil
+			})
+			if err != nil {
+				return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+			}
+		}
+	}
+
+	// Automatic and explicit assistant targets leave a durable dispatch audit
+	// trail without changing the identity of the caller.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, auditLogger, db, assistantToolCallAudit{
 			organizationID: toolset.OrganizationID,
 			projectID:      payload.projectID,
 			principal:      principal,
-			chatID:         payload.chatID,
+			chatID:         toolCallEnv.GramChatID,
 			toolsetSlug:    payload.toolset,
 			toolName:       params.Name,
 			toolURN:        toolURN,
@@ -405,7 +428,7 @@ func handleToolsCall(
 		organizationID:  descriptor.OrganizationID,
 		projectID:       descriptor.ProjectID,
 		sessionID:       payload.sessionID,
-		chatID:          payload.chatID,
+		chatID:          toolCallEnv.GramChatID,
 		toolName:        toolName,
 		toolURN:         toolURN.String(),
 		toolsetSlug:     payload.toolset,
@@ -435,7 +458,7 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                conv.PtrEmpty(payload.chatID),
+			ChatID:                conv.PtrEmpty(toolCallEnv.GramChatID),
 			MCPServerID:           optionalUUIDString(attributedMCPServerID),
 			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
@@ -458,8 +481,8 @@ func handleToolsCall(
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 
-		if payload.chatID != "" {
-			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		if toolCallEnv.GramChatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
 		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
@@ -490,6 +513,9 @@ func handleToolsCall(
 		}
 		telemLogger.Log(ctx, params)
 	}()
+	if metaAttempt != nil {
+		metaAttempt.logged = true
+	}
 
 	// The record is built when the call returns, so a call the scan stops still
 	// shows, and published off the response path.
@@ -509,7 +535,7 @@ func handleToolsCall(
 		ToolName:        toolName,
 		ResourceURI:     "",
 		PromptName:      "",
-		ChatID:          payload.chatID,
+		ChatID:          toolCallEnv.GramChatID,
 		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments))
 	decision := scan.Scan(ctx, requestSubject)
@@ -524,7 +550,7 @@ func handleToolsCall(
 		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
 	}
 	if decision.Denied() {
-		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
@@ -598,7 +624,7 @@ func handleToolsCall(
 		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			discardWithheldBody(rw.body)
-			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
@@ -633,7 +659,7 @@ func handleToolsCall(
 		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			discardWithheldBody(rw.body)
-			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
@@ -768,7 +794,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, logger)
+		return oops.E(oops.CodeForbidden, remotemcp.ErrToolUsageLimitReached, "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil

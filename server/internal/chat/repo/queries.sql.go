@@ -30,6 +30,16 @@ func (q *Queries) AcquireChatPromptCorrelationLock(ctx context.Context, arg Acqu
 	return err
 }
 
+const acquireToolCallSummaryLock = `-- name: AcquireToolCallSummaryLock :exec
+SELECT pg_advisory_lock($1::bigint)
+`
+
+// Session-level: the caller must release it on the same connection.
+func (q *Queries) AcquireToolCallSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, acquireToolCallSummaryLock, lockKey)
+	return err
+}
+
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
 UPDATE chat_user_feedback
 SET chat_resolution_id = $1
@@ -130,7 +140,22 @@ WITH candidate_chats AS (
     -- also carries a human identity (user_id or external_user_id) is that
     -- human's, whatever agent_id says.
     AND ($5 = '' OR c.user_id = $5 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($6::uuid[])))
-    AND ($7::uuid IS NULL OR c.agent_id = $7::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      $7::uuid IS NULL
+      OR c.agent_id = $7::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = $3 AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = $3 AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = $7::uuid
+          AND bound.project_id = $3
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       $8::text = ''
       OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -1087,7 +1112,7 @@ func (q *Queries) GetChatSessionCount(ctx context.Context, arg GetChatSessionCou
 }
 
 const getChatTitlesByIDs = `-- name: GetChatTitlesByIDs :many
-SELECT id, title FROM chats
+SELECT id, title, title_manually_set FROM chats
 WHERE id = ANY($1::uuid[])
   AND project_id = ANY($2::uuid[])
   AND deleted IS FALSE
@@ -1099,8 +1124,9 @@ type GetChatTitlesByIDsParams struct {
 }
 
 type GetChatTitlesByIDsRow struct {
-	ID    uuid.UUID
-	Title pgtype.Text
+	ID               uuid.UUID
+	Title            pgtype.Text
+	TitleManuallySet bool
 }
 
 func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDsParams) ([]GetChatTitlesByIDsRow, error) {
@@ -1112,7 +1138,7 @@ func (q *Queries) GetChatTitlesByIDs(ctx context.Context, arg GetChatTitlesByIDs
 	var items []GetChatTitlesByIDsRow
 	for rows.Next() {
 		var i GetChatTitlesByIDsRow
-		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.TitleManuallySet); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1240,52 +1266,6 @@ func (q *Queries) GetKitProjectionMessage(ctx context.Context, arg GetKitProject
 		&i.RiskAnalyzedAt,
 	)
 	return i, err
-}
-
-const getLLMClientBreakdownByMessages = `-- name: GetLLMClientBreakdownByMessages :many
-SELECT
-  COALESCE(m.source, 'unknown') as client_name,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND m.created_at >= $2
-  AND m.created_at <= $3
-  AND m.role IN ('user', 'assistant')
-GROUP BY client_name
-ORDER BY message_count DESC
-`
-
-type GetLLMClientBreakdownByMessagesParams struct {
-	ProjectID uuid.UUID
-	TimeStart pgtype.Timestamptz
-	TimeEnd   pgtype.Timestamptz
-}
-
-type GetLLMClientBreakdownByMessagesRow struct {
-	ClientName   string
-	MessageCount int64
-}
-
-func (q *Queries) GetLLMClientBreakdownByMessages(ctx context.Context, arg GetLLMClientBreakdownByMessagesParams) ([]GetLLMClientBreakdownByMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getLLMClientBreakdownByMessages, arg.ProjectID, arg.TimeStart, arg.TimeEnd)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetLLMClientBreakdownByMessagesRow
-	for rows.Next() {
-		var i GetLLMClientBreakdownByMessagesRow
-		if err := rows.Scan(&i.ClientName, &i.MessageCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getLatestChatUserPromptSource = `-- name: GetLatestChatUserPromptSource :one
@@ -1563,62 +1543,6 @@ func (q *Queries) GetToolCallSummaryContext(ctx context.Context, arg GetToolCall
 	return i, err
 }
 
-const getTopUsersByMessages = `-- name: GetTopUsersByMessages :many
-SELECT
-  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
-  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = $1
-  AND c.deleted IS FALSE
-  AND m.created_at >= $2
-  AND m.created_at <= $3
-  AND m.role IN ('user', 'assistant')
-  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
-GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
-ORDER BY message_count DESC
-LIMIT $4
-`
-
-type GetTopUsersByMessagesParams struct {
-	ProjectID   uuid.UUID
-	TimeStart   pgtype.Timestamptz
-	TimeEnd     pgtype.Timestamptz
-	ResultLimit int32
-}
-
-type GetTopUsersByMessagesRow struct {
-	UserID       pgtype.Text
-	UserType     string
-	MessageCount int64
-}
-
-func (q *Queries) GetTopUsersByMessages(ctx context.Context, arg GetTopUsersByMessagesParams) ([]GetTopUsersByMessagesRow, error) {
-	rows, err := q.db.Query(ctx, getTopUsersByMessages,
-		arg.ProjectID,
-		arg.TimeStart,
-		arg.TimeEnd,
-		arg.ResultLimit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetTopUsersByMessagesRow
-	for rows.Next() {
-		var i GetTopUsersByMessagesRow
-		if err := rows.Scan(&i.UserID, &i.UserType, &i.MessageCount); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const inferenceChatExists = `-- name: InferenceChatExists :one
 SELECT EXISTS (
   SELECT 1 FROM chats
@@ -1850,6 +1774,30 @@ type IsAgentOwnerParams struct {
 
 func (q *Queries) IsAgentOwner(ctx context.Context, arg IsAgentOwnerParams) (bool, error) {
 	row := q.db.QueryRow(ctx, isAgentOwner, arg.AgentID, arg.OrganizationID, arg.OwnerUserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const isLiveAgent = `-- name: IsLiveAgent :one
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = $1
+    AND a.organization_id = $2
+    AND a.deleted IS FALSE
+)
+`
+
+type IsLiveAgentParams struct {
+	AgentID        uuid.UUID
+	OrganizationID string
+}
+
+// Whether an agent exists in the organization and is not deleted, before a
+// caller's agent:write grant on it lets them read its sessions.
+func (q *Queries) IsLiveAgent(ctx context.Context, arg IsLiveAgentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLiveAgent, arg.AgentID, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -2645,8 +2593,10 @@ SELECT
   l.device_hostname,
   l.created_at,
   pc.title AS parent_title,
+  COALESCE(pc.title_manually_set, FALSE)::boolean AS parent_title_manually_set,
   (pc.id IS NOT NULL)::boolean AS parent_captured,
   cc.title AS child_title,
+  COALESCE(cc.title_manually_set, FALSE)::boolean AS child_title_manually_set,
   (cc.id IS NOT NULL)::boolean AS child_captured
 FROM chat_session_links l
 LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
@@ -2674,19 +2624,21 @@ type ListChatSessionLinksParams struct {
 }
 
 type ListChatSessionLinksRow struct {
-	ParentChatID   uuid.UUID
-	ChildChatID    uuid.NullUUID
-	ChildSessionID pgtype.Text
-	Kind           string
-	TargetHarness  string
-	SourceSurface  pgtype.Text
-	ActorEmail     pgtype.Text
-	DeviceHostname pgtype.Text
-	CreatedAt      pgtype.Timestamptz
-	ParentTitle    pgtype.Text
-	ParentCaptured bool
-	ChildTitle     pgtype.Text
-	ChildCaptured  bool
+	ParentChatID           uuid.UUID
+	ChildChatID            uuid.NullUUID
+	ChildSessionID         pgtype.Text
+	Kind                   string
+	TargetHarness          string
+	SourceSurface          pgtype.Text
+	ActorEmail             pgtype.Text
+	DeviceHostname         pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	ParentTitle            pgtype.Text
+	ParentTitleManuallySet bool
+	ParentCaptured         bool
+	ChildTitle             pgtype.Text
+	ChildTitleManuallySet  bool
+	ChildCaptured          bool
 }
 
 // Session-lineage edges touching any of the requested chats, either as the
@@ -2727,8 +2679,10 @@ func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionL
 			&i.DeviceHostname,
 			&i.CreatedAt,
 			&i.ParentTitle,
+			&i.ParentTitleManuallySet,
 			&i.ParentCaptured,
 			&i.ChildTitle,
+			&i.ChildTitleManuallySet,
 			&i.ChildCaptured,
 		); err != nil {
 			return nil, err
@@ -2994,6 +2948,7 @@ WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.title_manually_set,
     c.session_surface,
     c.user_id,
     c.external_user_id,
@@ -3018,7 +2973,22 @@ WITH candidate_chats AS (
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
     -- sessions would otherwise belong to nobody.
     AND ($4 = '' OR c.user_id = $4 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($5::uuid[])))
-    AND ($6::uuid IS NULL OR c.agent_id = $6::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      $6::uuid IS NULL
+      OR c.agent_id = $6::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = $1 AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = $1 AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = $6::uuid
+          AND bound.project_id = $1
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       $7::text = ''
       OR ($7::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -3132,6 +3102,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.title_manually_set,
     cc.session_surface,
     cc.user_id,
     cc.external_user_id,
@@ -3161,6 +3132,7 @@ limited_chats AS (
   SELECT
     fc.id,
     fc.title,
+    fc.title_manually_set,
     fc.user_id,
     fc.external_user_id,
     fc.created_at,
@@ -3185,22 +3157,26 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
-        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-        CASE WHEN $17 = 'num_messages' AND $20 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
-        CASE WHEN $17 = 'num_messages' AND $20 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        -- pinned_first lists pinned chats ahead of the rest; NULL when off, so
+        -- it does not affect the order.
+        CASE WHEN $20::boolean THEN fc.pinned_at IS NOT NULL END DESC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $21 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $21 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $21 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $21 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
         fc.last_message_timestamp DESC,
         fc.id DESC
     ) AS page_position
   FROM filtered_chats fc
   ORDER BY page_position
-  LIMIT $22
-  OFFSET $21
+  LIMIT $23
+  OFFSET $22
 ),
 page_chats AS (
   SELECT
     lc.id,
     lc.title,
+    lc.title_manually_set,
     lc.user_id,
     lc.external_user_id,
     lc.created_at,
@@ -3264,7 +3240,7 @@ page_chats AS (
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.title_manually_set, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3282,6 +3258,7 @@ chat_attribution AS (
 SELECT
   lc.id,
   lc.title,
+  lc.title_manually_set,
   lc.user_id,
   lc.external_user_id,
   lc.source,
@@ -3324,6 +3301,7 @@ type ListChatsParams struct {
 	SortBy            interface{}
 	FromTime          pgtype.Timestamptz
 	ToTime            pgtype.Timestamptz
+	PinnedFirst       bool
 	SortOrder         interface{}
 	PageOffset        int32
 	PageLimit         int32
@@ -3332,6 +3310,7 @@ type ListChatsParams struct {
 type ListChatsRow struct {
 	ID                   uuid.UUID
 	Title                pgtype.Text
+	TitleManuallySet     bool
 	UserID               pgtype.Text
 	ExternalUserID       pgtype.Text
 	Source               pgtype.Text
@@ -3380,6 +3359,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.SortBy,
 		arg.FromTime,
 		arg.ToTime,
+		arg.PinnedFirst,
 		arg.SortOrder,
 		arg.PageOffset,
 		arg.PageLimit,
@@ -3394,6 +3374,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		if err := rows.Scan(
 			&i.ID,
 			&i.Title,
+			&i.TitleManuallySet,
 			&i.UserID,
 			&i.ExternalUserID,
 			&i.Source,
@@ -3621,6 +3602,35 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationAgentIDs = `-- name: ListOrganizationAgentIDs :many
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+`
+
+// Every live agent in the organization: the candidates a caller's agent:write
+// grants are filtered against to find the agents whose sessions they may read.
+func (q *Queries) ListOrganizationAgentIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationAgentIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -4025,6 +4035,21 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 	return items, nil
 }
 
+const lockChatForCompaction = `-- name: LockChatForCompaction :exec
+SELECT 1 FROM chats WHERE id = $1 AND project_id = $2 FOR UPDATE
+`
+
+type LockChatForCompactionParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Serializes compaction writes for one chat. A missing chat is not an error.
+func (q *Queries) LockChatForCompaction(ctx context.Context, arg LockChatForCompactionParams) error {
+	_, err := q.db.Exec(ctx, lockChatForCompaction, arg.ID, arg.ProjectID)
+	return err
+}
+
 const lockChatRowForTest = `-- name: LockChatRowForTest :exec
 SELECT id FROM chats WHERE id = $1 AND project_id = $2 FOR NO KEY UPDATE
 `
@@ -4187,6 +4212,15 @@ func (q *Queries) RecordSlackMessageParticipant(ctx context.Context, arg RecordS
 		arg.TeamID,
 		arg.MessageID,
 	)
+	return err
+}
+
+const releaseToolCallSummaryLock = `-- name: ReleaseToolCallSummaryLock :exec
+SELECT pg_advisory_unlock($1::bigint)
+`
+
+func (q *Queries) ReleaseToolCallSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, releaseToolCallSummaryLock, lockKey)
 	return err
 }
 

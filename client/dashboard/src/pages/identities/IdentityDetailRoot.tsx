@@ -14,7 +14,6 @@ import {
 } from "@/components/route-not-found-state";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Badge } from "@/components/ui/Badge";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
@@ -116,7 +115,7 @@ function IdentityDetailContent(): JSX.Element {
   const recentsUserId = useRecentsUserId(agentUnavailable);
   const { orgSlug, projectSlug } = useSlugs();
   const resourceHref = encodedUrn
-    ? routes.identities.href(encodedUrn)
+    ? routes.identities.detail.href(encodedUrn)
     : undefined;
   useEffect(() => {
     if (!agentUnavailable || !recentsUserId || !resourceHref) return;
@@ -429,16 +428,7 @@ function IdentityDetailLoading(): JSX.Element {
       <Page.Header>
         <Page.Header.Breadcrumbs />
       </Page.Header>
-      <Page.Body fullWidth className="gap-0">
-        <div
-          aria-label="Loading identity"
-          className="mx-auto w-full max-w-[1270px] flex-1 space-y-8 px-8 py-8"
-        >
-          <Skeleton className="h-20 w-full" />
-          <Skeleton className="h-64 w-full" />
-          <Skeleton className="h-48 w-full" />
-        </div>
-      </Page.Body>
+      <Page.Body isLoading>{null}</Page.Body>
     </Page>
   );
 }

@@ -4,4 +4,4 @@
 "dashboard": patch
 ---
 
-Staff can turn skills over MCP on for a single organization from the admin dashboard's Features page. The new "Skills over MCP" toggle works alongside the existing rollout flag: an organization gets skills served over MCP when either one is on.
+Skills over MCP is now a per-organization switch that staff turn on from the admin dashboard's Features page. It is off by default for every organization and replaces the `skills-over-mcp` rollout flag.

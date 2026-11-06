@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // A GitHub Actions subject: colons inside the external subject are what make a
@@ -97,19 +99,19 @@ func seedWorkloadAgent(t *testing.T, ctx context.Context, conn *pgxpool.Pool, na
 }
 
 // seedWorkloadAssignment assigns an agent to a workload principal directly.
-// There is no create query yet: writes belong to the workload identity
-// management API.
+// Writes belong to the workload identity management API, so this uses a fixture.
 func seedWorkloadAssignment(t *testing.T, ctx context.Context, conn *pgxpool.Pool, issuerID uuid.UUID, subject string, agentID uuid.UUID) {
 	t.Helper()
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
-		VALUES ($1, $2, $3, $4)
-	`, authCtx.ActiveOrganizationID, issuerID, subject, agentID)
+	err := usersessionsrepo.New(conn).SeedWorkloadAgentAssignmentFixture(ctx, usersessionsrepo.SeedWorkloadAgentAssignmentFixtureParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		AgentID:          agentID,
+	})
 	require.NoError(t, err)
 }
 
@@ -121,13 +123,13 @@ func seedWorkloadAdmission(t *testing.T, ctx context.Context, conn *pgxpool.Pool
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
-		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id
-	`, authCtx.ActiveOrganizationID, projectID, issuerID, subject, name).Scan(&id)
+	id, err := usersessionsrepo.New(conn).SeedWorkloadAdmissionFixture(ctx, usersessionsrepo.SeedWorkloadAdmissionFixtureParams{
+		OrganizationID:   authCtx.ActiveOrganizationID,
+		ProjectID:        projectID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		Name:             pgtype.Text{String: name, Valid: true},
+	})
 	require.NoError(t, err)
 
 	return id
@@ -290,8 +292,7 @@ func TestListUserSessions_ListsEveryAdmissionLettingTheWorkloadIn(t *testing.T) 
 	siblingProjectID := createSiblingProject(t, ctx, ti.conn, "workload-admissions-sibling")
 
 	withdrawn := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Withdrawn admission")
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1`, withdrawn)
+	err := usersessionsrepo.New(ti.conn).WithdrawWorkloadAdmissionFixture(ctx, withdrawn)
 	require.NoError(t, err)
 
 	projectAdmission := seedWorkloadAdmission(t, ctx, ti.conn, project, workloadIssuerID, workloadTestSubject, "Project admission")

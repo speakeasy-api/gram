@@ -56,7 +56,9 @@ function PageHeaderComponent({
   // banner there would hide a paused organization from the page it was working
   // on.
   const onBillingPage = useMatch("/:orgSlug/billing") !== null;
-  const showBreadcrumbs = useShowBreadcrumbs();
+  const breadcrumbPage = useShowBreadcrumbs();
+  const showBreadcrumbs =
+    breadcrumbPage && React.Children.toArray(children).length > 0;
   const stickyRef = useStickyTopVar();
 
   return (
@@ -99,7 +101,10 @@ function PageHeaderComponent({
           and on one line the two read as a single path. px-8 matches
           Page.Body so the crumbs line up with the content edge. */}
         {showBreadcrumbs && (
-          <div className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5">
+          <div
+            data-slot="page-breadcrumbs"
+            className="border-foreground/10 flex shrink-0 items-center gap-2 border-b px-8 py-2.5"
+          >
             {children}
           </div>
         )}
@@ -204,14 +209,16 @@ type PageHeaderBreadcrumbsTrailProps = PageHeaderBreadcrumbsProps & {
 // (S-853 made it the inventory and put the add flow, the catalog and sources
 // underneath it) and Identities (each person has their own page below the
 // roster) and Remote Identity Providers (each session client sits below its
-// provider). Those pages sit two and three levels deep with no way back up but
-// browser back. Listed by first path segment; every caller still mounts
+// provider) and Watchdog (each signal has its own page below the list). Those
+// pages sit two and three levels deep with no way back up but browser back.
+// Listed by first path segment; every caller still mounts
 // <PageHeader.Breadcrumbs>, so adding a surface here is all it takes.
 const BREADCRUMB_PAGE_SLUGS = new Set([
   "mcp",
   "identities",
   "shadow-ai",
   "remote-identity-providers",
+  "watchdog",
 ]);
 
 // Whether the current page shows a breadcrumb trail. Shared by the header (to

@@ -589,6 +589,25 @@ WHERE a.organization_id = @organization_id
   AND a.owner_reassignment_required_at IS NULL
   AND a.deleted IS FALSE;
 
+-- name: ListOrganizationAgentIDs :many
+-- Every live agent in the organization: the candidates a caller's agent:write
+-- grants are filtered against to find the agents whose sessions they may read.
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE;
+
+-- name: IsLiveAgent :one
+-- Whether an agent exists in the organization and is not deleted, before a
+-- caller's agent:write grant on it lets them read its sessions.
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = @agent_id
+    AND a.organization_id = @organization_id
+    AND a.deleted IS FALSE
+);
+
 -- name: IsAgentOwner :one
 SELECT EXISTS (
   SELECT 1
@@ -624,7 +643,22 @@ WITH candidate_chats AS (
     -- also carries a human identity (user_id or external_user_id) is that
     -- human's, whatever agent_id says.
     AND (@user_id = '' OR c.user_id = @user_id OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
-    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      sqlc.narg(agent_id)::uuid IS NULL
+      OR c.agent_id = sqlc.narg(agent_id)::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = @project_id AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = @project_id AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = sqlc.narg(agent_id)::uuid
+          AND bound.project_id = @project_id
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -745,6 +779,7 @@ WITH candidate_chats AS (
   SELECT
     c.id,
     c.title,
+    c.title_manually_set,
     c.session_surface,
     c.user_id,
     c.external_user_id,
@@ -769,7 +804,22 @@ WITH candidate_chats AS (
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
     -- sessions would otherwise belong to nobody.
     AND (@user_id = '' OR c.user_id = @user_id OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
-    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      sqlc.narg(agent_id)::uuid IS NULL
+      OR c.agent_id = sqlc.narg(agent_id)::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = @project_id AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = @project_id AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = sqlc.narg(agent_id)::uuid
+          AND bound.project_id = @project_id
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -883,6 +933,7 @@ filtered_chats AS (
   SELECT
     cc.id,
     cc.title,
+    cc.title_manually_set,
     cc.session_surface,
     cc.user_id,
     cc.external_user_id,
@@ -912,6 +963,7 @@ limited_chats AS (
   SELECT
     fc.id,
     fc.title,
+    fc.title_manually_set,
     fc.user_id,
     fc.external_user_id,
     fc.created_at,
@@ -936,6 +988,9 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
+        -- pinned_first lists pinned chats ahead of the rest; NULL when off, so
+        -- it does not affect the order.
+        CASE WHEN @pinned_first::boolean THEN fc.pinned_at IS NOT NULL END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
         CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
@@ -952,6 +1007,7 @@ page_chats AS (
   SELECT
     lc.id,
     lc.title,
+    lc.title_manually_set,
     lc.user_id,
     lc.external_user_id,
     lc.created_at,
@@ -1033,6 +1089,7 @@ chat_attribution AS (
 SELECT
   lc.id,
   lc.title,
+  lc.title_manually_set,
   lc.user_id,
   lc.external_user_id,
   lc.source,
@@ -1201,7 +1258,7 @@ LEFT JOIN agents acting_agent ON acting_agent.id = c.agent_id
 WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
 
 -- name: GetChatTitlesByIDs :many
-SELECT id, title FROM chats
+SELECT id, title, title_manually_set FROM chats
 WHERE id = ANY(@ids::uuid[])
   AND project_id = ANY(@project_ids::uuid[])
   AND deleted IS FALSE;
@@ -1802,37 +1859,6 @@ SELECT
   EXISTS (SELECT 1 FROM del) AS deleted,
   COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
 
--- name: GetTopUsersByMessages :many
-SELECT
-  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
-  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
-GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
-ORDER BY message_count DESC
-LIMIT @result_limit;
-
--- name: GetLLMClientBreakdownByMessages :many
-SELECT
-  COALESCE(m.source, 'unknown') as client_name,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-GROUP BY client_name
-ORDER BY message_count DESC;
-
 -- name: GetActiveUserCountByMessages :one
 SELECT
   COUNT(DISTINCT COALESCE(NULLIF(c.external_user_id, ''), c.user_id))::bigint as active_user_count
@@ -1988,8 +2014,10 @@ SELECT
   l.device_hostname,
   l.created_at,
   pc.title AS parent_title,
+  COALESCE(pc.title_manually_set, FALSE)::boolean AS parent_title_manually_set,
   (pc.id IS NOT NULL)::boolean AS parent_captured,
   cc.title AS child_title,
+  COALESCE(cc.title_manually_set, FALSE)::boolean AS child_title_manually_set,
   (cc.id IS NOT NULL)::boolean AS child_captured
 FROM chat_session_links l
 -- The caller's visibility predicate lives in the JOIN conditions, so an end
@@ -2226,3 +2254,14 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
+
+-- name: LockChatForCompaction :exec
+-- Serializes compaction writes for one chat. A missing chat is not an error.
+SELECT 1 FROM chats WHERE id = @id AND project_id = @project_id FOR UPDATE;
+
+-- name: AcquireToolCallSummaryLock :exec
+-- Session-level: the caller must release it on the same connection.
+SELECT pg_advisory_lock(@lock_key::bigint);
+
+-- name: ReleaseToolCallSummaryLock :exec
+SELECT pg_advisory_unlock(@lock_key::bigint);

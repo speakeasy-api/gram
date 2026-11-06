@@ -3,9 +3,11 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -16,15 +18,62 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// ConnectionCatalogKey exposes where an approved catalog is stored.
+func ConnectionCatalogKey(organizationID string, id uuid.UUID) string {
+	return connectionCatalogKey(organizationID, id)
+}
+
+// InflateConsentInventory makes a completed capture too big to freeze into a catalog.
+func (s *Service) InflateConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) error {
+	inventory, found, err := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt)
+	if err != nil {
+		return err
+	}
+	if !found || len(inventory.Tools) == 0 || inventory.Tools[0].Definition == nil {
+		return fmt.Errorf("no completed capture for attempt %s", attempt)
+	}
+	inventory.Tools[0].Definition.Description = strings.Repeat("x", connectionCatalogMaxBytes)
+	inventory.Tools[0].DefinitionHash = consentEvidenceHash(inventory.Tools[0].Definition)
+	if err := s.consentToolInventoryCache.Store(ctx, inventory); err != nil {
+		return fmt.Errorf("store inflated capture: %w", err)
+	}
+	return nil
+}
+
+// DrainConnectionEndings waits for once-only endings in flight.
+func (s *Service) DrainConnectionEndings(ctx context.Context) error {
+	return s.attemptEndings.drain(ctx)
+}
+
+// SetConnectionRecorder replaces the connection attempt recorder.
+func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
+	s.connections = recorder
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.Connections = recorder
+	}
+}
+
+// ConnectionAttempt exposes the state's connection attempt.
+func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
+	return a.connectionAttempt(endpoint)
+}
+
+// SetEnvironmentLoader replaces the environment loader.
+func (s *Service) SetEnvironmentLoader(loader toolconfig.EnvironmentLoader) {
+	s.env = loader
+}
 
 // SetCIMDResolver replaces the client metadata document resolver.
 func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
@@ -61,7 +110,7 @@ func AdmitWorkloadAssertion(
 
 // VerifyRemoteGrant exposes the grant hook to tests.
 func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
-	return s.verifyRemoteGrant(ctx, grant)
+	return s.verifyRemoteGrant(ctx, mcpconnectionattempts.FromRequest(nil), grant)
 }
 
 // VerifyRemoteGrantOn runs the probe step against an endpoint the test resolved itself.
@@ -72,7 +121,7 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return
 	}
-	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+	s.probeRemoteGrant(ctx, s.logger, mcpconnectionattempts.FromRequest(nil), endpoint, challengeState, grant)
 }
 
 // LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
@@ -184,6 +233,35 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	return s.verifyConnectionRecoveryCompletion(r, remote)
 }
 
+// TagTunnelOutage and ErrTunnelNoRoute expose the answer every tunneled path shares.
+var (
+	TagTunnelOutage  = tagTunnelOutage
+	ErrTunnelNoRoute = errTunnelNoRoute
+)
+
+// SetDB swaps only the pool the service reads endpoints through, to fail that first read.
+func (s *Service) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
+// ConnectionRouteFailureForOutage is what Code Mode reports for a connection in an outage.
+func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool) (string, string) {
+	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
+}
+
+// RemoteSessionUnavailableError exposes the answer for a required connection in an outage.
+var RemoteSessionUnavailableError = remoteSessionUnavailableError
+
+// SetAuthzEngine swaps the authorization engine, to make it fail.
+func (s *Service) SetAuthzEngine(engine *authz.Engine) {
+	s.authz = engine
+}
+
+// SetChatSessionsManager swaps the store revocation checks read, to take it down.
+func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
+	s.chatSessionsManager = manager
+}
+
 // ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.
 const (
 	ConnectionRecoveryRoute    = connectionRecoveryRoute
@@ -209,7 +287,7 @@ func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *Reso
 		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
 		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
 	}
-	return s.connectionRecoveryError(ctx, authentication)
+	return s.connectionRecoveryError(ctx, authentication, nil)
 }
 
 type callerRecordingPermitter struct {
@@ -260,4 +338,9 @@ func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotese
 // SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
 func (s *Service) SetIDJAGTrust(store idjag.Store) {
 	s.idJAGTrust = store
+}
+
+// StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
+func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
+	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
 }

@@ -12,7 +12,8 @@ import {
 } from "@/lib/adminQueries";
 import {
   organizationFeaturesQuery,
-  useSetAdminOrganizationFeatureMutation,
+  setAdminOrganizationProviderSetup,
+  setAdminOrganizationFeature,
 } from "@/lib/gramAdminClient";
 import {
   errorMessage,
@@ -39,7 +40,16 @@ type ProductFeatureDecision =
     }
   | { kind: "omitted"; where: string };
 
+type AdminFeatureName = FeatureName | "provider_setup";
+
 const PRODUCT_FEATURES = {
+  provider_setup: {
+    kind: "toggle",
+    enabledKey: "providerSetupEnabled",
+    label: "MCP provider setup",
+    description:
+      "Enables guided OAuth app setup for supported MCP providers in this organization.",
+  },
   ai_platform_push_integrations: {
     kind: "toggle",
     enabledKey: "aiPlatformPushIntegrationsEnabled",
@@ -115,7 +125,7 @@ const PRODUCT_FEATURES = {
     enabledKey: "skillsOverMcpEnabled",
     label: "Skills over MCP",
     description:
-      "Enables Skills over MCP for this organization: linked skills on hosted MCP servers and gateways, the Platform MCP skill surface, and skill links in the dashboard. Also on for organizations in the skills-over-mcp rollout flag.",
+      "Enables Skills over MCP for this organization: linked skills on hosted MCP servers and gateways, the Platform MCP skill surface, and skill links in the dashboard. Off by default.",
   },
   sso: {
     kind: "toggle",
@@ -174,7 +184,7 @@ const PRODUCT_FEATURES = {
     kind: "omitted",
     where: "Dashboard Gateway settings",
   },
-} satisfies Record<FeatureName, ProductFeatureDecision>;
+} satisfies Record<AdminFeatureName, ProductFeatureDecision>;
 
 export function FeaturesRoute(): JSX.Element | null {
   const { idOrSlug } = useParams({ from: "/organizations/$idOrSlug" });
@@ -223,7 +233,19 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
     ...query,
     enabled: !!org.id,
   });
-  const mutation = useSetAdminOrganizationFeatureMutation({
+  const mutation = useMutation({
+    mutationFn: ({
+      organizationId,
+      featureName,
+      enabled,
+    }: {
+      organizationId: string;
+      featureName: AdminFeatureName;
+      enabled: boolean;
+    }) =>
+      featureName === "provider_setup"
+        ? setAdminOrganizationProviderSetup({ organizationId, enabled })
+        : setAdminOrganizationFeature({ organizationId, featureName, enabled }),
     onMutate: async ({ featureName, enabled }) => {
       await queryClient.cancelQueries({ queryKey: query.queryKey });
       const previous = queryClient.getQueryData<ProductFeatures>(
@@ -282,7 +304,7 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
         <div className="divide-border divide-y">
           {Object.entries(PRODUCT_FEATURES).map(([featureName, feature]) => {
             if (feature.kind === "omitted") return null;
-            const typedFeatureName = featureName as FeatureName;
+            const typedFeatureName = featureName as AdminFeatureName;
             const rowError =
               mutation.isError &&
               mutation.variables.featureName === typedFeatureName
@@ -299,11 +321,13 @@ function ProductFeatures({ org }: { org: AdminOrganization }): JSX.Element {
                     {feature.description}
                   </p>
                   {rowError && (
-                    <p className="text-destructive mt-1 text-sm">{rowError}</p>
+                    <p className="text-destructive mt-1 text-sm" role="alert">
+                      {rowError}
+                    </p>
                   )}
                 </div>
                 <Switch
-                  checked={data[feature.enabledKey]}
+                  checked={data[feature.enabledKey] ?? false}
                   disabled={mutation.isPending}
                   onCheckedChange={(enabled) =>
                     mutation.mutate({

@@ -3,14 +3,11 @@ package platformmcp
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"maps"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 )
@@ -25,38 +22,22 @@ type SkillsGate interface {
 	SkillsEnabled(ctx context.Context, organizationID string) bool
 }
 
-// FeatureSkillsGate evaluates the skills-over-mcp rollout the way the hosted
-// and assistant surfaces do: the PostHog flag by organization id, with the
-// organization's slug as its PostHog group, from locally cached definitions
-// only, or the staff-managed skills_over_mcp product feature, failing closed.
-// A slug lookup failure degrades to id-only evaluation.
+// FeatureSkillsGate serves the Skills extension to organizations with the
+// staff-managed skills_over_mcp product feature, the same switch the hosted
+// and assistant surfaces read. It fails closed.
 type FeatureSkillsGate struct {
-	logger   *slog.Logger
-	features feature.Provider
 	entitled mcpskills.FeatureChecker
-	slugs    OrganizationSlugResolver
 }
 
-func NewFeatureSkillsGate(logger *slog.Logger, features feature.Provider, entitled mcpskills.FeatureChecker, slugs OrganizationSlugResolver) *FeatureSkillsGate {
-	return &FeatureSkillsGate{logger: logger, features: features, entitled: entitled, slugs: slugs}
+func NewFeatureSkillsGate(entitled mcpskills.FeatureChecker) *FeatureSkillsGate {
+	return &FeatureSkillsGate{entitled: entitled}
 }
 
 func (g *FeatureSkillsGate) SkillsEnabled(ctx context.Context, organizationID string) bool {
-	if g == nil || (g.features == nil && g.entitled == nil) || organizationID == "" {
+	if g == nil {
 		return false
 	}
-
-	var slug string
-	if g.slugs != nil {
-		resolved, err := g.slugs.OrganizationSlug(ctx, organizationID)
-		if err != nil {
-			g.logger.WarnContext(ctx, "resolve organization slug for skills-over-mcp flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-		} else {
-			slug = resolved
-		}
-	}
-
-	return mcpskills.FlagEnabled(ctx, g.logger, g.features, g.entitled, organizationID, slug)
+	return mcpskills.Enabled(ctx, g.entitled, organizationID)
 }
 
 // skillsListParams is the params of skills/list. The catalog fits in one

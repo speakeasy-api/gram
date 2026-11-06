@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Label } from "@/components/ui/Label";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { useProject } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useRegisterWorkloadIssuerMutation } from "@gram/client/react-query/registerWorkloadIssuer.js";
@@ -94,7 +95,12 @@ export function WorkloadIssuerSelector({
       setBusy(false);
     }
   };
-  if (loading) return <p role="status">Loading workload issuers…</p>;
+  if (loading)
+    return (
+      <div role="status" aria-label="Loading workload issuers">
+        <Skeleton className="h-9 w-full" />
+      </div>
+    );
   if (failed)
     return (
       <div role="alert">

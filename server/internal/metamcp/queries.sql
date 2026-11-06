@@ -302,6 +302,11 @@ RETURNING *;
 -- caller still fails closed on none or several, since a grant records one
 -- resource.
 --
+-- With typed_offers, a member is associated with the client when it offers
+-- the client's registration through an enabled personal or identity-provider
+-- auth client, the offers ListServerConsentAuthClients lists, rather than
+-- through mcp_server_remote_session_clients.
+--
 -- upstream_url is the member's RFC 8707 resource: the remote server URL or
 -- the tunneled server's recorded resource identifier (empty when a tunneled
 -- member records none — the claim still lands, minting an unqualified grant).
@@ -332,12 +337,29 @@ WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.deleted IS FALSE
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = @remote_session_client_id
-      AND a.deleted IS FALSE
+  AND (
+    (NOT @typed_offers::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = @remote_session_client_id
+        AND a.deleted IS FALSE
+    ))
+    OR (@typed_offers::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = @remote_session_client_id
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY m.sort_order, m.created_at, m.id;
 
@@ -346,8 +368,8 @@ ORDER BY m.sort_order, m.created_at, m.id;
 -- ListMetaMCPMembersForRemoteSessionClient: the organization's proxied servers
 -- associated with a given upstream OAuth client, filtered as
 -- ListServableMCPServersByOrganizationID so a server the gateway cannot serve
--- cannot claim a credential either. Returns the same columns, so callers
--- treat both alike.
+-- cannot claim a credential either. Returns the same columns and reads
+-- typed_offers the same way, so callers treat both alike.
 --
 -- project_id narrows the claim to one project's servers, for a client that a
 -- project owns: that client's grant routes only to its own project's members.
@@ -379,21 +401,39 @@ WHERE p.organization_id = @organization_id
   AND s.visibility <> 'disabled'
   AND s.slug IS NOT NULL
   AND (r.id IS NOT NULL OR t.id IS NOT NULL)
-  AND EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS a
-    WHERE a.mcp_server_id = s.id
-      AND a.remote_session_client_id = @remote_session_client_id
-      AND a.deleted IS FALSE
+  AND (
+    (NOT @typed_offers::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_remote_session_clients AS a
+      WHERE a.mcp_server_id = s.id
+        AND a.remote_session_client_id = @remote_session_client_id
+        AND a.deleted IS FALSE
+    ))
+    OR (@typed_offers::boolean AND EXISTS (
+      SELECT 1
+      FROM mcp_server_auth_clients AS link
+      JOIN mcp_auth_clients AS c
+        ON c.id = link.auth_client_id
+       AND c.organization_id = link.organization_id
+       AND (c.project_id IS NULL OR c.project_id = s.project_id)
+       AND c.deleted IS FALSE
+       AND c.enabled
+      WHERE link.mcp_server_id = s.id
+        AND link.project_id = s.project_id
+        AND link.organization_id = p.organization_id
+        AND link.deleted IS FALSE
+        AND c.remote_session_client_id = @remote_session_client_id
+        AND c.client_type IN ('remote_session', 'ema')
+    ))
   )
 ORDER BY s.project_id, s.slug;
 
 -- name: ListOrganizationProxiedMCPServerResources :many
 -- The organization gateway's counterpart to ListMetaMCPProxiedMemberResources,
 -- over the servers ListOrganizationMCPServersForRemoteSessionClient considers:
--- one row per server and associated client. Each row carries its server's
--- project and network access mode, which the caller matches against a card's
--- client and the request's surface.
+-- one row per server and associated client, read by typed_offers the same
+-- way. Each row carries its server's project and network access mode, which
+-- the caller matches against a card's client and the request's surface.
 SELECT
     a.remote_session_client_id,
     s.id AS mcp_server_id,
@@ -412,9 +452,29 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = s.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT @typed_offers::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE @typed_offers::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.organization_id = p.organization_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
 WHERE p.organization_id = @organization_id
   AND s.deleted IS FALSE
   AND s.visibility <> 'disabled'
@@ -424,9 +484,10 @@ ORDER BY s.project_id, s.slug, a.remote_session_client_id;
 
 -- name: ListMetaMCPProxiedMemberResources :many
 -- Every proxied member's associated clients and RFC 8707 resource, one row
--- per member and associated client, with the member filters of
--- ListMetaMCPMembersForRemoteSessionClient, so a consent render resolves
--- resource display ownership for every card from one read.
+-- per member and associated client, with the member filters and the
+-- typed_offers reading of ListMetaMCPMembersForRemoteSessionClient, so a
+-- consent render resolves resource display ownership for every card from one
+-- read.
 SELECT
     a.remote_session_client_id,
     s.id AS mcp_server_id,
@@ -447,9 +508,28 @@ LEFT JOIN tunneled_mcp_servers t
   ON t.id = s.tunneled_mcp_server_id
  AND t.project_id = m.project_id
  AND t.deleted IS FALSE
-JOIN mcp_server_remote_session_clients a
-  ON a.mcp_server_id = s.id
- AND a.deleted IS FALSE
+CROSS JOIN LATERAL (
+  SELECT assoc.remote_session_client_id
+  FROM mcp_server_remote_session_clients AS assoc
+  WHERE NOT @typed_offers::boolean
+    AND assoc.mcp_server_id = s.id
+    AND assoc.deleted IS FALSE
+  UNION
+  SELECT c.remote_session_client_id
+  FROM mcp_server_auth_clients AS link
+  JOIN mcp_auth_clients AS c
+    ON c.id = link.auth_client_id
+   AND c.organization_id = link.organization_id
+   AND (c.project_id IS NULL OR c.project_id = s.project_id)
+   AND c.deleted IS FALSE
+   AND c.enabled
+  WHERE @typed_offers::boolean
+    AND link.mcp_server_id = s.id
+    AND link.project_id = s.project_id
+    AND link.deleted IS FALSE
+    AND c.remote_session_client_id IS NOT NULL
+    AND c.client_type IN ('remote_session', 'ema')
+) AS a
 WHERE m.meta_mcp_server_id = @meta_mcp_server_id
   AND m.project_id = @project_id
   AND m.deleted IS FALSE
@@ -590,9 +670,25 @@ WHERE e.project_id = @project_id
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
 
--- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
--- Gateway names for telemetry labels, deleted gateways included.
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = @project_id
-ORDER BY deleted ASC, created_at DESC;
+-- name: ListMetaMCPServerLabelsForTelemetry :many
+-- Names the stored gateways among telemetry ids, deleted gateways included: a
+-- member's calls are logged in the member's project, which need not be the
+-- gateway's. Ids that are not stored gateways (agent and organization gateways
+-- stamp derived ids) simply match nothing. The project and deleted flags let a
+-- label link to the gateway's page while it still has one, and say which
+-- project the caller must be able to read to see the name.
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND ms.id = ANY(@ids::uuid[]);
+
+-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

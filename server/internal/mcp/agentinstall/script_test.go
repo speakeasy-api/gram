@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 const (
@@ -130,15 +131,17 @@ func TestScriptEmbedsTheAgentsOpenClawPlugin(t *testing.T) {
 	archive := embeddedPlugin(t, renderScript(t, testParams()))
 
 	var config struct {
-		ServerURL   string `json:"server_url"`
-		Project     string `json:"project"`
-		Org         string `json:"org"`
-		HooksAPIKey string `json:"hooks_api_key"`
-		AgentKey    bool   `json:"agent_key"`
+		ServerURL    string `json:"server_url"`
+		Project      string `json:"project"`
+		Org          string `json:"org"`
+		HooksAPIKey  string `json:"hooks_api_key"`
+		AgentKey     bool   `json:"agent_key"`
+		InstallRoute string `json:"install_route"`
 	}
 	require.NoError(t, json.Unmarshal(zipFile(t, archive, "speakeasy.json"), &config))
 	require.Equal(t, testKey, config.HooksAPIKey)
 	require.True(t, config.AgentKey)
+	require.Equal(t, plugins.InstallRouteAgentInstall, config.InstallRoute)
 	require.Equal(t, testProject, config.Project)
 	require.Equal(t, testServerURL, config.ServerURL)
 	require.Equal(t, testOrgID, config.Org)

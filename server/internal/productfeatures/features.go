@@ -10,6 +10,9 @@ import (
 type Feature string
 
 const (
+	// FeatureProviderSetup is the temporary staff-managed rollout for provider setup.
+	// It defaults off and is never included in signup, trial, or demo bundles.
+	FeatureProviderSetup  Feature = "provider_setup"
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"
 	FeatureSessionCapture Feature = "session_capture"
@@ -62,10 +65,10 @@ const (
 	// serve Progressive discovery.
 	FeatureCodeMode Feature = "code_mode"
 	// FeatureSkillsOverMCP is the staff-managed per-organization switch for
-	// serving managed skills over MCP. It is ORed with the skills-over-mcp
-	// PostHog flag (see mcpskills.FlagEnabled), so staff can turn the feature
-	// on for one organization from the admin dashboard without editing flag
-	// targeting. Never included in default bundles.
+	// serving managed skills over MCP (the io.modelcontextprotocol/skills
+	// extension on hosted MCP servers, gateways and Platform MCP, plus the
+	// skill links API and dashboard hints). Off by default; staff turn it on
+	// from the admin dashboard. Never included in default bundles.
 	FeatureSkillsOverMCP Feature = "skills_over_mcp"
 	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
 	// servers through the typed auth client resolver and requires mcp:auth on

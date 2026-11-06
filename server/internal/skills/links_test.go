@@ -14,31 +14,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/skills"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// newLinkTestService returns a test service in the skills-over-mcp rollout,
-// with a caller who holds skill write, mcp write on every server and project
+// newLinkTestService returns a test service whose organization has the
+// skills_over_mcp product feature, with a caller who holds skill write, mcp write on every server and project
 // write, which together cover every link target.
-func newLinkTestService(t *testing.T) (context.Context, *testInstance, *feature.InMemory) {
+func newLinkTestService(t *testing.T) (context.Context, *testInstance) {
 	t.Helper()
 
 	ctx, ti := newTestService(t)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagSkillsOverMCP, ti.authContext.ActiveOrganizationID, true)
-	ti.service.WithFeatureProvider(flags)
+	setSkillsOverMCP(t, ctx, ti, true)
 	ctx = authztest.WithExactGrants(t, ctx,
 		authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()),
 		authz.NewGrant(authz.ScopeMCPWrite, "*"),
 		authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()),
 	)
-	return ctx, ti, flags
+	return ctx, ti
+}
+
+func setSkillsOverMCP(t *testing.T, ctx context.Context, ti *testInstance, enabled bool) {
+	t.Helper()
+	require.NoError(t, ti.features.SetFeatureEnabled(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkillsOverMCP, enabled))
 }
 
 type linkTestServer struct {
@@ -99,7 +102,7 @@ func auditCount(t *testing.T, ctx context.Context, ti *testInstance, action audi
 func TestSkillLinkLifecycle(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "linked-skill", "Linked over MCP.")
 	server := createLinkServer(t, ctx, ti, ti.projectID, "linked-server")
 	linksBefore := auditCount(t, ctx, ti, audit.ActionSkillLink)
@@ -165,7 +168,7 @@ func TestSkillLinkLifecycle(t *testing.T) {
 func TestSkillLinkGatewayTargetsAndFilters(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	first := createSkill(t, ctx, ti, "first-linked", "First.")
 	second := createSkill(t, ctx, ti, "second-linked", "Second.")
 	server := createLinkServer(t, ctx, ti, ti.projectID, "filter-server")
@@ -215,7 +218,7 @@ func TestSkillLinkGatewayTargetsAndFilters(t *testing.T) {
 func TestSkillLinkListPaginates(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "paginated-link", "Valid.")
 	for _, slug := range []string{"page-server-a", "page-server-b", "page-server-c"} {
 		server := createLinkServer(t, ctx, ti, ti.projectID, slug)
@@ -238,54 +241,45 @@ func TestSkillLinkListPaginates(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
-func TestSkillLinkRefusedWhenFlagOff(t *testing.T) {
+func TestSkillLinkRefusedWhenProductFeatureOff(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, flags := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "flagged-link", "Valid.")
 	server := createLinkServer(t, ctx, ti, ti.projectID, "flagged-server")
 	link, err := ti.service.Link(ctx, linkToServer(created.Skill.ID, server.id, nil))
 	require.NoError(t, err)
 
-	flags.SetFlag(feature.FlagSkillsOverMCP, ti.authContext.ActiveOrganizationID, false)
+	setSkillsOverMCP(t, ctx, ti, false)
 	_, err = ti.service.Link(ctx, linkToServer(created.Skill.ID, server.id, nil))
 	requireOopsCode(t, err, oops.CodeForbidden)
 	requireOopsCode(t, ti.service.Unlink(ctx, &gen.UnlinkPayload{LinkID: link.ID}), oops.CodeForbidden)
 	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	ti.service.WithFeatureProvider(nil)
+	setSkillsOverMCP(t, ctx, ti, true)
 	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
-	requireOopsCode(t, err, oops.CodeForbidden) // without a flag provider the methods fail closed
+	require.NoError(t, err)
 }
 
-func TestSkillLinkAllowedByProductFeatureWhenFlagOff(t *testing.T) {
+func TestSkillLinkRefusedByDefault(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, flags := newLinkTestService(t)
-	flags.SetFlag(feature.FlagSkillsOverMCP, ti.authContext.ActiveOrganizationID, false)
+	ctx, ti := newTestService(t)
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeSkillWrite, ti.projectID.String()),
+		authz.NewGrant(authz.ScopeMCPWrite, "*"),
+		authz.NewGrant(authz.ScopeProjectWrite, ti.projectID.String()),
+	)
 	_, err := ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
 	requireOopsCode(t, err, oops.CodeForbidden)
-
-	require.NoError(t, ti.features.SetFeatureEnabled(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkillsOverMCP, true))
-	created := createSkill(t, ctx, ti, "entitled-link", "Valid.")
-	server := createLinkServer(t, ctx, ti, ti.projectID, "entitled-server")
-	_, err = ti.service.Link(ctx, linkToServer(created.Skill.ID, server.id, nil))
-	require.NoError(t, err)
-
-	ti.service.WithFeatureProvider(nil)
-	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
-	require.NoError(t, err, "the product feature alone admits the organization")
-
-	require.NoError(t, ti.features.SetFeatureEnabled(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkillsOverMCP, false))
-	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
-	requireOopsCode(t, err, oops.CodeForbidden)
+	require.ErrorIs(t, err, skills.ErrSkillsOverMCPDisabled)
 }
 
 func TestSkillLinkRBAC(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "rbac-link", "Valid.")
 	visible := createLinkServer(t, ctx, ti, ti.projectID, "visible-server")
 	hidden := createLinkServer(t, ctx, ti, ti.projectID, "hidden-server")
@@ -336,7 +330,7 @@ func TestSkillLinkRBAC(t *testing.T) {
 func TestSkillLinkGatewayVisibleWithProjectMCPRead(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "gateway-read", "Valid.")
 	gatewayID := createLinkGateway(t, ctx, ti, "read-gateway")
 	gatewayLink, err := ti.service.Link(ctx, &gen.LinkPayload{ID: created.Skill.ID, TargetKind: "meta_mcp_server", MetaMcpServerID: new(gatewayID.String())})
@@ -360,7 +354,7 @@ func TestSkillLinkGatewayVisibleWithProjectMCPRead(t *testing.T) {
 func TestSkillLinkValidation(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "validated-link", "Valid.")
 	other := createSkill(t, ctx, ti, "other-skill", "Other.")
 	server := createLinkServer(t, ctx, ti, ti.projectID, "validated-server")
@@ -404,7 +398,7 @@ func createProjectContextID(t *testing.T, ctx context.Context, ti *testInstance)
 func TestSkillLinkGatewayWritableWithProjectMCPWrite(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti, _ := newLinkTestService(t)
+	ctx, ti := newLinkTestService(t)
 	created := createSkill(t, ctx, ti, "gateway-write", "Valid.")
 	gatewayID := createLinkGateway(t, ctx, ti, "write-gateway")
 

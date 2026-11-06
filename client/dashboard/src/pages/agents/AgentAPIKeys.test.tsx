@@ -283,7 +283,9 @@ async function openCreate() {
     target: { value: "New key" },
   });
   await waitFor(() =>
-    expect(screen.queryByText("Loading delegable permissions…")).toBeNull(),
+    expect(
+      screen.queryByRole("status", { name: "Loading delegable permissions" }),
+    ).toBeNull(),
   );
 }
 async function createWithGrant() {
@@ -994,7 +996,9 @@ describe("Agent API keys", () => {
         }),
     );
     void client.invalidateQueries({ queryKey: ["agent-delegable-grants"] });
-    await screen.findByText("Loading delegable permissions…");
+    await screen.findByRole("status", {
+      name: "Loading delegable permissions",
+    });
     expect(screen.queryByRole("button", { name: "Create key" })).toBeNull();
     resolve([creationGrant]);
     const permission = await screen.findByRole("checkbox", {
@@ -1082,7 +1086,11 @@ describe("Agent API keys", () => {
       );
       resolve(statusCode === 403 ? [] : [creationGrant]);
       await waitFor(() =>
-        expect(screen.queryByText("Loading delegable permissions…")).toBeNull(),
+        expect(
+          screen.queryByRole("status", {
+            name: "Loading delegable permissions",
+          }),
+        ).toBeNull(),
       );
       if (statusCode === 500)
         expect(

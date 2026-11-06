@@ -35,6 +35,10 @@ vi.mock("@/components/page-layout", () => {
     },
   };
 });
+vi.mock("@/pages/skills/use-skills-over-mcp", () => ({
+  useSkillsOverMcpStatus: () => state.flag,
+  useSkillsOverMcpEnabled: () => state.flag.status === "enabled",
+}));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: () => state.flag,
 }));
@@ -42,6 +46,15 @@ vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session-a" }),
   useProject: () => ({ id: "project-a", slug: "project-a" }),
   useOrganization: () => ({ id: "org-a" }),
+}));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
 }));
 vi.mock("@/hooks/useRBAC", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/hooks/useRBAC")>();
@@ -72,15 +85,8 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => {
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: { detail: { href: (id: string) => `/skills/${id}` } },
-    mcp: {
-      details: {
-        overview: { href: (slug: string) => `/mcp/${slug}/overview` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/skillLinks.js", () => ({
@@ -289,7 +295,7 @@ describe("MCPSkillsTabRoute", () => {
       <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/toolset-a/overview",
+      "/org/projects/project/mcp/toolset-a/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Button } from "@/components/ui/Button";
 import {
   DropdownMenu,
@@ -5,7 +6,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 
 /**
  * The single suppression entry point: a "Suppress" menu offering the two ways
@@ -39,7 +40,7 @@ export function SuppressMenu({
         <Button variant={variant} size={size} disabled={busy} aria-busy={busy}>
           {busy && (
             <Button.LeftIcon>
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner className="mr-0 size-4" />
             </Button.LeftIcon>
           )}
           <Button.Text>Suppress</Button.Text>

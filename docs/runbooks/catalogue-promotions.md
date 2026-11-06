@@ -10,11 +10,11 @@ atomically. Staff track qualification and guide progress in the admin workflow.
 Configure the process running the shared worker (`worker`, or `start` when it
 runs the worker) with these environment values:
 
-| Variable                                 | Purpose                                                                                                                                                       |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GRAM_CATALOG_GUIDES_GITHUB_TOKEN`       | GitHub App installation token or fine-grained PAT with repository access and Issues read/write on the guide repository. Operators manage expiry and rotation. |
-| `GRAM_CATALOG_GUIDES_GITHUB_REPOSITORY`  | Guide repository, default `speakeasy-api/mcp-setup-docs`.                                                                                                     |
-| `GRAM_CATALOG_PROMOTION_DELIVERY_PAUSED` | Set `true` to suspend external guide writes while retaining pending jobs, candidate discovery, and progress metrics. Defaults to `false`.                     |
+| Variable                                 | Purpose                                                                                                                                                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GRAM_CATALOG_GUIDES_GITHUB_TOKEN`       | GitHub App installation token or fine-grained PAT with repository access, Issues read/write, Contents read and Pull requests read on the guide repository. Operators manage expiry and rotation. |
+| `GRAM_CATALOG_GUIDES_GITHUB_REPOSITORY`  | Guide repository, default `speakeasy-api/mcp-setup-docs`.                                                                                                                                        |
+| `GRAM_CATALOG_PROMOTION_DELIVERY_PAUSED` | Set `true` to suspend external guide writes while retaining pending jobs, candidate discovery, and progress metrics. Defaults to `false`.                                                        |
 
 The GitHub token is environment-only; there is no command-line token flag.
 The admin, MCP, and private ingress processes do not consume these delivery
@@ -26,6 +26,14 @@ suppresses most follow-on workflow events and is unsuitable for this integration
 The repository needs its `guide:draft` label, enabled **Guide draft** workflow,
 `OPENROUTER_API_KEY`, and configured publisher credentials. Missing or invalid
 credentials never count as queued delivery.
+
+Widen an existing token to Contents read and Pull requests read before deploying
+the existing-guide checks. A delivery stops at `docs_not_configured` when a
+lookup it needs is refused, and needs a staff retry once the token is fixed.
+Without Contents read, that is every delivery without an earlier request issue.
+Without Pull requests read, it is only deliveries whose guide is not already on
+the default branch: a published guide is recorded as `existing_guide` before the
+PR lookup runs. No guide request is filed while a lookup fails.
 
 Ship generated database migrations in a separate migration-only PR and apply
 them before merging and deploying the API and worker change. Configure external
@@ -57,6 +65,26 @@ and arbitrary endpoint paths are not suggested. Descriptions and missing officia
 documentation references require staff input; the form does not invent them.
 Suggestions never overwrite edits on refresh. Guide status and retry information
 remain visible through the Published filter after promotion.
+
+When the shared endpoint matches exactly one existing setup guide, the form
+suggests that guide's slug. Under the slug field, the form shows one of three
+messages as the slug is edited:
+
+- **Neutral note:** the slug is the guide for this server's endpoint.
+  Publishing links to that guide and requests no new one, which is expected.
+- **Amber warning:** another guide already uses the slug. Publishing would
+  still link to that guide and request no new one, so keep the slug only if it
+  is the same provider.
+- **Muted hint:** no guide uses the slug, so publishing requests a new guide.
+  The hint names the pinned guides version.
+
+The check uses the guides embedded in the server (`setupguides.PinnedVersion`),
+so it can lag the docs repository's `main`; delivery rechecks GitHub before
+requesting a guide. The Admin MCP promotion preview runs the same exact-slug
+check as an "Existing setup guide" row, but with only two messages: any slug
+that already belongs to a guide gets the warning wording, including this
+server's own endpoint guide, and a free slug gets the pinned-version note.
+Neither blocks publication.
 
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
@@ -118,10 +146,31 @@ promoting the same provider. Existing native catalogue rollout remains unchanged
 ## Guide lifecycle and recovery
 
 1. Promotion atomically publishes a catalogue entry and records pending delivery.
-2. The dispatcher reconciles a GitHub issue by stable public guide slug.
-3. It creates the issue if absent, then separately adds `guide:draft`.
-4. The existing factory researches, drafts, reviews, validates, and opens a PR.
-5. A maintainer reviews and merges the PR; existing repository workflows publish it.
+2. The dispatcher reconciles a GitHub issue by stable public guide slug. An
+   earlier request issue always wins, including while its factory PR is open.
+3. Without one, it checks the default branch for `guides/<slug>/meta.yaml`. If
+   present, it records `existing_guide` with a link to the guide and files nothing.
+   GitHub also answers 404 when the token lacks Contents read, so a missing file
+   only counts as absent once the `guides` directory reads successfully.
+4. Otherwise it looks for an open PR changing any file under `guides/<slug>/`. If
+   one exists, it records `guide_in_review` with a link to the PR and files nothing.
+5. Otherwise it creates the issue, then separately adds `guide:draft`.
+6. The existing factory researches, drafts, reviews, validates, and opens a PR.
+7. A maintainer reviews and merges the PR; existing repository workflows publish it.
+
+The checks exist because the factory researches and rewrites a whole guide on
+every trigger. A guide written outside promotion (for example, alongside the
+catalogue change itself) must use the same slug staff choose at promotion, or
+promotion requests a second guide. The review form's slug warning helps staff
+pick the existing slug.
+
+`existing_guide` is final: promotion never refreshes an existing guide. Refreshes
+go through the setup docs repository's `guide:stale` sweep. `guide_in_review`
+rechecks the PR daily without counting as a failure. When the PR merges, the next
+check records `existing_guide`. When it closes unmerged, the next check files a
+request as normal. A PR still open 14 days after it was first seen becomes
+`needs_attention` with `docs_guide_pr_stalled`. Merge or close it, then retry. A
+retry restarts the 14-day clock.
 
 `queued` means the factory accepted the issue trigger. It does not mean the guide
 has been generated, merged, or published. Follow the linked issue and factory
@@ -140,9 +189,17 @@ configuration, conflicting metadata, and other permanent failures become
 underlying problem, then explicitly retry from the admin UI or Admin MCP.
 Success receipts are never cleared by retrying another attempt.
 
-Guide issue reconciliation scans at most 100 pages of 100 issues or events and
-also obeys the attempt deadline. Reaching a history limit blocks creation to
+Guide issue reconciliation scans at most 100 pages of 100 issues, events or open
+PRs, and also obeys the attempt deadline. Reaching a history limit blocks creation to
 avoid duplicates; large repositories may require indexed reconciliation.
+The changed-files check is the exception. GitHub lists at most 3000 changed
+files per PR, and a larger PR only counts as changing a guide when one of the
+listed files is in that guide's folder. An open guide PR whose folder only
+appears after the first 3000 files is missed, so a duplicate request can be
+filed. That trade-off keeps one oversized, unrelated PR from blocking every new
+guide request while it stays open. The worker caches each open PR's changed
+guide folders by head commit, so later checks list files only for new or
+updated PRs.
 An issue with the same marker but a different body requires manual reconciliation.
 Preserve the original body and put factory questions and answers in comments.
 
@@ -169,9 +226,10 @@ what work remains after restart.
 
 Progress gauges are exported through the existing Temporal metrics handler:
 
-- `catalog_promotion_pending_docs`: guide requests waiting for automatic delivery.
+- `catalog_promotion_pending_docs`: guide requests waiting for automatic delivery, excluding those waiting on an open guide PR.
 - `catalog_promotion_needs_attention`: requests needing staff intervention.
-- `catalog_promotion_oldest_pending_seconds`: age of the oldest request awaiting automatic delivery.
+- `catalog_promotion_oldest_pending_seconds`: age of the oldest request awaiting automatic delivery, excluding those waiting on an open guide PR.
+- `catalog_promotion_guide_in_review`: requests waiting on an open guide PR.
 - `catalog_promotion_last_discovery_timestamp_seconds`: latest persisted discovery attempt.
 - `catalog_promotion_discovery_failures`: sources whose latest discovery failed.
 - `catalog_promotion_delivery_paused`: whether this worker has delivery paused.
@@ -200,4 +258,6 @@ credentials. In staging, use a public test provider and dedicated guide reposito
 Verify one catalogue entry, one guide issue and factory run, visible retry state,
 and recovery after a lost response. Confirm pausing preserves pending jobs and
 resuming does not repeat completed effects. Confirm the eventual guide PR before
-enabling production delivery.
+enabling production delivery. Promote one slug that already has a guide and
+confirm no issue is filed (`existing_guide`). Promote one slug with an open guide
+PR and confirm `guide_in_review`, then `existing_guide` after the PR merges.

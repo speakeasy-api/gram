@@ -46,6 +46,7 @@ const mocks = vi.hoisted(() => ({
   discoverProtectedResource: vi.fn(),
   commit: vi.fn(),
   detach: vi.fn(),
+  detachAssociation: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
   scopes: vi.fn(),
@@ -66,32 +67,6 @@ vi.mock("sonner", () => ({
   },
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      details: {
-        overview: { href: (slug: string) => `/mcp/${slug}` },
-        inspect: { href: (slug: string) => `/mcp/${slug}/inspect` },
-        teamAccess: { href: (slug: string) => `/mcp/${slug}/team-access` },
-        sessions: { href: (slug: string) => `/mcp/${slug}/sessions` },
-        settings: { href: (slug: string) => `/mcp/${slug}/settings` },
-      },
-    },
-    remoteIdentityProviders: {
-      href: () => "/remote-identity-providers",
-      issuerDetail: { href: (id: string) => `/providers/${id}` },
-      clientDetail: {
-        href: (issuerId: string, clientId: string) =>
-          `/providers/${issuerId}/clients/${clientId}`,
-        mcpServers: {
-          href: (issuerId: string, clientId: string) =>
-            `/providers/${issuerId}/clients/${clientId}/mcp-servers`,
-        },
-      },
-    },
-  }),
-}));
-
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     remoteSessions: { commitServerIdentityConfiguration: mocks.commit },
@@ -100,12 +75,22 @@ vi.mock("@/contexts/Sdk", () => ({
       discoverProtectedResourceMetadata: mocks.discoverProtectedResource,
     },
   }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1" }),
 }));
 
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    tasks: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => mocks.rbac(),
 }));
@@ -133,6 +118,14 @@ vi.mock("@gram/client/react-query/serverIdentityImpact.js", () => ({
     _security: unknown,
     options: { enabled?: boolean },
   ) => mocks.impact(request, options),
+}));
+
+vi.mock("@gram/client/react-query/detachServerClientAssociation.js", () => ({
+  useDetachServerClientAssociationMutation: () => ({
+    mutateAsync: mocks.detachAssociation,
+    isPending: false,
+    error: null,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/serverClientAssociations.js", () => ({
@@ -562,7 +555,19 @@ const target: AuthTarget = {
 };
 
 beforeEach(() => {
-  mocks.associations.mockReturnValue({ data: { associations: [] } });
+  // Unless a test says otherwise, every client on the issuer is this server's.
+  mocks.associations.mockImplementation(() => {
+    const items: Array<{ id: string }> = mocks.clients().items ?? [];
+    return {
+      data: {
+        associations: items.map((client) => ({
+          remoteSessionClientId: client.id,
+          serverCount: 1,
+        })),
+        requiredClientIds: items.map((client) => client.id),
+      },
+    };
+  });
   mocks.impact.mockReturnValue({
     data: { servers: [], hiddenServerCount: 0 },
     isLoading: false,
@@ -644,6 +649,7 @@ beforeEach(() => {
   mocks.fetchMetadata.mockReset();
   mocks.invalidateHeaders.mockResolvedValue(undefined);
   mocks.detach.mockResolvedValue({});
+  mocks.detachAssociation.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
   mocks.scopes.mockReturnValue({ data: undefined, isError: false });
   mocks.setPin.mockImplementation(
@@ -2090,6 +2096,16 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       },
     });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        detachClientIds: ["client-1"],
+      },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
 
     renderIdentity();
 
@@ -2127,6 +2143,267 @@ describe("RemoteMcpIdentitySectionBody", () => {
         },
       }),
     );
+    expect(mocks.detachAssociation).not.toHaveBeenCalled();
+  });
+
+  it("only stops this server using a client other servers share when leaving User Identity", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+          issuer: {
+            id: "provider-1",
+            issuer: "https://idp.example.com",
+            slug: "idp",
+          },
+        },
+        {
+          id: "client-of-another-server",
+          clientId: "other-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-2",
+          projectId: "project-1",
+          issuer: {
+            id: "provider-2",
+            issuer: "https://other-idp.example.com",
+            slug: "other-idp",
+          },
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.associations.mockReturnValue({
+      data: {
+        associations: [{ remoteSessionClientId: "client-1", serverCount: 2 }],
+        requiredClientIds: ["client-1"],
+      },
+    });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        releaseClientIds: ["client-1"],
+      },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.detachAssociation).toHaveBeenCalledWith({
+        request: {
+          detachServerClientAssociationRequestBody: {
+            mcpServerId: "mcp-server-1",
+            remoteSessionClientId: "client-1",
+          },
+        },
+      }),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("shows and removes a client the server needs without an association", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "unclaimed-client",
+          clientId: "unclaimed",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.associations.mockReturnValue({
+      data: { associations: [], requiredClientIds: ["unclaimed-client"] },
+    });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        releaseClientIds: ["unclaimed-client"],
+      },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    const manual = screen.getByRole("radio", {
+      name: "Manual",
+      description: /static headers/,
+    });
+    expect(manual.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(manual);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.detachAssociation).toHaveBeenCalledWith({
+        request: {
+          detachServerClientAssociationRequestBody: {
+            mcpServerId: "mcp-server-1",
+            remoteSessionClientId: "unclaimed-client",
+          },
+        },
+      }),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("does not report success when turning off User Identity would remove nothing", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.impact.mockReturnValue({
+      data: { servers: [], hiddenServerCount: 0 },
+      isFetching: false,
+      isError: false,
+      error: null,
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        expect.stringContaining("nothing was removed"),
+      ),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+    expect(mocks.detachAssociation).not.toHaveBeenCalled();
+  });
+
+  it("does not trust the previous preview once a refresh of it fails", async () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-1",
+          clientId: "dashboard-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-1",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.impact.mockReturnValue({
+      data: {
+        servers: [],
+        hiddenServerCount: 0,
+        detachClientIds: ["client-1"],
+      },
+      isFetching: false,
+      isError: true,
+      error: new Error("preview failed"),
+    });
+
+    renderIdentity();
+    fireEvent.click(
+      screen.getByRole("radio", {
+        name: "Manual",
+        description: /static headers/,
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() =>
+      expect(mocks.toastError).toHaveBeenCalledWith(
+        expect.stringContaining("Couldn't check which clients"),
+      ),
+    );
+    expect(mocks.detach).not.toHaveBeenCalled();
+  });
+
+  it("stays unresolved when it cannot tell which clients are this server's", () => {
+    mocks.associations.mockReturnValue({
+      data: undefined,
+      isError: true,
+      error: new Error("associations failed"),
+    });
+
+    renderIdentity();
+
+    expect(screen.getByText("Identity is unavailable.")).toBeDefined();
+    expect(screen.queryByRole("radio", { name: /User Identity/ })).toBeNull();
+  });
+
+  it("does not treat another server's client on the issuer as this server's identity", () => {
+    mocks.clients.mockReturnValue({
+      items: [
+        {
+          id: "client-of-another-server",
+          clientId: "other-client",
+          scope: [],
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          remoteSessionIssuerId: "provider-2",
+          projectId: "project-1",
+        },
+      ],
+      isLoading: false,
+      isError: false,
+      error: null,
+    });
+    mocks.associations.mockReturnValue({
+      data: { associations: [], requiredClientIds: [] },
+    });
+
+    renderIdentity();
+
+    expect(
+      screen.queryByRole("button", { name: "Clear connection" }),
+    ).toBeNull();
+    expect(
+      screen
+        .getByRole("radio", { name: "Manual", description: /static headers/ })
+        .getAttribute("aria-checked"),
+    ).toBe("true");
   });
 
   it("shows a connected client with its sign-ins, scopes and settings", () => {
@@ -2177,7 +2454,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.queryByRole("link", { name: "id.example" })).toBeNull();
     expect(
       screen.getByRole("link", { name: /Advanced/ }).getAttribute("href"),
-    ).toBe("/providers/provider-1/clients/client-1");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/provider-1/clients/client-1",
+    );
     // A raw client ID tells an operator nothing.
     expect(screen.queryByText("dashboard-client")).toBeNull();
   });
@@ -2218,6 +2497,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
     mocks.associations.mockReturnValue({
       data: {
         associations: [{ remoteSessionClientId: "client-1", serverCount: 3 }],
+        requiredClientIds: ["client-1"],
       },
     });
 
@@ -2293,6 +2573,8 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect.objectContaining({
         commitServerIdentityConfigurationForm: expect.objectContaining({
           clientMode: "auto",
+          replaceClient: true,
+          replaceClientServerIds: [],
         }),
       }),
     );
@@ -2965,7 +3247,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen
         .getByRole("link", { name: /client's MCP servers/ })
         .getAttribute("href"),
-    ).toBe("/providers/provider-1/clients/client-1/mcp-servers");
+    ).toBe(
+      "/org/projects/project/remote-identity-providers/provider-1/clients/client-1/mcp-servers",
+    );
     expect(
       (
         screen.getByRole("radio", {
@@ -3430,7 +3714,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
       screen
         .getByRole("link", { name: "Authorization Servers" })
         .getAttribute("href"),
-    ).toBe("/remote-identity-providers");
+    ).toBe("/org/projects/project/remote-identity-providers");
   });
 
   describe("pinned scopes", () => {

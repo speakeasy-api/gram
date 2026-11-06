@@ -19,14 +19,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
-import { telemetryQuery } from "@gram/client/funcs/telemetryQuery";
-import { telemetrySearchUsers } from "@gram/client/funcs/telemetrySearchUsers";
-import { Dimension } from "@gram/client/models/components/queryfilter.js";
-import { GroupBy } from "@gram/client/models/components/querypayload.js";
 import type { QueryMeasures } from "@gram/client/models/components/querymeasures.js";
-import type { SearchUsersFilter } from "@gram/client/models/components/searchusersfilter.js";
-import type { UserSummary } from "@gram/client/models/components/usersummary.js";
-import { unwrapAsync } from "@gram/client/types/fp";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
@@ -54,8 +47,6 @@ import { buildProjectOverviewQuery } from "./projectOverviewQuery";
 export function ProjectDashboard(): JSX.Element {
   const isDark = useIsDarkTheme();
   const { orgSlug, projectSlug } = useSlugs();
-  const project = useProject();
-  const projectId = project.id;
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
 
@@ -112,6 +103,7 @@ export function ProjectDashboard(): JSX.Element {
   const {
     data: overview,
     isPending: isOverviewPending,
+    isError: isOverviewError,
     isFetching: isOverviewFetching,
   } = useQuery({
     ...buildProjectOverviewQuery(client, {
@@ -138,56 +130,18 @@ export function ProjectDashboard(): JSX.Element {
     [members],
   );
 
-  // Hook/agent-view metrics read the pre-aggregated attribute_metrics_summaries
-  // table through the org-scoped telemetry.query endpoint, filtered to this
-  // project (project_id is an allowlisted dimension) — the same source as the
-  // Costs page, so the numbers agree. This replaces paginating every user
-  // through telemetry.searchUsers, which scanned raw telemetry_logs. The
-  // generated useTelemetryQuery hook keys its cache on gramSession only
-  // (ignores the body), so drive useQuery directly. throwOnError is off so a
-  // member without org:read degrades to the MCP view instead of crashing the
-  // page on the app-wide error boundary.
-  const projectFilter = useMemo(
-    () => [{ dimension: Dimension.ProjectId, values: [projectId] }],
-    [projectId],
-  );
-
-  const {
-    data: usageByUserData,
-    isPending: isUsageByUserPending,
-    isError: isUsageByUserError,
-  } = useQuery({
-    queryKey: [
-      "project",
-      "usageByUser",
-      projectId,
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: () =>
-      unwrapAsync(
-        telemetryQuery(client, {
-          queryPayload: {
-            from,
-            to,
-            groupBy: GroupBy.Email,
-            sortBy: "llm_tokens",
-            topN: 100,
-            filters: projectFilter,
-          },
-        }),
-      ),
-    enabled: logsEnabled && !!projectId,
-    placeholderData: keepPreviousData,
-    throwOnError: false,
-  });
+  // Usage sections ride along with the overview (include_usage), so the page
+  // loads with one request. The server picks the view: usageByUser is absent
+  // when the caller lacks org:read, which falls back to the MCP view.
+  const usageByUserData = overview?.usageByUser;
+  const isUsageByUserPending = isOverviewPending;
+  const isUsageByUserError = !!overview && !overview.usageByUser;
   const usageByUserRows = usageByUserData?.table;
 
   // Mode detection: attribute_metrics_summaries only admits agent-surface
   // telemetry (Claude/Codex/Cursor), so any row with usage means the project
   // has hook data. A project that only hosts MCP servers produces none, and
   // falls back to the MCP-hosting view.
-  const hookDataLoaded = usageByUserRows !== undefined || isUsageByUserError;
   const hasHookData = (usageByUserRows ?? []).some((r) => hasUsage(r.measures));
 
   // Per-user rows suitable for ranking: drop the unattributed '' bucket and
@@ -252,35 +206,10 @@ export function ProjectDashboard(): JSX.Element {
     0,
   );
 
-  // Most Used Agents: one grouped-by-hook_source read, ranked by token volume.
-  // Only fetched in the hook/agent view.
-  const { data: usageByAgentData, isPending: isUsageByAgentPending } = useQuery(
-    {
-      queryKey: [
-        "project",
-        "usageByAgent",
-        projectId,
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          telemetryQuery(client, {
-            queryPayload: {
-              from,
-              to,
-              groupBy: GroupBy.HookSource,
-              sortBy: "llm_tokens",
-              topN: 10,
-              filters: projectFilter,
-            },
-          }),
-        ),
-      enabled: logsEnabled && !!projectId && hasHookData,
-      placeholderData: keepPreviousData,
-      throwOnError: false,
-    },
-  );
+  // Most Used Agents: grouped by hook_source, ranked by token volume. Only
+  // returned in the hook/agent view.
+  const usageByAgentData = overview?.usageByAgent;
+  const isUsageByAgentPending = isOverviewPending;
 
   const mostUsedAgents = useMemo(() => {
     return (
@@ -302,90 +231,65 @@ export function ProjectDashboard(): JSX.Element {
     );
   }, [usageByAgentData]);
 
-  // MCP-hosting fallback: external end-users (customer-supplied IDs) and their
-  // tool-call activity. Fetched only when the project has no hook data. No
-  // eventSource filter — these projects' activity is MCP tool calls, not hooks.
-  const { data: externalUsersData } = useQuery({
-    queryKey: [
-      "project",
-      "externalUsers",
-      from.toISOString(),
-      to.toISOString(),
-    ],
-    queryFn: () => fetchAllUsers(client, { from, to }, "external"),
-    enabled: logsEnabled && hookDataLoaded && !hasHookData,
-    placeholderData: keepPreviousData,
-  });
-
-  // Top end-users by MCP tool-call volume. External IDs are customer-supplied,
-  // not Speakeasy members, so they render raw (no member resolution).
-  const topEndUsers = useMemo(
+  // MCP-hosting fallback: external end users (customer-supplied IDs) and
+  // their tool-call activity, ranked by the server. Only returned when the
+  // project has no hook data, so a loaded overview without it means no
+  // activity, not a pending fetch. A failed overview settles it too, so the
+  // MCP cards never wait forever.
+  const mcpUsage = useMemo(
     () =>
-      [...(externalUsersData ?? [])]
-        .sort((a, b) => b.totalToolCalls - a.totalToolCalls)
-        .slice(0, 5)
-        .map((u) => ({
-          key: u.userId,
-          label: u.userId,
-          value: u.totalToolCalls,
-        })),
-    [externalUsersData],
+      overview || isOverviewError
+        ? (overview?.mcpUsage ?? {
+            endUsersCount: 0,
+            topEndUsers: [],
+            topTools: [],
+            topFailingTools: [],
+          })
+        : undefined,
+    [overview, isOverviewError],
   );
 
-  // Most-used tools = aggregate per-user tool breakdowns by URN across all
-  // external users (replaces Most Used Agents, which has no MCP equivalent).
-  const mostUsedTools = useMemo(() => {
-    const byTool = new Map<string, number>();
-    for (const u of externalUsersData ?? []) {
-      for (const t of u.tools) {
-        byTool.set(t.urn, (byTool.get(t.urn) ?? 0) + t.count);
-      }
-    }
-    return [...byTool.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([urn, count]) => ({
-        key: urn,
-        label: toolLabelFromUrn(urn),
-        value: count,
-      }));
-  }, [externalUsersData]);
+  // External IDs are customer-supplied, not Speakeasy members, so they render
+  // raw (no member resolution).
+  const topEndUsers = useMemo(
+    () =>
+      (mcpUsage?.topEndUsers ?? []).map((u) => ({
+        key: u.userId,
+        label: u.userId,
+        value: u.toolCalls,
+      })),
+    [mcpUsage],
+  );
 
-  // Top tools by failure rate (MCP view): aggregate per-tool call + failure
-  // counts across external users; rank by failure rate, tie-broken by absolute
-  // failures so a high-volume failing tool outranks a one-off 100% failure.
-  const topToolsByFailureRate = useMemo(() => {
-    const agg = new Map<string, { calls: number; failures: number }>();
-    for (const u of externalUsersData ?? []) {
-      for (const t of u.tools) {
-        const cur = agg.get(t.urn) ?? { calls: 0, failures: 0 };
-        cur.calls += t.count;
-        cur.failures += t.failureCount;
-        agg.set(t.urn, cur);
-      }
-    }
-    return [...agg.entries()]
-      .filter(([, v]) => v.failures > 0)
-      .map(([urn, v]) => ({
-        key: urn,
-        label: toolLabelFromUrn(urn),
-        rate: v.calls > 0 ? (v.failures / v.calls) * 100 : 0,
-        failures: v.failures,
-      }))
-      .sort((a, b) => b.rate - a.rate || b.failures - a.failures)
-      .slice(0, 5)
-      .map((t) => ({
-        key: t.key,
-        label: t.label,
-        // Keep the raw rate for the bar width: every tool here has ≥1 failure,
-        // so rounding (e.g. 0.4% → 0) would zero out the bar and the label.
-        value: t.rate,
-        // Never render "0%" in a failures-only list; show "<1%" below 1%.
-        valueLabel: t.rate < 1 ? "<1%" : `${Math.round(t.rate)}%`,
-      }));
-  }, [externalUsersData]);
+  const mostUsedTools = useMemo(
+    () =>
+      (mcpUsage?.topTools ?? []).map((t) => ({
+        key: t.urn,
+        label: toolLabelFromUrn(t.urn),
+        value: t.calls,
+      })),
+    [mcpUsage],
+  );
 
-  const endUsersCount = externalUsersData?.length ?? 0;
+  const topToolsByFailureRate = useMemo(
+    () =>
+      (mcpUsage?.topFailingTools ?? []).map((t) => {
+        const rate = t.calls > 0 ? (t.failures / t.calls) * 100 : 0;
+        return {
+          key: t.urn,
+          label: toolLabelFromUrn(t.urn),
+          // Keep the raw rate for the bar width: every tool here has ≥1
+          // failure, so rounding (e.g. 0.4% → 0) would zero out the bar and
+          // the label.
+          value: rate,
+          // Never render "0%" in a failures-only list; show "<1%" below 1%.
+          valueLabel: rate < 1 ? "<1%" : `${Math.round(rate)}%`,
+        };
+      }),
+    [mcpUsage],
+  );
+
+  const endUsersCount = mcpUsage?.endUsersCount ?? 0;
 
   const isTopUsersLoading =
     logsEnabled &&
@@ -396,7 +300,7 @@ export function ProjectDashboard(): JSX.Element {
   // Agent breakdown (hook view) / external users (MCP view) still loading
   // after mode is known.
   const isAgentsLoading = hasHookData && isUsageByAgentPending;
-  const mcpUsersPending = !hasHookData && externalUsersData === undefined;
+  const mcpUsersPending = !hasHookData && mcpUsage === undefined;
 
   const featuresSettled = !isFeaturesPending || isFeaturesError;
   const isOverviewLoading =
@@ -918,36 +822,6 @@ function hasUsage(m: QueryMeasures): boolean {
     m.totalChats > 0 ||
     m.totalToolCalls > 0
   );
-}
-
-// Fetch every page of telemetrySearchUsers for the given filter, following the
-// pagination cursor. Used by the MCP-hosting fallback view's external-user
-// query only — the hook/agent view reads pre-aggregated data via
-// telemetry.query instead.
-async function fetchAllUsers(
-  client: Parameters<typeof telemetrySearchUsers>[0],
-  filter: SearchUsersFilter,
-  userType: "internal" | "external",
-): Promise<UserSummary[]> {
-  const users: UserSummary[] = [];
-  let cursor: string | undefined;
-  for (;;) {
-    const result = await unwrapAsync(
-      telemetrySearchUsers(client, {
-        searchUsersPayload: {
-          cursor,
-          filter,
-          limit: 1000,
-          sort: "desc",
-          userType,
-        },
-      }),
-    );
-    users.push(...result.users);
-    if (!result.nextCursor) break;
-    cursor = result.nextCursor;
-  }
-  return users;
 }
 
 // Tool URNs look like `tools:externalmcp:<server>:<tool>`; show the trailing

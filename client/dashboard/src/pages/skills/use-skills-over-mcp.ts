@@ -1,23 +1,33 @@
 import { useOrganization } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
+export type SkillsOverMcpStatus =
+  | { status: "loading" }
+  | { status: "enabled" }
+  | { status: "disabled" }
+  | { status: "error" };
+
 /**
- * Whether the dashboard shows skills as served over MCP. It is on when the
- * org-targeted skills-over-mcp flag is on, or when staff turned on the
- * skills_over_mcp product feature for the organization from the admin
- * dashboard. The server reads the same two sources before it serves anything,
- * so the hints only appear where agents can really load skills.
+ * Whether skills over MCP is on for the organization: the staff-managed
+ * skills_over_mcp product feature, toggled per organization from the admin
+ * dashboard and off by default. The server reads the same feature before it
+ * serves anything, so the hints only appear where agents can really load
+ * skills.
  */
-export function useSkillsOverMcpEnabled(): boolean {
+export function useSkillsOverMcpStatus(): SkillsOverMcpStatus {
   const organization = useOrganization();
-  const flagEnabled =
-    useFeatureFlag(FEATURE_FLAGS.skillsOverMcp).status === "enabled";
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
-    { throwOnError: false, enabled: !flagEnabled },
+    { throwOnError: false },
   );
-  return flagEnabled || features.data?.skillsOverMcpEnabled === true;
+  if (features.isPending) return { status: "loading" };
+  if (features.isError || !features.data) return { status: "error" };
+  return features.data.skillsOverMcpEnabled
+    ? { status: "enabled" }
+    : { status: "disabled" };
+}
+
+export function useSkillsOverMcpEnabled(): boolean {
+  return useSkillsOverMcpStatus().status === "enabled";
 }

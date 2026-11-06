@@ -22,6 +22,7 @@ type Endpoints struct {
 	Logout                                  goa.Endpoint
 	GetSession                              goa.Endpoint
 	GetOrganizationFeatures                 goa.Endpoint
+	SetOrganizationProviderSetup            goa.Endpoint
 	SetOrganizationFeature                  goa.Endpoint
 	GetOrganizationChatAnalysisSettings     goa.Endpoint
 	SetOrganizationChatAnalysisSettings     goa.Endpoint
@@ -79,9 +80,6 @@ type Endpoints struct {
 	DescribeMcpServerHealth                 goa.Endpoint
 	GetMcpServerToolCalls                   goa.Endpoint
 	GetHookClients                          goa.Endpoint
-	ListExternalMcpMigrationCandidates      goa.Endpoint
-	PreviewExternalMcpMigration             goa.Endpoint
-	MigrateExternalMcpServers               goa.Endpoint
 	ListRegistryPromotionCandidates         goa.Endpoint
 	GetRegistryPromotionCandidate           goa.Endpoint
 	PromoteRegistryCandidate                goa.Endpoint
@@ -121,6 +119,7 @@ type Endpoints struct {
 	EnableUpstreamAuthEnforcement           goa.Endpoint
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
+	BackfillMcpConnectGrants                goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -151,6 +150,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                                  NewLogoutEndpoint(s),
 		GetSession:                              NewGetSessionEndpoint(s, a.APIKeyAuth),
 		GetOrganizationFeatures:                 NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationProviderSetup:            NewSetOrganizationProviderSetupEndpoint(s, a.APIKeyAuth),
 		SetOrganizationFeature:                  NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
 		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
 		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
@@ -208,9 +208,6 @@ func NewEndpoints(s Service) *Endpoints {
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
 		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
-		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesEndpoint(s, a.APIKeyAuth),
-		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationEndpoint(s, a.APIKeyAuth),
-		MigrateExternalMcpServers:               NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
@@ -250,6 +247,7 @@ func NewEndpoints(s Service) *Endpoints {
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
+		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -260,6 +258,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetSession = m(e.GetSession)
 	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
+	e.SetOrganizationProviderSetup = m(e.SetOrganizationProviderSetup)
 	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
 	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
 	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
@@ -317,9 +316,6 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
 	e.GetHookClients = m(e.GetHookClients)
-	e.ListExternalMcpMigrationCandidates = m(e.ListExternalMcpMigrationCandidates)
-	e.PreviewExternalMcpMigration = m(e.PreviewExternalMcpMigration)
-	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
 	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
 	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
@@ -359,6 +355,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
+	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -431,6 +428,34 @@ func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		res, err := s.GetOrganizationFeatures(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedProductFeatures(res, "default")
+		return vres, nil
+	}
+}
+
+// NewSetOrganizationProviderSetupEndpoint returns an endpoint function that
+// calls the method "setOrganizationProviderSetup" of service "admin".
+func NewSetOrganizationProviderSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationProviderSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.SetOrganizationProviderSetup(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -1748,76 +1773,6 @@ func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
-// NewListExternalMcpMigrationCandidatesEndpoint returns an endpoint function
-// that calls the method "listExternalMcpMigrationCandidates" of service
-// "admin".
-func NewListExternalMcpMigrationCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*ListExternalMcpMigrationCandidatesPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.ListExternalMcpMigrationCandidates(ctx, p)
-	}
-}
-
-// NewPreviewExternalMcpMigrationEndpoint returns an endpoint function that
-// calls the method "previewExternalMcpMigration" of service "admin".
-func NewPreviewExternalMcpMigrationEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*PreviewExternalMcpMigrationPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.PreviewExternalMcpMigration(ctx, p)
-	}
-}
-
-// NewMigrateExternalMcpServersEndpoint returns an endpoint function that calls
-// the method "migrateExternalMcpServers" of service "admin".
-func NewMigrateExternalMcpServersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
-	return func(ctx context.Context, req any) (any, error) {
-		p := req.(*MigrateExternalMcpServersPayload)
-		var err error
-		sc := security.APIKeyScheme{
-			Name:           "admin_auth",
-			Scopes:         []string{},
-			RequiredScopes: []string{},
-		}
-		var key string
-		if p.AdminSessionToken != nil {
-			key = *p.AdminSessionToken
-		}
-		ctx, err = authAPIKeyFn(ctx, key, &sc)
-		if err != nil {
-			return nil, err
-		}
-		return s.MigrateExternalMcpServers(ctx, p)
-	}
-}
-
 // NewListRegistryPromotionCandidatesEndpoint returns an endpoint function that
 // calls the method "listRegistryPromotionCandidates" of service "admin".
 func NewListRegistryPromotionCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2714,5 +2669,28 @@ func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKe
 			return nil, err
 		}
 		return s.BackfillMcpAuthGrants(ctx, p)
+	}
+}
+
+// NewBackfillMcpConnectGrantsEndpoint returns an endpoint function that calls
+// the method "backfillMcpConnectGrants" of service "admin".
+func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpConnectGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpConnectGrants(ctx, p)
 	}
 }

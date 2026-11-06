@@ -217,6 +217,42 @@ func BuildDetachBindingPayload(remoteSessionsDetachBindingBody string, remoteSes
 	return v, nil
 }
 
+// BuildTestServerConnectionPayload builds the payload for the remoteSessions
+// testServerConnection endpoint from CLI flags.
+func BuildTestServerConnectionPayload(remoteSessionsTestServerConnectionBody string, remoteSessionsTestServerConnectionSessionToken string, remoteSessionsTestServerConnectionProjectSlugInput string) (*remotesessions.TestServerConnectionPayload, error) {
+	var err error
+	var body TestServerConnectionRequestBody
+	{
+		err = json.Unmarshal([]byte(remoteSessionsTestServerConnectionBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if remoteSessionsTestServerConnectionSessionToken != "" {
+			sessionToken = &remoteSessionsTestServerConnectionSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if remoteSessionsTestServerConnectionProjectSlugInput != "" {
+			projectSlugInput = &remoteSessionsTestServerConnectionProjectSlugInput
+		}
+	}
+	v := &remotesessions.TestServerConnectionPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildCommitServerIdentityConfigurationPayload builds the payload for the
 // remoteSessions commitServerIdentityConfiguration endpoint from CLI flags.
 func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIdentityConfigurationBody string, remoteSessionsCommitServerIdentityConfigurationSessionToken string, remoteSessionsCommitServerIdentityConfigurationApikeyToken string, remoteSessionsCommitServerIdentityConfigurationProjectSlugInput string) (*remotesessions.CommitServerIdentityConfigurationPayload, error) {
@@ -225,7 +261,7 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 	{
 		err = json.Unmarshal([]byte(remoteSessionsCommitServerIdentityConfigurationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_grant_profiles_supported\": [\n            \"abc123\"\n         ],\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"omit_scope_fallback\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_method\": \"dcr\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"client_configuration\": {\n         \"audience\": \"aaa\",\n         \"client_id\": \"abc123\",\n         \"client_secret\": \"abc123\",\n         \"scope\": [\n            \"aaa\",\n            \"aaa\",\n            \"aaa\"\n         ],\n         \"token_endpoint_auth_method\": \"client_secret_post\"\n      },\n      \"client_mode\": \"existing\",\n      \"create_provider\": {\n         \"authorization_endpoint\": \"abc123\",\n         \"authorization_grant_profiles_supported\": [\n            \"abc123\"\n         ],\n         \"authorization_response_iss_parameter_supported\": false,\n         \"backchannel_logout_supported\": false,\n         \"claims_supported\": [\n            \"abc123\"\n         ],\n         \"client_id_metadata_document_supported\": false,\n         \"client_setup_documentation_url\": \"abc123\",\n         \"code_challenge_methods_supported\": [\n            \"abc123\"\n         ],\n         \"grant_types_supported\": [\n            \"abc123\"\n         ],\n         \"id_token_signing_alg_values_supported\": [\n            \"abc123\"\n         ],\n         \"introspection_endpoint\": \"abc123\",\n         \"introspection_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"issuer\": \"abc123\",\n         \"jwks_uri\": \"abc123\",\n         \"logo_asset_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"name\": \"abc123\",\n         \"oidc\": false,\n         \"omit_scope_fallback\": false,\n         \"op_policy_uri\": \"abc123\",\n         \"op_tos_uri\": \"abc123\",\n         \"passthrough\": false,\n         \"registration_endpoint\": \"abc123\",\n         \"resource_indicator_supported\": false,\n         \"response_types_supported\": [\n            \"abc123\"\n         ],\n         \"revocation_endpoint\": \"abc123\",\n         \"scope_override\": [\n            \"abc123\"\n         ],\n         \"scopes_supported\": [\n            \"abc123\"\n         ],\n         \"service_documentation\": \"abc123\",\n         \"slug\": \"abc123\",\n         \"token_endpoint\": \"abc123\",\n         \"token_endpoint_auth_methods_supported\": [\n            \"abc123\"\n         ],\n         \"tunneled_mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n         \"userinfo_endpoint\": \"abc123\"\n      },\n      \"existing_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"provider_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"registration_method\": \"dcr\",\n      \"replace_client\": false,\n      \"replace_client_server_ids\": [\n         \"550e8400-e29b-41d4-a716-446655440000\"\n      ],\n      \"target_server_only\": false\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
 		if body.ProviderID != nil {
@@ -252,6 +288,9 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 			}
 		}
+		for _, e := range body.ReplaceClientServerIds {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.replace_client_server_ids[*]", e, goa.FormatUUID))
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -277,15 +316,23 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 	v := &remotesessions.CommitServerIdentityConfigurationPayload{
 		McpServerID:        body.McpServerID,
 		ProviderID:         body.ProviderID,
+		TargetServerOnly:   body.TargetServerOnly,
 		ClientMode:         body.ClientMode,
 		ExistingClientID:   body.ExistingClientID,
 		RegistrationMethod: body.RegistrationMethod,
+		ReplaceClient:      body.ReplaceClient,
 	}
 	if body.CreateProvider != nil {
 		v.CreateProvider = marshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
 	}
 	if body.ClientConfiguration != nil {
 		v.ClientConfiguration = marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(body.ClientConfiguration)
+	}
+	if body.ReplaceClientServerIds != nil {
+		v.ReplaceClientServerIds = make([]string, len(body.ReplaceClientServerIds))
+		for i, val := range body.ReplaceClientServerIds {
+			v.ReplaceClientServerIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -296,7 +343,7 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 
 // BuildGetServerIdentityImpactPayload builds the payload for the
 // remoteSessions getServerIdentityImpact endpoint from CLI flags.
-func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
+func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactReplaceClient string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
 	var err error
 	var userSessionIssuerID string
 	{
@@ -346,6 +393,17 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 			}
 		}
 	}
+	var replaceClient *bool
+	{
+		if remoteSessionsGetServerIdentityImpactReplaceClient != "" {
+			var val bool
+			val, err = strconv.ParseBool(remoteSessionsGetServerIdentityImpactReplaceClient)
+			replaceClient = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for replaceClient, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if remoteSessionsGetServerIdentityImpactSessionToken != "" {
@@ -370,6 +428,7 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.ReplaceClient = replaceClient
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

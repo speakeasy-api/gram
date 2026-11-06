@@ -1,4 +1,5 @@
 import { Page } from "@/components/page-layout";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import {
   RouteNotFoundState,
   SecondaryRouteAction,
@@ -73,7 +74,7 @@ export function ToolsetRedirectPage({
     );
   }
   if (isLoadingToolset || isLoadingServers || !toolset || !serversResult) {
-    return null;
+    return <SplashScreen />;
   }
 
   const host = serversResult.mcpServers.find(

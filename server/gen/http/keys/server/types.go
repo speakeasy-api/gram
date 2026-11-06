@@ -62,6 +62,18 @@ type RotateKeyRequestBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// ExtendAgentKeysRequestBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP request body.
+type ExtendAgentKeysRequestBody struct {
+	// The agent whose keys gain the grants
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
+}
+
 // UpdateKeyPolicyRequestBody is the type of the "keys" service
 // "updateKeyPolicy" endpoint HTTP request body.
 type UpdateKeyPolicyRequestBody struct {
@@ -143,6 +155,12 @@ type RotateKeyResponseBody struct {
 	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	// When the key was last accessed.
 	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
+}
+
+// ExtendAgentKeysResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body.
+type ExtendAgentKeysResponseBody struct {
+	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
@@ -544,6 +562,188 @@ type RotateKeyUnexpectedResponseBody struct {
 // RotateKeyGatewayErrorResponseBody is the type of the "keys" service
 // "rotateKey" endpoint HTTP response body for the "gateway_error" error.
 type RotateKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnauthorizedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unauthorized" error.
+type ExtendAgentKeysUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysForbiddenResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "forbidden" error.
+type ExtendAgentKeysForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysBadRequestResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "bad_request" error.
+type ExtendAgentKeysBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysNotFoundResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "not_found" error.
+type ExtendAgentKeysNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysConflictResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "conflict" error.
+type ExtendAgentKeysConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnsupportedMediaResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ExtendAgentKeysUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysInvalidResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "invalid" error.
+type ExtendAgentKeysInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysInvariantViolationResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ExtendAgentKeysInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnexpectedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unexpected" error.
+type ExtendAgentKeysUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysGatewayErrorResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "gateway_error" error.
+type ExtendAgentKeysGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1476,6 +1676,16 @@ type AgentKeyAuthClientChoiceRequestBody struct {
 	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
 }
 
+// ExtendAgentKeyGrantFormRequestBody is used to define fields on request body
+// types.
+type ExtendAgentKeyGrantFormRequestBody struct {
+	// The grant's scope
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant effect
+	Effect   *string                         `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector *AgentPolicySelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
+}
+
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
 // the "createKey" endpoint of the "keys" service.
 func NewCreateKeyResponseBody(res *keys.Key) *CreateKeyResponseBody {
@@ -1556,6 +1766,25 @@ func NewRotateKeyResponseBody(res *keys.Key) *RotateKeyResponseBody {
 			}
 			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
 		}
+	}
+	return body
+}
+
+// NewExtendAgentKeysResponseBody builds the HTTP response body from the result
+// of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysResponseBody(res *keys.ListKeysResult) *ExtendAgentKeysResponseBody {
+	body := &ExtendAgentKeysResponseBody{}
+	if res.Keys != nil {
+		body.Keys = make([]*KeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalKeysKeyToKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*KeyResponseBody{}
 	}
 	return body
 }
@@ -1921,6 +2150,146 @@ func NewRotateKeyUnexpectedResponseBody(res *goa.ServiceError) *RotateKeyUnexpec
 // result of the "rotateKey" endpoint of the "keys" service.
 func NewRotateKeyGatewayErrorResponseBody(res *goa.ServiceError) *RotateKeyGatewayErrorResponseBody {
 	body := &RotateKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnauthorizedResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnauthorizedResponseBody {
+	body := &ExtendAgentKeysUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysForbiddenResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysForbiddenResponseBody(res *goa.ServiceError) *ExtendAgentKeysForbiddenResponseBody {
+	body := &ExtendAgentKeysForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysBadRequestResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysBadRequestResponseBody(res *goa.ServiceError) *ExtendAgentKeysBadRequestResponseBody {
+	body := &ExtendAgentKeysBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysNotFoundResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysNotFoundResponseBody(res *goa.ServiceError) *ExtendAgentKeysNotFoundResponseBody {
+	body := &ExtendAgentKeysNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysConflictResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysConflictResponseBody(res *goa.ServiceError) *ExtendAgentKeysConflictResponseBody {
+	body := &ExtendAgentKeysConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnsupportedMediaResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnsupportedMediaResponseBody {
+	body := &ExtendAgentKeysUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysInvalidResponseBody builds the HTTP response body from the
+// result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysInvalidResponseBody(res *goa.ServiceError) *ExtendAgentKeysInvalidResponseBody {
+	body := &ExtendAgentKeysInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysInvariantViolationResponseBody(res *goa.ServiceError) *ExtendAgentKeysInvariantViolationResponseBody {
+	body := &ExtendAgentKeysInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysUnexpectedResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnexpectedResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnexpectedResponseBody {
+	body := &ExtendAgentKeysUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysGatewayErrorResponseBody(res *goa.ServiceError) *ExtendAgentKeysGatewayErrorResponseBody {
+	body := &ExtendAgentKeysGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2568,6 +2937,35 @@ func NewRotateKeyPayload(body *RotateKeyRequestBody, sessionToken *string) *keys
 	return v
 }
 
+// NewExtendAgentKeysPayload builds a keys service extendAgentKeys endpoint
+// payload.
+func NewExtendAgentKeysPayload(body *ExtendAgentKeysRequestBody, sessionToken *string) *keys.ExtendAgentKeysPayload {
+	v := &keys.ExtendAgentKeysPayload{
+		AgentID: *body.AgentID,
+	}
+	v.RequestedGrants = make([]*keys.ExtendAgentKeyGrantForm, len(body.RequestedGrants))
+	for i, val := range body.RequestedGrants {
+		if val == nil {
+			v.RequestedGrants[i] = nil
+			continue
+		}
+		v.RequestedGrants[i] = unmarshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(val)
+	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListKeysPayload builds a keys service listKeys endpoint payload.
 func NewListKeysPayload(agentID *string, sessionToken *string) *keys.ListKeysPayload {
 	v := &keys.ListKeysPayload{}
@@ -2705,6 +3103,44 @@ func ValidateRotateKeyRequestBody(body *RotateKeyRequestBody) (err error) {
 	}
 	if body.ExpiresAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", *body.ExpiresAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysRequestBody runs the validations defined on
+// ExtendAgentKeysRequestBody
+func ValidateExtendAgentKeysRequestBody(body *ExtendAgentKeysRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.RequestedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_grants", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if len(body.RequestedGrants) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 1, true))
+	}
+	if len(body.RequestedGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 100, false))
+	}
+	for _, e := range body.RequestedGrants {
+		if e != nil {
+			if err2 := ValidateExtendAgentKeyGrantFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.AuthClientChoices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
 	}
 	return
 }
@@ -2852,6 +3288,36 @@ func ValidateAgentKeyAuthClientChoiceRequestBody(body *AgentKeyAuthClientChoiceR
 	}
 	if body.AuthClientID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateExtendAgentKeyGrantFormRequestBody runs the validations defined on
+// ExtendAgentKeyGrantFormRequestBody
+func ValidateExtendAgentKeyGrantFormRequestBody(body *ExtendAgentKeyGrantFormRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if !(*body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"mcp:connect"}))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }

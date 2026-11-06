@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -35,6 +36,16 @@ func newRecallService(t *testing.T, conn *pgxpool.Pool, enabled *bool) (*Session
 	return NewSessionRecallService(testenv.NewLogger(t), conn, platformrepo.New(conn), audit.NewLogger(), func(_ context.Context, _ string) (bool, error) {
 		return *enabled, nil
 	}, findings, allowBudget()), findings
+}
+
+type recordingHandoffMinter struct {
+	inputs []sessionhandoff.SessionHandoffMintInput
+}
+
+func (m *recordingHandoffMinter) Valid() bool { return true }
+func (m *recordingHandoffMinter) Mint(_ context.Context, input sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error) {
+	m.inputs = append(m.inputs, input)
+	return sessionhandoff.SessionHandoffMintResult{URL: "https://example.test/shared/handoffs/token", ExpiresAt: "2026-08-20T10:15:00Z"}, nil
 }
 
 // seedRecallChat inserts a captured chat the way hook ingest records one: the
@@ -175,6 +186,15 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 
 	ownedSession := "ses_" + uuid.NewString()
 	ownedChatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, ownedSession, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary:   conv.ToPGText("sensitive transcript-derived summary"),
+		ID:        ownedChatID,
+		ProjectID: project.ID,
+	}))
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary: conv.ToPGText("sensitive transcript-derived summary"),
+		ID:      ownedChatID, ProjectID: project.ID,
+	}))
 
 	teamAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("team"))
 	personalAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("personal"))
@@ -209,6 +229,8 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	require.Contains(t, byChatID, teamChatID.String())
 	require.Equal(t, ownedSession, byChatID[ownedChatID.String()].SessionID, "the harness-native session id is served, not the chat uuid")
 	require.Equal(t, "fix flaky auth test", byChatID[ownedChatID.String()].Title)
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
 	require.Equal(t, project.Slug, byChatID[ownedChatID.String()].ProjectSlug)
 	require.NotContains(t, byChatID, deletedChatID.String())
 
@@ -230,6 +252,8 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
 	svc, findings := newRecallService(t, conn, &enabled)
+	minter := &recordingHandoffMinter{}
+	svc.WithHandoffMinter(minter)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -283,6 +307,14 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	require.Contains(t, out.NotCarriedOver, "tool inputs and outputs (redacted; tool names retained)")
 	require.Contains(t, out.NotCarriedOver, "files touched (derived from tool inputs, which are redacted)")
 	require.Contains(t, out.Notes, "1 messages are awaiting risk analysis; their content was withheld")
+
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true})
+	require.NoError(t, err)
+	require.Len(t, minter.inputs, 1)
+	require.Equal(t, out.Digest, minter.inputs[0].Content)
+	require.Contains(t, minter.inputs[0].Content, masked)
+	require.NotContains(t, minter.inputs[0].Content, secret)
+	require.NotContains(t, minter.inputs[0].Content, "/repo/auth/login.go")
 
 	// Case 3: one NULL-child recall edge and one content-free audit record,
 	// committed together.
@@ -487,4 +519,26 @@ func TestSessionRecallContinueServesLatestGenerationOnly(t *testing.T) {
 	require.Contains(t, out.Digest, "current generation ask")
 	require.Contains(t, out.Digest, "current generation answer")
 	require.NotContains(t, out.Digest, "SUPERSEDED-GENERATION-ZERO")
+}
+
+// A cron session captured before cron titles stored its raw envelope; the
+// recall listing names it after its job, as the dashboard does.
+func TestSessionRecallListNamesStoredCronEnvelopesAfterTheirJob(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_session_recall_cron_title")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	enabled := true
+	svc, _ := newRecallService(t, conn, &enabled)
+
+	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, "ses_"+uuid.NewString(), "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skills", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	out, err := svc.ListMySessions(ctx, principal, ListMySessionsInput{Limit: 0})
+	require.NoError(t, err)
+	require.Len(t, out.Sessions, 1)
+	require.Equal(t, chatID.String(), out.Sessions[0].ChatID)
+	require.Equal(t, "Cron: weekly-skill-review", out.Sessions[0].Title)
 }

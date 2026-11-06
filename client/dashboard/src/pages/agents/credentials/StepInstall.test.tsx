@@ -23,6 +23,7 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
       onIssue={vi.fn<() => void>()}
       issuing={false}
       secret="gram_secret"
+      existingKey={null}
       gatewayURL={gatewayURL}
       serverCount={1}
     />,
@@ -43,4 +44,68 @@ it("adds the gateway to OpenClaw by hand with the key from the environment", () 
   );
   expect(copied).not.toContain('"Authorization=Bearer $SPEAKEASY_AGENT_KEY"');
   expect(copied).not.toContain("gram_secret");
+});
+
+function covered(existingKey: { lastUsedAt?: Date } | null | undefined) {
+  render(
+    <StepInstall
+      command={null}
+      commandError={null}
+      minting={false}
+      onRegenerate={vi.fn<() => void>()}
+      onIssue={vi.fn<() => void>()}
+      issuing={false}
+      secret={null}
+      existingKey={existingKey}
+      gatewayURL={gatewayURL}
+      serverCount={1}
+    />,
+  );
+}
+
+it("claims neither state while the agent's keys are unknown", () => {
+  covered(undefined);
+  expect(
+    screen.getByText("A key that already exists cannot be shown here."),
+  ).toBeTruthy();
+  expect(
+    screen.getByText(/any key the agent already holds keeps working/),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("This agent needs a key before it can be connected."),
+  ).toBeNull();
+  expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
+});
+
+it("asks for a key when the agent has none", () => {
+  covered(null);
+  expect(
+    screen.getByText("This agent needs a key before it can be connected."),
+  ).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
+});
+
+it("says an agent with a used key is already connected", () => {
+  covered({ lastUsedAt: new Date(Date.now() - 3 * 3_600_000) });
+  expect(
+    screen.getByText(
+      "This agent is already connected. Its key was last used 3h ago.",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText(/the current one keeps working/)).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Issue another key" }),
+  ).toBeTruthy();
+});
+
+it("says an agent already has a key that nothing has used yet", () => {
+  covered({});
+  expect(screen.getByText("This agent already has a key.")).toBeTruthy();
+  expect(
+    screen.getByText(/Nothing has used it yet: issue another only if/),
+  ).toBeTruthy();
+  expect(screen.queryByText(/the current one keeps working/)).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Issue another key" }),
+  ).toBeTruthy();
 });

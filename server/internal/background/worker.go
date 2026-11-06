@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -75,6 +76,9 @@ import (
 )
 
 type WorkerOptions struct {
+	// FleetHealthCache refreshes the staff dashboard snapshot; nil disables its schedule.
+	FleetHealthCache FleetHealthCacheRefresher
+
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
 
@@ -123,7 +127,6 @@ type WorkerOptions struct {
 	FunctionsDeployer functions.Deployer
 	FunctionsVersion  functions.RunnerVersion
 	RagService        *rag.ToolsetVectorStore
-	MCPRegistryClient *externalmcp.RegistryClient
 	MCPCatalog        *externalmcp.CatalogService
 	TelemetryLogger   *telemetry.Logger
 	ClickhouseConn    clickhouse.Conn
@@ -147,6 +150,8 @@ type WorkerOptions struct {
 	// RemoteSessionAssertionSigner enables scheduled refreshes for clients that
 	// authenticate with private_key_jwt.
 	RemoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner
+	// Connections records scheduled refresh outcomes. Optional.
+	Connections *mcpconnectionattempts.Recorder
 	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
 	IssuerKeySweeper InternalSessionIssuerKeySweeper
 
@@ -195,7 +200,6 @@ func ForDeploymentProcessing(
 	assetStorage assets.BlobStore,
 	enc *encryption.Client,
 	deployer functions.Deployer,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	auditLogger *audit.Logger,
 ) *WorkerOptions {
 	validator, err := mcpregistry.LoadValidator()
@@ -204,6 +208,7 @@ func ForDeploymentProcessing(
 	}
 	return &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
@@ -214,10 +219,10 @@ func ForDeploymentProcessing(
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
 		FunctionsVersion:               "local", // Test deployers don't use baked versions
-		MCPRegistryClient:              mcpRegistryClient,
-		MCPCatalog:                     externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator)), f),
+		MCPCatalog:                     externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, validator))),
 		AuditLogger:                    auditLogger,
 		RemoteSessionAssertionSigner:   nil,
+		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
@@ -304,6 +309,7 @@ func NewTemporalWorker(
 ) *Workers {
 	opts := &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
@@ -334,7 +340,6 @@ func NewTemporalWorker(
 		FunctionsDeployer:              nil,
 		FunctionsVersion:               "",
 		RagService:                     nil,
-		MCPRegistryClient:              nil,
 		TelemetryLogger:                nil,
 		MeterReadConn:                  nil,
 		TelemetryRepo:                  nil,
@@ -342,6 +347,7 @@ func NewTemporalWorker(
 		CacheAdapter:                   nil,
 		IssuerMetadataRefresher:        nil,
 		RemoteSessionAssertionSigner:   nil,
+		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
@@ -363,6 +369,7 @@ func NewTemporalWorker(
 
 	for _, o := range options {
 		opts = &WorkerOptions{
+			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
@@ -392,7 +399,6 @@ func NewTemporalWorker(
 			FunctionsDeployer:              conv.Default(o.FunctionsDeployer, opts.FunctionsDeployer),
 			FunctionsVersion:               conv.Default(o.FunctionsVersion, opts.FunctionsVersion),
 			RagService:                     conv.Default(o.RagService, opts.RagService),
-			MCPRegistryClient:              conv.Default(o.MCPRegistryClient, opts.MCPRegistryClient),
 			MCPCatalog:                     conv.Default(o.MCPCatalog, opts.MCPCatalog),
 			TelemetryLogger:                conv.Default(o.TelemetryLogger, opts.TelemetryLogger),
 			MeterReadConn:                  conv.Default(o.MeterReadConn, opts.MeterReadConn),
@@ -401,6 +407,7 @@ func NewTemporalWorker(
 			CacheAdapter:                   conv.Default(o.CacheAdapter, opts.CacheAdapter),
 			IssuerMetadataRefresher:        conv.Default(o.IssuerMetadataRefresher, opts.IssuerMetadataRefresher),
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
+			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
@@ -502,7 +509,6 @@ func NewTemporalWorker(
 		opts.FunctionsDeployer,
 		opts.FunctionsVersion,
 		opts.RagService,
-		opts.MCPRegistryClient,
 		opts.MCPCatalog,
 		opts.TemporalEnv,
 		opts.TelemetryLogger,
@@ -532,9 +538,15 @@ func NewTemporalWorker(
 		opts.IssuerMetadataRefresher,
 		remoteSessionEnricher,
 		opts.RemoteSessionAssertionSigner,
+		opts.Connections,
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)
+
+	if opts.FleetHealthCache != nil {
+		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
+		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
+	}
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
@@ -886,6 +898,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if env.Queue() != sharedTaskQueue {
 		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
 		return
+	}
+
+	if opts.FleetHealthCache != nil {
+		if err := addFleetHealthCacheSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register fleet health cache schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.CatalogPromotions != nil {

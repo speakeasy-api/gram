@@ -32,6 +32,11 @@ func GetOrganizationFeaturesAdminPath() string {
 	return "/admin/organization.features"
 }
 
+// SetOrganizationProviderSetupAdminPath returns the URL path to the admin service setOrganizationProviderSetup HTTP endpoint.
+func SetOrganizationProviderSetupAdminPath() string {
+	return "/admin/organization.providerSetup"
+}
+
 // SetOrganizationFeatureAdminPath returns the URL path to the admin service setOrganizationFeature HTTP endpoint.
 func SetOrganizationFeatureAdminPath() string {
 	return "/admin/organization.features"
@@ -317,21 +322,6 @@ func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
 }
 
-// ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
-func ListExternalMcpMigrationCandidatesAdminPath() string {
-	return "/admin/externalMcpMigration.listCandidates"
-}
-
-// PreviewExternalMcpMigrationAdminPath returns the URL path to the admin service previewExternalMcpMigration HTTP endpoint.
-func PreviewExternalMcpMigrationAdminPath() string {
-	return "/admin/externalMcpMigration.preview"
-}
-
-// MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
-func MigrateExternalMcpServersAdminPath() string {
-	return "/admin/externalMcpMigration.migrate"
-}
-
 // ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
 func ListRegistryPromotionCandidatesAdminPath() string {
 	return "/admin/registry.promotionCandidates"
@@ -525,4 +515,9 @@ func DisableUpstreamAuthEnforcementAdminPath() string {
 // BackfillMcpAuthGrantsAdminPath returns the URL path to the admin service backfillMcpAuthGrants HTTP endpoint.
 func BackfillMcpAuthGrantsAdminPath() string {
 	return "/admin/mcpAuthGrants.backfill"
+}
+
+// BackfillMcpConnectGrantsAdminPath returns the URL path to the admin service backfillMcpConnectGrants HTTP endpoint.
+func BackfillMcpConnectGrantsAdminPath() string {
+	return "/admin/mcpConnectGrants.backfill"
 }

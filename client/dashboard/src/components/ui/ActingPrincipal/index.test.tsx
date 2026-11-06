@@ -1,7 +1,7 @@
 import { render, screen, cleanup } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ActingPrincipal } from ".";
+import { ActingPrincipal, PersonFace } from ".";
 import { actingPrincipalText } from "./text";
 
 vi.mock("@/lib/useIdentityHref", () => ({
@@ -105,6 +105,15 @@ describe("ActingPrincipal", () => {
         .getByText("shared credential")
         .parentElement?.getAttribute("title"),
     ).toBe("Signed in with: Service account");
+  });
+
+  it.each([
+    { name: "Amara Okafor", expected: "AO" },
+    { name: "j.smith@example.com", expected: "JS" },
+    { name: "amara@example.com", expected: "AM" },
+  ])("draws $name as $expected", ({ name, expected }) => {
+    setup(<PersonFace person={{ id: "u1", name }} />);
+    expect(screen.getByText(expected)).toBeTruthy();
   });
 
   it("gives the same relation as plain text", () => {

@@ -37,6 +37,10 @@ type Client struct {
 	// detachBinding endpoint.
 	DetachBindingDoer goahttp.Doer
 
+	// TestServerConnection Doer is the HTTP client used to make requests to the
+	// testServerConnection endpoint.
+	TestServerConnectionDoer goahttp.Doer
+
 	// CommitServerIdentityConfiguration Doer is the HTTP client used to make
 	// requests to the commitServerIdentityConfiguration endpoint.
 	CommitServerIdentityConfigurationDoer goahttp.Doer
@@ -91,6 +95,7 @@ func NewClient(
 		ListBindingsDoer:                      doer,
 		AttachBindingDoer:                     doer,
 		DetachBindingDoer:                     doer,
+		TestServerConnectionDoer:              doer,
 		CommitServerIdentityConfigurationDoer: doer,
 		GetServerIdentityImpactDoer:           doer,
 		ListServerClientAssociationsDoer:      doer,
@@ -221,6 +226,30 @@ func (c *Client) DetachBinding() goa.Endpoint {
 		resp, err := c.DetachBindingDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("remoteSessions", "detachBinding", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// TestServerConnection returns an endpoint that makes HTTP requests to the
+// remoteSessions service testServerConnection server.
+func (c *Client) TestServerConnection() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeTestServerConnectionRequest(c.encoder)
+		decodeResponse = DecodeTestServerConnectionResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildTestServerConnectionRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.TestServerConnectionDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("remoteSessions", "testServerConnection", err)
 		}
 		return decodeResponse(resp)
 	}

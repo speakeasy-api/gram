@@ -19,7 +19,7 @@ export class CliAuth extends ClientSDK {
    * authorize cliAuth
    *
    * @remarks
-   * Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
+   * Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
    */
   async authorize(
     request: CliAuthAuthorizeRequest,
@@ -38,7 +38,7 @@ export class CliAuth extends ClientSDK {
    * redeem cliAuth
    *
    * @remarks
-   * Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.
+   * Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.
    */
   async redeem(
     request: RedeemRequestBody,

@@ -1,6 +1,12 @@
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+} from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SettingsTab } from "./SettingsTab";
 
@@ -18,8 +24,8 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasAnyScope: () => true }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ remoteIdentityProviders: { goTo: vi.fn() } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
@@ -97,6 +103,8 @@ vi.mock(
     }),
   }),
 );
+
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
 
 afterEach(() => {
   cleanup();

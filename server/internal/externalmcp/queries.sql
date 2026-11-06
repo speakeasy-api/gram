@@ -38,12 +38,6 @@ INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, re
 VALUES (@deployment_id, @registry_id, @name, @slug, @registry_server_specifier)
 RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at;
 
--- name: ListExternalMCPAttachments :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, created_at, updated_at
-FROM external_mcp_attachments
-WHERE deployment_id = @deployment_id AND deleted IS FALSE
-ORDER BY created_at ASC;
-
 -- name: CreateExternalMCPToolDefinition :one
 INSERT INTO external_mcp_tool_definitions (
   external_mcp_attachment_id,
@@ -231,42 +225,6 @@ JOIN project_deployments pd ON e.deployment_id = pd.deployment_id
 WHERE t.deleted IS FALSE
   AND e.deleted IS FALSE;
 
--- name: GetExternalMCPToolsRequiringOAuth :many
-SELECT
-  t.id,
-  t.external_mcp_attachment_id,
-  t.tool_urn,
-  t.type,
-  t.name,
-  t.description,
-  t.schema,
-  t.remote_url,
-  t.requires_oauth,
-  t.oauth_version,
-  t.oauth_authorization_endpoint,
-  t.oauth_token_endpoint,
-  t.oauth_registration_endpoint,
-  t.oauth_scopes_supported,
-  t.header_definitions,
-  t.title,
-  t.read_only_hint,
-  t.destructive_hint,
-  t.idempotent_hint,
-  t.open_world_hint,
-  t.created_at,
-  t.updated_at,
-  e.deployment_id,
-  e.registry_id,
-  e.name as registry_server_name,
-  e.slug,
-  e.registry_server_specifier
-FROM external_mcp_tool_definitions t
-JOIN external_mcp_attachments e ON t.external_mcp_attachment_id = e.id
-WHERE e.deployment_id = @deployment_id
-  AND t.requires_oauth = TRUE
-  AND t.deleted IS FALSE
-  AND e.deleted IS FALSE;
-
 -- name: CreateMCPRegistry :one
 INSERT INTO mcp_registries (name, url)
 VALUES (@name, @url)
@@ -334,3 +292,15 @@ UPDATE mcp_registries SET enabled = @enabled WHERE id = @id;
 
 -- name: SetMCPRegistryURLFixture :exec
 UPDATE mcp_registries SET url = @url WHERE id = @id;
+
+-- name: EnsureNativeCatalogRegistry :exec
+-- Never changes an existing row, including an operator-disabled native source.
+INSERT INTO mcp_registries
+  (id, name, url, source_type, auth_profile, enabled, certification_state, source_key)
+VALUES (@id, 'Speakeasy', @url, 'native_v1', 'none', true, 'certified', 'speakeasy')
+ON CONFLICT (id) DO NOTHING;
+
+-- name: NativeCatalogRegistryMatches :one
+SELECT url = @url::text AND source_type = 'native_v1' AND auth_profile = 'none' AND source_key = 'speakeasy' AS valid
+FROM mcp_registries
+WHERE id = @id;

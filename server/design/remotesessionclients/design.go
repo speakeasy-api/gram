@@ -66,6 +66,13 @@ func AudienceAttribute() {
 	MaxLength(512)
 }
 
+// UpdateAudienceAttribute allows an explicit empty string to clear the audience.
+// Omitted values leave it unchanged; creation still uses AudienceAttribute.
+func UpdateAudienceAttribute() {
+	Pattern("^[!-~]*$")
+	MaxLength(512)
+}
+
 // Companion endpoint: POST /oauth/proxy-register. The dashboard mints the
 // client_id/client_secret it hands to createRemoteSessionClient by running
 // Dynamic Client Registration against the upstream provider through that
@@ -877,7 +884,8 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("scope", ArrayOf(String), func() {
 		ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", AudienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.", UpdateAudienceAttribute)
+	Attribute("forward_client_name", Boolean, "Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.")
 	Attribute("legacy_callback_url", Boolean, "Platform admins only. Set true to run the client in compatibility mode with the legacy callback URL, or false to migrate it to the current callback URL once that URL is registered with the identity provider. Omit to leave unchanged.")
 
 	Required("id")
@@ -979,6 +987,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")
 	Attribute("audience", String, "Upstream OAuth audience sent on the authorize redirect and token exchange. Null omits the audience parameter.")
+	Attribute("forward_client_name", Boolean, "Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.")
 	Attribute("legacy_callback_url", Boolean, "Whether the client was registered upstream with the legacy callback URL. The authorize leg then sends that URL and a JSON state instead of the current callback. Cleared when the client is rotated.")
 	Attribute("credential_owner", String, "Who the upstream access credential belongs to. subject means each caller connects their own upstream account; self means the client holds one credential for itself, obtained with the client_credentials grant, that every caller shares.", credentialOwnerEnum)
 	Attribute("callback_url", String, "The redirect URI this client registers with its upstream provider. It never changes after the client is created. Absent on global clients and on clients with credential_owner self, which have no callback.", func() {
@@ -994,7 +1003,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		Format(FormatDateTime)
 	})
 
-	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "credential_owner", "created_at", "updated_at")
+	Required("id", "project_id", "organization_id", "remote_session_issuer_id", "user_session_issuer_ids", "client_id", "legacy_callback_url", "forward_client_name", "credential_owner", "created_at", "updated_at")
 })
 
 var NewClientCallbackURLResult = Type("NewClientCallbackUrlResult", func() {

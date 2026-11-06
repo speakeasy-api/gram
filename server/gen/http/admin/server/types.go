@@ -17,6 +17,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetOrganizationProviderSetupRequestBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP request body.
+type SetOrganizationProviderSetupRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Enabled        *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetOrganizationFeatureRequestBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP request body.
 type SetOrganizationFeatureRequestBody struct {
@@ -414,20 +421,6 @@ type UpdateSupportMatrixRequestBody struct {
 	Draft    *SupportDraftRequestBody `form:"draft,omitempty" json:"draft,omitempty" xml:"draft,omitempty"`
 }
 
-// PreviewExternalMcpMigrationRequestBody is the type of the "admin" service
-// "previewExternalMcpMigration" endpoint HTTP request body.
-type PreviewExternalMcpMigrationRequestBody struct {
-	// Servers to migrate or delete, in order.
-	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
-}
-
-// MigrateExternalMcpServersRequestBody is the type of the "admin" service
-// "migrateExternalMcpServers" endpoint HTTP request body.
-type MigrateExternalMcpServersRequestBody struct {
-	// Servers to migrate or delete, in order.
-	Servers []*AdminExternalMcpMigrationRequestRequestBody `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
-}
-
 // GetRegistryPromotionCandidateRequestBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP request body.
 type GetRegistryPromotionCandidateRequestBody struct {
@@ -557,11 +550,14 @@ type CreateOnboardingPlaybookRequestBody struct {
 // UpdateOnboardingPlaybookRequestBody is the type of the "admin" service
 // "updateOnboardingPlaybook" endpoint HTTP request body.
 type UpdateOnboardingPlaybookRequestBody struct {
-	PlaybookID  *string  `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
-	Name        *string  `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Description *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	StepSlugs   []string `form:"step_slugs,omitempty" json:"step_slugs,omitempty" xml:"step_slugs,omitempty"`
+	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Name           *string  `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Description    *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	IsDefault      *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	StepSlugs      []string `form:"step_slugs,omitempty" json:"step_slugs,omitempty" xml:"step_slugs,omitempty"`
 }
 
 // DeleteOnboardingPlaybookRequestBody is the type of the "admin" service
@@ -640,6 +636,14 @@ type DisableUpstreamAuthEnforcementRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// BackfillMcpConnectGrantsRequestBody is the type of the "admin" service
+// "backfillMcpConnectGrants" endpoint HTTP request body.
+type BackfillMcpConnectGrantsRequestBody struct {
+	// Only copy grants created before this time. Set it to when read and write
+	// stopped implying connect, so grants written since are left alone.
+	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -650,6 +654,9 @@ type GetSessionResponseBody struct {
 // GetOrganizationFeaturesResponseBody is the type of the "admin" service
 // "getOrganizationFeatures" endpoint HTTP response body.
 type GetOrganizationFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -704,18 +711,96 @@ type GetOrganizationFeaturesResponseBody struct {
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
 	// Whether staff turned on serving managed skills over MCP for the
-	// organization. Skills over MCP is also on when the organization is in the
-	// skills-over-mcp rollout flag.
+	// organization. Off by default.
 	SkillsOverMcpEnabled bool `form:"skills_over_mcp_enabled" json:"skills_over_mcp_enabled" xml:"skills_over_mcp_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
+}
+
+// SetOrganizationProviderSetupResponseBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP response body.
+type SetOrganizationProviderSetupResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
+	// Whether logging is enabled
+	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool `form:"hooks_fail_open_enabled" json:"hooks_fail_open_enabled" xml:"hooks_fail_open_enabled"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization can use the Speakeasy Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool `form:"remote_session_auto_refresh_enabled" json:"remote_session_auto_refresh_enabled" xml:"remote_session_auto_refresh_enabled"`
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool `form:"session_portability_enabled" json:"session_portability_enabled" xml:"session_portability_enabled"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
+	// Whether staff turned on serving managed skills over MCP for the
+	// organization. Off by default.
+	SkillsOverMcpEnabled bool `form:"skills_over_mcp_enabled" json:"skills_over_mcp_enabled" xml:"skills_over_mcp_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP response body.
 type SetOrganizationFeatureResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -770,13 +855,16 @@ type SetOrganizationFeatureResponseBody struct {
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
 	// Whether staff turned on serving managed skills over MCP for the
-	// organization. Skills over MCP is also on when the organization is in the
-	// skills-over-mcp rollout flag.
+	// organization. Off by default.
 	SkillsOverMcpEnabled bool `form:"skills_over_mcp_enabled" json:"skills_over_mcp_enabled" xml:"skills_over_mcp_enabled"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -1106,7 +1194,7 @@ type ListProjectMcpServersResponseBody struct {
 // "listOrganizationActivity" endpoint HTTP response body.
 type ListOrganizationActivityResponseBody struct {
 	// List of organization activity.
-	Logs []*AuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
+	Logs []*AdminAuditLogResponseBody `form:"logs" json:"logs" xml:"logs"`
 	// Cursor for the next page of results.
 	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
 }
@@ -2174,7 +2262,8 @@ type GetHookClientsResponseBody struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
@@ -2184,29 +2273,6 @@ type GetHookClientsResponseBody struct {
 	Inference []*AdminInferenceHookCellResponseBody `form:"inference" json:"inference" xml:"inference"`
 	// The device agent version grid. Empty for days before versions were recorded.
 	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents" json:"device_agents" xml:"device_agents"`
-}
-
-// ListExternalMcpMigrationCandidatesResponseBody is the type of the "admin"
-// service "listExternalMcpMigrationCandidates" endpoint HTTP response body.
-type ListExternalMcpMigrationCandidatesResponseBody struct {
-	// Every candidate across all organizations.
-	Candidates []*AdminExternalMcpMigrationCandidateResponseBody `form:"candidates" json:"candidates" xml:"candidates"`
-	// Days of tool calls each candidate's tool_calls covers.
-	ToolCallWindowDays int `form:"tool_call_window_days" json:"tool_call_window_days" xml:"tool_call_window_days"`
-}
-
-// PreviewExternalMcpMigrationResponseBody is the type of the "admin" service
-// "previewExternalMcpMigration" endpoint HTTP response body.
-type PreviewExternalMcpMigrationResponseBody struct {
-	// One outcome per requested server, in request order.
-	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
-}
-
-// MigrateExternalMcpServersResponseBody is the type of the "admin" service
-// "migrateExternalMcpServers" endpoint HTTP response body.
-type MigrateExternalMcpServersResponseBody struct {
-	// One outcome per requested server, in request order.
-	Outcomes []*AdminExternalMcpMigrationOutcomeResponseBody `form:"outcomes" json:"outcomes" xml:"outcomes"`
 }
 
 // ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
@@ -2219,15 +2285,23 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2256,15 +2330,23 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2293,15 +2375,23 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2330,15 +2420,23 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -2867,6 +2965,19 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 type BackfillMcpAuthGrantsResponseBody struct {
 	// How many principals gained the mcp:auth grant.
 	Granted int64 `form:"granted" json:"granted" xml:"granted"`
+}
+
+// BackfillMcpConnectGrantsResponseBody is the type of the "admin" service
+// "backfillMcpConnectGrants" endpoint HTTP response body.
+type BackfillMcpConnectGrantsResponseBody struct {
+	// How many mcp:connect grants were written.
+	Inserted int64 `form:"inserted" json:"inserted" xml:"inserted"`
+	// How many existing temporary mcp:connect grants were extended to last as long
+	// as the access they mirror.
+	Extended int64 `form:"extended" json:"extended" xml:"extended"`
+	// How many mcp:connect grants provisioned by the default auth permission
+	// backfill became explicit grants.
+	TakenOver int64 `form:"taken_over" json:"taken_over" xml:"taken_over"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -3764,6 +3875,196 @@ type GetOrganizationFeaturesUnexpectedResponseBody struct {
 // service "getOrganizationFeatures" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationProviderSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupForbiddenResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type SetOrganizationProviderSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "bad_request" error.
+type SetOrganizationProviderSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupNotFoundResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "not_found" error.
+type SetOrganizationProviderSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupConflictResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "conflict" error.
+type SetOrganizationProviderSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnsupportedMediaResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetOrganizationProviderSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvalidResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationProviderSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationProviderSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationProviderSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unexpected" error.
+type SetOrganizationProviderSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationProviderSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -14768,633 +15069,6 @@ type GetHookClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// ListExternalMcpMigrationCandidatesUnavailableResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "unavailable" error.
-type ListExternalMcpMigrationCandidatesUnavailableResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesUnauthorizedResponseBody is the type of
-// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
-// response body for the "unauthorized" error.
-type ListExternalMcpMigrationCandidatesUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesForbiddenResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "forbidden" error.
-type ListExternalMcpMigrationCandidatesForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesBadRequestResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "bad_request" error.
-type ListExternalMcpMigrationCandidatesBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesNotFoundResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "not_found" error.
-type ListExternalMcpMigrationCandidatesNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesConflictResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "conflict" error.
-type ListExternalMcpMigrationCandidatesConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody is the type
-// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
-// response body for the "unsupported_media" error.
-type ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesInvalidResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "invalid" error.
-type ListExternalMcpMigrationCandidatesInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesInvariantViolationResponseBody is the type
-// of the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
-// response body for the "invariant_violation" error.
-type ListExternalMcpMigrationCandidatesInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesUnexpectedResponseBody is the type of the
-// "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP response
-// body for the "unexpected" error.
-type ListExternalMcpMigrationCandidatesUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// ListExternalMcpMigrationCandidatesGatewayErrorResponseBody is the type of
-// the "admin" service "listExternalMcpMigrationCandidates" endpoint HTTP
-// response body for the "gateway_error" error.
-type ListExternalMcpMigrationCandidatesGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationUnavailableResponseBody is the type of the
-// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
-// for the "unavailable" error.
-type PreviewExternalMcpMigrationUnavailableResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationUnauthorizedResponseBody is the type of the
-// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
-// for the "unauthorized" error.
-type PreviewExternalMcpMigrationUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationForbiddenResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "forbidden" error.
-type PreviewExternalMcpMigrationForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationBadRequestResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "bad_request" error.
-type PreviewExternalMcpMigrationBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationNotFoundResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "not_found" error.
-type PreviewExternalMcpMigrationNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationConflictResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "conflict" error.
-type PreviewExternalMcpMigrationConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationUnsupportedMediaResponseBody is the type of the
-// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
-// for the "unsupported_media" error.
-type PreviewExternalMcpMigrationUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationInvalidResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "invalid" error.
-type PreviewExternalMcpMigrationInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationInvariantViolationResponseBody is the type of the
-// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
-// for the "invariant_violation" error.
-type PreviewExternalMcpMigrationInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationUnexpectedResponseBody is the type of the "admin"
-// service "previewExternalMcpMigration" endpoint HTTP response body for the
-// "unexpected" error.
-type PreviewExternalMcpMigrationUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// PreviewExternalMcpMigrationGatewayErrorResponseBody is the type of the
-// "admin" service "previewExternalMcpMigration" endpoint HTTP response body
-// for the "gateway_error" error.
-type PreviewExternalMcpMigrationGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersUnavailableResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "unavailable" error.
-type MigrateExternalMcpServersUnavailableResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersUnauthorizedResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "unauthorized" error.
-type MigrateExternalMcpServersUnauthorizedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersForbiddenResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "forbidden" error.
-type MigrateExternalMcpServersForbiddenResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersBadRequestResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "bad_request" error.
-type MigrateExternalMcpServersBadRequestResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersNotFoundResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "not_found" error.
-type MigrateExternalMcpServersNotFoundResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersConflictResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "conflict" error.
-type MigrateExternalMcpServersConflictResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersUnsupportedMediaResponseBody is the type of the
-// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
-// the "unsupported_media" error.
-type MigrateExternalMcpServersUnsupportedMediaResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersInvalidResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "invalid" error.
-type MigrateExternalMcpServersInvalidResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersInvariantViolationResponseBody is the type of the
-// "admin" service "migrateExternalMcpServers" endpoint HTTP response body for
-// the "invariant_violation" error.
-type MigrateExternalMcpServersInvariantViolationResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersUnexpectedResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "unexpected" error.
-type MigrateExternalMcpServersUnexpectedResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
-// MigrateExternalMcpServersGatewayErrorResponseBody is the type of the "admin"
-// service "migrateExternalMcpServers" endpoint HTTP response body for the
-// "gateway_error" error.
-type MigrateExternalMcpServersGatewayErrorResponseBody struct {
-	// Name is the name of this class of errors.
-	Name string `form:"name" json:"name" xml:"name"`
-	// ID is a unique identifier for this particular occurrence of the problem.
-	ID string `form:"id" json:"id" xml:"id"`
-	// Message is a human-readable explanation specific to this occurrence of the
-	// problem.
-	Message string `form:"message" json:"message" xml:"message"`
-	// Is the error temporary?
-	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
-	// Is the error a timeout?
-	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
-	// Is the error a server-side fault?
-	Fault bool `form:"fault" json:"fault" xml:"fault"`
-}
-
 // ListRegistryPromotionCandidatesUnauthorizedResponseBody is the type of the
 // "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -22797,6 +22471,196 @@ type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BackfillMcpConnectGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpConnectGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpConnectGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpConnectGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsNotFoundResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "not_found" error.
+type BackfillMcpConnectGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsConflictResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "conflict" error.
+type BackfillMcpConnectGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsUnsupportedMediaResponseBody is the type of the
+// "admin" service "backfillMcpConnectGrants" endpoint HTTP response body for
+// the "unsupported_media" error.
+type BackfillMcpConnectGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsInvalidResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "invalid" error.
+type BackfillMcpConnectGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpConnectGrants" endpoint HTTP response body for
+// the "invariant_violation" error.
+type BackfillMcpConnectGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpConnectGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpConnectGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpConnectGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -22844,8 +22708,12 @@ type AdminMcpServerResponseBody struct {
 	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
-// AuditLogResponseBody is used to define fields on response body types.
-type AuditLogResponseBody struct {
+// AdminAuditLogResponseBody is used to define fields on response body types.
+type AdminAuditLogResponseBody struct {
+	// Internal staff-only audit activity; persisted but never published to the
+	// outbox. Always present in responses; optional in the schema so clients built
+	// against it still read responses from servers that predate it.
+	IsInternal       *bool   `form:"is_internal,omitempty" json:"is_internal,omitempty" xml:"is_internal,omitempty"`
 	ID               string  `form:"id" json:"id" xml:"id"`
 	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	ProjectSlug      *string `form:"project_slug,omitempty" json:"project_slug,omitempty" xml:"project_slug,omitempty"`
@@ -22860,7 +22728,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -23356,13 +23230,19 @@ type SupportMappingResponseBody struct {
 type SupportCoverageCellResponseBody struct {
 	// Capability the cell reports on.
 	Capability string `form:"capability" json:"capability" xml:"capability"`
-	// Consuming surface the cell reports on.
+	// Surface the cell reports on: Speakeasy's own MCP gateway, or a consuming
+	// agent surface.
 	Surface string `form:"surface" json:"surface" xml:"surface"`
-	// Whether evidence was found, absent, or not answerable yet.
+	// Whether evidence was found, absent, not answerable yet, or impossible for
+	// this pair.
 	Status string `form:"status" json:"status" xml:"status"`
 	// Primary measure: sessions, tokens, blocks, attributed sessions or distinct
 	// shadow servers depending on the capability. Zero unless observed.
 	Value int64 `form:"value" json:"value" xml:"value"`
+	// Singular noun the value counts, when the capability's own unit does not
+	// apply. The gateway is measured in tool calls where an agent surface is
+	// measured in sessions. Empty when the capability's default unit stands.
+	Unit string `form:"unit" json:"unit" xml:"unit"`
 	// Short qualifier rendered under the value. Empty when there is nothing to
 	// qualify.
 	Detail string `form:"detail" json:"detail" xml:"detail"`
@@ -23669,98 +23549,26 @@ type AdminDeviceAgentCellResponseBody struct {
 	Machines int64 `form:"machines" json:"machines" xml:"machines"`
 }
 
-// AdminExternalMcpMigrationCandidateResponseBody is used to define fields on
-// response body types.
-type AdminExternalMcpMigrationCandidateResponseBody struct {
-	// The toolset behind the server.
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// Organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Organization name.
-	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
-	// Organization slug.
-	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
-	// Project ID.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// Project name.
-	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
-	// Project slug.
-	ProjectSlug string `form:"project_slug" json:"project_slug" xml:"project_slug"`
-	// The server's display name.
-	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
-	// The slug in the server's /mcp/<slug> address. Absent when the server has
-	// none.
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// The attachment's upstream URL. Absent when the server proxies several.
-	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
-	// The upstream URL the server will dial as a remote MCP server: the one
-	// resource its signed-in sessions recorded, otherwise the attachment's URL
-	// without unfilled template query parameters.
-	ReplacementURL *string `form:"replacement_url,omitempty" json:"replacement_url,omitempty" xml:"replacement_url,omitempty"`
-	// The server's user session issuer and the upstream authorization servers
-	// behind it. Absent when the server has none.
-	SignInProvider *string `form:"sign_in_provider,omitempty" json:"sign_in_provider,omitempty" xml:"sign_in_provider,omitempty"`
-	// Tool calls over the last tool_call_window_days. Absent when telemetry is
-	// unavailable.
-	ToolCalls *int64 `form:"tool_calls,omitempty" json:"tool_calls,omitempty" xml:"tool_calls,omitempty"`
-	// What running the candidate does: migrate switches its server in place to a
-	// remote MCP server; delete removes the toolset because nothing is left to
-	// migrate, along with any server, addresses and plugin entries it still owns.
-	// A server already migrated in place is kept and keeps working.
-	Action string `form:"action" json:"action" xml:"action"`
-	// Why the candidate is deleted rather than migrated. Empty when it migrates.
-	DeleteReasons []string `form:"delete_reasons" json:"delete_reasons" xml:"delete_reasons"`
-	// Why the server cannot be migrated. Empty when it can.
-	Blockers []string `form:"blockers" json:"blockers" xml:"blockers"`
-	// What migrating the server drops or cannot carry over. Warnings do not stop
-	// it.
-	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
-}
-
-// AdminExternalMcpMigrationOutcomeResponseBody is used to define fields on
-// response body types.
-type AdminExternalMcpMigrationOutcomeResponseBody struct {
-	// The candidate's toolset.
-	ToolsetID string `form:"toolset_id" json:"toolset_id" xml:"toolset_id"`
-	// What the run did, or would do, with the candidate. Absent when it was not
-	// attempted.
-	Action *string `form:"action,omitempty" json:"action,omitempty" xml:"action,omitempty"`
-	// migrated, deleted and previewed completed every step; deleted removed the
-	// toolset and any server it still owned, so mcp_server_id,
-	// remote_mcp_server_id and remote_url are absent; failed left the server
-	// unchanged; not_attempted follows an earlier failure.
-	MigrationStatus string `form:"migration_status" json:"migration_status" xml:"migration_status"`
-	// Why the server failed or was not attempted.
-	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
-	// The server's /mcp/<slug> address. Migrating keeps it; deleting a server the
-	// toolset still owns removes it.
-	McpSlug *string `form:"mcp_slug,omitempty" json:"mcp_slug,omitempty" xml:"mcp_slug,omitempty"`
-	// The server, which keeps its ID.
-	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	// The remote MCP source the server proxies once migrated. Absent when the
-	// server failed; a preview's source is rolled back.
-	RemoteMcpServerID *string `form:"remote_mcp_server_id,omitempty" json:"remote_mcp_server_id,omitempty" xml:"remote_mcp_server_id,omitempty"`
-	// The upstream URL the server dials once migrated. Absent when the server
-	// failed.
-	RemoteURL *string `form:"remote_url,omitempty" json:"remote_url,omitempty" xml:"remote_url,omitempty"`
-	// Each change, in order.
-	Actions []string `form:"actions" json:"actions" xml:"actions"`
-	// What the migration could not carry over.
-	Warnings []string `form:"warnings" json:"warnings" xml:"warnings"`
-}
-
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                string                                           `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	ID                string                                         `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	// Guides in the pinned setup-docs export, for warning when a slug is already
+	// taken. Present only with suggested_metadata. Guides merged after the pinned
+	// version are missing.
+	SetupGuides []*AdminRegistryPromotionSetupGuideResponseBody `form:"setup_guides,omitempty" json:"setup_guides,omitempty" xml:"setup_guides,omitempty"`
+	// Pinned setup-docs export version that setup_guides came from.
+	SetupGuidesVersion *string `form:"setup_guides_version,omitempty" json:"setup_guides_version,omitempty" xml:"setup_guides_version,omitempty"`
+	// Slug of the one pinned guide that documents the suggested public endpoint.
+	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
 	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
@@ -23796,6 +23604,13 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionSetupGuideResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionSetupGuideResponseBody struct {
+	Slug  string `form:"slug" json:"slug" xml:"slug"`
+	Title string `form:"title" json:"title" xml:"title"`
 }
 
 // AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
@@ -24292,13 +24107,6 @@ type SupportFactRequestBody struct {
 	Verify *bool   `json:"verify"`
 }
 
-// AdminExternalMcpMigrationRequestRequestBody is used to define fields on
-// request body types.
-type AdminExternalMcpMigrationRequestRequestBody struct {
-	// The candidate's toolset.
-	ToolsetID *string `form:"toolset_id,omitempty" json:"toolset_id,omitempty" xml:"toolset_id,omitempty"`
-}
-
 // AdminOnboardingStackVendorRequestBody is used to define fields on request
 // body types.
 type AdminOnboardingStackVendorRequestBody struct {
@@ -24322,6 +24130,7 @@ func NewGetSessionResponseBody(res *admin.AdminSession) *GetSessionResponseBody 
 // the result of the "getOrganizationFeatures" endpoint of the "admin" service.
 func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView) *GetOrganizationFeaturesResponseBody {
 	body := &GetOrganizationFeaturesResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24345,6 +24154,41 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		SkillsOverMcpEnabled:                    *res.SkillsOverMcpEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupResponseBody builds the HTTP response body
+// from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationProviderSetupResponseBody {
+	body := &SetOrganizationProviderSetupResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
+		LogsEnabled:                             *res.LogsEnabled,
+		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            *res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              *res.SsoEnabled,
+		ScimEnabled:                             *res.ScimEnabled,
+		HooksBrowserLoginEnabled:                *res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    *res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  *res.CustomModelKeysEnabled,
+		SkillsEnabled:                           *res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                *res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       *res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      *res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
+		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         *res.CodeModeEnabled,
+		SkillsOverMcpEnabled:                    *res.SkillsOverMcpEnabled,
+		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24353,6 +24197,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 // result of the "setOrganizationFeature" endpoint of the "admin" service.
 func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationFeatureResponseBody {
 	body := &SetOrganizationFeatureResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24376,6 +24221,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		SkillsOverMcpEnabled:                    *res.SkillsOverMcpEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24649,16 +24495,16 @@ func NewListOrganizationActivityResponseBody(res *admin.AdminListOrganizationAct
 		NextCursor: res.NextCursor,
 	}
 	if res.Logs != nil {
-		body.Logs = make([]*AuditLogResponseBody, len(res.Logs))
+		body.Logs = make([]*AdminAuditLogResponseBody, len(res.Logs))
 		for i, val := range res.Logs {
 			if val == nil {
 				body.Logs[i] = nil
 				continue
 			}
-			body.Logs[i] = marshalAdminAuditLogToAuditLogResponseBody(val)
+			body.Logs[i] = marshalAdminAdminAuditLogToAdminAuditLogResponseBody(val)
 		}
 	} else {
-		body.Logs = []*AuditLogResponseBody{}
+		body.Logs = []*AdminAuditLogResponseBody{}
 	}
 	return body
 }
@@ -25885,68 +25731,6 @@ func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookCl
 	return body
 }
 
-// NewListExternalMcpMigrationCandidatesResponseBody builds the HTTP response
-// body from the result of the "listExternalMcpMigrationCandidates" endpoint of
-// the "admin" service.
-func NewListExternalMcpMigrationCandidatesResponseBody(res *admin.AdminListExternalMcpMigrationCandidatesResult) *ListExternalMcpMigrationCandidatesResponseBody {
-	body := &ListExternalMcpMigrationCandidatesResponseBody{
-		ToolCallWindowDays: res.ToolCallWindowDays,
-	}
-	if res.Candidates != nil {
-		body.Candidates = make([]*AdminExternalMcpMigrationCandidateResponseBody, len(res.Candidates))
-		for i, val := range res.Candidates {
-			if val == nil {
-				body.Candidates[i] = nil
-				continue
-			}
-			body.Candidates[i] = marshalAdminAdminExternalMcpMigrationCandidateToAdminExternalMcpMigrationCandidateResponseBody(val)
-		}
-	} else {
-		body.Candidates = []*AdminExternalMcpMigrationCandidateResponseBody{}
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationResponseBody builds the HTTP response body
-// from the result of the "previewExternalMcpMigration" endpoint of the "admin"
-// service.
-func NewPreviewExternalMcpMigrationResponseBody(res *admin.AdminExternalMcpMigrationResult) *PreviewExternalMcpMigrationResponseBody {
-	body := &PreviewExternalMcpMigrationResponseBody{}
-	if res.Outcomes != nil {
-		body.Outcomes = make([]*AdminExternalMcpMigrationOutcomeResponseBody, len(res.Outcomes))
-		for i, val := range res.Outcomes {
-			if val == nil {
-				body.Outcomes[i] = nil
-				continue
-			}
-			body.Outcomes[i] = marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(val)
-		}
-	} else {
-		body.Outcomes = []*AdminExternalMcpMigrationOutcomeResponseBody{}
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersResponseBody builds the HTTP response body from
-// the result of the "migrateExternalMcpServers" endpoint of the "admin"
-// service.
-func NewMigrateExternalMcpServersResponseBody(res *admin.AdminExternalMcpMigrationResult) *MigrateExternalMcpServersResponseBody {
-	body := &MigrateExternalMcpServersResponseBody{}
-	if res.Outcomes != nil {
-		body.Outcomes = make([]*AdminExternalMcpMigrationOutcomeResponseBody, len(res.Outcomes))
-		for i, val := range res.Outcomes {
-			if val == nil {
-				body.Outcomes[i] = nil
-				continue
-			}
-			body.Outcomes[i] = marshalAdminAdminExternalMcpMigrationOutcomeToAdminExternalMcpMigrationOutcomeResponseBody(val)
-		}
-	} else {
-		body.Outcomes = []*AdminExternalMcpMigrationOutcomeResponseBody{}
-	}
-	return body
-}
-
 // NewListRegistryPromotionCandidatesResponseBody builds the HTTP response body
 // from the result of the "listRegistryPromotionCandidates" endpoint of the
 // "admin" service.
@@ -25982,6 +25766,8 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26006,6 +25792,16 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26025,6 +25821,8 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26049,6 +25847,16 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26069,6 +25877,8 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26093,6 +25903,16 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26113,6 +25933,8 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 		SourceName:             res.SourceName,
 		CreatedAt:              res.CreatedAt,
 		CurationRevision:       res.CurationRevision,
+		SetupGuidesVersion:     res.SetupGuidesVersion,
+		EndpointGuideSlug:      res.EndpointGuideSlug,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -26137,6 +25959,16 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.SetupGuides != nil {
+		body.SetupGuides = make([]*AdminRegistryPromotionSetupGuideResponseBody, len(res.SetupGuides))
+		for i, val := range res.SetupGuides {
+			if val == nil {
+				body.SetupGuides[i] = nil
+				continue
+			}
+			body.SetupGuides[i] = marshalAdminAdminRegistryPromotionSetupGuideToAdminRegistryPromotionSetupGuideResponseBody(val)
+		}
 	}
 	if res.AuthDiscovery != nil {
 		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
@@ -26920,6 +26752,17 @@ func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsR
 	return body
 }
 
+// NewBackfillMcpConnectGrantsResponseBody builds the HTTP response body from
+// the result of the "backfillMcpConnectGrants" endpoint of the "admin" service.
+func NewBackfillMcpConnectGrantsResponseBody(res *admin.AdminBackfillMCPConnectGrantsResult) *BackfillMcpConnectGrantsResponseBody {
+	body := &BackfillMcpConnectGrantsResponseBody{
+		Inserted:  res.Inserted,
+		Extended:  res.Extended,
+		TakenOver: res.TakenOver,
+	}
+	return body
+}
+
 // NewLoginUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "login" endpoint of the "admin" service.
 func NewLoginUnauthorizedResponseBody(res *goa.ServiceError) *LoginUnauthorizedResponseBody {
@@ -27620,6 +27463,156 @@ func NewGetOrganizationFeaturesUnexpectedResponseBody(res *goa.ServiceError) *Ge
 // "admin" service.
 func NewGetOrganizationFeaturesGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationFeaturesGatewayErrorResponseBody {
 	body := &GetOrganizationFeaturesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnauthorizedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnauthorizedResponseBody {
+	body := &SetOrganizationProviderSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupForbiddenResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupForbiddenResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupForbiddenResponseBody {
+	body := &SetOrganizationProviderSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupBadRequestResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupBadRequestResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupBadRequestResponseBody {
+	body := &SetOrganizationProviderSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupNotFoundResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupNotFoundResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupNotFoundResponseBody {
+	body := &SetOrganizationProviderSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupConflictResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupConflictResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupConflictResponseBody {
+	body := &SetOrganizationProviderSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnsupportedMediaResponseBody {
+	body := &SetOrganizationProviderSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvalidResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupInvalidResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvalidResponseBody {
+	body := &SetOrganizationProviderSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "setOrganizationProviderSetup"
+// endpoint of the "admin" service.
+func NewSetOrganizationProviderSetupInvariantViolationResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvariantViolationResponseBody {
+	body := &SetOrganizationProviderSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnexpectedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnexpectedResponseBody {
+	body := &SetOrganizationProviderSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupGatewayErrorResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupGatewayErrorResponseBody {
+	body := &SetOrganizationProviderSetupGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -36234,501 +36227,6 @@ func NewGetHookClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetHookCl
 	return body
 }
 
-// NewListExternalMcpMigrationCandidatesUnavailableResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesUnavailableResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnavailableResponseBody {
-	body := &ListExternalMcpMigrationCandidatesUnavailableResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesUnauthorizedResponseBody builds the
-// HTTP response body from the result of the
-// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesUnauthorizedResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnauthorizedResponseBody {
-	body := &ListExternalMcpMigrationCandidatesUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesForbiddenResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesForbiddenResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesForbiddenResponseBody {
-	body := &ListExternalMcpMigrationCandidatesForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesBadRequestResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesBadRequestResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesBadRequestResponseBody {
-	body := &ListExternalMcpMigrationCandidatesBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesNotFoundResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesNotFoundResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesNotFoundResponseBody {
-	body := &ListExternalMcpMigrationCandidatesNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesConflictResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesConflictResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesConflictResponseBody {
-	body := &ListExternalMcpMigrationCandidatesConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody builds the
-// HTTP response body from the result of the
-// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody {
-	body := &ListExternalMcpMigrationCandidatesUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesInvalidResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesInvalidResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesInvalidResponseBody {
-	body := &ListExternalMcpMigrationCandidatesInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesInvariantViolationResponseBody builds
-// the HTTP response body from the result of the
-// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesInvariantViolationResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesInvariantViolationResponseBody {
-	body := &ListExternalMcpMigrationCandidatesInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesUnexpectedResponseBody builds the HTTP
-// response body from the result of the "listExternalMcpMigrationCandidates"
-// endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesUnexpectedResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesUnexpectedResponseBody {
-	body := &ListExternalMcpMigrationCandidatesUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewListExternalMcpMigrationCandidatesGatewayErrorResponseBody builds the
-// HTTP response body from the result of the
-// "listExternalMcpMigrationCandidates" endpoint of the "admin" service.
-func NewListExternalMcpMigrationCandidatesGatewayErrorResponseBody(res *goa.ServiceError) *ListExternalMcpMigrationCandidatesGatewayErrorResponseBody {
-	body := &ListExternalMcpMigrationCandidatesGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationUnavailableResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationUnavailableResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnavailableResponseBody {
-	body := &PreviewExternalMcpMigrationUnavailableResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationUnauthorizedResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnauthorizedResponseBody {
-	body := &PreviewExternalMcpMigrationUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationForbiddenResponseBody builds the HTTP response
-// body from the result of the "previewExternalMcpMigration" endpoint of the
-// "admin" service.
-func NewPreviewExternalMcpMigrationForbiddenResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationForbiddenResponseBody {
-	body := &PreviewExternalMcpMigrationForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationBadRequestResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationBadRequestResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationBadRequestResponseBody {
-	body := &PreviewExternalMcpMigrationBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationNotFoundResponseBody builds the HTTP response
-// body from the result of the "previewExternalMcpMigration" endpoint of the
-// "admin" service.
-func NewPreviewExternalMcpMigrationNotFoundResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationNotFoundResponseBody {
-	body := &PreviewExternalMcpMigrationNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationConflictResponseBody builds the HTTP response
-// body from the result of the "previewExternalMcpMigration" endpoint of the
-// "admin" service.
-func NewPreviewExternalMcpMigrationConflictResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationConflictResponseBody {
-	body := &PreviewExternalMcpMigrationConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationUnsupportedMediaResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnsupportedMediaResponseBody {
-	body := &PreviewExternalMcpMigrationUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationInvalidResponseBody builds the HTTP response
-// body from the result of the "previewExternalMcpMigration" endpoint of the
-// "admin" service.
-func NewPreviewExternalMcpMigrationInvalidResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationInvalidResponseBody {
-	body := &PreviewExternalMcpMigrationInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationInvariantViolationResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationInvariantViolationResponseBody {
-	body := &PreviewExternalMcpMigrationInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationUnexpectedResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationUnexpectedResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationUnexpectedResponseBody {
-	body := &PreviewExternalMcpMigrationUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewPreviewExternalMcpMigrationGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "previewExternalMcpMigration" endpoint
-// of the "admin" service.
-func NewPreviewExternalMcpMigrationGatewayErrorResponseBody(res *goa.ServiceError) *PreviewExternalMcpMigrationGatewayErrorResponseBody {
-	body := &PreviewExternalMcpMigrationGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersUnavailableResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersUnavailableResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnavailableResponseBody {
-	body := &MigrateExternalMcpServersUnavailableResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersUnauthorizedResponseBody builds the HTTP
-// response body from the result of the "migrateExternalMcpServers" endpoint of
-// the "admin" service.
-func NewMigrateExternalMcpServersUnauthorizedResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnauthorizedResponseBody {
-	body := &MigrateExternalMcpServersUnauthorizedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersForbiddenResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersForbiddenResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersForbiddenResponseBody {
-	body := &MigrateExternalMcpServersForbiddenResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersBadRequestResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersBadRequestResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersBadRequestResponseBody {
-	body := &MigrateExternalMcpServersBadRequestResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersNotFoundResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersNotFoundResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersNotFoundResponseBody {
-	body := &MigrateExternalMcpServersNotFoundResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersConflictResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersConflictResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersConflictResponseBody {
-	body := &MigrateExternalMcpServersConflictResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "migrateExternalMcpServers" endpoint of
-// the "admin" service.
-func NewMigrateExternalMcpServersUnsupportedMediaResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnsupportedMediaResponseBody {
-	body := &MigrateExternalMcpServersUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersInvalidResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersInvalidResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersInvalidResponseBody {
-	body := &MigrateExternalMcpServersInvalidResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "migrateExternalMcpServers" endpoint of
-// the "admin" service.
-func NewMigrateExternalMcpServersInvariantViolationResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersInvariantViolationResponseBody {
-	body := &MigrateExternalMcpServersInvariantViolationResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersUnexpectedResponseBody builds the HTTP response
-// body from the result of the "migrateExternalMcpServers" endpoint of the
-// "admin" service.
-func NewMigrateExternalMcpServersUnexpectedResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersUnexpectedResponseBody {
-	body := &MigrateExternalMcpServersUnexpectedResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewMigrateExternalMcpServersGatewayErrorResponseBody builds the HTTP
-// response body from the result of the "migrateExternalMcpServers" endpoint of
-// the "admin" service.
-func NewMigrateExternalMcpServersGatewayErrorResponseBody(res *goa.ServiceError) *MigrateExternalMcpServersGatewayErrorResponseBody {
-	body := &MigrateExternalMcpServersGatewayErrorResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
 // NewListRegistryPromotionCandidatesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "listRegistryPromotionCandidates"
 // endpoint of the "admin" service.
@@ -42551,6 +42049,156 @@ func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *Ba
 	return body
 }
 
+// NewBackfillMcpConnectGrantsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsUnauthorizedResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsUnauthorizedResponseBody {
+	body := &BackfillMcpConnectGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsForbiddenResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsForbiddenResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsForbiddenResponseBody {
+	body := &BackfillMcpConnectGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsBadRequestResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsBadRequestResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsBadRequestResponseBody {
+	body := &BackfillMcpConnectGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsNotFoundResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsNotFoundResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsNotFoundResponseBody {
+	body := &BackfillMcpConnectGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsConflictResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsConflictResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsConflictResponseBody {
+	body := &BackfillMcpConnectGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "backfillMcpConnectGrants" endpoint of
+// the "admin" service.
+func NewBackfillMcpConnectGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsUnsupportedMediaResponseBody {
+	body := &BackfillMcpConnectGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsInvalidResponseBody builds the HTTP response body
+// from the result of the "backfillMcpConnectGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpConnectGrantsInvalidResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsInvalidResponseBody {
+	body := &BackfillMcpConnectGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "backfillMcpConnectGrants" endpoint of
+// the "admin" service.
+func NewBackfillMcpConnectGrantsInvariantViolationResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsInvariantViolationResponseBody {
+	body := &BackfillMcpConnectGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsUnexpectedResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsUnexpectedResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsUnexpectedResponseBody {
+	body := &BackfillMcpConnectGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpConnectGrantsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "backfillMcpConnectGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpConnectGrantsGatewayErrorResponseBody(res *goa.ServiceError) *BackfillMcpConnectGrantsGatewayErrorResponseBody {
+	body := &BackfillMcpConnectGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -42593,6 +42241,18 @@ func NewGetSessionPayload(adminSessionToken *string) *admin.GetSessionPayload {
 func NewGetOrganizationFeaturesPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationFeaturesPayload {
 	v := &admin.GetOrganizationFeaturesPayload{}
 	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupPayload builds a admin service
+// setOrganizationProviderSetup endpoint payload.
+func NewSetOrganizationProviderSetupPayload(body *SetOrganizationProviderSetupRequestBody, adminSessionToken *string) *admin.SetOrganizationProviderSetupPayload {
+	v := &admin.SetOrganizationProviderSetupPayload{
+		OrganizationID: *body.OrganizationID,
+		Enabled:        *body.Enabled,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -43418,49 +43078,6 @@ func NewGetHookClientsPayload(windowDays int, refresh bool, adminSessionToken *s
 	return v
 }
 
-// NewListExternalMcpMigrationCandidatesPayload builds a admin service
-// listExternalMcpMigrationCandidates endpoint payload.
-func NewListExternalMcpMigrationCandidatesPayload(adminSessionToken *string) *admin.ListExternalMcpMigrationCandidatesPayload {
-	v := &admin.ListExternalMcpMigrationCandidatesPayload{}
-	v.AdminSessionToken = adminSessionToken
-
-	return v
-}
-
-// NewPreviewExternalMcpMigrationPayload builds a admin service
-// previewExternalMcpMigration endpoint payload.
-func NewPreviewExternalMcpMigrationPayload(body *PreviewExternalMcpMigrationRequestBody, adminSessionToken *string) *admin.PreviewExternalMcpMigrationPayload {
-	v := &admin.PreviewExternalMcpMigrationPayload{}
-	v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
-	for i, val := range body.Servers {
-		if val == nil {
-			v.Servers[i] = nil
-			continue
-		}
-		v.Servers[i] = unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v
-}
-
-// NewMigrateExternalMcpServersPayload builds a admin service
-// migrateExternalMcpServers endpoint payload.
-func NewMigrateExternalMcpServersPayload(body *MigrateExternalMcpServersRequestBody, adminSessionToken *string) *admin.MigrateExternalMcpServersPayload {
-	v := &admin.MigrateExternalMcpServersPayload{}
-	v.Servers = make([]*admin.AdminExternalMcpMigrationRequest, len(body.Servers))
-	for i, val := range body.Servers {
-		if val == nil {
-			v.Servers[i] = nil
-			continue
-		}
-		v.Servers[i] = unmarshalAdminExternalMcpMigrationRequestRequestBodyToAdminAdminExternalMcpMigrationRequest(val)
-	}
-	v.AdminSessionToken = adminSessionToken
-
-	return v
-}
-
 // NewListRegistryPromotionCandidatesPayload builds a admin service
 // listRegistryPromotionCandidates endpoint payload.
 func NewListRegistryPromotionCandidatesPayload(cursor *string, status string, limit int, adminSessionToken *string) *admin.ListRegistryPromotionCandidatesPayload {
@@ -43752,10 +43369,11 @@ func NewCreateOnboardingPlaybookPayload(body *CreateOnboardingPlaybookRequestBod
 // updateOnboardingPlaybook endpoint payload.
 func NewUpdateOnboardingPlaybookPayload(body *UpdateOnboardingPlaybookRequestBody, adminSessionToken *string) *admin.UpdateOnboardingPlaybookPayload {
 	v := &admin.UpdateOnboardingPlaybookPayload{
-		PlaybookID:  *body.PlaybookID,
-		Name:        *body.Name,
-		Description: body.Description,
-		IsDefault:   body.IsDefault,
+		PlaybookID:     *body.PlaybookID,
+		OrganizationID: body.OrganizationID,
+		Name:           *body.Name,
+		Description:    body.Description,
+		IsDefault:      body.IsDefault,
 	}
 	v.StepSlugs = make([]string, len(body.StepSlugs))
 	for i, val := range body.StepSlugs {
@@ -43943,6 +43561,29 @@ func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillM
 	v.AdminSessionToken = adminSessionToken
 
 	return v
+}
+
+// NewBackfillMcpConnectGrantsPayload builds a admin service
+// backfillMcpConnectGrants endpoint payload.
+func NewBackfillMcpConnectGrantsPayload(body *BackfillMcpConnectGrantsRequestBody, adminSessionToken *string) *admin.BackfillMcpConnectGrantsPayload {
+	v := &admin.BackfillMcpConnectGrantsPayload{
+		CreatedBefore: body.CreatedBefore,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// ValidateSetOrganizationProviderSetupRequestBody runs the validations defined
+// on SetOrganizationProviderSetupRequestBody
+func ValidateSetOrganizationProviderSetupRequestBody(body *SetOrganizationProviderSetupRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	return
 }
 
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
@@ -44462,50 +44103,6 @@ func ValidateUpdateSupportMatrixRequestBody(body *UpdateSupportMatrixRequestBody
 	return
 }
 
-// ValidatePreviewExternalMcpMigrationRequestBody runs the validations defined
-// on PreviewExternalMcpMigrationRequestBody
-func ValidatePreviewExternalMcpMigrationRequestBody(body *PreviewExternalMcpMigrationRequestBody) (err error) {
-	if body.Servers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
-	}
-	if len(body.Servers) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
-	}
-	if len(body.Servers) > 100 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
-	}
-	for _, e := range body.Servers {
-		if e != nil {
-			if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
-// ValidateMigrateExternalMcpServersRequestBody runs the validations defined on
-// MigrateExternalMcpServersRequestBody
-func ValidateMigrateExternalMcpServersRequestBody(body *MigrateExternalMcpServersRequestBody) (err error) {
-	if body.Servers == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("servers", "body"))
-	}
-	if len(body.Servers) < 1 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 1, true))
-	}
-	if len(body.Servers) > 100 {
-		err = goa.MergeErrors(err, goa.InvalidLengthError("body.servers", body.Servers, len(body.Servers), 100, false))
-	}
-	for _, e := range body.Servers {
-		if e != nil {
-			if err2 := ValidateAdminExternalMcpMigrationRequestRequestBody(e); err2 != nil {
-				err = goa.MergeErrors(err, err2)
-			}
-		}
-	}
-	return
-}
-
 // ValidateGetRegistryPromotionCandidateRequestBody runs the validations
 // defined on GetRegistryPromotionCandidateRequestBody
 func ValidateGetRegistryPromotionCandidateRequestBody(body *GetRegistryPromotionCandidateRequestBody) (err error) {
@@ -44940,6 +44537,15 @@ func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuth
 	return
 }
 
+// ValidateBackfillMcpConnectGrantsRequestBody runs the validations defined on
+// BackfillMcpConnectGrantsRequestBody
+func ValidateBackfillMcpConnectGrantsRequestBody(body *BackfillMcpConnectGrantsRequestBody) (err error) {
+	if body.CreatedBefore != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_before", *body.CreatedBefore, goa.FormatDateTime))
+	}
+	return
+}
+
 // ValidateSupportDraftRequestBody runs the validations defined on
 // SupportDraftRequestBody
 func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) {
@@ -45021,18 +44627,6 @@ func ValidateSupportFactRequestBody(body *SupportFactRequestBody) (err error) {
 		if utf8.RuneCountInString(*body.Note) > 10000 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.note", *body.Note, utf8.RuneCountInString(*body.Note), 10000, false))
 		}
-	}
-	return
-}
-
-// ValidateAdminExternalMcpMigrationRequestRequestBody runs the validations
-// defined on AdminExternalMcpMigrationRequestRequestBody
-func ValidateAdminExternalMcpMigrationRequestRequestBody(body *AdminExternalMcpMigrationRequestRequestBody) (err error) {
-	if body.ToolsetID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("toolset_id", "body"))
-	}
-	if body.ToolsetID != nil {
-		err = goa.MergeErrors(err, goa.ValidateFormat("body.toolset_id", *body.ToolsetID, goa.FormatUUID))
 	}
 	return
 }

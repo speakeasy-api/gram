@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
 import { describe, expect, it } from "vitest";
 import { pluginUpToDate } from "./plugin-sync-state";

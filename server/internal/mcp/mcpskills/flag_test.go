@@ -2,83 +2,14 @@ package mcpskills_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// recordingFlagProvider counts which evaluation path a flag check takes. The
-// handshake must only ever take the local one.
-type recordingFlagProvider struct {
-	localCalls  int
-	remoteCalls int
-	localResult bool
-	localErr    error
-	lastGroups  map[string]string
-}
-
-func (p *recordingFlagProvider) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	p.remoteCalls++
-	return true, nil
-}
-
-func (p *recordingFlagProvider) IsFlagEnabledLocal(_ context.Context, _ feature.Flag, _ string, groups, _ map[string]string) (bool, error) {
-	p.localCalls++
-	p.lastGroups = groups
-	return p.localResult, p.localErr
-}
-
-func (p *recordingFlagProvider) FlagPayload(context.Context, feature.Flag, string, map[string]string) ([]byte, error) {
-	return nil, nil
-}
-
-func TestFlagEnabled_UsesOnlyLocalEvaluation(t *testing.T) {
-	t.Parallel()
-
-	provider := &recordingFlagProvider{localResult: true}
-	on := mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", "acme")
-	require.True(t, on)
-	require.Equal(t, 1, provider.localCalls)
-	require.Zero(t, provider.remoteCalls, "the handshake must never wait on a remote flag evaluation")
-	require.Equal(t, map[string]string{"organization": "acme"}, provider.lastGroups)
-}
-
-func TestFlagEnabled_FailsClosed(t *testing.T) {
-	t.Parallel()
-
-	t.Run("provider error", func(t *testing.T) {
-		t.Parallel()
-		provider := &recordingFlagProvider{localResult: true, localErr: errors.New("definitions unavailable")}
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", "acme"))
-		require.Zero(t, provider.remoteCalls)
-	})
-
-	t.Run("no provider", func(t *testing.T) {
-		t.Parallel()
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, nil, "org_1", "acme"))
-	})
-
-	t.Run("no organization", func(t *testing.T) {
-		t.Parallel()
-		provider := &recordingFlagProvider{localResult: true}
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "", "acme"))
-		require.Zero(t, provider.localCalls)
-	})
-
-	t.Run("unknown slug evaluates by id alone", func(t *testing.T) {
-		t.Parallel()
-		provider := &recordingFlagProvider{localResult: true}
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", ""))
-		require.Nil(t, provider.lastGroups)
-	})
-}
-
-func TestFlagEnabled_ProductFeature(t *testing.T) {
+func TestEnabled(t *testing.T) {
 	t.Parallel()
 
 	entitled := func(want bool, calls *int, gotFeature *string) mcpskills.FeatureChecker {
@@ -89,54 +20,32 @@ func TestFlagEnabled_ProductFeature(t *testing.T) {
 		}
 	}
 
-	t.Run("product feature turns it on when the flag is off", func(t *testing.T) {
+	t.Run("product feature on", func(t *testing.T) {
 		t.Parallel()
 		var calls int
 		var got string
-		provider := &recordingFlagProvider{localResult: false}
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(true, &calls, &got), "org_1", "acme"))
+		require.True(t, mcpskills.Enabled(t.Context(), entitled(true, &calls, &got), "org_1"))
 		require.Equal(t, 1, calls)
 		require.Equal(t, "skills_over_mcp", got)
-		require.Zero(t, provider.remoteCalls)
 	})
 
-	t.Run("product feature still applies when the flag errors", func(t *testing.T) {
+	t.Run("product feature off", func(t *testing.T) {
 		t.Parallel()
 		var calls int
 		var got string
-		provider := &recordingFlagProvider{localErr: errors.New("definitions unavailable")}
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(true, &calls, &got), "org_1", "acme"))
+		require.False(t, mcpskills.Enabled(t.Context(), entitled(false, &calls, &got), "org_1"))
 	})
 
-	t.Run("flag on skips the product feature lookup", func(t *testing.T) {
+	t.Run("no checker", func(t *testing.T) {
 		t.Parallel()
-		var calls int
-		var got string
-		provider := &recordingFlagProvider{localResult: true}
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(false, &calls, &got), "org_1", "acme"))
-		require.Zero(t, calls)
-	})
-
-	t.Run("both off", func(t *testing.T) {
-		t.Parallel()
-		var calls int
-		var got string
-		provider := &recordingFlagProvider{localResult: false}
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(false, &calls, &got), "org_1", "acme"))
-	})
-
-	t.Run("no flag provider", func(t *testing.T) {
-		t.Parallel()
-		var calls int
-		var got string
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, entitled(true, &calls, &got), "org_1", "acme"))
+		require.False(t, mcpskills.Enabled(t.Context(), nil, "org_1"))
 	})
 
 	t.Run("no organization", func(t *testing.T) {
 		t.Parallel()
 		var calls int
 		var got string
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, entitled(true, &calls, &got), "", "acme"))
+		require.False(t, mcpskills.Enabled(t.Context(), entitled(true, &calls, &got), ""))
 		require.Zero(t, calls)
 	})
 }

@@ -22,6 +22,7 @@ var (
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
 	AccessMemberV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_member_event_v1", "Emitted when changes to org members are made")
 	AccessRoleV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_role_event_v1", "Emitted when changes to roles are made")
+	AccessGrantV1                          = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_grant_event_v1", "Emitted when access grants are given, renewed or revoked")
 	AgentV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.agent_event_v1", "Emitted when changes to agents are made")
 	APIKeyV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.api_key_event_v1", "Emitted when changes to API keys are made")
 	AssetV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.asset_event_v1", "Emitted when changes to assets are made")
@@ -138,6 +139,14 @@ type AuditLogCreatedPayloadV1 struct {
 	// property breaks every one of them; optional keeps the addition additive
 	// while the value is in fact always sent.
 	ActingSurface string `json:"acting_surface,omitzero"`
+
+	// Category is what kind of event this is: "configuration" for a change to
+	// the platform's configuration, "security" for machine access and other
+	// security-relevant activity that is not a configuration decision.
+	// Subscribers filter on it to separate the two. Optional in the schema for
+	// the same reason as ActingSurface; every record Speakeasy writes carries
+	// one.
+	Category string `json:"category,omitzero"`
 
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`

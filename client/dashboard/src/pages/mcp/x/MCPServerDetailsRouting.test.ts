@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
   activeTabFromPath,
@@ -18,6 +19,7 @@ describe("activeTabFromPath", () => {
 
   it.each([
     "overview",
+    "setup",
     "inspect",
     "team-access",
     "guardrails",

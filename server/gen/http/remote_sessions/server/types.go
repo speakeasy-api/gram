@@ -46,6 +46,13 @@ type DetachBindingRequestBody struct {
 	ID                  *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
 }
 
+// TestServerConnectionRequestBody is the type of the "remoteSessions" service
+// "testServerConnection" endpoint HTTP request body.
+type TestServerConnectionRequestBody struct {
+	// Exact MCP server to test.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+}
+
 // CommitServerIdentityConfigurationRequestBody is the type of the
 // "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
 // request body.
@@ -54,6 +61,10 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
 	// An existing Remote Identity Provider visible to the target project.
 	ProviderID *string `form:"provider_id,omitempty" json:"provider_id,omitempty" xml:"provider_id,omitempty"`
+	// Refuse a save if the user session issuer also serves another MCP server.
+	// Setup screens must set this to avoid changing shared sign-in bindings.
+	// Explicitly assign a dedicated issuer before retrying.
+	TargetServerOnly *bool `form:"target_server_only,omitempty" json:"target_server_only,omitempty" xml:"target_server_only,omitempty"`
 	// A new project-scoped Remote Identity Provider to create.
 	CreateProvider *CreateRemoteSessionIssuerFormRequestBody `form:"create_provider,omitempty" json:"create_provider,omitempty" xml:"create_provider,omitempty"`
 	// How to provide the OAuth client.
@@ -67,6 +78,17 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string `form:"registration_method,omitempty" json:"registration_method,omitempty" xml:"registration_method,omitempty"`
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool `form:"replace_client,omitempty" json:"replace_client,omitempty" xml:"replace_client,omitempty"`
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string `form:"replace_client_server_ids,omitempty" json:"replace_client_server_ids,omitempty" xml:"replace_client_server_ids,omitempty"`
 }
 
 // DetachServerClientAssociationRequestBody is the type of the "remoteSessions"
@@ -114,6 +136,19 @@ type AttachBindingResponseBody struct {
 	RemoteSession *RemoteSessionResponseBody `form:"remote_session,omitempty" json:"remote_session,omitempty" xml:"remote_session,omitempty"`
 }
 
+// TestServerConnectionResponseBody is the type of the "remoteSessions" service
+// "testServerConnection" endpoint HTTP response body.
+type TestServerConnectionResponseBody struct {
+	// Live result of this test, never a persisted completion record.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Stable, credential-free reason suitable for choosing a recovery action.
+	Code string `form:"code" json:"code" xml:"code"`
+	// Safe message for display in the failed setup step.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Tools discovered, present only after every tools/list page succeeds.
+	ToolCount *int `form:"tool_count,omitempty" json:"tool_count,omitempty" xml:"tool_count,omitempty"`
+}
+
 // CommitServerIdentityConfigurationResponseBody is the type of the
 // "remoteSessions" service "commitServerIdentityConfiguration" endpoint HTTP
 // response body.
@@ -153,6 +188,13 @@ type GetServerIdentityImpactResponseBody struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int `form:"hidden_server_count" json:"hidden_server_count" xml:"hidden_server_count"`
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string `form:"detach_client_ids,omitempty" json:"detach_client_ids,omitempty" xml:"detach_client_ids,omitempty"`
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string `form:"release_client_ids,omitempty" json:"release_client_ids,omitempty" xml:"release_client_ids,omitempty"`
 }
 
 // ListServerClientAssociationsResponseBody is the type of the "remoteSessions"
@@ -160,6 +202,12 @@ type GetServerIdentityImpactResponseBody struct {
 type ListServerClientAssociationsResponseBody struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociationResponseBody `form:"associations" json:"associations" xml:"associations"`
+	// The remote_session_client_id of each client bound to the server's user
+	// session issuer that its callers need to sign in through. These are its
+	// associated clients, or when it has none, the bound clients no other server
+	// claims and it has not explicitly detached. Empty when the server requires no
+	// upstream sign-in.
+	RequiredClientIds []string `form:"required_client_ids" json:"required_client_ids" xml:"required_client_ids"`
 }
 
 // ListRemoteSessionsResponseBody is the type of the "remoteSessions" service
@@ -1104,6 +1152,196 @@ type DetachBindingUnexpectedResponseBody struct {
 // service "detachBinding" endpoint HTTP response body for the "gateway_error"
 // error.
 type DetachBindingGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionUnauthorizedResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unauthorized" error.
+type TestServerConnectionUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionForbiddenResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "forbidden" error.
+type TestServerConnectionForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionBadRequestResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "bad_request" error.
+type TestServerConnectionBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionNotFoundResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the
+// "not_found" error.
+type TestServerConnectionNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionConflictResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the
+// "conflict" error.
+type TestServerConnectionConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionUnsupportedMediaResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unsupported_media" error.
+type TestServerConnectionUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionInvalidResponseBody is the type of the "remoteSessions"
+// service "testServerConnection" endpoint HTTP response body for the "invalid"
+// error.
+type TestServerConnectionInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionInvariantViolationResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "invariant_violation" error.
+type TestServerConnectionInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionUnexpectedResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "unexpected" error.
+type TestServerConnectionUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// TestServerConnectionGatewayErrorResponseBody is the type of the
+// "remoteSessions" service "testServerConnection" endpoint HTTP response body
+// for the "gateway_error" error.
+type TestServerConnectionGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2710,6 +2948,10 @@ type RemoteSessionClientResponseBody struct {
 	// Upstream OAuth audience sent on the authorize redirect and token exchange.
 	// Null omits the audience parameter.
 	Audience *string `form:"audience,omitempty" json:"audience,omitempty" xml:"audience,omitempty"`
+	// Whether the connecting MCP client's self-reported name is sent to this
+	// provider as speakeasy_client_name on /authorize. Only sent for anonymous
+	// sessions.
+	ForwardClientName bool `form:"forward_client_name" json:"forward_client_name" xml:"forward_client_name"`
 	// Whether the client was registered upstream with the legacy callback URL. The
 	// authorize leg then sends that URL and a JSON state instead of the current
 	// callback. Cleared when the client is rotated.
@@ -2970,6 +3212,19 @@ func NewAttachBindingResponseBody(res *remotesessions.PrincipalRemoteSessionBind
 	return body
 }
 
+// NewTestServerConnectionResponseBody builds the HTTP response body from the
+// result of the "testServerConnection" endpoint of the "remoteSessions"
+// service.
+func NewTestServerConnectionResponseBody(res *remotesessions.ServerConnectionTestResult) *TestServerConnectionResponseBody {
+	body := &TestServerConnectionResponseBody{
+		Status:    res.Status,
+		Code:      res.Code,
+		Message:   res.Message,
+		ToolCount: res.ToolCount,
+	}
+	return body
+}
+
 // NewCommitServerIdentityConfigurationResponseBody builds the HTTP response
 // body from the result of the "commitServerIdentityConfiguration" endpoint of
 // the "remoteSessions" service.
@@ -3014,6 +3269,18 @@ func NewGetServerIdentityImpactResponseBody(res *remotesessions.ServerIdentityIm
 	} else {
 		body.Servers = []*ServerIdentityImpactServerResponseBody{}
 	}
+	if res.DetachClientIds != nil {
+		body.DetachClientIds = make([]string, len(res.DetachClientIds))
+		for i, val := range res.DetachClientIds {
+			body.DetachClientIds[i] = val
+		}
+	}
+	if res.ReleaseClientIds != nil {
+		body.ReleaseClientIds = make([]string, len(res.ReleaseClientIds))
+		for i, val := range res.ReleaseClientIds {
+			body.ReleaseClientIds[i] = val
+		}
+	}
 	return body
 }
 
@@ -3033,6 +3300,14 @@ func NewListServerClientAssociationsResponseBody(res *remotesessions.ListServerC
 		}
 	} else {
 		body.Associations = []*ServerClientAssociationResponseBody{}
+	}
+	if res.RequiredClientIds != nil {
+		body.RequiredClientIds = make([]string, len(res.RequiredClientIds))
+		for i, val := range res.RequiredClientIds {
+			body.RequiredClientIds[i] = val
+		}
+	} else {
+		body.RequiredClientIds = []string{}
 	}
 	return body
 }
@@ -3783,6 +4058,156 @@ func NewDetachBindingUnexpectedResponseBody(res *goa.ServiceError) *DetachBindin
 // the result of the "detachBinding" endpoint of the "remoteSessions" service.
 func NewDetachBindingGatewayErrorResponseBody(res *goa.ServiceError) *DetachBindingGatewayErrorResponseBody {
 	body := &DetachBindingGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionUnauthorizedResponseBody(res *goa.ServiceError) *TestServerConnectionUnauthorizedResponseBody {
+	body := &TestServerConnectionUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionForbiddenResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionForbiddenResponseBody(res *goa.ServiceError) *TestServerConnectionForbiddenResponseBody {
+	body := &TestServerConnectionForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionBadRequestResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionBadRequestResponseBody(res *goa.ServiceError) *TestServerConnectionBadRequestResponseBody {
+	body := &TestServerConnectionBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionNotFoundResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionNotFoundResponseBody(res *goa.ServiceError) *TestServerConnectionNotFoundResponseBody {
+	body := &TestServerConnectionNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionConflictResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionConflictResponseBody(res *goa.ServiceError) *TestServerConnectionConflictResponseBody {
+	body := &TestServerConnectionConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionUnsupportedMediaResponseBody(res *goa.ServiceError) *TestServerConnectionUnsupportedMediaResponseBody {
+	body := &TestServerConnectionUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionInvalidResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionInvalidResponseBody(res *goa.ServiceError) *TestServerConnectionInvalidResponseBody {
+	body := &TestServerConnectionInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionInvariantViolationResponseBody(res *goa.ServiceError) *TestServerConnectionInvariantViolationResponseBody {
+	body := &TestServerConnectionInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionUnexpectedResponseBody builds the HTTP response body
+// from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionUnexpectedResponseBody(res *goa.ServiceError) *TestServerConnectionUnexpectedResponseBody {
+	body := &TestServerConnectionUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewTestServerConnectionGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "testServerConnection" endpoint of the
+// "remoteSessions" service.
+func NewTestServerConnectionGatewayErrorResponseBody(res *goa.ServiceError) *TestServerConnectionGatewayErrorResponseBody {
+	body := &TestServerConnectionGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -4911,21 +5336,41 @@ func NewDetachBindingPayload(body *DetachBindingRequestBody, sessionToken *strin
 	return v
 }
 
+// NewTestServerConnectionPayload builds a remoteSessions service
+// testServerConnection endpoint payload.
+func NewTestServerConnectionPayload(body *TestServerConnectionRequestBody, sessionToken *string, projectSlugInput *string) *remotesessions.TestServerConnectionPayload {
+	v := &remotesessions.TestServerConnectionPayload{
+		McpServerID: *body.McpServerID,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewCommitServerIdentityConfigurationPayload builds a remoteSessions service
 // commitServerIdentityConfiguration endpoint payload.
 func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfigurationRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.CommitServerIdentityConfigurationPayload {
 	v := &remotesessions.CommitServerIdentityConfigurationPayload{
 		McpServerID:        *body.McpServerID,
 		ProviderID:         body.ProviderID,
+		TargetServerOnly:   body.TargetServerOnly,
 		ClientMode:         *body.ClientMode,
 		ExistingClientID:   body.ExistingClientID,
 		RegistrationMethod: body.RegistrationMethod,
+		ReplaceClient:      body.ReplaceClient,
 	}
 	if body.CreateProvider != nil {
 		v.CreateProvider = unmarshalCreateRemoteSessionIssuerFormRequestBodyToRemotesessionsCreateRemoteSessionIssuerForm(body.CreateProvider)
 	}
 	if body.ClientConfiguration != nil {
 		v.ClientConfiguration = unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerIdentityClientConfiguration(body.ClientConfiguration)
+	}
+	if body.ReplaceClientServerIds != nil {
+		v.ReplaceClientServerIds = make([]string, len(body.ReplaceClientServerIds))
+		for i, val := range body.ReplaceClientServerIds {
+			v.ReplaceClientServerIds[i] = val
+		}
 	}
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
@@ -4936,13 +5381,14 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 
 // NewGetServerIdentityImpactPayload builds a remoteSessions service
 // getServerIdentityImpact endpoint payload.
-func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, replaceClient *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
 	v := &remotesessions.GetServerIdentityImpactPayload{}
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.McpServerID = mcpServerID
 	v.Change = change
 	v.ProviderID = providerID
 	v.ClientID = clientID
+	v.ReplaceClient = replaceClient
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput
@@ -5113,6 +5559,18 @@ func ValidateDetachBindingRequestBody(body *DetachBindingRequestBody) (err error
 	return
 }
 
+// ValidateTestServerConnectionRequestBody runs the validations defined on
+// TestServerConnectionRequestBody
+func ValidateTestServerConnectionRequestBody(body *TestServerConnectionRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateCommitServerIdentityConfigurationRequestBody runs the validations
 // defined on CommitServerIdentityConfigurationRequestBody
 func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIdentityConfigurationRequestBody) (err error) {
@@ -5150,6 +5608,9 @@ func ValidateCommitServerIdentityConfigurationRequestBody(body *CommitServerIden
 		if !(*body.RegistrationMethod == "cimd" || *body.RegistrationMethod == "dcr") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.registration_method", *body.RegistrationMethod, []any{"cimd", "dcr"}))
 		}
+	}
+	for _, e := range body.ReplaceClientServerIds {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.replace_client_server_ids[*]", e, goa.FormatUUID))
 	}
 	return
 }

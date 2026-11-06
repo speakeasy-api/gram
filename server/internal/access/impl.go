@@ -282,74 +282,73 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		attr.UserID(ac.UserID),
 	)
 
-	scopes := []scopeDefinitionInput{
-		{scope: authz.ScopeOrgRead, description: "Read organization metadata and members.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedRead, description: "Store exceptions for organization read access.", resourceType: "org"},
-		{scope: authz.ScopeOrgAdmin, description: "Manage organization access and settings.", resourceType: "org"},
-		{scope: authz.ScopeOrgBlockedAdmin, description: "Store exceptions for organization admin access.", resourceType: "org"},
-		{scope: authz.ScopeProjectRead, description: "View projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedRead, description: "Store exceptions for project read access.", resourceType: "project"},
-		{scope: authz.ScopeProjectWrite, description: "Create and modify projects and project-related resources.", resourceType: "project"},
-		{scope: authz.ScopeProjectBlockedWrite, description: "Store exceptions for project write access.", resourceType: "project"},
-		{scope: authz.ScopeMCPRead, description: "View MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedRead, description: "Store exceptions for MCP read access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPWrite, description: "Create and modify MCP servers and configuration.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedWrite, description: "Store exceptions for MCP write access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPConnect, description: "Connect to and use MCP servers.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPBlockedConnect, description: "Store exceptions for MCP connect access.", resourceType: "mcp"},
-		{scope: authz.ScopeMCPAuth, description: "Use an upstream auth client to reach MCP servers. Applies on every server that shares the client.", resourceType: "mcp_auth_client"},
-		{scope: authz.ScopeMCPBlockedAuth, description: "Store exceptions for auth client use.", resourceType: "mcp_auth_client"},
-		{scope: authz.ScopeEnvironmentRead, description: "View environments and their entries within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedRead, description: "Store exceptions for environment read access.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentWrite, description: "Add, edit, clone, and remove environments within the project.", resourceType: "environment"},
-		{scope: authz.ScopeEnvironmentBlockedWrite, description: "Store exceptions for environment write access.", resourceType: "environment"},
-		{scope: authz.ScopeSkillRead, description: "View skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedRead, description: "Store exceptions for skill read access.", resourceType: "skill"},
-		{scope: authz.ScopeSkillWrite, description: "Create and modify skills within the project.", resourceType: "skill"},
-		{scope: authz.ScopeSkillBlockedWrite, description: "Store exceptions for skill write access.", resourceType: "skill"},
-		{scope: authz.ScopePluginWrite, description: "Manage plugin contents and publish plugins within the project, without editing referenced skills or MCP servers.", resourceType: "project"},
-		{scope: authz.ScopePluginBlockedWrite, description: "Store exceptions for plugin write access.", resourceType: "project"},
-		{scope: authz.ScopeAssistantRead, description: "View and interact with assistants within the project.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantBlockedRead, description: "Store exceptions for assistant read access.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantWrite, description: "Create and modify assistants within the project.", resourceType: "assistant"},
-		{scope: authz.ScopeAssistantBlockedWrite, description: "Store exceptions for assistant write access.", resourceType: "assistant"},
-		{scope: authz.ScopeRiskPolicyEvaluate, description: "Evaluate risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBypass, description: "Bypass risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
-		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
-		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
-		{scope: authz.ScopeInferenceExecute, description: "Run model inference without accessing chat transcripts.", resourceType: "inference"},
-		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
-		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
-		{scope: authz.ScopeAgentAuthorize, description: "Authorize and manage agent credentials.", resourceType: "agent"},
-		{scope: authz.ScopeAgentTransfer, description: "Transfer agent ownership.", resourceType: "agent"},
-		{scope: authz.ScopeWorkloadRead, description: "View workload identity trust policy: issuers, admitted subjects, and assigned agents.", resourceType: "workload"},
-		{scope: authz.ScopeWorkloadWrite, description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", resourceType: "workload"},
-		{scope: authz.ScopeOrgDeviceAgentSync, description: "Let an agent's device agent sync the plugins assigned to it.", resourceType: "org"},
-		{scope: authz.ScopeOrgHooksIngest, description: "Let an agent send AI-tool hook events and telemetry.", resourceType: "org"},
-	}
-	result := make([]*gen.ScopeDefinition, 0, len(scopes))
-	for _, scope := range scopes {
-		result = append(result, scopeDefinition(scope))
-	}
-
-	return &gen.ListScopesResult{Scopes: result}, nil
+	return scopeCatalogueResult(), nil
 }
 
-type scopeDefinitionInput struct {
-	scope        authz.Scope
-	description  string
-	resourceType string
+// scopeCatalogueResult is the catalogue as access.listScopes serves it. It is
+// the same for every caller, so the dashboard's tests read a fixture of it.
+func scopeCatalogueResult() *gen.ListScopesResult {
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		result = append(result, scopeDefinition(entry))
+	}
+
+	tasks := authz.Tasks()
+	taskModels := make([]*gen.ScopeTask, 0, len(tasks))
+	for _, task := range tasks {
+		scopes := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
+			scopes = append(scopes, string(scope))
+		}
+		taskModels = append(taskModels, &gen.ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
+			Scopes: scopes,
+		})
+	}
+
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}
 }
 
-func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
+// ListAgentPolicyScopes lists the catalogue scopes an agent policy may hold.
+// It needs a session and no organization grant: an owner configuring their
+// own agent holds no RBAC grant, and the list is product configuration that
+// names nothing about the organization. The dashboard's agent permission
+// editor reads it instead of keeping a copy of the runtime-safe set.
+func (s *Service) ListAgentPolicyScopes(ctx context.Context, _ *gen.ListAgentPolicyScopesPayload) (*gen.ListAgentPolicyScopesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		definition := scopeDefinition(entry)
+		// Only what a person could also tick in a role: the runtime registry
+		// decides eligibility, exception scopes are not a choice, and shared
+		// auth-client access is provisioned by the auth client editor rather
+		// than chosen as a permission.
+		if !definition.AgentEligible || definition.Visibility != authz.ScopeVisibilityUserVisible || entry.Category == authz.ScopeCategoryMCPAuthClient {
+			continue
+		}
+		result = append(result, definition)
+	}
+	return &gen.ListAgentPolicyScopesResult{Scopes: result}, nil
+}
+
+func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	var exclusionScope *string
-	if exclusion, ok := authz.ExclusionScopeFor(input.scope); ok {
+	if exclusion, ok := authz.ExclusionScopeFor(entry.Scope); ok {
 		exclusionScopeValue := string(exclusion)
 		exclusionScope = &exclusionScopeValue
 	}
-	visibility, ok := authz.ScopeVisibilityFor(input.scope)
+	visibility, ok := authz.ScopeVisibilityFor(entry.Scope)
 	if !ok {
 		visibility = authz.ScopeVisibilityInternal
 	}
@@ -357,16 +356,28 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	// A role may hold scopes its agent members cannot. Agent policy is filtered
 	// against the runtime registry every time it is loaded, so those scopes are
 	// dropped rather than granted; reporting eligibility here lets the role
-	// editor say so instead of leaving the difference invisible.
-	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+	// editor say so instead of leaving the difference invisible. Scopes kept
+	// only for managed assistants are not eligible through a role.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, entry.Scope) && !runtimepolicy.IsManagedAssistantOnlyScope(entry.Scope)
+
+	var sensitivity *string
+	if entry.Sensitive() {
+		reason := string(entry.Sensitivity)
+		sensitivity = &reason
+	}
 
 	return &gen.ScopeDefinition{
-		Slug:           string(input.scope),
-		Description:    input.description,
-		ResourceType:   input.resourceType,
+		Slug:           string(entry.Scope),
+		Label:          entry.Label,
+		Description:    entry.Description,
+		ResourceType:   entry.ResourceType,
+		Category:       string(entry.Category),
 		Visibility:     visibility,
 		AgentEligible:  agentEligible,
 		ExclusionScope: exclusionScope,
+		Sensitive:      entry.Sensitive(),
+		Sensitivity:    sensitivity,
+		SubScopes:      entry.SubScopes(),
 	}
 }
 
@@ -1645,10 +1656,22 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		manageAccessLink = accessURL.String()
 	}
 
+	// Name the permission the way the role editor does, so the admin reads
+	// "View tool logs" rather than a slug. An unknown slug is sent as is.
+	permissionLabel := payload.Scope
+	permissionDescription := ""
+	if entry, ok := authz.ScopeEntryFor(authz.Scope(payload.Scope)); ok {
+		permissionLabel = entry.Label
+		permissionDescription = entry.Description
+	}
+
 	tmpl := email.AccessRequest{
-		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
-		OrganizationName: org.Name,
-		ManageAccessLink: manageAccessLink,
+		RequesterName:         conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName:      org.Name,
+		ManageAccessLink:      manageAccessLink,
+		PermissionLabel:       permissionLabel,
+		PermissionScope:       payload.Scope,
+		PermissionDescription: permissionDescription,
 	}
 
 	// Send emails to all admins

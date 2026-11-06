@@ -96,6 +96,7 @@ func (s *Service) identityChainingRequestForKind(ctx context.Context, kind mcpid
 func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	endpoint := authentication.endpoint
+	authentication.ownClientsOnly = true
 	// A credential's own choice for the server replaces the issuer derived
 	// for it: the chosen client's issuer is the one it routes and chains by.
 	choice, selected, err := s.directUpstreamChoice(ctx, w, authentication)
@@ -143,13 +144,13 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			return none, s.rejectRemoteSession(ctx, w, authentication, err)
 		}
 		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+			return none, s.remoteSessionResolveFailed(ctx, logger, authentication, err)
 		}
 		if upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID) {
 			return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 		}
 	case strictErr != nil:
-		return none, oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
+		return none, s.remoteSessionResolveFailed(ctx, logger, authentication, strictErr)
 	case upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID):
 		return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 	}
@@ -157,18 +158,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	chained, outcome := s.identityChainer.Acquire(ctx, req)
 	switch {
 	case outcome.Succeeded():
-		// The token is delegated to the authenticated human, and comes from
-		// no stored grant.
-		return remotesessions.UpstreamToken{
-			Token:                              chained.Value(),
-			Resource:                           "",
-			CredentialOwner:                    remotesessions.CredentialOwnerSubject,
-			RemoteSessionClientID:              uuid.Nil,
-			RemoteSessionID:                    uuid.Nil,
-			RemoteSessionUpdatedAt:             time.Time{},
-			RemoteSessionResolvedFromUpdatedAt: time.Time{},
-			ClientCredentialErr:                nil,
-		}, nil
+		return chainedUpstreamToken(chained), nil
 	case !outcome.Applicable() && unusable:
 		return none, s.rejectRemoteSession(ctx, w, authentication, strictErr)
 	case !outcome.Applicable():
@@ -182,7 +172,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonIdentityChainingReauthentication, authentication.mcpURL, authentication.surface)
 		// Reauthorizing signs the human in again, which retains a fresh
 		// delegation, so the challenge matches a missing upstream session.
-		return none, writeRemoteSessionReconnectChallenge(w, authentication)
+		return none, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case unusable && outcome.ProviderRefusal():
 		// The provider refused for good, which refresh also sees, so the
 		// client lands here again only after reauthorizing. Reauthorizing
@@ -230,7 +220,8 @@ func routeDirectUpstreamToken(ctx context.Context, w http.ResponseWriter, logger
 // upstreamTokenPresent reports, without routing or logging, whether any
 // resolved token claims the backend's upstream. Duplicates and self clients
 // whose credential could not be obtained count as present, so routing still
-// fails closed on them rather than chaining around them.
+// fails closed on them rather than chaining around them. A subject's connection
+// in an outage doesn't count: chaining may serve it.
 func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) bool {
 	want := strings.TrimRight(upstreamResource, "/")
 	if tunneled {
@@ -238,10 +229,10 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 			return false
 		}
 		entry, ok := tokens[backendIssuerID.UUID]
-		return ok && grantRoutesToUpstream(entry.Resource, want, true)
+		return ok && !entry.SessionUnavailable() && grantRoutesToUpstream(entry.Resource, want, true)
 	}
 	for issuerID, entry := range tokens {
-		if upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+		if !entry.SessionUnavailable() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			return true
 		}
 	}
@@ -249,12 +240,20 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 }
 
 // identityChainingError is the client-facing failure for an applicable
-// attempt. It names the normalized reason only, never provider detail.
+// attempt. It names no reason code or provider detail.
 func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
-		return oops.E(oops.CodeUnavailable, nil, "enterprise-managed authorization for this MCP server is temporarily unavailable (%s); retry shortly", outcome.Reason)
+		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
-	return oops.E(oops.CodeForbidden, nil, "enterprise-managed authorization for this MCP server failed (%s); contact your administrator", outcome.Reason)
+	if exchangeRejectedSignIn(outcome) {
+		return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Reconnect this server in your AI client. If that doesn't help, contact your administrator.")
+	}
+	return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Contact your administrator.")
+}
+
+// exchangeRejectedSignIn reports the provider turning down the saved sign-in, which a new one may repair.
+func exchangeRejectedSignIn(outcome identitychaining.Outcome) bool {
+	return outcome.Stage == identitychaining.StageExchange && outcome.Reason == identitychaining.ReasonInvalidGrant
 }
 
 // metaMemberChainer returns the runtime chaining hook for member,
@@ -287,11 +286,14 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", &metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug)}
+			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Reconnect this gateway in your AI client.", member.slug)}}
 		case outcome.Retryable:
-			return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason)}
+			return "", memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}, status: 0, retryable: outcome.SafeToRepeat() && ctx.Err() == nil, retryAfter: 0}
 		}
-		return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization failed (%s); contact your administrator", member.slug, outcome.Reason)}
+		if exchangeRejectedSignIn(outcome) {
+			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Reconnect this gateway in your AI client. If that doesn't help, contact your administrator.", member.slug)}
+		}
+		return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
 	}
 }
 
@@ -473,4 +475,18 @@ func (s *Service) consentChainedMetaClients(ctx context.Context, endpoint *Resol
 		}
 	}
 	return chained
+}
+
+// Chained tokens belong to the authenticated human, not a stored grant.
+func chainedUpstreamToken(chained identitychaining.Token) remotesessions.UpstreamToken {
+	return remotesessions.UpstreamToken{
+		Token:                              chained.Value(),
+		Resource:                           "",
+		CredentialOwner:                    remotesessions.CredentialOwnerSubject,
+		RemoteSessionClientID:              uuid.Nil,
+		RemoteSessionID:                    uuid.Nil,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                nil,
+	}
 }

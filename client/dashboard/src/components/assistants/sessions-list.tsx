@@ -5,12 +5,18 @@ import {
   useDateRangeFilter,
 } from "@/components/observe/useDateRangeFilter";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Button } from "@/components/ui/Button";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
+import {
+  formatUsageCost,
+  isCostUnknown,
+  UNKNOWN_COST_EXPLANATION,
+} from "@/pages/chatLogs/claudeUsage";
+import { UnknownCost } from "@/pages/chatLogs/UnknownCost";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
@@ -18,7 +24,6 @@ import { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { useAssistantSessionSummary } from "@gram/client/react-query/assistantSessionSummary.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const SESSION_PAGE_LIMIT = 8;
@@ -159,9 +164,13 @@ function SessionListResult({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Stack align="center" justify="center" className="py-12">
-        <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
-      </Stack>
+      <Skeleton label="Loading sessions">
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+        <div className="h-12 w-full" />
+      </Skeleton>
     );
   }
   if (error) {
@@ -229,6 +238,10 @@ function SessionSummaryTiles({
   error: Error | null;
 }): JSX.Element {
   const displayValue = isLoading ? "—" : undefined;
+  // The totals come from the server with no per-session breakdown, so a
+  // range that used tokens but cost nothing is one whose agents do not
+  // report cost. $0 there would read as free.
+  const costUnknown = !isLoading && data !== undefined && isCostUnknown(data);
   return (
     <>
       <Stack gap={0}>
@@ -252,7 +265,8 @@ function SessionSummaryTiles({
           <StatTile
             title="Cost"
             value={data?.totalCost ?? 0}
-            displayValue={displayValue}
+            displayValue={costUnknown ? "—" : displayValue}
+            tooltip={costUnknown ? UNKNOWN_COST_EXPLANATION : undefined}
             format="currency"
             tone="neutral"
           />
@@ -353,6 +367,12 @@ function SessionRow({
           <>
             <span className="text-muted-foreground/40">·</span>
             <span>{formatUsageCost(chat.totalCost)}</span>
+          </>
+        )}
+        {isCostUnknown(chat) && (
+          <>
+            <span className="text-muted-foreground/40">·</span>
+            <UnknownCost focusable={false} />
           </>
         )}
         <span className="text-muted-foreground/40">·</span>

@@ -2576,6 +2576,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- One Speakeasy Slack app trigger routes to each managed assistant.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_speakeasy_slack_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE;
+
 -- trigger_thread_routes records how events on one external conversation (a
 -- trigger correlation id such as a Slack thread) reach a trigger target:
 -- whether the target is subscribed to it, and which of the target's
@@ -3940,6 +3945,9 @@ CREATE TABLE IF NOT EXISTS remote_session_clients (
   -- Administrator-chosen label. NULL means unset, and readers show client_id.
   display_name TEXT,
 
+  -- Opt-in: send the MCP client's name upstream as speakeasy_client_name on /authorize.
+  forward_client_name boolean NOT NULL DEFAULT FALSE,
+
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -4023,6 +4031,7 @@ COMMENT ON COLUMN remote_session_clients.resource_tos_uri IS '@access: restricte
 COMMENT ON COLUMN remote_session_clients.upstream_rejected_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.identity_provider_connection_id IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.credential_owner IS '@access: confidential';
+COMMENT ON COLUMN remote_session_clients.forward_client_name IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.created_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.updated_at IS '@access: confidential';
 COMMENT ON COLUMN remote_session_clients.deleted_at IS '@access: confidential';
@@ -5464,6 +5473,11 @@ WHERE deleted IS FALSE;
 CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
 ON user_sessions (refresh_token_hash)
 WHERE deleted IS FALSE;
+
+-- Finds a used or revoked refresh token by hash; live rows use the index above.
+CREATE INDEX IF NOT EXISTS user_sessions_spent_refresh_token_hash_idx
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS TRUE AND refresh_token_hash IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
@@ -7729,11 +7743,18 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   last_sync_failed_at timestamptz,
   -- Store a typed failure code and omit the raw provider response.
   last_error_code TEXT,
+  -- The project whose managed assistant answers mentions and direct messages
+  -- sent to the Speakeasy app in this workspace. NULL leaves the app silent.
+  default_project_id uuid,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  -- Composite so the routed project is pinned to the connection's
+  -- organization. Only the project column is nulled on delete because
+  -- organization_id is NOT NULL.
+  CONSTRAINT slack_directory_connections_default_project_id_fkey FOREIGN KEY (organization_id, default_project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL (default_project_id)
 );
 
 COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';
@@ -7750,12 +7771,25 @@ COMMENT ON COLUMN slack_directory_connections.last_full_sync_generation IS '@acc
 COMMENT ON COLUMN slack_directory_connections.last_full_sync_succeeded_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_sync_failed_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_error_code IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.default_project_id IS 'Project whose managed assistant answers the Speakeasy app in this workspace.
+@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.created_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.updated_at IS '@access: confidential';
 
 -- Reconnect the same workspace in place; disconnection does not release its key.
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
 ON slack_directory_connections (organization_id, slack_team_id);
+
+-- A project answers in at most one workspace, so its assistant's Slack replies
+-- resolve to exactly one bot token.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_default_project_id_key
+ON slack_directory_connections (default_project_id)
+WHERE default_project_id IS NOT NULL;
+
+-- Find the workspace that routes Slack events by team.
+CREATE INDEX IF NOT EXISTS slack_directory_connections_slack_team_id_idx
+ON slack_directory_connections (slack_team_id)
+WHERE default_project_id IS NOT NULL AND disconnected_at IS NULL;
 
 -- Store verified members of the connected workspace. Seeing an external Slack
 -- Connect user in a shared channel does not establish membership. Full syncs
@@ -9380,6 +9414,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
+  expires_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9409,6 +9444,8 @@ COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' 
 @access: confidential';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 @access: opaque-restricted';
+COMMENT ON COLUMN principal_grants.expires_at IS 'When a temporary grant stops authorizing new requests. NULL = permanent. A row whose expires_at has passed grants nothing and is ignored by every reader.
+@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
@@ -9419,6 +9456,11 @@ ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'al
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
+
+-- Listing an organization's temporary grants.
+CREATE INDEX IF NOT EXISTS principal_grants_org_expires_at_idx
+ON principal_grants (organization_id, expires_at)
+WHERE expires_at IS NOT NULL;
 
 -- Grants the default auth permission backfill wrote, kept after the grant is
 -- deleted: a rerun never restores what an admin removed, and a rollback
@@ -9511,6 +9553,7 @@ ON agent_connection_blocks (remote_session_client_id);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  is_internal boolean NOT NULL DEFAULT false,
   seq BIGINT NOT NULL GENERATED BY DEFAULT AS IDENTITY,
   organization_id TEXT NOT NULL,
   project_id uuid,
@@ -9572,6 +9615,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
 );
 
 COMMENT ON COLUMN audit_logs.id IS '@access: confidential';
+COMMENT ON COLUMN audit_logs.is_internal IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.seq IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN audit_logs.project_id IS '@access: confidential';
@@ -9612,6 +9656,7 @@ ON audit_logs (organization_id, subject_id, seq DESC);
 -- audit_logs so both read back through the same API shape.
 CREATE TABLE IF NOT EXISTS security_audit_logs (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
+  is_internal boolean NOT NULL DEFAULT false,
   -- Starts high so that sequence values below the start stay free for entries
   -- moved here from audit_logs, which keep their audit_logs seq and so sort
   -- before every entry written here, in their original order.
@@ -9658,6 +9703,7 @@ CREATE TABLE IF NOT EXISTS security_audit_logs (
 );
 
 COMMENT ON COLUMN security_audit_logs.id IS '@access: confidential';
+COMMENT ON COLUMN security_audit_logs.is_internal IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.seq IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.organization_id IS '@access: confidential';
 COMMENT ON COLUMN security_audit_logs.project_id IS '@access: confidential';
@@ -16512,6 +16558,8 @@ CREATE TABLE IF NOT EXISTS registry_promotion_candidates (
   curation_retry_key text,
   curation_retry_revision text,
   curation_retry_action text,
+  docs_outcome text,
+  docs_review_since timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT registry_promotion_candidates_pkey PRIMARY KEY (id),
@@ -16568,6 +16616,10 @@ COMMENT ON COLUMN registry_promotion_candidates.docs_revision IS '@access: confi
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_key IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_revision IS '@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.docs_retry_by IS '@access: confidential-pii';
+COMMENT ON COLUMN registry_promotion_candidates.docs_outcome IS 'How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL with docs_queued_at set means requested (resolved before this was recorded); NULL with docs_queued_at NULL means delivery has not resolved yet.
+@access: confidential';
+COMMENT ON COLUMN registry_promotion_candidates.docs_review_since IS 'When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+@access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_status IS 'Staff curation state, independent of observed eligibility.
 @access: confidential';
 COMMENT ON COLUMN registry_promotion_candidates.curation_revision IS 'Compare-and-swap revision for staff curation changes.

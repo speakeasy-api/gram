@@ -11,6 +11,31 @@ import (
 	"github.com/google/uuid"
 )
 
+const createWorkloadAgentAssignment = `-- name: CreateWorkloadAgentAssignment :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateWorkloadAgentAssignmentParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+}
+
+func (q *Queries) CreateWorkloadAgentAssignment(ctx context.Context, arg CreateWorkloadAgentAssignmentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createWorkloadAgentAssignment,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.AgentID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const snapshotAgentMemberAuthority = `-- name: SnapshotAgentMemberAuthority :one
 SELECT jsonb_build_object(
   'bindings', (SELECT jsonb_agg(to_jsonb(b) ORDER BY b.id) FROM principal_remote_session_bindings b WHERE principal_id = $1::uuid),
@@ -26,4 +51,13 @@ func (q *Queries) SnapshotAgentMemberAuthority(ctx context.Context, agentID uuid
 	var snapshot string
 	err := row.Scan(&snapshot)
 	return snapshot, err
+}
+
+const softDeleteWorkloadAgentAssignment = `-- name: SoftDeleteWorkloadAgentAssignment :exec
+UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) SoftDeleteWorkloadAgentAssignment(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, softDeleteWorkloadAgentAssignment, id)
+	return err
 }

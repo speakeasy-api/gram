@@ -157,6 +157,10 @@ export type ListChatsRequest = {
    */
   sortOrder?: SortOrder | undefined;
   /**
+   * List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+   */
+  pinnedFirst?: boolean | undefined;
+  /**
    * Session header
    */
   gramSession?: string | undefined;
@@ -305,6 +309,7 @@ export type ListChatsRequest$Outbound = {
   offset: number;
   sort_by: string;
   sort_order: string;
+  pinned_first: boolean;
   "Gram-Session"?: string | undefined;
   "Gram-Project"?: string | undefined;
   "Gram-Chat-Session"?: string | undefined;
@@ -334,6 +339,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
     offset: z._default(z.int(), 0),
     sortBy: z._default(SortBy$outboundSchema, "last_message_timestamp"),
     sortOrder: z._default(SortOrder$outboundSchema, "desc"),
+    pinnedFirst: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
     gramProject: z.optional(z.string()),
     gramChatSession: z.optional(z.string()),
@@ -351,6 +357,7 @@ export const ListChatsRequest$outboundSchema: z.ZodMiniType<
       minRiskScore: "min_risk_score",
       sortBy: "sort_by",
       sortOrder: "sort_order",
+      pinnedFirst: "pinned_first",
       gramSession: "Gram-Session",
       gramProject: "Gram-Project",
       gramChatSession: "Gram-Chat-Session",

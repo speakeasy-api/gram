@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = [
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
   "slack-directory-connection:sync",
+  "slack-directory-connection:set-default-project",
   "slack-identity-mapping:confirm",
   "slack-identity-mapping:reassign",
   "slack-identity-mapping:reconfirm",
@@ -21,8 +22,13 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "access_grant:create_temporary",
+  "access_grant:renew_temporary",
+  "access_grant:revoke_temporary",
+  "agent:connection_attach",
   "agent:connection_block_create",
   "agent:connection_block_delete",
+  "agent:connection_detach",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -392,6 +398,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "authorized Slack workspace";
     case "slack-directory-connection:disconnect":
       return "disconnected Slack workspace";
+    case "slack-directory-connection:set-default-project":
+      return "changed the default project for Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:revoke_sign_ins":
@@ -404,7 +412,17 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+    case "access_grant:create_temporary":
+      return "gave temporary access to";
+    case "access_grant:renew_temporary":
+      return "renewed temporary access for";
+    case "access_grant:revoke_temporary":
+      return "revoked temporary access for";
 
+    case "agent:connection_attach":
+      return "granted their connection to agent";
+    case "agent:connection_detach":
+      return "removed their connection from agent";
     case "agent:connection_block_create":
       return "blocked connection access for agent";
     case "agent:connection_block_delete":

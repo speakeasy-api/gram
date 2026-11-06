@@ -1,7 +1,7 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
-  AGENT_POLICY_SCOPES,
   agentPolicyFingerprint,
   agentPolicyDraftFromGrants,
   agentPolicyGrantsFromDraft,
@@ -29,49 +29,25 @@ function storedGrant(
 }
 
 describe("agent policy scope catalog", () => {
-  // Pins the mirror of safeRuntimeScope() in
-  // server/internal/agents/runtimepolicy/scopes.go. Drift is a 400 in one
-  // direction and a missing capability in the other.
-  it("offers exactly the agent-runtime-safe scopes", () => {
-    expect(AGENT_POLICY_SCOPES.map((scope) => scope.slug).sort()).toEqual([
-      "assistant:read",
-      "assistant:write",
-      "environment:read",
-      "environment:write",
-      "inference:execute",
-      "mcp:connect",
-      "mcp:read",
-      "mcp:write",
-      "org:device_agent_sync",
-      "org:hooks_ingest",
-      "project:read",
-      "project:write",
-      "risk_policy:evaluate",
-      "skill:read",
-      "skill:write",
-    ]);
-  });
-
-  it("never offers a scope outside the safe set", () => {
-    for (const scope of AGENT_POLICY_SCOPES) {
-      const family = scope.slug.split(":")[0];
-      expect(scope.slug).not.toMatch(/blocked_/);
-      if (family === "org") {
-        expect(["org:device_agent_sync", "org:hooks_ingest"]).toContain(
-          scope.slug,
-        );
-      }
-      expect(family).not.toBe("chat");
-      expect(family).not.toBe("agent");
-      expect(scope.slug).not.toBe("risk_policy:bypass");
-      expect(scope.slug).not.toBe("risk_policy:block");
-    }
-  });
-
+  // The scopes an agent may hold come from access.listAgentPolicyScopes;
+  // TestService_ListAgentPolicyScopes_OffersExactlyTheRuntimeSafeScopes pins
+  // the set on the server. What stays here is the selector shape per family.
   it("fixes the resource kind from the scope family", () => {
-    for (const scope of AGENT_POLICY_SCOPES) {
-      expect(agentPolicyResourceKind(scope.slug)).toBe(scope.resourceType);
+    for (const [slug, resourceType] of [
+      ["inference:execute", "inference"],
+      ["mcp:connect", "mcp"],
+      ["mcp:write", "mcp"],
+      ["project:read", "project"],
+      ["environment:write", "environment"],
+      ["skill:read", "skill"],
+      ["assistant:write", "assistant"],
+      ["risk_policy:evaluate", "risk_policy"],
+      ["org:device_agent_sync", "org"],
+      ["org:hooks_ingest", "org"],
+    ] as const) {
+      expect(agentPolicyResourceKind(slug)).toBe(resourceType);
     }
+    expect(agentPolicyResourceKind("widget:read")).toBe("*");
   });
 
   it("withholds a resource choice where the picker cannot name the right kind", () => {

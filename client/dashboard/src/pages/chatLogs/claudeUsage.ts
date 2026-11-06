@@ -14,6 +14,33 @@ export function formatUsageCost(cost: number): string {
   return `$${cost.toFixed(2)}`;
 }
 
+/** Shown wherever a session used tokens but its agent sent no cost. */
+export const UNKNOWN_COST_EXPLANATION =
+  "Unknown cost: this agent doesn't report cost.";
+
+type UsageTotals = {
+  totalCost?: number | null;
+  totalTokens?: number;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+};
+
+export function totalTokensFor(usage: UsageTotals): number {
+  if (usage.totalTokens && usage.totalTokens > 0) return usage.totalTokens;
+  return (usage.totalInputTokens || 0) + (usage.totalOutputTokens || 0);
+}
+
+/**
+ * Only some agents (Claude Code) report what a session cost. Others (Codex,
+ * OpenClaw) report tokens alone, and their missing cost arrives as 0. A
+ * session that used tokens but cost nothing is one whose cost is unknown,
+ * not a free one.
+ */
+export function isCostUnknown(usage: UsageTotals): boolean {
+  if (usage.totalCost != null && usage.totalCost > 0) return false;
+  return totalTokensFor(usage) > 0;
+}
+
 export function formatTokenCount(tokens: number): string {
   return new Intl.NumberFormat(undefined, {
     notation: "compact",

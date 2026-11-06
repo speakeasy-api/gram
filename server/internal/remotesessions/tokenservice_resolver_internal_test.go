@@ -86,7 +86,7 @@ func TestResolveAccessToken_AgentNeedsScopedAttachment(t *testing.T) {
 	// A nil database proves the client-only primitive cannot fall back to a
 	// direct credential lookup for an agent.
 	manager := &ChallengeManager{}
-	token, err := manager.ResolveAccessToken(t.Context(), uuid.New(), urn.NewAgentSubject(uuid.New()), "")
+	token, err := manager.ResolveAccessToken(t.Context(), RefreshAttribution{}, uuid.New(), urn.NewAgentSubject(uuid.New()), "")
 	require.NoError(t, err)
 	require.Empty(t, token)
 }

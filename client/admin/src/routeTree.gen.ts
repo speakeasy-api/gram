@@ -11,7 +11,6 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as CustomerUsageRouteImport } from './routes/customer-usage'
-import { Route as ExternalMcpMigrationRouteImport } from './routes/external-mcp-migration'
 import { Route as FleetHealthRouteImport } from './routes/fleet-health'
 import { Route as IntegrationCoverageRouteImport } from './routes/integration-coverage'
 import { Route as McpSetupRouteImport } from './routes/mcp-setup'
@@ -42,6 +41,7 @@ import { Route as OrganizationsIdOrSlugCoverageRouteImport } from './routes/orga
 import { Route as OrganizationsIdOrSlugFeaturesRouteImport } from './routes/organizations.$idOrSlug.features'
 import { Route as OrganizationsIdOrSlugMcpServersRouteImport } from './routes/organizations.$idOrSlug.mcp-servers'
 import { Route as OrganizationsIdOrSlugMembersRouteImport } from './routes/organizations.$idOrSlug.members'
+import { Route as OrganizationsIdOrSlugOnboardingRouteImport } from './routes/organizations.$idOrSlug.onboarding'
 import { Route as RemoteSessionIssuersIssuerIdIndexRouteImport } from './routes/remote-session-issuers.$issuerId.index'
 import { Route as RemoteSessionIssuersIssuerIdConvergenceRouteImport } from './routes/remote-session-issuers.$issuerId.convergence'
 import { Route as RemoteSessionIssuersIssuerIdSettingsRouteImport } from './routes/remote-session-issuers.$issuerId.settings'
@@ -58,11 +58,6 @@ const IndexRoute = IndexRouteImport.update({
 const CustomerUsageRoute = CustomerUsageRouteImport.update({
   id: '/customer-usage',
   path: '/customer-usage',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ExternalMcpMigrationRoute = ExternalMcpMigrationRouteImport.update({
-  id: '/external-mcp-migration',
-  path: '/external-mcp-migration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const FleetHealthRoute = FleetHealthRouteImport.update({
@@ -224,6 +219,12 @@ const OrganizationsIdOrSlugMembersRoute =
     path: '/members',
     getParentRoute: () => OrganizationsIdOrSlugRoute,
   } as any)
+const OrganizationsIdOrSlugOnboardingRoute =
+  OrganizationsIdOrSlugOnboardingRouteImport.update({
+    id: '/onboarding',
+    path: '/onboarding',
+    getParentRoute: () => OrganizationsIdOrSlugRoute,
+  } as any)
 const RemoteSessionIssuersIssuerIdIndexRoute =
   RemoteSessionIssuersIssuerIdIndexRouteImport.update({
     id: '/',
@@ -270,7 +271,6 @@ const OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -300,6 +300,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
@@ -312,7 +313,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -334,6 +334,7 @@ export interface FileRoutesByTo {
   '/organizations/$idOrSlug/coverage': typeof OrganizationsIdOrSlugCoverageRoute
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugIndexRoute
@@ -347,7 +348,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/customer-usage': typeof CustomerUsageRoute
-  '/external-mcp-migration': typeof ExternalMcpMigrationRoute
   '/fleet-health': typeof FleetHealthRoute
   '/integration-coverage': typeof IntegrationCoverageRoute
   '/mcp-setup': typeof McpSetupRoute
@@ -377,6 +377,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug/features': typeof OrganizationsIdOrSlugFeaturesRoute
   '/organizations/$idOrSlug/mcp-servers': typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   '/organizations/$idOrSlug/members': typeof OrganizationsIdOrSlugMembersRoute
+  '/organizations/$idOrSlug/onboarding': typeof OrganizationsIdOrSlugOnboardingRoute
   '/remote-session-issuers/$issuerId/convergence': typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   '/remote-session-issuers/$issuerId/settings': typeof RemoteSessionIssuersIssuerIdSettingsRoute
   '/organizations/$idOrSlug/': typeof OrganizationsIdOrSlugIndexRoute
@@ -391,7 +392,6 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -421,6 +421,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug/'
@@ -433,7 +434,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -455,6 +455,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/coverage'
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug'
@@ -467,7 +468,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/customer-usage'
-    | '/external-mcp-migration'
     | '/fleet-health'
     | '/integration-coverage'
     | '/mcp-setup'
@@ -497,6 +497,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug/features'
     | '/organizations/$idOrSlug/mcp-servers'
     | '/organizations/$idOrSlug/members'
+    | '/organizations/$idOrSlug/onboarding'
     | '/remote-session-issuers/$issuerId/convergence'
     | '/remote-session-issuers/$issuerId/settings'
     | '/organizations/$idOrSlug/'
@@ -510,7 +511,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CustomerUsageRoute: typeof CustomerUsageRoute
-  ExternalMcpMigrationRoute: typeof ExternalMcpMigrationRoute
   FleetHealthRoute: typeof FleetHealthRoute
   IntegrationCoverageRoute: typeof IntegrationCoverageRoute
   McpSetupRoute: typeof McpSetupRoute
@@ -540,13 +540,6 @@ declare module '@tanstack/react-router' {
       path: '/customer-usage'
       fullPath: '/customer-usage'
       preLoaderRoute: typeof CustomerUsageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/external-mcp-migration': {
-      id: '/external-mcp-migration'
-      path: '/external-mcp-migration'
-      fullPath: '/external-mcp-migration'
-      preLoaderRoute: typeof ExternalMcpMigrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/fleet-health': {
@@ -759,6 +752,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof OrganizationsIdOrSlugMembersRouteImport
       parentRoute: typeof OrganizationsIdOrSlugRoute
     }
+    '/organizations/$idOrSlug/onboarding': {
+      id: '/organizations/$idOrSlug/onboarding'
+      path: '/onboarding'
+      fullPath: '/organizations/$idOrSlug/onboarding'
+      preLoaderRoute: typeof OrganizationsIdOrSlugOnboardingRouteImport
+      parentRoute: typeof OrganizationsIdOrSlugRoute
+    }
     '/remote-session-issuers/$issuerId/': {
       id: '/remote-session-issuers/$issuerId/'
       path: '/'
@@ -836,6 +836,7 @@ interface OrganizationsIdOrSlugRouteChildren {
   OrganizationsIdOrSlugFeaturesRoute: typeof OrganizationsIdOrSlugFeaturesRoute
   OrganizationsIdOrSlugMcpServersRoute: typeof OrganizationsIdOrSlugMcpServersRouteWithChildren
   OrganizationsIdOrSlugMembersRoute: typeof OrganizationsIdOrSlugMembersRoute
+  OrganizationsIdOrSlugOnboardingRoute: typeof OrganizationsIdOrSlugOnboardingRoute
   OrganizationsIdOrSlugIndexRoute: typeof OrganizationsIdOrSlugIndexRoute
   OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute: typeof OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute
   OrganizationsIdOrSlugProjectsIndexRoute: typeof OrganizationsIdOrSlugProjectsIndexRoute
@@ -849,6 +850,7 @@ const OrganizationsIdOrSlugRouteChildren: OrganizationsIdOrSlugRouteChildren = {
   OrganizationsIdOrSlugMcpServersRoute:
     OrganizationsIdOrSlugMcpServersRouteWithChildren,
   OrganizationsIdOrSlugMembersRoute: OrganizationsIdOrSlugMembersRoute,
+  OrganizationsIdOrSlugOnboardingRoute: OrganizationsIdOrSlugOnboardingRoute,
   OrganizationsIdOrSlugIndexRoute: OrganizationsIdOrSlugIndexRoute,
   OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute:
     OrganizationsIdOrSlugProjectsProjectIdOrSlugRoute,
@@ -953,7 +955,6 @@ const UsersRouteWithChildren = UsersRoute._addFileChildren(UsersRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CustomerUsageRoute: CustomerUsageRoute,
-  ExternalMcpMigrationRoute: ExternalMcpMigrationRoute,
   FleetHealthRoute: FleetHealthRoute,
   IntegrationCoverageRoute: IntegrationCoverageRoute,
   McpSetupRoute: McpSetupRoute,

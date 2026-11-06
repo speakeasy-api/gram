@@ -130,6 +130,9 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 	// organization admins; org-settable operational toggles need org:admin only.
 	// Retired rollout flags and upstream auth enforcement, which has readiness
 	// checks of its own, cannot be changed here, including by staff.
+	if feature == FeatureProviderSetup {
+		return oops.E(oops.CodeForbidden, nil, "Provider setup rollout is managed through the staff admin API.")
+	}
 	if feature == Feature("automatic-role-distribution") {
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
 	}
@@ -237,7 +240,16 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	snapshot := s.featureClient.Snapshot(ctx, orgID)
+	// Left absent when unreadable so a caller never presents an enforcing
+	// organization as unenforced.
+	var upstreamAuthEnforced *bool
+	if enforced, err := s.featureClient.IsFeatureEnabled(ctx, orgID, FeatureUpstreamAuthEnforced); err != nil {
+		s.logger.WarnContext(ctx, "failed to read upstream auth enforcement", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+	} else {
+		upstreamAuthEnforced = &enforced
+	}
 	return &gen.ProductFeatures{
+		ProviderSetupEnabled:                    new(snapshot.ProviderSetupEnabled),
 		LogsEnabled:                             snapshot.LogsEnabled,
 		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   snapshot.SessionCaptureEnabled,
@@ -261,6 +273,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		SkillsOverMcpEnabled:                    snapshot.SkillsOverMcpEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }
 

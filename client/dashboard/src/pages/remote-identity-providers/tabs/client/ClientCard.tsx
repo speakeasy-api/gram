@@ -4,6 +4,7 @@ import { PlatformAdminOnlyPanel } from "@/components/platform-admin-only-panel";
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { Checkbox } from "@/components/ui/Checkbox";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Switch } from "@/components/ui/Switch";
@@ -20,6 +21,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientForm,
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
@@ -27,7 +29,7 @@ import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/reac
 import { invalidateAllOrganizationRemoteSessionClientSessions } from "@gram/client/react-query/organizationRemoteSessionClientSessions.js";
 import { useUpdateOrganizationRemoteSessionClientMutation } from "@gram/client/react-query/updateOrganizationRemoteSessionClient.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { toast } from "sonner";
 import {
   ClientAssertionAudienceField,
@@ -94,6 +96,14 @@ export function ClientCard({
   const [confirmClientIdChange, setConfirmClientIdChange] = useState(false);
   const [scope, setScope] = useState<string[]>(client.scope ?? []);
   const [audience, setAudience] = useState(client.audience ?? "");
+  // Undefined until changed, so a refetch can't leave a stale value to save.
+  const [forwardClientNameDraft, setForwardClientNameDraft] = useState<
+    boolean | undefined
+  >(undefined);
+  const forwardClientNameChecked =
+    forwardClientNameDraft ?? client.forwardClientName;
+  // The duplicate dialog renders a second card, so the id must be unique.
+  const forwardClientNameId = useId();
   const [clientSecret, setClientSecret] = useState("");
   // Undefined until a platform admin flips the switch, so the switch tracks
   // the saved value (including a Migrate from the warning above) and a save
@@ -183,8 +193,8 @@ export function ClientCard({
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
       await invalidateClient();
-      // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
+      setForwardClientNameDraft(undefined);
       setClientIdDraft(saved.clientId);
       setConfirmClientIdChange(false);
       setClientSecret("");
@@ -232,12 +242,18 @@ export function ClientCard({
     scope.length !== savedScope.length ||
     scope.some((s, i) => s !== savedScope[i]);
 
+  const savedAudience = client.audience ?? "";
+  const audienceChanged = audience !== savedAudience;
+  const forwardClientNameChanged =
+    forwardClientNameChecked !== client.forwardClientName;
+
   const dirty =
     canEdit &&
     (clientIdChanged ||
       authMethod !== persistedAuthMethod ||
       scopeChanged ||
-      audience !== (client.audience ?? "") ||
+      audienceChanged ||
+      forwardClientNameChanged ||
       clientSecret !== "" ||
       (privateKeyJwtSelected &&
         authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
@@ -249,26 +265,40 @@ export function ClientCard({
 
   const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
+
+    const input: UpdateRemoteSessionClientForm = { id: client.id };
+    if (clientIdChanged) {
+      input.clientId = trimmedClientId;
+    }
+    if (authMethod) {
+      input.tokenEndpointAuthMethod = authMethod;
+    }
+    if (privateKeyJwtSelected && authAudienceFormat !== undefined) {
+      input.tokenEndpointAuthAudienceFormat = authAudienceFormat;
+    }
+    if (scopeChanged) {
+      input.scope = scope;
+    }
+    if (audienceChanged) {
+      input.audience = audience.trim();
+    }
+    if (forwardClientNameChanged) {
+      input.forwardClientName = forwardClientNameChecked;
+    }
+    const secretUpdate = clientSecretUpdateValue(authMethod, clientSecret);
+    if (secretUpdate !== undefined) {
+      input.clientSecret = secretUpdate;
+    }
+    if (
+      isPlatformAdmin &&
+      legacyCallbackMode !== undefined &&
+      legacyCallbackMode !== client.legacyCallbackUrl
+    ) {
+      input.legacyCallbackUrl = legacyCallbackMode;
+    }
+
     update.mutate({
-      request: {
-        updateRemoteSessionClientForm: {
-          id: client.id,
-          clientId: clientIdChanged ? trimmedClientId : undefined,
-          tokenEndpointAuthMethod: authMethod || undefined,
-          tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
-            ? authAudienceFormat
-            : undefined,
-          scope: scopeChanged ? scope : undefined,
-          audience: audience.trim() || undefined,
-          clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
-          legacyCallbackUrl:
-            isPlatformAdmin &&
-            legacyCallbackMode !== undefined &&
-            legacyCallbackMode !== client.legacyCallbackUrl
-              ? legacyCallbackMode
-              : undefined,
-        },
-      },
+      request: { updateRemoteSessionClientForm: input },
     });
   };
 
@@ -417,6 +447,33 @@ export function ClientCard({
                 disabled={!canEdit}
               />
             </div>
+            {!serviceAccount && (
+              <div className="flex flex-col gap-1.5">
+                <div className="flex items-center gap-3">
+                  <Checkbox
+                    id={forwardClientNameId}
+                    checked={forwardClientNameChecked}
+                    onCheckedChange={(checked) =>
+                      setForwardClientNameDraft(checked === true)
+                    }
+                    disabled={!canEdit}
+                  />
+                  <Label htmlFor={forwardClientNameId}>
+                    Send the MCP client&apos;s name to the authorization server
+                  </Label>
+                </div>
+                <Text small muted>
+                  Shows the authorization server the name the MCP client gives
+                  itself, such as Claude or Cursor, in the{" "}
+                  <code className="bg-muted px-1 py-0.5 text-xs">
+                    speakeasy_client_name
+                  </code>{" "}
+                  parameter. Only for public servers that don&apos;t require
+                  sign-in. Test a connection after turning it on, since some
+                  servers reject it.
+                </Text>
+              </div>
+            )}
             {privateKeyJwtSelected ? (
               <Text small muted>
                 Any existing client secret is retained but not used with

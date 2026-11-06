@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -48,10 +49,12 @@ import (
 // outcome, and the surface-resolved protocol version. Assembled once in
 // serveResolvedMetaMCPEndpoint and threaded through dispatch.
 type metaGateContext struct {
-	projectID uuid.UUID
+	// fromRequest is what the request says about its client, for connection rows.
+	fromRequest mcpconnectionattempts.Option
+	projectID   uuid.UUID
 	// metaServerID is a stored meta_mcp_servers row for an operator-built
-	// gateway, and a synthetic per-agent id for an agent gateway — see
-	// agentGatewayID. Treat it as a telemetry grouping key, never as
+	// gateway, and a synthetic per-agent id (agentgateway.GatewayID) for an
+	// agent gateway. Treat it as a telemetry grouping key, never as
 	// something to read a row back by.
 	metaServerID uuid.UUID
 	// agentID is set only when this request is an agent gateway, which
@@ -89,8 +92,16 @@ type metaGateContext struct {
 	consentDiagnostics *consentDiagnostics
 	// catalogRef is the authenticated consent reference and discovery mode.
 	catalogRef *toolfilter.CatalogReference
+	// catalogRecoveryOnly admits recovery helpers without any tool authorization.
+	catalogRecoveryOnly bool
 	// authentication retains validated endpoint identity for lazy catalogue loading.
 	authentication *issuerGateAuthentication
+
+	// skippedUpstreams says why partial resolution left a member's client out.
+	skippedUpstreams *remotesessions.SkippedClients
+
+	// request is the caller's request, read only if a row is written.
+	request *http.Request
 	// unapprovedMembers are current members the catalog did not approve. They
 	// are reported by connection_status only, never discovered or executed.
 	unapprovedMembers []metaMember
@@ -208,8 +219,8 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 		}
 	}
 
-	admission := metaGateAdmission{bearer: httpheaders.AuthorizationBearerToken(r), baseURL: s.BaseURLForRequest(r), sessionID: parseMcpSessionID(r.Header), clientSessionID: r.Header.Get("Mcp-Session-Id"), chatID: r.Header.Get("Gram-Chat-ID"), resolution: resolution}
-	ctx, gate, err := s.admitMetaGate(ctx, w, logger, mcpEndpoint, metaServer, membership, resolvedEndpoint, admission)
+	admission := metaGateAdmission{fromRequest: mcpconnectionattempts.FromRequest(r), bearer: httpheaders.AuthorizationBearerToken(r), baseURL: s.BaseURLForRequest(r), sessionID: parseMcpSessionID(r.Header), clientSessionID: r.Header.Get("Mcp-Session-Id"), chatID: r.Header.Get("Gram-Chat-ID"), resolution: resolution}
+	ctx, gate, err := s.admitMetaGate(ctx, w, r, logger, mcpEndpoint, metaServer, membership, resolvedEndpoint, admission)
 	if err != nil {
 		return err
 	}
@@ -226,10 +237,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || (metaSkillMethod(&req) && s.metaSkillsEnabled(ctx, gate))) {
 		authentication := gate.authentication
 		catalog, err := s.loadConnectionCatalog(ctx, authentication.endpoint, authentication.subject, gate.catalogRef, time.Now())
-		if errors.Is(err, errConnectionCatalogExpired) {
+		if errors.Is(err, errConnectionCatalogExpired) && gate.discoveryMode == metamcp.DiscoveryModeCode {
+			gate.catalogRecoveryOnly = true
+		} else if errors.Is(err, errConnectionCatalogExpired) {
 			return WriteAuthenticateChallenge(w, authentication.protectedResourceURL, err.Error())
-		}
-		if err != nil {
+		} else if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; retry shortly").LogError(ctx, logger)
 		}
 		gate.catalog = catalog
@@ -240,7 +252,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
 		endpoint := *mcpEndpoint
 		refresh := metaCodeGateRefresher(func(callbackCtx context.Context, current *metamcprepo.MetaMcpServer) (context.Context, *metaGateContext, error) {
-			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
+			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
 		})
 		if membership.organization {
 			// The organization gateway has no stored rows to re-read: reloading
@@ -254,7 +266,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 				if fresh.metaServer.UserSessionIssuerID != admittedIssuer {
 					return callbackCtx, nil, nil
 				}
-				return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, logger, fresh.endpoint, fresh.metaServer, membership, fresh.resolved, admission)
+				return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, fresh.endpoint, fresh.metaServer, membership, fresh.resolved, admission)
 			}
 		}
 		ctx = context.WithValue(ctx, metaCodeRefreshKey{}, refresh)
@@ -333,7 +345,10 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)), mcpversions.SupportedMetaServer())
+		if !req.ID.IsSet() {
+			return nil, nil
+		}
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsCancelled:
 		if gate.discoveryMode == metamcp.DiscoveryModeCode {
 			return nil, s.cancelMetaCode(ctx, gate, req)
@@ -465,7 +480,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -476,12 +491,48 @@ func (s *Service) handleMetaInitialize(
 	return bs, nil
 }
 
+// metaInstructionMembers names the servers this caller's tool listing would
+// offer. A failed snapshot only drops the summary: the handshake must not fail.
+func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
+	if gate.organizationID == "" || metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
+		return nil
+	}
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = true
+	}
+	// Only servers the connection approved are named; an expired or
+	// unreadable approval names none.
+	if gate.catalogRef != nil && gate.catalog == nil {
+		if gate.authentication == nil {
+			return nil
+		}
+		catalog, err := s.loadConnectionCatalog(ctx, gate.authentication.endpoint, gate.authentication.subject, gate.catalogRef, time.Now())
+		if err != nil {
+			if !errors.Is(err, errConnectionCatalogExpired) {
+				logger.WarnContext(ctx, "failed to load approved tools for instructions", attr.SlogError(err))
+			}
+			return nil
+		}
+		gate.catalog = catalog
+	}
+	_, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
+	if err != nil {
+		return nil
+	}
+	selected := catalogSelectedMembers(gate, members)
+	labels := make([]metamcp.MemberLabel, 0, len(selected))
+	for _, member := range selected {
+		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name})
+	}
+	return labels
+}
+
 func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
 	contract := metamcp.Tools(dynamicExecuteToolSchema)
 	tools := make([]*toolListEntry, 0, len(contract))
 	for _, tool := range contract {
 		tools = append(tools, &toolListEntry{
-			Title: "", OutputSchema: nil, Icons: nil, Execution: nil,
+			Title: tool.Title, OutputSchema: nil, Icons: nil, Execution: nil,
 			Name:        tool.Name,
 			Description: tool.Description,
 			InputSchema: tool.InputSchema,
@@ -555,7 +606,12 @@ func (s *Service) callMetaServerTool(
 	if !served {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool %q is not available on this connection; the gateway's tools may have changed, so reconnect to refresh the tool list", params.Name).LogWarn(ctx, logger)
 	}
-	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool
+	// Status and describe read the live choice so they agree with a call, and write nothing.
+	liveRead := params.Name == metamcp.ToolConnectionStatus || params.Name == metamcp.ToolDescribeServer || params.Name == metamcp.ToolDescribeTools
+	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool || liveRead
+	if liveRead && gate.memberChoices != nil {
+		gate.memberChoices.readOnly = true
+	}
 	start := time.Now()
 
 	// One snapshot per request: every meta MCP tool answers from the same
@@ -565,9 +621,13 @@ func (s *Service) callMetaServerTool(
 	// revoked grant lands between requests the same way.
 	ctx, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, mcpEndpoint.ProjectID)
 	if err != nil {
-		if params.Name != metamcp.ToolExecuteTool {
-			s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		// A tool call that never reached a member still failed as one. Live
+		// discovery reads also resolve credentials but stay discovery.
+		if gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool {
+			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
+			return nil, err
 		}
+		s.logMetaDiscovery(ctx, gate, params.Name, start, err)
 		return nil, err
 	}
 
@@ -588,8 +648,9 @@ func (s *Service) callMetaServerTool(
 	case metamcp.ToolConnectionStatus:
 		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
 	default:
-		// execute_tool is deliberately not logged here: the member dispatch
-		// writes the single tool_call row, stamped with this gateway's id.
+		// execute_tool is deliberately not logged here: it writes a single
+		// tool_call row stamped with this gateway's id, the member dispatch's
+		// or, when it fails before one, its own.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
 	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
@@ -599,6 +660,12 @@ func (s *Service) callMetaServerTool(
 // logMetaDiscovery writes one meta_discovery telemetry row for a gateway
 // discovery call. Failures record their oops status code.
 func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
+	s.telemLogger.Log(ctx, metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr))
+}
+
+// metaDiscoveryLogParams builds a meta_discovery telemetry row for a gateway
+// discovery call that took since start and failed with handlerErr, if any.
+func metaDiscoveryLogParams(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) tm.LogParams {
 	logAttrs := tm.HTTPLogAttributes{
 		attr.EventSourceKey:     string(tm.EventSourceMetaDiscovery),
 		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
@@ -623,7 +690,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 	if gate.apiKeyID != "" {
 		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
 	}
-	s.telemLogger.Log(ctx, tm.LogParams{
+	return tm.LogParams{
 		Timestamp: time.Now(),
 		ToolInfo: tm.ToolInfo{
 			ID: gate.metaServerID.String(),
@@ -637,7 +704,7 @@ func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, t
 		},
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
-	})
+	}
 }
 
 // catalogSelectedMembers keeps the members with at least one tool a Specific
@@ -698,6 +765,7 @@ func (s *Service) handleMetaListServersCall(
 type metaGateAdmission struct {
 	bearer          string
 	baseURL         string
+	fromRequest     mcpconnectionattempts.Option
 	sessionID       string
 	clientSessionID string
 	chatID          string
@@ -707,7 +775,10 @@ type metaGateAdmission struct {
 // membership says where the members come from. resolvedEndpoint is the
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
-func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
+func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
+	refreshScope := gatewayScope(metaServer.OrganizationID, mcpEndpoint.ProjectID, metaServer.ID, requestApp(ctx))
+	skipped := new(remotesessions.SkippedClients)
+
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
@@ -719,12 +790,13 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 	case membership.organization:
 		// Members span projects, so credentials resolve per member project
 		// when a member first needs them rather than once for the gateway.
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
-		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
+		authentication.skippedUpstreams = skipped
+		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -739,11 +811,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
 		}
 		ctx = newCtx
+		authentication.skippedUpstreams = skipped
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -752,7 +825,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			// Decided before the token path, so members the key has a choice
 			// for resolve lazily like any other chosen member.
 			agentKeyChoicesRead = true
-			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+			gateMemberChoices, err = s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 			if err != nil {
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 			}
@@ -761,7 +834,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
-			gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
+			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {
@@ -773,7 +846,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		gateAuthentication = authentication
 	}
 	if gateMemberChoices == nil && membership.agentID != uuid.Nil && !agentKeyChoicesRead {
-		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID)
+		agentKeyChoices, err := s.agentKeyMemberChoices(ctx, metaServer.OrganizationID, membership.agentID, remotesessions.RefreshIn(refreshScope).FromRequest(r))
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load agent key credential choices").LogError(ctx, logger)
 		}
@@ -792,8 +865,11 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		}
 	}
 	gate := &metaGateContext{
-		projectID:    mcpEndpoint.ProjectID,
-		metaServerID: metaServer.ID,
+		fromRequest:      request.fromRequest,
+		skippedUpstreams: skipped,
+		request:          r,
+		projectID:        mcpEndpoint.ProjectID,
+		metaServerID:     metaServer.ID,
 		// Both unset for a stored gateway, whose members come from
 		// meta_mcp_server_members rather than from a caller's grants.
 		agentID:             membership.agentID,
@@ -809,6 +885,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		catalog:             nil,
 		consentDiagnostics:  nil,
 		catalogRef:          nil,
+		catalogRecoveryOnly: false,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,

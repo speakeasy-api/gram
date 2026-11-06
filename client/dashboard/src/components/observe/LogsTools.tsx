@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { traceLogsQueryOptions } from "@/pages/logs/traceLogsQuery";
 import { IdentityLink } from "@/components/identity-link";
 import { identityRefForKind } from "@/lib/identity-urn";
@@ -10,6 +11,10 @@ import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import {
+  GatewayDispatchLink,
+  GatewayTargetLink,
+} from "@/components/observe/GatewayDispatchLink";
+import {
   FilterChip,
   type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
@@ -20,6 +25,7 @@ import {
   encodeShadowServerFilter,
   parseTargetFilter,
   isDefaultToolUsageTypeSelection,
+  scopedToolUsageDefaultTypes,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
@@ -41,6 +47,7 @@ import {
 } from "@/components/observe/LogsFacetRail";
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
+import { ScopedToolLogsEmptyState } from "@/components/observe/ScopedToolLogsEmptyState";
 import {
   SKILL_LOAD_CHANNEL_LABELS,
   selectedLoadedVia,
@@ -137,6 +144,11 @@ export type LogsToolsScope = {
    * the view's own so its rows match the page around it.
    */
   accountType?: string;
+  /**
+   * The host page's "Show local tools" choice, which sets the Type facet's
+   * default. Omitted means every type, local tools included.
+   */
+  includeLocalTools?: boolean;
 };
 
 /** Facets that pick identities, which a scoped view has already chosen. */
@@ -158,6 +170,17 @@ export function LogsTools({
   });
 
   const serverNameMappings = useServerNameMappings();
+
+  // A scoped view shows every call the identity made unless its page hides
+  // local tools. Local tools are hidden by default on the page-wide view for
+  // volume, but an agent that only runs through hooks makes nothing but local
+  // tool calls, and hiding them would leave its panel empty. These are only
+  // the defaults: a Type selection the user makes in the facet is kept in the
+  // URL and wins over the page's toggle. Every list is a module constant, so
+  // the reference stays stable across renders.
+  const defaultTypes = scope
+    ? scopedToolUsageDefaultTypes(scope.includeLocalTools ?? true)
+    : TOOL_USAGE_DEFAULT_TYPES;
 
   const {
     from,
@@ -185,7 +208,7 @@ export function LogsTools({
     accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
-    defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+    defaultTypes,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
   const accountType =
@@ -510,7 +533,10 @@ export function LogsTools({
       {
         id: "type",
         label: "Type",
-        isDefaultSelection: isDefaultToolUsageTypeSelection(selectedHookTypes),
+        isDefaultSelection: isDefaultToolUsageTypeSelection(
+          selectedHookTypes,
+          defaultTypes,
+        ),
         // Declared order groups the MCP surfaces together and leaves local
         // tools and skills at the end, which alphabetising breaks apart.
         keepValueOrder: true,
@@ -614,6 +640,7 @@ export function LogsTools({
     accountType,
     agentNamesById,
     agentOptions,
+    defaultTypes,
     filterOptionsData,
     hookSourceOptions,
     roleOptions,
@@ -710,7 +737,7 @@ export function LogsTools({
           handleStatusesChange([]);
           break;
         case "type":
-          handleHookTypesChange(TOOL_USAGE_DEFAULT_TYPES);
+          handleHookTypesChange(defaultTypes);
           break;
         case "source":
           handleHookSourceSelectionChange([]);
@@ -733,6 +760,7 @@ export function LogsTools({
       }
     },
     [
+      defaultTypes,
       setLoadedVia,
       handleAccountTypeChange,
       handleRoleSelectionChange,
@@ -1008,6 +1036,7 @@ export function LogsTools({
             timeSeriesPending={timeSeriesPending}
             facetGroups={visibleFacetGroups}
             embedded={!!scope}
+            defaultTypes={defaultTypes}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -1261,6 +1290,7 @@ function LogsToolsContent({
   onResetRange,
   isZoomed,
   embedded = false,
+  defaultTypes,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1319,6 +1349,8 @@ function LogsToolsContent({
   isZoomed: boolean;
   /** Inside another page: that page supplies the heading and the inset. */
   embedded?: boolean;
+  /** The type selection that counts as "no filter" for this view. */
+  defaultTypes: ToolUsageType[];
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1639,7 +1671,10 @@ function LogsToolsContent({
                       traces={traces}
                       hasActiveFilters={
                         activeFilters.length > 0 ||
-                        !isDefaultToolUsageTypeSelection(selectedTypes) ||
+                        !isDefaultToolUsageTypeSelection(
+                          selectedTypes,
+                          defaultTypes,
+                        ) ||
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
@@ -1657,6 +1692,8 @@ function LogsToolsContent({
                       serverNameMappings={serverNameMappings}
                       from={from}
                       to={to}
+                      embedded={embedded}
+                      localToolsHidden={!defaultTypes.includes("local_tool")}
                     />
                   </div>
 
@@ -1704,6 +1741,8 @@ function LogsToolsTableContent({
   serverNameMappings,
   from,
   to,
+  embedded = false,
+  localToolsHidden = false,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -1720,6 +1759,10 @@ function LogsToolsTableContent({
   to: Date;
   /** Resolved when this row's caller is an agent; its name is not on the row. */
   agent?: { id: string; name: string };
+  /** Scoped to one identity, whose page already says capture is set up. */
+  embedded?: boolean;
+  /** The view's default leaves local tools out, so "no calls" means no others. */
+  localToolsHidden?: boolean;
 }) {
   // Agent names are not on a trace — the row carries "agent:<uuid>" and
   // nothing else — so they are read once here rather than per row. Asked for
@@ -1785,6 +1828,10 @@ function LogsToolsTableContent({
   }
 
   if (traces.length === 0) {
+    if (!hasActiveFilters && embedded) {
+      return <ScopedToolLogsEmptyState localToolsHidden={localToolsHidden} />;
+    }
+
     if (!hasActiveFilters) {
       return <HooksEmptyState />;
     }
@@ -1861,7 +1908,7 @@ function LogsToolsTableContent({
         <div className="text-muted-foreground flex h-12 items-center justify-center gap-2 border-t">
           {isFetchingNextPage && (
             <>
-              <Icon name="loader-circle" className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
               <span className="text-eyebrow">Loading more</span>
             </>
           )}
@@ -2001,14 +2048,10 @@ function LogsToolsTraceRow({
                 >
                   {targetLabel}
                 </Link>
-              ) : trace.targetType === "meta_mcp_server" && trace.targetId ? (
-                <Link
-                  to={routes.mcp.gateway.overview.href(trace.targetId)}
-                  onClick={(event) => event.stopPropagation()}
-                  className="hover:text-foreground hover:underline"
-                >
+              ) : trace.targetType === "meta_mcp_server" ? (
+                <GatewayTargetLink trace={trace}>
                   {targetLabel}
-                </Link>
+                </GatewayTargetLink>
               ) : (
                 targetLabel
               )}
@@ -2033,18 +2076,7 @@ function LogsToolsTraceRow({
           )}
           {trace.viaMetaMcpServerId && (
             // The gateway that dispatched this member call.
-            <SimpleTooltip
-              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-            >
-              <Link
-                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
-              >
-                <Icon name="network" className="size-4" />
-              </Link>
-            </SimpleTooltip>
+            <GatewayDispatchLink trace={trace} />
           )}
         </div>
 
