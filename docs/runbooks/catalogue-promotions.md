@@ -91,14 +91,14 @@ Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 and include `promote_registry_candidate`, `retry_registry_promotion_docs`, and
 `curate_registry_promotion_candidate` in
 `GRAM_ADMIN_MCP_WRITE_OPERATIONS`, preserving other configured operations.
-Preparing a write creates an exact stored proposal; the same staff member
-reviews and approves it in the admin browser. Tool discovery alone grants no
-publication or retry authority.
+Write tools apply immediately. There is no server-side preview or approval, so
+the agent must show the exact change and get your explicit confirmation before
+calling one.
 
 Admin MCP uses the same business service and canonical targets as the dashboard.
 `list_registry_promotion_candidates` accepts the same status filters and returns
-newest-first pages. Use `prepare_registry_promotion_curation` to reject, archive, or
-restore an exact candidate, then approve it in the browser and execute its proposal.
+newest-first pages. Use `curate_registry_promotion_candidate` to reject, archive, or
+restore an exact candidate.
 Private source-derived suggestions are confined to the staff review form; Admin MCP
 retains bounded evidence and requires independently supplied public metadata.
 Retrying documentation changes only the delivery attempt state, never the
@@ -124,7 +124,7 @@ change. A candidate needs at least 10 successful direct calls across two UTC
 days, activity within 48 hours, and no observed errors or unknown outcomes.
 Missing or disabled telemetry does not demonstrate health. Custom connection
 headers and disabled deployments are ineligible. Evidence must be refreshed
-within 15 minutes before approval.
+within 15 minutes before promotion.
 
 Staff supplies the public provider identity, title, description, endpoint,
 documentation URL, guide slug, and authentication mode (`none` or `oauth`).

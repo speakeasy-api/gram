@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -22,10 +21,10 @@ const (
 	maxSupportMatrixNote    = 512
 )
 
-type PrepareSupportMatrixInput struct {
-	Revision string                `json:"revision" jsonschema:"Exact current revision from get_support_matrix_entry; any later matrix change requires a new proposal"`
+// SupportMatrixInput is a bounded set of changes to existing matrix entries.
+type SupportMatrixInput struct {
+	Revision string                `json:"revision" jsonschema:"Exact current revision from get_support_matrix_entry; any later matrix change refuses this write"`
 	Changes  []SupportMatrixChange `json:"changes" jsonschema:"One to 25 exact existing mapping or reference entries to update"`
-	RetryKey string                `json:"retry_key" jsonschema:"Unique retry key for this exact change (up to 128 characters)"`
 }
 
 type SupportMatrixChange struct {
@@ -44,16 +43,7 @@ type SupportMatrixFactChange struct {
 	Verify       *bool   `json:"verify,omitempty" jsonschema:"Whether this fact needs verification"`
 }
 
-type supportMatrixExpected struct {
-	Revision string `json:"revision"`
-}
-
-type supportMatrixArguments struct {
-	Revision string                `json:"revision"`
-	Changes  []SupportMatrixChange `json:"changes"`
-}
-
-type supportMatrixPreviewChange struct {
+type supportMatrixChangeDiff struct {
 	Kind      string          `json:"kind"`
 	MethodID  string          `json:"method_id"`
 	ProductID string          `json:"product_id,omitempty"`
@@ -61,133 +51,62 @@ type supportMatrixPreviewChange struct {
 	After     json.RawMessage `json:"after"`
 }
 
-type supportMatrixPreview struct {
-	RevisionBefore string                       `json:"revision_before"`
-	RevisionAfter  string                       `json:"revision_after,omitempty"`
-	Changes        []supportMatrixPreviewChange `json:"changes"`
-}
-
 type supportMatrixReceipt struct {
-	Revision string `json:"revision"`
+	RevisionBefore string                    `json:"revision_before"`
+	Revision       string                    `json:"revision"`
+	Changes        []supportMatrixChangeDiff `json:"changes"`
 }
 
-// supportMatrixWriter executes one platform-global support matrix proposal.
+// supportMatrixWriter applies one platform-global support matrix change.
 type supportMatrixWriter struct {
-	store   *proposalStore
-	writes  WriteConfig
-	baseURL string
+	runner *writeRunner
+	writes WriteConfig
 }
 
-func (s *supportMatrixWriter) readMatrix(ctx context.Context, tx pgx.Tx) (*gen.SupportMatrix, error) {
-	matrix, err := adminservice.ReadSupportMatrixTx(ctx, tx)
-	if err != nil {
-		return nil, fmt.Errorf("read locked support matrix: %w", err)
-	}
-	return matrix, nil
-}
-
-func (s *supportMatrixWriter) expectedState(ctx context.Context, tx pgx.Tx, proposal Proposal) (supportMatrixExpected, error) {
-	if proposal.Operation != OperationUpdateSupportMatrix || proposal.SchemaVersion != 1 || !proposal.PlatformGlobal || proposal.Target.OrganizationID != "" || proposal.Target.ProjectID.Valid || proposal.Target.ResourceID != "" || proposal.Target.ResourceKind != "" {
-		return supportMatrixExpected{}, ErrProposalInvalidated
-	}
-	var args supportMatrixArguments
-	if err := json.Unmarshal(proposal.Arguments, &args); err != nil || args.Revision == "" || len(args.Changes) == 0 {
-		return supportMatrixExpected{}, ErrProposalInvalidated
-	}
-	matrix, err := s.readMatrix(ctx, tx)
-	if err != nil {
-		return supportMatrixExpected{}, err
-	}
-	if matrix.Revision != args.Revision {
-		return supportMatrixExpected{}, ErrStaleState
-	}
-	if _, err := normalizeSupportMatrixChanges(args.Changes); err != nil {
-		return supportMatrixExpected{}, ErrProposalInvalidated
-	}
-	encoded, err := json.Marshal(supportMatrixExpected{Revision: matrix.Revision})
-	if err != nil {
-		return supportMatrixExpected{}, fmt.Errorf("encode expected support matrix state: %w", err)
-	}
-	digest, err := stateDigest(encoded)
-	if err != nil || !digestsEqual(digest, proposal.ExpectedStateDigest) {
-		return supportMatrixExpected{}, ErrStaleState
-	}
-	return supportMatrixExpected{Revision: args.Revision}, nil
-}
-
-func (s *supportMatrixWriter) revalidate(ctx context.Context, tx pgx.Tx, proposal Proposal) error {
-	_, err := s.expectedState(ctx, tx, proposal)
-	return err
-}
-
-func (s *supportMatrixWriter) prepare(ctx context.Context, input PrepareSupportMatrixInput) (ProposalOutput, error) {
+func (s *supportMatrixWriter) apply(ctx context.Context, input SupportMatrixInput) (supportMatrixReceipt, error) {
 	authority, err := requireWriteAuthority(ctx, s.writes, OperationUpdateSupportMatrix)
 	if err != nil {
-		return ProposalOutput{}, err
+		return supportMatrixReceipt{}, err
 	}
-	owner, err := ownerFromAuthority(authority)
-	if err != nil {
-		return ProposalOutput{}, err
-	}
-	if input.RetryKey == "" || len(input.RetryKey) > maxIdempotencyKeyLength || input.Revision == "" || len(input.Revision) > maxSupportMatrixText {
-		return ProposalOutput{}, errors.New("provide the current matrix revision and a retry key of at most 128 characters")
+	if input.Revision == "" || len(input.Revision) > maxSupportMatrixText {
+		return supportMatrixReceipt{}, errors.New("provide the current matrix revision")
 	}
 	if len(input.Changes) == 0 || len(input.Changes) > maxSupportMatrixChanges {
-		return ProposalOutput{}, fmt.Errorf("changes must contain between 1 and %d entries", maxSupportMatrixChanges)
+		return supportMatrixReceipt{}, fmt.Errorf("changes must contain between 1 and %d entries", maxSupportMatrixChanges)
 	}
-	input.Changes, err = normalizeSupportMatrixChanges(input.Changes)
+	changes, err := normalizeSupportMatrixChanges(input.Changes)
 	if err != nil {
-		return ProposalOutput{}, err
+		return supportMatrixReceipt{}, err
 	}
-	tx, err := s.store.db.Begin(ctx)
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("begin support matrix proposal preparation: %w", err)
-	}
-	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
-	matrix, err := s.readMatrix(ctx, tx)
-	if err != nil {
-		return ProposalOutput{}, err
-	}
-	if matrix.Revision != input.Revision {
-		return ProposalOutput{}, ErrStaleState
-	}
-	before, err := json.Marshal(supportMatrixExpected{Revision: matrix.Revision})
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("encode current support matrix revision: %w", err)
-	}
-	draft, err := applySupportMatrixChanges(matrix.Draft, input.Changes)
-	if err != nil {
-		return ProposalOutput{}, err
-	}
-	if err := adminservice.ValidateSupportDraft(draft, matrix); err != nil {
-		return ProposalOutput{}, fmt.Errorf("validate support matrix changes: %w", err)
-	}
-	if reflect.DeepEqual(draft, matrix.Draft) {
-		return ProposalOutput{}, errors.New("these changes match the current support matrix; nothing would change")
-	}
-	if err := tx.Commit(ctx); err != nil {
-		return ProposalOutput{}, fmt.Errorf("finish support matrix proposal preparation: %w", err)
-	}
-	arguments, err := json.Marshal(supportMatrixArguments{Revision: matrix.Revision, Changes: input.Changes})
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("encode support matrix arguments: %w", err)
-	}
-	changes, err := previewSupportMatrixChanges(matrix.Draft, draft, input.Changes)
-	if err != nil {
-		return ProposalOutput{}, err
-	}
-	preview, err := json.Marshal(supportMatrixPreview{RevisionBefore: matrix.Revision, Changes: changes})
-	if err != nil {
-		return ProposalOutput{}, fmt.Errorf("encode support matrix preview: %w", err)
-	}
-	if len(arguments) > maxProposalArgumentBytes || len(before) > maxProposalArgumentBytes || len(preview) > maxProposalPreviewBytes {
-		return ProposalOutput{}, errors.New("support matrix proposal exceeds the existing storage limit; reduce the change set")
-	}
-	proposal, replay, err := s.store.Create(ctx, owner, NewProposal{Operation: OperationUpdateSupportMatrix, SchemaVersion: 1, IdempotencyKey: input.RetryKey, Arguments: arguments, ExpectedState: before, Preview: preview}, time.Now())
-	if err != nil {
-		return ProposalOutput{}, err
-	}
-	return proposalOutput(proposal, replay, s.baseURL), nil
+	target := writeTarget{ResourceKind: "support_matrix", ResourceID: input.Revision}
+	return runWrite(ctx, s.runner, authority, target, func(ctx context.Context, tx pgx.Tx) (supportMatrixReceipt, error) {
+		matrix, err := adminservice.ReadSupportMatrixTx(ctx, tx)
+		if err != nil {
+			return supportMatrixReceipt{}, fmt.Errorf("read locked support matrix: %w", err)
+		}
+		if matrix.Revision != input.Revision {
+			return supportMatrixReceipt{}, ErrStaleState
+		}
+		draft, err := applySupportMatrixChanges(matrix.Draft, changes)
+		if err != nil {
+			return supportMatrixReceipt{}, err
+		}
+		if err := adminservice.ValidateSupportDraft(draft, matrix); err != nil {
+			return supportMatrixReceipt{}, fmt.Errorf("validate support matrix changes: %w", err)
+		}
+		if reflect.DeepEqual(draft, matrix.Draft) {
+			return supportMatrixReceipt{}, errors.New("these changes match the current support matrix; nothing would change")
+		}
+		diffs, err := diffSupportMatrixChanges(matrix.Draft, draft, changes)
+		if err != nil {
+			return supportMatrixReceipt{}, err
+		}
+		updated, err := adminservice.UpdateSupportMatrixTx(ctx, tx, &gen.UpdateSupportMatrixPayload{Revision: matrix.Revision, Draft: draft})
+		if err != nil {
+			return supportMatrixReceipt{}, fmt.Errorf("update support matrix: %w", err)
+		}
+		return supportMatrixReceipt{RevisionBefore: matrix.Revision, Revision: updated.Revision, Changes: diffs}, nil
+	})
 }
 
 func normalizeSupportMatrixChanges(changes []SupportMatrixChange) ([]SupportMatrixChange, error) {
@@ -293,23 +212,23 @@ func applySupportMatrixFacts(current map[string]*gen.SupportFact, changes []Supp
 	return nil
 }
 
-func previewSupportMatrixChanges(before, after *gen.SupportDraft, changes []SupportMatrixChange) ([]supportMatrixPreviewChange, error) {
-	preview := make([]supportMatrixPreviewChange, 0, len(changes))
+func diffSupportMatrixChanges(before, after *gen.SupportDraft, changes []SupportMatrixChange) ([]supportMatrixChangeDiff, error) {
+	diffs := make([]supportMatrixChangeDiff, 0, len(changes))
 	for _, change := range changes {
-		oldJSON, err := json.Marshal(previewSupportMatrixFields(before, change))
+		oldJSON, err := json.Marshal(diffSupportMatrixFields(before, change))
 		if err != nil {
-			return nil, fmt.Errorf("encode support matrix before preview: %w", err)
+			return nil, fmt.Errorf("encode support matrix before state: %w", err)
 		}
-		newJSON, err := json.Marshal(previewSupportMatrixFields(after, change))
+		newJSON, err := json.Marshal(diffSupportMatrixFields(after, change))
 		if err != nil {
-			return nil, fmt.Errorf("encode support matrix after preview: %w", err)
+			return nil, fmt.Errorf("encode support matrix after state: %w", err)
 		}
-		preview = append(preview, supportMatrixPreviewChange{Kind: change.Kind, MethodID: change.MethodID, ProductID: change.ProductID, Before: oldJSON, After: newJSON})
+		diffs = append(diffs, supportMatrixChangeDiff{Kind: change.Kind, MethodID: change.MethodID, ProductID: change.ProductID, Before: oldJSON, After: newJSON})
 	}
-	return preview, nil
+	return diffs, nil
 }
 
-func previewSupportMatrixFields(draft *gen.SupportDraft, change SupportMatrixChange) map[string]any {
+func diffSupportMatrixFields(draft *gen.SupportDraft, change SupportMatrixChange) map[string]any {
 	fields := map[string]any{}
 	var facts map[string]*gen.SupportFact
 	if change.Kind == "mapping" {
@@ -345,62 +264,8 @@ func previewSupportMatrixFields(draft *gen.SupportDraft, change SupportMatrixCha
 	return fields
 }
 
-func (s *supportMatrixWriter) view(proposal Proposal) (proposalView, error) {
-	if !proposal.PlatformGlobal || proposal.Target.OrganizationID != "" || proposal.Target.ProjectID.Valid || proposal.Target.ResourceID != "" || proposal.Target.ResourceKind != "" {
-		return proposalView{}, ErrProposalInvalidated
-	}
-	var preview supportMatrixPreview
-	if err := json.Unmarshal(proposal.Preview, &preview); err != nil || preview.RevisionBefore == "" || len(preview.Changes) == 0 {
-		return proposalView{}, ErrProposalInvalidated
-	}
-	changes := make([]proposalViewChange, 0, len(preview.Changes))
-	for _, change := range preview.Changes {
-		label := change.Kind + " " + change.MethodID
-		if change.ProductID != "" {
-			label += "/" + change.ProductID
-		}
-		if len(change.Before) == 0 || len(change.After) == 0 {
-			return proposalView{}, ErrProposalInvalidated
-		}
-		changes = append(changes, proposalViewChange{Setting: label, Before: string(change.Before), After: string(change.After)})
-	}
-	return proposalView{Summary: "Update the platform-global support matrix", PlatformGlobal: true, Changes: changes}, nil
-}
-
-func (s *supportMatrixWriter) execution(_ writeAuthority) ProposalExecution {
-	return ProposalExecution{Run: func(ctx context.Context, tx pgx.Tx, proposal Proposal) (string, json.RawMessage, error) {
-		if _, err := s.expectedState(ctx, tx, proposal); err != nil {
-			return "", nil, err
-		}
-		var args supportMatrixArguments
-		if err := json.Unmarshal(proposal.Arguments, &args); err != nil || len(args.Changes) == 0 {
-			return "", nil, ErrProposalInvalidated
-		}
-		matrix, err := s.readMatrix(ctx, tx)
-		if err != nil {
-			return "", nil, err
-		}
-		draft, err := applySupportMatrixChanges(matrix.Draft, args.Changes)
-		if err != nil {
-			return "", nil, ErrProposalInvalidated
-		}
-		updated, err := adminservice.UpdateSupportMatrixTx(ctx, tx, &gen.UpdateSupportMatrixPayload{Revision: args.Revision, Draft: draft})
-		if err != nil {
-			return "", nil, fmt.Errorf("update support matrix: %w", err)
-		}
-		result, err := json.Marshal(supportMatrixReceipt{Revision: updated.Revision})
-		if err != nil {
-			return "", nil, fmt.Errorf("encode support matrix receipt: %w", err)
-		}
-		return "succeeded", result, nil
-	}}
-}
-
-func (s *supportMatrixWriter) registerPrepare(server *mcp.Server) {
-	addProposalTool(server, &mcp.Tool{Name: "prepare_update_support_matrix", Title: "Prepare Global Support Matrix Update", Description: "Prepare bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The before/after preview includes only supplied fields and is stored for separate same-staff approval. Does not create catalogue entries or modify issuers. Requires admin:write.", Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true)}}, func(ctx context.Context, _ *mcp.CallToolRequest, input PrepareSupportMatrixInput) (*mcp.CallToolResult, ProposalOutput, error) {
-		out, err := s.prepare(ctx, input)
-		return nil, out, err
-	})
+func (s *supportMatrixWriter) register(server *mcp.Server) {
+	addWriteTool(server, &mcp.Tool{Name: string(OperationUpdateSupportMatrix), Title: "Update Global Support Matrix", Description: "Make bounded changes to existing global mapping or reference entries only. Use stable IDs and the exact revision from get_support_matrix_entry. Only supplied fields change; all other entries, notes, conditions, and verification flags are preserved. The result shows before and after for the supplied fields only. Does not create catalogue entries or modify issuers."}, s.apply)
 }
 
 var _ operationWriter = (*supportMatrixWriter)(nil)

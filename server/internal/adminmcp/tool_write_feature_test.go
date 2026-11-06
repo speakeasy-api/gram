@@ -2,226 +2,103 @@ package adminmcp
 
 import (
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"testing"
-	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featurerepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-func TestFeatureWriteApprovalAndExecution(t *testing.T) {
-	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_feature_write")
+func newFeatureWriterFixture(t *testing.T, f writeFixture) (*featureWriter, *productfeatures.Client) {
+	t.Helper()
 	redisContainer, newRedisClient, err := testenv.NewTestRedis(t.Context())
 	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, redisContainer.Terminate(context.Background())) })
+	t.Cleanup(func() { require.NoError(t, redisContainer.Terminate(context.WithoutCancel(t.Context()))) })
 	redisClient, err := newRedisClient(t, 0)
 	require.NoError(t, err)
 	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, redisClient)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	writer := &featureWriter{store: f.store, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes, baseURL: "https://staff.example.test" + Path}
-	tools := newWriteTools(f.store, writes, writer.baseURL, map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
-	staff := &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}
-	principal := Principal{Subject: f.owner.SubjectURN, Email: staff.Email, ClientID: "test-client", ClientRowID: f.owner.ClientRowID.String(), ConnectionID: f.owner.ConnectionID.String(), Generation: f.owner.Generation.String(), Scopes: []string{ScopeRead, ScopeWrite}, staff: staff}
-	ctx := contextvalues.SetAdminAuthContext(context.WithValue(t.Context(), principalKey{}, principal), staff)
-	state := func(org string, feature productfeatures.Feature) bool {
-		t.Helper()
-		enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: org, FeatureName: string(feature)})
-		require.NoError(t, err)
-		return enabled
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only the tested feature operation is enabled.
+	return &featureWriter{runner: f.runner, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes}, features
+}
+
+func featureEnabled(t *testing.T, f writeFixture, org string, feature productfeatures.Feature) bool {
+	t.Helper()
+	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: org, FeatureName: string(feature)})
+	require.NoError(t, err)
+	return enabled
+}
+
+func TestFeatureWriteChangesOnlyTheExactFeatureAndOrganization(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_feature_write")
+	writer, features := newFeatureWriterFixture(t, f)
+	ctx := writeContext(t, f)
+
+	for _, unreviewed := range []string{"custom_model_keys", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", "automatic-role-distribution", ""} {
+		_, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: unreviewed, Enabled: true})
+		require.ErrorContains(t, err, "available for this write", "unreviewed feature %q stays disabled", unreviewed)
 	}
+	_, err := writer.apply(ctx, FeatureInput{OrganizationID: "synthetic-a", Feature: "logs", Enabled: true})
+	require.ErrorIs(t, err, ErrStaleState, "a slug is not a canonical target")
 
-	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
-	require.Error(t, err, "retry keys are mandatory")
-	for _, unreviewed := range []string{"custom_model_keys", "remote_session_auto_refresh_enforced", "session_portability", "platform_mcp", "skills", ""} {
-		_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgA, Feature: unreviewed, Enabled: true, RetryKey: "not-supported-" + unreviewed})
-		require.Error(t, err, "unreviewed feature %q stays disabled", unreviewed)
-	}
-	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: "synthetic-a", Feature: "logs", Enabled: true, RetryKey: "slug"})
-	require.Error(t, err, "a slug is not a canonical target")
-
-	verifier := &fakeAdminVerifier{result: staff}
-	memory := testenv.NewMemoryCache()
-	approval := newStaffProposalApproval(f.store, NewStaffOAuthAuthorization(nil, nil, memory, verifier, f.cipher, staffAudience), memory, writes)
-	approval.operations = map[WriteOperation]approvableOperation{OperationSetOrganizationFeature: writer} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	handler := middleware.AdminOriginCheck(nil)(approval.Handler())
-
-	// Sequential, not subtests: features share one organisation so each
-	// run can check that the other features are left alone.
+	// Sequential, not subtests: features share one organization so each run
+	// can check that the others are left alone.
 	writable := []productfeatures.Feature{productfeatures.FeatureLogs, productfeatures.FeatureRemoteSessionAutoRefresh, productfeatures.FeatureSSO, productfeatures.FeatureSCIM}
-	// New organizations already enable role distribution by default. Start both
-	// exact targets from the same off state for this approval lifecycle test.
 	for _, orgID := range []string{f.orgA, f.orgB} {
 		for _, feature := range writable {
-			if !state(orgID, feature) {
-				continue
+			if featureEnabled(t, f, orgID, feature) {
+				_, err := featurerepo.New(f.db).DeleteFeature(t.Context(), featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
+				require.NoError(t, err)
 			}
-			_, err := featurerepo.New(f.db).DeleteFeature(t.Context(), featurerepo.DeleteFeatureParams{OrganizationID: orgID, FeatureName: string(feature)})
-			require.NoError(t, err)
 		}
 	}
-	for _, feature := range writable {
-		func() {
-			t.Logf("feature %s", feature)
-			input := PrepareFeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true, RetryKey: "feature-" + string(feature)}
-			prepared, err := writer.prepare(ctx, input)
-			require.NoError(t, err)
-			require.Equal(t, "https://staff.example.test"+Path+"/proposals/"+prepared.ProposalID, prepared.ApprovalURL)
-			var preview featurePreview
-			require.NoError(t, json.Unmarshal(prepared.Preview, &preview))
-			require.Equal(t, string(feature), preview.Feature)
-			require.False(t, preview.Before)
-			require.True(t, preview.After)
-			require.Equal(t, writableFeatures[feature], preview.SideEffects)
-			require.False(t, state(f.orgA, feature), "prepare does not mutate the entitlement")
-			require.False(t, state(f.orgB, feature))
-
-			replay, err := writer.prepare(ctx, input)
-			require.NoError(t, err)
-			require.True(t, replay.Replay)
-			require.Equal(t, prepared.ProposalID, replay.ProposalID)
-			input.Enabled = false
-			_, err = writer.prepare(ctx, input)
-			require.ErrorIs(t, err, ErrProposalConflict)
-			id, err := uuid.Parse(prepared.ProposalID)
-			require.NoError(t, err)
-			_, err = tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
-			require.ErrorIs(t, err, ErrProposalNotApproved)
-
-			page := httptest.NewRecorder()
-			handler.ServeHTTP(page, approvalRequest(http.MethodGet, id, nil, "browser-session"))
-			require.Equal(t, http.StatusOK, page.Code)
-			require.Contains(t, page.Body.String(), "Synthetic A")
-			require.Contains(t, page.Body.String(), "<td>"+string(feature)+" feature</td><td>Off</td><td>On</td>")
-			form := approvalForm(t, page.Body.String())
-			accepted := httptest.NewRecorder()
-			handler.ServeHTTP(accepted, approvalRequest(http.MethodPost, id, form, "browser-session"))
-			require.Equal(t, http.StatusOK, accepted.Code)
-
-			result, err := tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
-			require.NoError(t, err)
-			require.Equal(t, string(ProposalSucceeded), result.Status)
-			require.JSONEq(t, `{"changed":true}`, string(result.Result))
-			require.True(t, state(f.orgA, feature))
-			require.False(t, state(f.orgB, feature), "execution cannot affect a second tenant")
-			for _, untouched := range writable {
-				if untouched != feature {
-					require.False(t, state(f.orgA, untouched), "execution changes only the stored feature")
-				}
-			}
-			cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
-			require.NoError(t, err)
-			require.True(t, cached)
-			require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
-
-			result, err = tools.execute(ctx, ProposalIDInput{ProposalID: id.String()})
-			require.NoError(t, err)
-			require.True(t, result.Replay)
-			require.Equal(t, 1, countWriteEvents(t, f.db, id, "executed"))
-			status, err := tools.status(ctx, ProposalIDInput{ProposalID: id.String()})
-			require.NoError(t, err)
-			require.Equal(t, string(ProposalSucceeded), status.Status)
-			require.JSONEq(t, `{"changed":true}`, string(status.Result))
-
-			otherPrincipal := principal
-			otherPrincipal.Subject = "user:other-staff"
-			other := context.WithValue(ctx, principalKey{}, otherPrincipal)
-			_, err = tools.execute(other, ProposalIDInput{ProposalID: id.String()})
-			require.ErrorIs(t, err, ErrProposalNotFound)
-		}()
-		// Reset so the next feature starts from the same off state.
-		_, err = featurerepo.New(f.db).DeleteFeature(t.Context(), featurerepo.DeleteFeatureParams{OrganizationID: f.orgA, FeatureName: string(feature)})
+	for i, feature := range writable {
+		receipt, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true})
 		require.NoError(t, err)
+		require.Equal(t, featureReceipt{OrganizationID: f.orgA, Name: "Synthetic A", Slug: receipt.Slug, Feature: string(feature), Before: false, After: true, Changed: true, SideEffects: writableFeatures[feature]}, receipt)
+		require.True(t, featureEnabled(t, f, f.orgA, feature))
+		require.False(t, featureEnabled(t, f, f.orgB, feature), "a write cannot affect a second tenant")
+		for _, later := range writable[i+1:] {
+			require.False(t, featureEnabled(t, f, f.orgA, later), "a write changes only the named feature")
+		}
+		cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
+		require.NoError(t, err)
+		require.True(t, cached, "the cache follows the commit")
+		require.Equal(t, i+1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))
 	}
+
+	repeated, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
+	require.NoError(t, err)
+	require.False(t, repeated.Changed, "repeating a set is harmless")
+	require.EqualValues(t, len(writable), auditCount(t, f, audit.ActionOrganizationProductFeatureEnabled))
+
+	entry, err := audittest.LatestAuditLogByAction(t.Context(), f.db, audit.ActionOrganizationProductFeatureEnabled)
+	require.NoError(t, err)
+	require.Equal(t, f.orgA, entry.OrganizationID)
+	require.Equal(t, "staff-subject", entry.ActorID)
+	require.Equal(t, string(audit.SurfaceAdminMCP), *entry.ActingSurface)
+	require.Equal(t, "test-client", *entry.ActingClientID)
 
 	f.reauth()
-	_, err = writer.prepare(ctx, PrepareFeatureInput{OrganizationID: f.orgB, Feature: "logs", Enabled: true, RetryKey: "old-connection"})
+	_, err = writer.apply(ctx, FeatureInput{OrganizationID: f.orgB, Feature: "logs", Enabled: true})
 	require.ErrorIs(t, err, ErrConnectionChanged)
+	require.False(t, featureEnabled(t, f, f.orgB, productfeatures.FeatureLogs))
 }
 
-func TestFeatureWriteStaleStateAndDisabledSwitch(t *testing.T) {
+func TestFeatureWriteRefusedWhileSwitchedOff(t *testing.T) {
 	t.Parallel()
-	f := newProposalFixture(t, "admin_mcp_feature_stale")
-	writer := &featureWriter{store: f.store, writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	tx, err := f.db.Begin(t.Context())                                                                                                                       //nolint:glint // notestingrawsql: Exercise the transaction-bound state reader with a synthetic database.
-	require.NoError(t, err)
-	state, err := writer.readState(t.Context(), tx, f.orgA, productfeatures.FeatureLogs)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(t.Context()))
-	expected, err := json.Marshal(state)
-	require.NoError(t, err)
-	pInput := featureProposal(f.orgA, "stale-feature", true)
-	pInput.ExpectedState = expected
-	p, _, err := f.store.Create(t.Context(), f.owner, pInput, time.Now())
-	require.NoError(t, err)
-	_, err = featurerepo.New(f.db).EnableFeature(t.Context(), featurerepo.EnableFeatureParams{OrganizationID: f.orgA, FeatureName: "logs"})
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-	require.ErrorIs(t, err, ErrStaleState, "approval must reject a changed feature state")
-	closed, err := f.store.GetForOwner(t.Context(), p.ID, f.owner)
-	require.NoError(t, err)
-	require.Equal(t, ProposalInvalidated, closed.Status)
+	f := newWriteFixture(t, "admin_mcp_feature_disabled")
+	writer, _ := newFeatureWriterFixture(t, f)
 	writer.writes = WriteConfig{}
-	tools := newWriteTools(f.store, writer.writes, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
-	_, err = writer.prepare(t.Context(), PrepareFeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true, RetryKey: "disabled"})
+	_, err := writer.apply(writeContext(t, f), FeatureInput{OrganizationID: f.orgA, Feature: "logs", Enabled: true})
 	require.ErrorIs(t, err, ErrWriteDisabled)
-	_, err = tools.execute(t.Context(), ProposalIDInput{ProposalID: p.ID.String()})
-	require.ErrorIs(t, err, ErrWriteDisabled)
-}
-
-// A stored proposal naming a feature outside the allowlist can only come from
-// direct database access or a retired rollout. Approval refuses it, and execution refuses it even
-// when approval was bypassed.
-func TestFeatureWriteRejectsUnreviewedStoredFeature(t *testing.T) {
-	t.Parallel()
-	assertStoredFeatureRejected(t, "custom_model_keys")
-}
-
-func TestFeatureWriteRejectsRetiredStoredFeature(t *testing.T) {
-	t.Parallel()
-	assertStoredFeatureRejected(t, "automatic-role-distribution")
-}
-
-func assertStoredFeatureRejected(t *testing.T, feature string) {
-	t.Helper()
-	f := newProposalFixture(t, "admin_mcp_feature_unreviewed")
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
-	writer := &featureWriter{store: f.store, writes: writes}
-	tools := newWriteTools(f.store, writes, "", map[WriteOperation]operationWriter{OperationSetOrganizationFeature: writer}) //nolint:exhaustive // Only the implemented operation is dispatched.
-	ctx := writeContext(t, f)
-	before, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: feature})
-	require.NoError(t, err)
-	unreviewed := func(key string) NewProposal {
-		p := featureProposal(f.orgA, key, true)
-		p.Arguments = json.RawMessage(`{"feature":"` + feature + `","enabled":true}`)
-		return p
-	}
-
-	p, _, err := f.store.Create(t.Context(), f.owner, unreviewed("unreviewed-approve"), time.Now())
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), p.ID, f.owner.SubjectURN, p.ProposalDigest, time.Now(), allowProposalBrowser, writer.revalidate)
-	require.ErrorIs(t, err, ErrProposalInvalidated)
-
-	q, _, err := f.store.Create(t.Context(), f.owner, unreviewed("unreviewed-execute"), time.Now())
-	require.NoError(t, err)
-	_, err = f.store.Approve(t.Context(), q.ID, f.owner.SubjectURN, q.ProposalDigest, time.Now(), allowProposalBrowser, allowProposalBrowser)
-	require.NoError(t, err)
-	_, err = tools.execute(ctx, ProposalIDInput{ProposalID: q.ID.String()})
-	require.ErrorIs(t, err, ErrProposalInvalidated)
-	require.Equal(t, 0, countWriteEvents(t, f.db, q.ID, "executed"))
-	enabled, err := featurerepo.New(f.db).IsFeatureEnabled(t.Context(), featurerepo.IsFeatureEnabledParams{OrganizationID: f.orgA, FeatureName: feature})
-	require.NoError(t, err)
-	require.Equal(t, before, enabled)
+	require.False(t, featureEnabled(t, f, f.orgA, productfeatures.FeatureLogs))
 }
 
 func TestFeatureWriteRequiresStaffWriteAuthority(t *testing.T) {
@@ -241,19 +118,83 @@ func TestFeatureWriteRequiresStaffWriteAuthority(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := writer.prepare(tc.ctx(t), PrepareFeatureInput{OrganizationID: "org_role_rollout", Feature: string(productfeatures.FeatureSSO), Enabled: true, RetryKey: "denied"})
+			_, err := writer.apply(tc.ctx(t), FeatureInput{OrganizationID: "org_role_rollout", Feature: string(productfeatures.FeatureSSO), Enabled: true})
 			require.ErrorIs(t, err, tc.want)
 		})
 	}
 }
 
-func TestFeatureWriteRejectsRetiredRoleDistributionFlag(t *testing.T) {
+func TestFeatureWriteRefreshLeavesEnforcementAlone(t *testing.T) {
 	t.Parallel()
-	writer := &featureWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only feature writes are enabled.
-	for _, enabled := range []bool{false, true} {
-		_, ok := writableFeature("automatic-role-distribution")
-		require.False(t, ok)
-		_, err := writer.prepare(writePrincipalContext(t, []string{ScopeRead, ScopeWrite}), PrepareFeatureInput{OrganizationID: "org_retired_flag", Feature: "automatic-role-distribution", Enabled: enabled, RetryKey: "retired"})
-		require.ErrorContains(t, err, "available for this write")
+	f := newWriteFixture(t, "admin_mcp_refresh_feature")
+	writer, features := newFeatureWriterFixture(t, f)
+	ctx := writeContext(t, f)
+	for _, enabled := range []bool{true, false} {
+		receipt, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureRemoteSessionAutoRefresh), Enabled: enabled})
+		require.NoError(t, err)
+		require.Contains(t, receipt.SideEffects, "enforcement is not changed")
+		require.Equal(t, enabled, featureEnabled(t, f, f.orgA, productfeatures.FeatureRemoteSessionAutoRefresh))
+		require.False(t, featureEnabled(t, f, f.orgA, productfeatures.FeatureRemoteSessionAutoRefreshEnforced))
+		enforcedCache, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureRemoteSessionAutoRefreshEnforced)
+		require.NoError(t, err)
+		require.False(t, enforcedCache)
 	}
+}
+
+func TestFeatureWriteRefreshRefusesEnforcedOrganizations(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_refresh_enforced")
+	writer, _ := newFeatureWriterFixture(t, f)
+	_, err := featurerepo.New(f.db).EnableFeature(t.Context(), featurerepo.EnableFeatureParams{OrganizationID: f.orgA, FeatureName: string(productfeatures.FeatureRemoteSessionAutoRefreshEnforced)})
+	require.NoError(t, err)
+	for _, enabled := range []bool{true, false} {
+		_, err := writer.apply(writeContext(t, f), FeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureRemoteSessionAutoRefresh), Enabled: enabled})
+		require.ErrorContains(t, err, "cannot change enforcement")
+	}
+	require.True(t, featureEnabled(t, f, f.orgA, productfeatures.FeatureRemoteSessionAutoRefreshEnforced))
+}
+
+func TestFeatureWriteEntitlementsPreserveConnectionState(t *testing.T) {
+	t.Parallel()
+	for _, feature := range []productfeatures.Feature{productfeatures.FeatureSSO, productfeatures.FeatureSCIM} {
+		t.Run(string(feature), func(t *testing.T) {
+			t.Parallel()
+			f := newWriteFixture(t, "admin_mcp_entitlement_"+string(feature))
+			writer, _ := newFeatureWriterFixture(t, f)
+			ctx := writeContext(t, f)
+			orgs := orgrepo.New(f.db)
+			workosID := conv.ToPGText("workos_placeholder")
+			_, err := orgs.SetOrgWorkosID(ctx, orgrepo.SetOrgWorkosIDParams{OrganizationID: f.orgA, WorkosID: workosID})
+			require.NoError(t, err)
+			require.NoError(t, orgs.SetSSOEnabled(ctx, orgrepo.SetSSOEnabledParams{WorkosID: workosID, Enabled: conv.PtrToPGBool(new(true)), WorkosLastEventID: conv.ToPGText("event_placeholder")}))
+			require.NoError(t, orgs.SetSCIMEnabled(ctx, orgrepo.SetSCIMEnabledParams{WorkosID: workosID, Enabled: conv.PtrToPGBool(new(true)), WorkosLastEventID: conv.ToPGText("event_placeholder")}))
+			before, err := orgs.GetOrganizationMetadata(ctx, f.orgA)
+			require.NoError(t, err)
+			for _, enabled := range []bool{true, false} {
+				receipt, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: enabled})
+				require.NoError(t, err)
+				require.Contains(t, receipt.SideEffects, "setup portal links")
+				require.Equal(t, enabled, featureEnabled(t, f, f.orgA, feature))
+				after, err := orgs.GetOrganizationMetadata(ctx, f.orgA)
+				require.NoError(t, err)
+				require.Equal(t, before, after, "entitlements must not change connection status or other organization metadata")
+			}
+		})
+	}
+}
+
+func TestFeatureWriteAuditFailureRollsBack(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_feature_rollback")
+	writer, features := newFeatureWriterFixture(t, f)
+	ctx := writeContext(t, f)
+	require.NoError(t, audittest.RejectAction(ctx, f.db, audit.ActionOrganizationProductFeatureEnabled))
+	_, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureSSO), Enabled: true})
+	require.Error(t, err)
+	require.False(t, featureEnabled(t, f, f.orgA, productfeatures.FeatureSSO))
+	cached, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureSSO)
+	require.NoError(t, err)
+	require.False(t, cached, "a failed write leaves the cache alone")
+	require.Zero(t, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))
+	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventFailed))
 }

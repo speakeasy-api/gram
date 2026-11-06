@@ -22,11 +22,10 @@ const tools: AdminMcpTool[] = [
     access: "read",
   },
   {
-    name: "prepare_registry_promotion_curation",
+    name: "curate_registry_promotion_candidate",
     title: "Prepare Catalogue Candidate Review Status",
-    description:
-      "Reject, archive, or restore a candidate after browser approval.",
-    access: "approval",
+    description: "Reject, archive, or restore a candidate.",
+    access: "write",
   },
   {
     name: "create_image_upload_url",
@@ -49,8 +48,7 @@ it("loads live tool descriptions and access labels without MCP installation", as
   });
   expect(within(list).getAllByRole("listitem")).toHaveLength(3);
   expect(within(list).getByText("Read-only")).toBeTruthy();
-  expect(within(list).getByText("Approval flow")).toBeTruthy();
-  expect(within(list).getByText("Direct write")).toBeTruthy();
+  expect(within(list).getAllByText("Write").length).toBeGreaterThan(0);
   expect(within(list).getByText(tools[0]!.description)).toBeTruthy();
   expect(fetchTools).toHaveBeenCalledWith("/admin-mcp/tools", {
     signal: expect.any(AbortSignal),
@@ -65,7 +63,7 @@ it("combines search across names and descriptions with the access filter", async
     target: { value: "  ARCHIVE  " },
   });
   expect(screen.getByText("Showing 1 of 3 tools")).toBeTruthy();
-  expect(screen.getByText("prepare_registry_promotion_curation")).toBeTruthy();
+  expect(screen.getByText("curate_registry_promotion_candidate")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Read-only" }));
   expect(
     screen.getByText("No tools match your search and filter."),

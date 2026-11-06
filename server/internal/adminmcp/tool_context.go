@@ -99,15 +99,14 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 	})
 }
 
-// writeWorkflows describes the enabled writes. Most are proposals that need
-// separate browser approval; a direct write applies as soon as it is called.
+// writeWorkflows describes the enabled writes.
 func writeWorkflows(operations []WriteOperation) []string {
 	workflows := []string{}
-	if slices.ContainsFunc(operations, func(op WriteOperation) bool { return !op.direct() }) {
-		workflows = append(workflows, "prepare enabled exact staff changes for separate browser approval, execute approved proposals and inspect receipts")
+	if slices.ContainsFunc(operations, func(op WriteOperation) bool { return op != OperationUploadPlatformImage }) {
+		workflows = append(workflows, "apply enabled exact staff changes immediately, each after the user explicitly confirms that exact change")
 	}
 	if slices.Contains(operations, OperationUploadPlatformImage) {
-		workflows = append(workflows, "create single-use image upload URLs directly, without browser approval; uploaded images are public and persist immediately")
+		workflows = append(workflows, "create single-use image upload URLs; uploaded images are public and persist immediately")
 	}
 	return workflows
 }

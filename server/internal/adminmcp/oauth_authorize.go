@@ -266,7 +266,7 @@ var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doct
 <h1>Connect Staff Admin MCP</h1>
 <p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p>
 {{if .Write}}
-<p><strong>This client also requests admin:write.</strong> It may prepare staff changes. Each change still needs your separate approval in this admin site before it runs.</p>
+<p><strong>This client also requests admin:write.</strong> It can change customer and platform data as soon as it calls a write tool. The client is expected to ask you first, but the server does not enforce that, so approve write access only for a client you trust.</p>
 {{else}}
 <p>Access is read-only.</p>
 {{end}}

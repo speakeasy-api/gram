@@ -59,25 +59,13 @@ var AllWriteOperations = []WriteOperation{
 	OperationUploadPlatformImage,
 }
 
-// PlatformGlobal reports whether an operation has no tenant target. Global
-// operations have no customer audit row, so the staff event trail is their
-// only durable record.
-func (op WriteOperation) PlatformGlobal() bool {
-	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
-		return true
-	default:
-		return false
-	}
-}
-
 func (op WriteOperation) known() bool {
 	return slices.Contains(AllWriteOperations, op)
 }
 
 // WriteConfig is the server-side write switch. The zero value disables every
 // write: Enabled is the global switch and each operation needs its own switch.
-// Both are checked at consent, prepare, approve and execute.
+// Both are checked at consent and on every write.
 type WriteConfig struct {
 	Enabled    bool
 	Operations map[WriteOperation]bool
@@ -116,13 +104,6 @@ func (op WriteOperation) implemented() bool {
 	}
 }
 
-// direct reports whether an operation applies immediately instead of through a
-// stored proposal and browser approval. Only changes no customer sees until an
-// approved change references them qualify.
-func (op WriteOperation) direct() bool {
-	return op == OperationUploadPlatformImage
-}
-
 // WritesAvailable reports whether consent may offer admin:write at all.
 func (c WriteConfig) WritesAvailable() bool {
 	if !c.Enabled {
@@ -158,8 +139,7 @@ var (
 	errUnknownWriteOp = errors.New("unknown admin write operation")
 )
 
-// writeAuthority is the verified identity a write proposal is bound to. It is
-// derived only from the authenticated principal and verifier-produced staff
+// writeAuthority is the verified identity making a write. It is derived only from the authenticated principal and verifier-produced staff
 // context, never from tool arguments.
 type writeAuthority struct {
 	Principal Principal
@@ -167,8 +147,7 @@ type writeAuthority struct {
 	Operation WriteOperation
 }
 
-// requireWriteAuthority is the single gate every write tool and approval path
-// calls. It checks the operation allowlist, both switches, admin:write and the
+// requireWriteAuthority is the single gate every write tool calls. It checks the operation allowlist, both switches, admin:write and the
 // live staff context the authenticator established for this request.
 func requireWriteAuthority(ctx context.Context, config WriteConfig, op WriteOperation) (writeAuthority, error) {
 	if !op.known() {
@@ -185,9 +164,7 @@ func requireWriteAuthority(ctx context.Context, config WriteConfig, op WriteOper
 	return authority, nil
 }
 
-// requireWriteIdentity checks admin:write and the live staff context without
-// naming an operation. The shared proposal tools use it to find the caller's
-// own proposal, then call requireWriteAuthority for the operation stored on it.
+// requireWriteIdentity checks admin:write and the live staff context.
 func requireWriteIdentity(ctx context.Context) (writeAuthority, error) {
 	principal, ok := principalFromContext(ctx)
 	if !ok || principal.Subject == "" || principal.ClientID == "" || principal.ClientRowID == "" || principal.ConnectionID == "" || principal.Generation == "" {

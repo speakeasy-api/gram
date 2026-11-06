@@ -210,7 +210,7 @@ func registerServerHealthTools(server *mcp.Server, organizations OrganizationRea
 			"An upstream client's validation_status_counts cover live sessions only; its reauthorizations and first_linked_at also include revoked sessions. " +
 			"Upstream session counts are per client, so a client shared by several issuers reports the same sessions under each. " +
 			"An organization or global issuer's user session counts span every project that uses it, not just this server. " +
-			"tool_calls.type logging:disabled means the organization's logs feature is off and calls were never recorded; prepare_set_organization_feature can propose turning logs on.",
+			"tool_calls.type logging:disabled means the organization's logs feature is off and calls were never recorded; set_organization_feature can turn logs on once the user confirms.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input MCPServerHealthInput) (*mcp.CallToolResult, MCPServerHealth, error) {
 		if !verifiedStaff(ctx) {
