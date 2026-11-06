@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	unproxiedrepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
@@ -610,6 +611,18 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 	offer(chained, identityProvider, authz.AuthClientTypeEMA)
 	nothing := createServer(t, ctx, si, projectID, derived, "nothing")
 
+	// Unproxied servers sharing an issuer never receive typed offers.
+	backend, err := unproxiedrepo.New(si.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Unproxied"),
+		Slug: conv.ToPGText("unproxied"), Url: "https://unproxied.example/mcp",
+	})
+	require.NoError(t, err)
+	unproxied, err := si.q.CreateEligibleMCPServerFixture(ctx, repo.CreateEligibleMCPServerFixtureParams{
+		ProjectID: projectID, Name: conv.ToPGText("Unproxied"), Slug: conv.ToPGText("unproxied"),
+		UnproxiedMcpServerID: conv.ToNullUUID(backend.ID), RemoteSessionIssuerID: conv.ToNullUUID(derived), Visibility: "private",
+	})
+	require.NoError(t, err)
+
 	issuerOf := func(serverID uuid.UUID, enforced bool) (uuid.UUID, bool) {
 		rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: enforced})
 		require.NoError(t, err)
@@ -629,12 +642,26 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 		return one.IssuerID, true
 	}
 
-	for _, serverID := range []uuid.UUID{personal, chained, nothing} {
+	for _, serverID := range []uuid.UUID{personal, chained, nothing, unproxied} {
 		issuer, eligible := issuerOf(serverID, false)
 		require.True(t, eligible)
 		require.Equal(t, derived, issuer, "the derived authorization server stands without enforcement")
 	}
-	issuer, eligible := issuerOf(personal, true)
+	issuer, eligible := issuerOf(unproxied, true)
+	require.True(t, eligible, "unproxied servers stay eligible under enforcement without offers")
+	require.Equal(t, derived, issuer)
+	unproxiedRow, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: unproxied, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.False(t, unproxiedRow.TypedAuthEnforced, "client resolution must also retain derived clients for unproxied servers")
+	require.Empty(t, unproxiedRow.OfferedClientIds)
+	listed, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	for _, row := range listed {
+		if row.ID == unproxied {
+			require.False(t, row.TypedAuthEnforced, "list client resolution must retain derived clients too")
+		}
+	}
+	issuer, eligible = issuerOf(personal, true)
 	require.True(t, eligible)
 	require.Equal(t, offered, issuer)
 	issuer, eligible = issuerOf(chained, true)

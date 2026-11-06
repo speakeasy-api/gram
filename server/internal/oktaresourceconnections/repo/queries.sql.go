@@ -34,8 +34,8 @@ func (q *Queries) ClearIssuerDiscoveryFixture(ctx context.Context, arg ClearIssu
 }
 
 const createEligibleMCPServerFixture = `-- name: CreateEligibleMCPServerFixture :one
-INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, unproxied_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id
 `
 
@@ -44,6 +44,7 @@ type CreateEligibleMCPServerFixtureParams struct {
 	Name                  pgtype.Text
 	Slug                  pgtype.Text
 	RemoteMcpServerID     uuid.NullUUID
+	UnproxiedMcpServerID  uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	Visibility            string
@@ -55,6 +56,7 @@ func (q *Queries) CreateEligibleMCPServerFixture(ctx context.Context, arg Create
 		arg.Name,
 		arg.Slug,
 		arg.RemoteMcpServerID,
+		arg.UnproxiedMcpServerID,
 		arg.RemoteSessionIssuerID,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
@@ -301,7 +303,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , $1::boolean AS typed_auth_enforced
+  , CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
@@ -332,7 +334,7 @@ JOIN projects AS p
  AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN $1::boolean THEN (
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
        SELECT oc.remote_session_issuer_id
        FROM mcp_server_auth_clients AS ol
        JOIN mcp_auth_clients AS oa
@@ -723,7 +725,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , $1::boolean AS typed_auth_enforced
+  , CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
@@ -754,7 +756,7 @@ JOIN projects AS p
  AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = CASE WHEN $1::boolean THEN (
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
        SELECT oc.remote_session_issuer_id
        FROM mcp_server_auth_clients AS ol
        JOIN mcp_auth_clients AS oa
@@ -836,7 +838,9 @@ type ListEligibleServersRow struct {
 // matter: readiness is about the upstream authorization server. Undiscovered
 // issuers are returned so the list can count them; whether the issuer
 // advertises ID-JAG is decided in Go so the derivation stays pure.
-// Where typed auth clients choose upstream authentication (typed_auth_enforced)
+// Typed auth clients choose upstream authentication only for proxied servers.
+// Unproxied servers have no typed offers and retain their derived issuer and clients.
+// Where typed auth clients apply (typed_auth_enforced),
 // a server's authorization server is the one its personal or identity-provider
 // auth clients offer: an identity-provider client's if it offers one, else the
 // first by id. Elsewhere it is the one derived for the server.

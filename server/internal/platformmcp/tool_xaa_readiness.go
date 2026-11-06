@@ -529,8 +529,8 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 		out.NotServedReason = new(xaaNotRoutable)
 		return out, callback, nil
 	}
-	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true})
 	scope := uuid.NullUUID{UUID: remoteSessionIssuerID, Valid: true}
+	req, routable := identitychaining.NewUpstreamRequest(organizationID, projectID, userIssuerID, resource, server.TunneledMcpServerID.Valid, scope)
 	resources := []string{resource}
 	discoveryFailed := false
 	if routable {

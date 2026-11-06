@@ -208,10 +208,12 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	}
 	subject := urn.NewUserSubject(principal.UserID)
 	var authorization remotesessions.ResolvedAuthorization
+	chosen := clients[0]
 	if enforced {
 		// A server may offer several registrations for its callers to choose
 		// among; the caller is ready through the first that yields a credential,
 		// and the first registration's failure is reported when none does.
+		var firstErr error
 		for i, client := range clients {
 			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID)))})
 			token := tokens[client.RemoteSessionIssuerID]
@@ -219,32 +221,34 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 				resolveErr = remotesessions.ErrNoValidToken
 			}
 			if i == 0 {
-				err = resolveErr
+				firstErr = resolveErr
 			}
 			if resolveErr == nil {
-				err = nil
-				clients[0] = client
+				chosen = client
 				authorization = remotesessions.ResolvedAuthorization{AccessToken: token.Token, RemoteSessionID: token.RemoteSessionID, RemoteSessionUpdatedAt: token.RemoteSessionUpdatedAt, RemoteSessionClientID: client.ID, RemoteSessionIssuerID: client.RemoteSessionIssuerID, CredentialOwner: token.CredentialOwner}
 				break
 			}
+		}
+		if authorization.AccessToken == "" {
+			err = firstErr
 		}
 	} else {
 		if len(clients) != 1 {
 			return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil
 		}
-		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID))), projectID, principal.OrganizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
+		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID))), projectID, principal.OrganizationID, userSessionIssuerID, chosen.RemoteSessionIssuerID, subject, remote.Url)
 	}
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) || errors.Is(err, remotesessions.ErrChosenClientUnbound) {
-		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_client"), nil
+		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_client"), nil
 	}
 	if state, evidence, ok := ClientCredentialReadiness(err); ok {
-		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
+		return p.result(principal, registrationID, state, evidence, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if errors.Is(err, remotesessions.ErrNoValidToken) {
 		if chained, ok := ResolveIdentityChainingReadiness(ctx, p.chaining, principal.OrganizationID, principal.UserID, projectID, userSessionIssuerID, remote.Url); ok {
 			return p.result(principal, registrationID, chained.State, chained.EvidenceCode, remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chained.RemoteSessionIssuerID}, chained.Absence), nil
 		}
-		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_session"), nil
+		return p.result(principal, registrationID, ReadinessNeedsGramAuthorization, "upstream_authorization_required", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: chosen.RemoteSessionIssuerID}, "no_session"), nil
 	}
 	if err != nil {
 		return ProviderReadinessProbeResult{}, fmt.Errorf("resolve registered Remote MCP authorization: %w", err)

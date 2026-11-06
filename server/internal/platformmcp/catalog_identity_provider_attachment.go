@@ -162,8 +162,16 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 	if attachedClient, attached, err := s.matchingAttachment(ctx, s.db, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	} else if attached {
-		if err := s.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, attachedClient); err != nil {
-			return CatalogIdentityProviderAttachmentResult{}, err
+		enforced, err := s.authEnforcement.Enforced(ctx, principal.OrganizationID)
+		if err != nil {
+			return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+		}
+		// An offered typed client is already attached. Legacy synchronization
+		// would create a second auth client for an administrator's offer.
+		if !enforced {
+			if err := s.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, attachedClient); err != nil {
+				return CatalogIdentityProviderAttachmentResult{}, err
+			}
 		}
 		return CatalogIdentityProviderAttachmentResult{Attached: true, ProviderURL: metadata.Issuer}, nil
 	}

@@ -2,22 +2,29 @@ package platformmcp
 
 import (
 	"context"
+	"crypto/x509"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // typedCatalogServer fronts the fixture's remote source with an MCP server
@@ -121,4 +128,48 @@ func TestSetupConnectionFollowsTypedOffersUnderEnforcement(t *testing.T) {
 			require.Equal(t, tc.code, result.Code)
 		})
 	}
+}
+
+// A missing grant on the first offer must not hide a usable second offer or
+// attribute its successful probe to the first provider.
+func TestRemoteMCPReadinessChoosesFirstUsableTypedOffer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_readiness_usable_offer")
+	require.NoError(t, err)
+	f := seedChainedCatalogFixtureClient(t, ctx, conn, false)
+	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: f.principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	serverID := typedCatalogServer(t, ctx, conn, f, 2)
+	prober := NewRemoteMCPReadinessProber(testenv.NewLogger(t), conn, testenv.NewEncryptionClient(t), f.policy, f.sessions)
+	clients, err := prober.offeredRegistrations(ctx, f.principal.OrganizationID, f.projectID, []uuid.UUID{serverID}, []string{authz.AuthClientTypeRemoteSession})
+	require.NoError(t, err)
+	require.Len(t, clients, 2)
+	chosen := clients[1]
+	token, err := testenv.NewEncryptionClient(t).Encrypt([]byte("usable-offer-token"))
+	require.NoError(t, err)
+	session, err := remotesessionsrepo.New(conn).UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(f.principal.UserID), UserSessionIssuerID: f.userSessionIssuerID, RemoteSessionClientID: chosen.ID, AccessTokenEncrypted: token, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	require.NoError(t, err)
+	mcpServer := mcp.NewServer(&mcp.Implementation{Name: "typed-offer-target", Version: "1.0.0"}, nil)
+	handler := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return mcpServer }, nil)
+	upstream := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer usable-offer-token" {
+			http.Error(w, "authorization required", http.StatusUnauthorized)
+			return
+		}
+		handler.ServeHTTP(w, r)
+	}))
+	t.Cleanup(upstream.Close)
+	roots := x509.NewCertPool()
+	roots.AddCert(upstream.Certificate())
+	f.policy, err = guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
+	require.NoError(t, err)
+	_, err = remotemcprepo.New(conn).UpdateServer(ctx, remotemcprepo.UpdateServerParams{ID: f.remoteID, ProjectID: f.projectID, Url: upstream.URL, TransportType: "streamable-http"})
+	require.NoError(t, err)
+	result := f.probe(t, conn, nil)
+	require.Equal(t, ReadinessReady, result.State)
+	require.Equal(t, "tools_list_ok", result.EvidenceCode)
+	require.Equal(t, chosen.RemoteSessionIssuerID, result.AuthorizationIdentity.RemoteSessionIssuerID)
+	require.Equal(t, chosen.ID, result.AuthorizationIdentity.RemoteSessionClientID)
+	require.Equal(t, session.ID, result.AuthorizationIdentity.RemoteSessionID)
 }
