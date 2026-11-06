@@ -50,13 +50,13 @@ pr_id=$(echo "$pr" | jq -r .id)
 # three are green, 1 when one failed, 2 while any are still running.
 required_checks() {
   local json name bucket missing=0
-  json=$(gh pr checks "$number" --repo "$REPO" --json name,bucket,startedAt)
+  json=$(gh pr checks "$number" --repo "$REPO" --json name,bucket,startedAt) || return 1
   for name in "CI Gate" "Lint PR Title and Changesets" "Tag branch changes"; do
     # shellcheck disable=SC2016 # $n is a jq variable
     bucket=$(echo "$json" | jq -r --arg n "$name" 'map(select(.name == $n)) | sort_by(.startedAt) | last | .bucket // "missing"')
     case "$bucket" in
       pass) echo "Required check green: ${name}" ;;
-      fail|cancel)
+      fail|cancel|skipping)
         echo "Required check ${bucket}: ${name}" >&2
         return 1
         ;;
@@ -76,11 +76,11 @@ deadline=$((SECONDS + 1800))
 while true; do
   rc=0
   required_checks || rc=$?
-  if [[ "$rc" -eq 0 || "$DRY_RUN" == "true" ]]; then
-    break
-  fi
   if [[ "$rc" -eq 1 ]]; then
     exit 1
+  fi
+  if [[ "$rc" -eq 0 || "$DRY_RUN" == "true" ]]; then
+    break
   fi
   if (( SECONDS >= deadline )); then
     echo "Required checks were still running after 30 minutes." >&2
@@ -102,6 +102,7 @@ fi
 
 if [[ "$review" != "APPROVED" ]]; then
   gh api "repos/${REPO}/pulls/${number}/reviews" \
+    -f commit_id="$sha" \
     -f event=APPROVE \
     -f body="Scheduled release approval. Required checks are green on ${sha}." >/dev/null
   echo "Approved pull request #${number}."

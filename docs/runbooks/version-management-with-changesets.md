@@ -64,5 +64,6 @@ Pacific it approves the open `chore: version packages` pull request and adds it
 to the merge queue, once the ruleset's required checks are green on the current
 head. The approval comes from a GitHub App other than gram-bot, because
 gram-bot opened the pull request and GitHub rejects a self-approval. A review
-that requests changes stops the run. Dispatch the workflow with dry run to see
-the decision without approving or enqueueing.
+that requests changes stops the run. The run waits up to 30 minutes for the
+required checks, and fails if one is still pending or is not successful. Dispatch
+the workflow with dry run to see the decision without approving or enqueueing.
