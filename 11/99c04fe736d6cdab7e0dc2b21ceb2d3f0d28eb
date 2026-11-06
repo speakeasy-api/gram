@@ -1,0 +1,18 @@
+server/database/schema.sql
+  h_2620cc60cfd1e9 9423
+server/migrations/20261106105841_drop_principal_grants_effect.sql
+  h_2620cc60cfd1e9 1-6
+server/migrations/atlas.sum
+  h_2620cc60cfd1e9 1,523
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "1199c04fe736d6cdab7e0dc2b21ceb2d3f0d28eb",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
