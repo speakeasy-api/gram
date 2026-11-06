@@ -78,11 +78,15 @@ func checkTables(reg *Registry) []error {
 			errs = append(errs, fmt.Errorf("Facts entry %s#%s matches no relation", key.Type, key.Relation))
 		}
 	}
-	for key := range Answers {
+	for key, scope := range Answers {
 		if def := reg.Types[key.Type]; def == nil || def.Permissions[key.Permission] == nil {
 			errs = append(errs, fmt.Errorf("Answers names missing permission %s#%s", key.Type, key.Permission))
 		}
+		if _, ok := ScopeCatalogue[scope]; !ok {
+			errs = append(errs, fmt.Errorf("Answers maps %s#%s to unknown scope %s", key.Type, key.Permission, scope))
+		}
 	}
+	errs = append(errs, checkSelectorsConsumed(reg)...)
 	for _, caveat := range reg.Caveats {
 		for _, param := range caveat.GrantedParams {
 			if !selectorKeys[strings.TrimPrefix(param, "granted_")] {
@@ -146,4 +150,38 @@ func collectSubtracted(reg *Registry, typeName string, expr Expr, subtracted boo
 			collectSubtracted(reg, typeName, child, subtracted, seen, out)
 		}
 	}
+}
+
+// checkSelectorsConsumed fails when a selector key a scope's rows may carry is
+// neither a project edge nor a granted_ parameter of the caveat on every
+// subject of every relation holding that scope. A key nothing reads would be
+// dropped when the row lands, silently widening the grant.
+func checkSelectorsConsumed(reg *Registry) []error {
+	var errs []error
+	for _, def := range reg.Types {
+		for _, rel := range def.Relations {
+			if rel.Scope == "" {
+				continue
+			}
+			resourceType := resourceTypeForScope(rel.Scope)
+			for _, key := range ScopeCatalogue[rel.Scope].Selectors {
+				if key == SelectorProjectID && landsOnProject(resourceType) {
+					continue
+				}
+				for _, subject := range rel.Subjects {
+					// a key policy carries only resource and project keys,
+					// enforced when it is written
+					if subject.Type == "api_key" {
+						continue
+					}
+					caveat := reg.Caveats[subject.Caveat]
+					if caveat == nil || !slices.Contains(caveat.GrantedParams, "granted_"+key) {
+						errs = append(errs, fmt.Errorf("%s#%s: selector key %s is not read for subject %s", def.Name, rel.Name, key, subject.Type))
+						break
+					}
+				}
+			}
+		}
+	}
+	return errs
 }

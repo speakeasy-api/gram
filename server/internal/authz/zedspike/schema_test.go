@@ -45,7 +45,7 @@ func TestSchemaCompiles(t *testing.T) {
 	compiled, err := CompileSchema()
 	require.NoError(t, err)
 	require.Len(t, compiled.ObjectDefinitions, 14)
-	require.Len(t, compiled.CaveatDefinitions, 8)
+	require.Len(t, compiled.CaveatDefinitions, 9)
 	newDevContext(t)
 }
 

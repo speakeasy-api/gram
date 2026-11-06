@@ -15,13 +15,13 @@ What is real and what is a stub:
 | Row landing (`Registry.Land`): a grant row read as relationships       | Real.                                                                                                                                |
 | Typed call sites (`refs.go`) and the `Client` (policies, intersection) | Real shape, small.                                                                                                                   |
 | The in-process evaluator (`RegistryEvaluator`) and `Predicate.SQL`     | Stubs returning `ErrNotImplemented`.                                                                                                 |
-| Conformance test                                                       | Real on SpiceDB's side: 36 cases run through SpiceDB's own evaluator over our rows. Our evaluator's side is skipped until it exists. |
+| Conformance test                                                       | Real on SpiceDB's side: 39 cases run through SpiceDB's own evaluator over our rows. Our evaluator's side is skipped until it exists. |
 
 ## Layout
 
 | File                  | What it holds                                                                                                                                     |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `rbac.zed`            | The schema: 14 definitions, 8 partials, 8 caveats. The only place a permission is defined.                                                        |
+| `rbac.zed`            | The schema: 14 definitions, 8 partials, 9 caveats. The only place a permission is defined.                                                        |
 | `schema.go`           | `go:embed`, `CompileSchema` (SpiceDB `pkg/schemadsl/compiler`), `LoadRegistry` (walks the compiled protos into `Registry`).                       |
 | `registry.go`         | The compiled shape: types, relations (grant, direct, block, own block, edge, fact), permission expressions, caveats.                              |
 | `catalogue.go`        | `ScopeCatalogue` (description, sensitive, strict, block, delegatable since, selector keys, surface), `Answers`, `Composites`, `UndeclaredScopes`. |
@@ -57,7 +57,8 @@ no database.
 - **Edges.** `relation project: project` and `relation organization:
   organization` are never stored. Organization edges are always the caller's
   organization; project edges come from the reference (`MCPServer(projectID,
-  id)`). Every child type has its own organization edge, so permissions read
+  id)`). Every child type except `risk_policy` (whose rows always name one
+  policy) has its own organization edge, so permissions read
   `x + project->x + organization->x`.
 - **Subjects.** Allows accept `user | user:* | role#member | agent`, plus
   `api_key` on the four scopes a key policy may hold. `_direct` and `_own`
@@ -161,7 +162,8 @@ Choices made without a reviewer, to confirm:
   access whatever tool it names, but overrides a block on a tool call only
   when it names everything the call carries. Neither the allow nor the block
   semantics fit, so `mcp_tools_direct` exists. Upstream auth clients use one
-  strict caveat for allows and blocks, as today.
+  strict caveat for allows and blocks, as today. Risk-policy bypasses use `server_match_strict`, as
+  today's strict bypass check.
 - **Blocks land at every level.** A block with `resource_id "*"` is valid
   today, so block relations exist on organization and project too (via the
   partials) and every `blocked_*` building block has three terms.
@@ -181,6 +183,9 @@ Choices made without a reviewer, to confirm:
   nothing. This is why the migration is a prerequisite, not an option.
 - **Chats take a project.** `Chat(projectID, chatID)`, so the project edge
   comes from the reference like every other child type.
+- **`root` does not reach risk policies.** Today `root` expands into every
+  check except auth clients; letting it satisfy `risk_policy:bypass` would
+  exempt root holders from every policy, so the spike leaves it out.
 - **`risk_policy` has no organization edge**: its rows name one policy, as
   today. A `"*"` risk-policy row would fail to land.
 

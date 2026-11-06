@@ -8,6 +8,8 @@ type Check struct {
 	resourceType string
 	resourceID   string
 	permission   string
+	// organizationID, when the reference names one, must be the caller's.
+	organizationID string
 	// projectID fills the project edge, from the reference.
 	projectID string
 	// context fills the caveats' check parameters. Typed methods always pass
@@ -42,16 +44,20 @@ type OrganizationRef struct{ id string }
 // organization edge in the schema is the caller's organization.
 func Organization(organizationID string) OrganizationRef { return OrganizationRef{id: organizationID} }
 
-func (o OrganizationRef) Read() Check       { return check("organization", o.id, "read") }
-func (o OrganizationRef) Administer() Check { return check("organization", o.id, "administer") }
-func (o OrganizationRef) SyncDeviceAgent() Check {
-	return check("organization", o.id, "sync_device_agent")
+func (o OrganizationRef) Read() Check            { return o.check("read") }
+func (o OrganizationRef) Administer() Check      { return o.check("administer") }
+func (o OrganizationRef) SyncDeviceAgent() Check { return o.check("sync_device_agent") }
+
+func (o OrganizationRef) check(permission string) Check {
+	c := check("organization", o.id, permission)
+	c.organizationID = o.id
+	return c
 }
 
 // IngestHooks always names the project, so a grant bounded to another project
 // never matches.
 func (o OrganizationRef) IngestHooks(projectID string) Check {
-	return check("organization", o.id, "ingest_hooks").with(map[string]any{"project_id": projectID})
+	return o.check("ingest_hooks").with(map[string]any{"project_id": projectID})
 }
 
 // ProjectRef names one project of the caller's organization.
@@ -61,27 +67,33 @@ func Project(organizationID, projectID string) ProjectRef {
 	return ProjectRef{organizationID: organizationID, id: projectID}
 }
 
-func (p ProjectRef) Read() Check          { return check("project", p.id, "read") }
-func (p ProjectRef) Write() Check         { return check("project", p.id, "write") }
-func (p ProjectRef) ReadToolLogs() Check  { return check("project", p.id, "read_logs") }
-func (p ProjectRef) PublishPlugin() Check { return check("project", p.id, "plugin_publication") }
+func (p ProjectRef) Read() Check          { return p.check("read") }
+func (p ProjectRef) Write() Check         { return p.check("write") }
+func (p ProjectRef) ReadToolLogs() Check  { return p.check("read_logs") }
+func (p ProjectRef) PublishPlugin() Check { return p.check("plugin_publication") }
 func (p ProjectRef) ReadOrOrganizationRead() Check {
-	return check("project", p.id, "read_or_organization_read")
+	return p.check("read_or_organization_read")
 }
-func (p ProjectRef) WriteOrAdminister() Check { return check("project", p.id, "write_or_administer") }
+func (p ProjectRef) WriteOrAdminister() Check { return p.check("write_or_administer") }
+
+func (p ProjectRef) check(permission string) Check {
+	c := check("project", p.id, permission)
+	c.organizationID = p.organizationID
+	return c
+}
 
 // Collections: every resource of a kind in the project, for listing and
 // creating. These replace the *InProject references that passed the project
 // ID as a server, environment or assistant ID.
-func (p ProjectRef) ReadMCPServers() Check    { return check("project", p.id, "read_mcp_servers") }
-func (p ProjectRef) CreateMCPServer() Check   { return check("project", p.id, "create_mcp_server") }
-func (p ProjectRef) ReadEnvironments() Check  { return check("project", p.id, "read_environments") }
-func (p ProjectRef) CreateEnvironment() Check { return check("project", p.id, "create_environment") }
-func (p ProjectRef) ReadSkills() Check        { return check("project", p.id, "read_skills") }
-func (p ProjectRef) WriteSkills() Check       { return check("project", p.id, "write_skills") }
-func (p ProjectRef) ReadAssistants() Check    { return check("project", p.id, "read_assistants") }
-func (p ProjectRef) CreateAssistant() Check   { return check("project", p.id, "create_assistant") }
-func (p ProjectRef) ReadChats() Check         { return check("project", p.id, "read_chats") }
+func (p ProjectRef) ReadMCPServers() Check    { return p.check("read_mcp_servers").with(noTool()) }
+func (p ProjectRef) CreateMCPServer() Check   { return p.check("create_mcp_server").with(noTool()) }
+func (p ProjectRef) ReadEnvironments() Check  { return p.check("read_environments") }
+func (p ProjectRef) CreateEnvironment() Check { return p.check("create_environment") }
+func (p ProjectRef) ReadSkills() Check        { return p.check("read_skills") }
+func (p ProjectRef) WriteSkills() Check       { return p.check("write_skills") }
+func (p ProjectRef) ReadAssistants() Check    { return p.check("read_assistants") }
+func (p ProjectRef) CreateAssistant() Check   { return p.check("create_assistant") }
+func (p ProjectRef) ReadChats() Check         { return p.check("read_chats") }
 
 // MCPServerRef names one MCP server. The project must be the server's own,
 // taken from the loaded row: a project-level grant on the request's project
@@ -107,6 +119,9 @@ func (m MCPServerRef) CallTool(tool, disposition string) Check {
 
 // ReadProjectOrEdit passes with project read or server edit.
 func (m MCPServerRef) ReadProjectOrEdit() Check { return m.check("project_read_or_edit", "", "") }
+
+// noTool is the MCP caveat context of a check about a server, not one tool.
+func noTool() map[string]any { return map[string]any{"tool": "", "disposition": ""} }
 
 func (m MCPServerRef) check(permission, tool, disposition string) Check {
 	return check("mcp_server", m.id, permission).inProject(m.projectID).

@@ -80,10 +80,11 @@ func (e spicedbEvaluator) relationships(organizationID string, policy Policy, ch
 	seen := map[string]bool{}
 	out := make([]*core.RelationTuple, 0, len(rels))
 	for _, rel := range rels {
-		if seen[rel.String()] {
+		key := fmt.Sprintf("%s%v", rel, rel.CaveatContext)
+		if seen[key] {
 			continue
 		}
-		seen[rel.String()] = true
+		seen[key] = true
 		t := tuple.Relationship{RelationshipReference: tuple.RelationshipReference{
 			Resource: tuple.ONR(rel.ResourceType, rel.ResourceID, rel.Relation),
 			Subject:  tuple.ONR(rel.SubjectType, rel.SubjectID, subjectRelation(rel)),
@@ -341,6 +342,25 @@ func conformanceCases() []conformanceCase {
 			check:    Project(org, projectP).ReadMCPServers(), want: true,
 		},
 		{
+			name:     "a tool-limited project-wide grant still lists the servers",
+			policies: []Policy{user("bob", members, row(memberRole, ScopeMCPRead, mcpRow("*", projectP, "tool", "search")))},
+			check:    Project(org, projectP).ReadMCPServers(), want: true,
+		},
+		{
+			name: "a bypass bounded to one server does not skip the policy elsewhere",
+			policies: []Policy{user("bob", members,
+				row(memberRole, ScopeRiskPolicyEvaluate, map[string]string{"resource_kind": "risk_policy", "resource_id": "R"}),
+				row(memberRole, ScopeRiskPolicyBypass, map[string]string{"resource_kind": "risk_policy", "resource_id": "R", "server_url": "https://a.example"}))},
+			check: RiskPolicy("R", "https://b.example", "").Evaluate(), want: true,
+		},
+		{
+			name: "but does skip it on that server",
+			policies: []Policy{user("bob", members,
+				row(memberRole, ScopeRiskPolicyEvaluate, map[string]string{"resource_kind": "risk_policy", "resource_id": "R"}),
+				row(memberRole, ScopeRiskPolicyBypass, map[string]string{"resource_kind": "risk_policy", "resource_id": "R", "server_url": "https://a.example"}))},
+			check: RiskPolicy("R", "https://a.example", "").Evaluate(), want: false,
+		},
+		{
 			name:     "a grant on one server does not list them all",
 			policies: []Policy{user("bob", members, row(memberRole, ScopeMCPRead, mcpRow("S", projectP)))},
 			check:    Project(org, projectP).ReadMCPServers(), want: false,
@@ -388,7 +408,7 @@ func TestConformance(t *testing.T) {
 	for _, tc := range conformanceCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx := WithCaller(context.Background(), Caller{OrganizationID: org, Policies: tc.policies, RepresentedUser: tc.policies[0].Subject.ID})
+			ctx := withCaller(context.Background(), Caller{OrganizationID: org, Policies: tc.policies, RepresentedUser: tc.policies[0].Subject.ID})
 
 			got, err := reference.Allowed(ctx, tc.check)
 			require.NoError(t, err)

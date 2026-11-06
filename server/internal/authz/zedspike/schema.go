@@ -121,9 +121,6 @@ func relationDef(typeName string, rel *core.Relation) (*RelationDef, error) {
 // scopeForRelation applies the naming rule: scope with ":" as "_", with an
 // optional _direct or _own suffix.
 func scopeForRelation(name string) (RelationKind, Scope, error) {
-	if name == "root" {
-		return RelationGrant, ScopeRoot, nil
-	}
 	kind := RelationGrant
 	base := name
 	switch {
@@ -203,7 +200,7 @@ func childExprs(children []*core.SetOperation_Child) ([]Expr, error) {
 }
 
 func caveatDef(caveat *core.CaveatDefinition) *CaveatDef {
-	def := &CaveatDef{Name: caveat.GetName()}
+	def := &CaveatDef{Name: caveat.GetName(), Definition: caveat}
 	for name := range caveat.GetParameterTypes() {
 		if strings.HasPrefix(name, "granted_") {
 			def.GrantedParams = append(def.GrantedParams, name)

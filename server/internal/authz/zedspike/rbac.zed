@@ -276,7 +276,7 @@ definition chat {
 
 definition risk_policy {
     relation risk_policy_evaluate: user with server_match | user:* with server_match | role#member with server_match | agent with server_match
-    relation risk_policy_bypass: user with server_match | user:* with server_match | role#member with server_match | agent with server_match
+    relation risk_policy_bypass: user with server_match_strict | user:* with server_match_strict | role#member with server_match_strict | agent with server_match_strict
     relation risk_policy_block: user with server_match | user:* with server_match | role#member with server_match | agent with server_match
 
     // a bypass exempts from the policy; it is not a block, so precedence
@@ -399,6 +399,13 @@ caveat in_project(project_id string, granted_project_id string) {
 caveat server_match(server_identity string, server_url string, granted_server_identity string, granted_server_url string) {
     (server_identity == "" || granted_server_identity == "" || server_identity == granted_server_identity) &&
     (server_url == "" || granted_server_url == "" || server_url == granted_server_url)
+}
+
+// A bypass names every server dimension it is bounded by, so it matches
+// strictly: a bypass for one server never skips the policy elsewhere.
+caveat server_match_strict(server_identity string, server_url string, granted_server_identity string, granted_server_url string) {
+    (granted_server_identity == "" || server_identity == granted_server_identity) &&
+    (granted_server_url == "" || server_url == granted_server_url)
 }
 
 caveat agent_live(deleted bool, owner_reassignment_required bool) {

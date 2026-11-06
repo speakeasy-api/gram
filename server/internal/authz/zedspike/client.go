@@ -56,8 +56,9 @@ type Caller struct {
 
 type callerKey struct{}
 
-// WithCaller stores the admitted caller. Only admission calls it.
-func WithCaller(ctx context.Context, caller Caller) context.Context {
+// withCaller stores the admitted caller. Admission lives in this package, so
+// no handler can replace the caller before a check.
+func withCaller(ctx context.Context, caller Caller) context.Context {
 	return context.WithValue(ctx, callerKey{}, caller)
 }
 
@@ -102,6 +103,10 @@ func (c *Client) Require(ctx context.Context, check Check) error {
 func (c *Client) Allowed(ctx context.Context, check Check) (bool, error) {
 	caller, ok := CallerFrom(ctx)
 	if !ok || len(caller.Policies) == 0 {
+		return false, nil
+	}
+	// every organization edge is the caller's organization
+	if check.organizationID != "" && check.organizationID != caller.OrganizationID {
 		return false, nil
 	}
 	if check.resourceType == "mcp_auth_client" {

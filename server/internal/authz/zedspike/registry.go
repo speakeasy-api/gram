@@ -1,5 +1,7 @@
 package zedspike
 
+import core "github.com/authzed/spicedb/pkg/proto/core/v1"
+
 // Registry is the compiled form of rbac.zed joined with the Go tables: what
 // the evaluator, the grant loader, the old-table projection and the rendered
 // documentation read. It holds no grant data.
@@ -96,6 +98,9 @@ type Arrow struct {
 // SpiceDB's CEL and is evaluated with SpiceDB's caveat package.
 type CaveatDef struct {
 	Name string
+	// Definition is SpiceDB's compiled caveat, expression included, ready
+	// for its caveats package to evaluate.
+	Definition *core.CaveatDefinition
 	// GrantedParams are filled from the grant row's selector.
 	GrantedParams []string
 	// CheckParams are filled from the check.

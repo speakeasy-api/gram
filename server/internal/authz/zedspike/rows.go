@@ -61,6 +61,21 @@ var scopeResourceType = map[string]string{
 	"risk_policy": "risk_policy",
 }
 
+// scopeResourceKind is the resource_kind a scope's rows must carry, as
+// written today.
+func scopeResourceKind(scope Scope) string {
+	switch prefix, _, _ := strings.Cut(string(scope), ":"); {
+	case scope == ScopeRoot:
+		return "*"
+	case scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth:
+		return "mcp_auth_client"
+	case prefix == "plugin" || prefix == "log":
+		return "project"
+	default:
+		return prefix
+	}
+}
+
 func resourceTypeForScope(scope Scope) string {
 	if scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth {
 		return "mcp_auth_client"
@@ -89,12 +104,17 @@ func (r *Registry) Land(organizationID string, row GrantRow) ([]Relationship, er
 	}
 
 	resourceType := resourceTypeForScope(row.Scope)
+	if kind := row.Selector["resource_kind"]; kind != scopeResourceKind(row.Scope) {
+		return nil, fmt.Errorf("row %s names resource kind %q, want %q", row.Scope, kind, scopeResourceKind(row.Scope))
+	}
 	objectType, objectID := "organization", organizationID
 	resourceID := row.Selector["resource_id"]
 	projectID := row.Selector[SelectorProjectID]
 	concrete := resourceID != "" && resourceID != "*"
 	switch {
-	case concrete && projectID != "" && resourceID == projectID && resourceType != "project":
+	case concrete && resourceType == "organization" && resourceID != organizationID:
+		return nil, fmt.Errorf("row %s names organization %q, not the caller's", row.Scope, resourceID)
+	case concrete && projectID != "" && resourceID == projectID && resourceType != "project" && landsOnProject(resourceType):
 		return nil, fmt.Errorf("%w: %s %v", ErrUnmigratedRow, row.Scope, row.Selector)
 	case concrete && resourceType != "organization":
 		objectType, objectID = resourceType, resourceID

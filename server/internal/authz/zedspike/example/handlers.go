@@ -97,9 +97,11 @@ func (s *Service) ConnectServer(ctx context.Context, serverID string) error {
 }
 
 // 6. A direct grant overriding a block. Also nothing in the handler: the
-// Members role is blocked from this server, and Dana, a member, was granted
-// it by name. Her row lands in mcp_connect_direct, which rbac.zed adds back
-// after the role's block and before her own blocks. The same call as 5.
+// Members role is blocked from reading this server's configuration, and
+// Dana, a member, was granted mcp:read on it by name. Her row lands in
+// mcp_read_direct, which rbac.zed adds back after the role's block and
+// before her own blocks. Connecting works the same way through
+// mcp_connect_direct.
 func (s *Service) OpenServerSettings(ctx context.Context, serverID string) error {
 	server, err := s.servers.Get(ctx, serverID)
 	if err != nil {
