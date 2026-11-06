@@ -1537,7 +1537,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "build remote session cards").LogError(ctx, logger)
 	}
-	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards)
+	upstreamPicks, err := s.consentUpstreamClientPicks(ctx, endpoint, pickState, cards, inventoryUpstreamPicks(boundInventory))
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "read upstream client picks").LogError(ctx, logger)

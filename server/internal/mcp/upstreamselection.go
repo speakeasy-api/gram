@@ -1138,6 +1138,10 @@ func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, g
 		message, _ := s.refuseStaleChoiceCall(ctx, logger, gate, member, stale)
 		return message
 	}
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		message, _ := s.refuseCatalogConsentCall(ctx, logger, gate, member, consent, true)
+		return message
+	}
 	return memberErrorMessage(err)
 }
 

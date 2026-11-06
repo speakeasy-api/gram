@@ -382,8 +382,15 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
 				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
 			}
-			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
-				b.service.recordConsentRefusal(ctx, &callGate, member, err)
+			err := b.service.validateCatalogMember(ctx, &callGate, member)
+			if consent, ok := errors.AsType[catalogConsentError](err); ok {
+				message, remedy := b.service.refuseCatalogConsentCall(ctx, b.service.logger, &callGate, member, consent, false)
+				if remedy == staleChoiceReconnect {
+					return nil, codemode.ErrConsentRequired
+				}
+				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnectThenAdmin}
+			}
+			if needsNewConsent(err) {
 				return nil, codemode.ErrConsentRequired
 			}
 		}
