@@ -47,20 +47,29 @@ configuration uncommitted.
 
 Call `hooks/configuration` to discover the supported subscriptions:
 
-- Intercept: `user.message.inbound` and `tool.before`.
+- Intercept: `turn.start`, `user.message.inbound`, and `tool.before`.
 - Observe: `session.start`, `session.end`, `turn.end`,
   `model.response.after`, and `tool.after`.
 
 Each event is advertised once. Intercept subscriptions use a ten-second timeout
-and the authenticated organization's current fail-open setting; policy presence
-does not change delivery mode. Both modes request `content: {"default": "body"}`.
+and the authenticated organization's current failure policy (`fail-open` or
+`fail-closed`); policy presence does not change delivery mode. Both modes request `content: {"default": "body"}`.
 The timeout is a fixed transport default; there is no organization-level AHP timeout setting.
 Discovery lookup failures return the SDK-native JSON-RPC
 error `-32004` (`Backend internal error`) over HTTP 200, without subscriptions or
 an assumed failure policy. Authentication failures remain HTTP 401/403.
 
-Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
-interception require the harness to support denial at the subscribed boundary.
+Observe mode records events without enforcing policy. Prompt and tool
+interception enforce denial only when the harness advertises `deny` at that
+boundary; otherwise the event is recorded without enforcement. User prompts
+arriving through `user.message.inbound` and admitted through `turn.start` both
+remain supported. Turn-start ingestion accepts user-role items on user or external
+triggers, excluding assistant/reasoning/tool-result context and continuation/hook
+turns. Matching message identities correlate transcript rows across the two prompt
+boundaries, including arrival before a turn exists, without suppressing independent
+policy evaluation. OpenCode single-message prompts also retain their shared
+native/proxy identity. Other harnesses need a shared message identity: provider-turn-only
+proxy events cannot safely be matched to arbitrary AHP message IDs.
 Both subscriptions advertise `/ahp/uploads` with a ten-second timeout and a 1 MiB
 limit. Uploads use the same authentication and project as event requests. Binary
 uploads are accepted, but only text is processed as prompt attachment evidence.

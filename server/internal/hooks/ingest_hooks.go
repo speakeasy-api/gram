@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpskills"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/sessionquarantine"
@@ -50,6 +51,9 @@ type AuthenticatedIngestOptions struct {
 	boundaryScans   []ahpBoundaryScan
 	// promptPolicyText overrides prompt evidence without changing transcript capture.
 	promptPolicyText *string
+	// promptCorrelationID is a trusted adapter-provided logical message identity.
+	// It affects transcript persistence only, never event/policy deduplication.
+	promptCorrelationID string
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -78,6 +82,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		contentBoundary:              false,
 		boundaryScans:                nil,
 		promptPolicyText:             nil,
+		promptCorrelationID:          "",
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -1631,7 +1636,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, nil
 		}
 		msg = baseMsg("user", content)
-		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
+		correlationID := authenticatedIngestOptions(ctx).promptCorrelationID
+		if correlationID == "" {
+			correlationID = agentPromptCorrelationID(payload)
+		}
+		if correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
 			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)
@@ -1907,10 +1916,50 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
 	queries := chatRepo.New(s.db)
+	commit := func() error { return nil }
+	logicalAttachments := authenticatedIngestOptions(ctx).promptCorrelationID != ""
+	if logicalAttachments {
+		// Attachment-only events have no prompt row to create their chat. Do
+		// this before starting a transaction that cannot recover from an FK error.
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+			return err
+		}
+		// Content parts have no external-ID uniqueness constraint. Serialize
+		// logical AHP attachment writes with the existing project/chat lock.
+		tx, err := s.db.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin logical prompt attachment transaction: %w", err)
+		}
+		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+		queries = chatRepo.New(tx)
+		if err := queries.AcquireChatPromptCorrelationLock(ctx, chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: chatID}); err != nil {
+			return fmt.Errorf("lock logical prompt attachments: %w", err)
+		}
+		commit = func() error {
+			if err := tx.Commit(ctx); err != nil {
+				return fmt.Errorf("commit logical prompt attachments: %w", err)
+			}
+			return nil
+		}
+	}
 
 	parentResolver, err := newPromptAttachmentParentResolver(ctx, queries, chatID, projectID)
 	if err != nil {
 		return err
+	}
+	seen := make(map[string]struct{})
+	if logicalAttachments {
+		existing, err := queries.ListChatContentPartsByChatID(ctx, chatRepo.ListChatContentPartsByChatIDParams{
+			ChatID: chatID, ProjectID: projectID, ParentChatMessageIds: parentResolver.parents, RiskContentPartIds: nil,
+		})
+		if err != nil {
+			return fmt.Errorf("list logical prompt attachments: %w", err)
+		}
+		for _, part := range existing {
+			if part.ExternalID.Valid {
+				seen[part.ExternalID.String] = struct{}{}
+			}
+		}
 	}
 
 	type pendingPromptAttachment struct {
@@ -1924,6 +1973,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	for _, attachment := range payload.Data.PromptAttachments {
 		if attachment == nil || strings.TrimSpace(attachment.EntryUUID) == "" || strings.TrimSpace(attachment.Content) == "" {
 			continue
+		}
+		if logicalAttachments {
+			id := strings.TrimSpace(attachment.EntryUUID)
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
 		}
 		promptSHA256 := strings.ToLower(strings.TrimSpace(conv.PtrValOr(attachment.PromptSha256, "")))
 		createdAt := occurredAt
@@ -1954,8 +2010,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		return nil
 	}
 
-	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
-		return err
+	if !logicalAttachments {
+		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+			return err
+		}
 	}
 
 	contents := make([][]byte, len(pending))
@@ -1984,8 +2042,10 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		})
 	}
 	if _, err := queries.CreateChatContentPart(ctx, rows); err == nil {
-		return nil
-	} else if !isForeignKeyViolation(err) {
+		return commit()
+	} else if logicalAttachments || !isForeignKeyViolation(err) {
+		// A failed statement aborts the logical-attachment transaction.
+		// Only autocommit writes can use the missing-chat retry below.
 		return fmt.Errorf("insert prompt attachment content parts: %w", err)
 	}
 	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
@@ -1994,12 +2054,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
 		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
 	}
-	return nil
+	return commit()
 }
 
 type promptAttachmentParentResolver struct {
-	latest uuid.NullUUID
-	byHash map[string]uuid.NullUUID
+	parents []uuid.UUID
+	latest  uuid.NullUUID
+	byHash  map[string]uuid.NullUUID
 }
 
 func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Queries, chatID uuid.UUID, projectID uuid.UUID) (*promptAttachmentParentResolver, error) {
@@ -2011,10 +2072,12 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 		return nil, fmt.Errorf("list prompt attachment parent candidates: %w", err)
 	}
 	resolver := &promptAttachmentParentResolver{
-		latest: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		byHash: make(map[string]uuid.NullUUID, len(candidates)),
+		parents: make([]uuid.UUID, 0, len(candidates)),
+		latest:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		byHash:  make(map[string]uuid.NullUUID, len(candidates)),
 	}
 	for i, candidate := range candidates {
+		resolver.parents = append(resolver.parents, candidate.ID)
 		id := uuid.NullUUID{UUID: candidate.ID, Valid: true}
 		if i == 0 {
 			resolver.latest = id
