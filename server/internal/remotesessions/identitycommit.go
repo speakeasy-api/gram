@@ -35,6 +35,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -89,6 +91,7 @@ const (
 	identityChainingBindingsMessage      = "active identity-chaining bindings reference this configuration; explicitly unlink them before changing or deleting it"
 	ambiguousCurrentProviderMessage      = "this MCP server's user session issuer is bound to more than one Remote Identity Provider; remove the extra clients from the Remote Identity Provider settings before changing it"
 	clientTakenMessage                   = "a remote session client is already bound to this user session issuer for the same remote session issuer"
+	clientServesOtherServerMessage       = "Another MCP server signs in through the client bound to this server's User Identity issuer, and one issuer cannot serve two servers through different clients. If the Remote Identity Provider is the same, reuse the existing bound client. To use a different client, assign this server a dedicated User Identity issuer in server settings, then configure its Remote Identity Provider."
 )
 
 // IdentityError is a refusal whose Message is safe to show the caller. Kind is
@@ -302,7 +305,10 @@ type BoundPolicy int
 const (
 	// ReplaceBound unbinds the clients of the server's current provider, read
 	// from the live bindings, and requires the plan's provider to have no
-	// other client bound.
+	// other client bound. It never unbinds a client another MCP server signs
+	// in through: such a commit is refused, or, under upstream auth
+	// enforcement, leaves the bindings alone and offers its client on the
+	// plan's MCP server only.
 	ReplaceBound BoundPolicy = iota + 1
 
 	// ReuseBound keeps a client already bound for the plan's provider, which
@@ -428,7 +434,10 @@ type IdentityCommit struct {
 	reusable           bool
 	locked             bool
 	userIssuerOrgLevel bool
-	result             IdentityResult
+	// serverOnly reports that Bind left the user session issuer's bindings
+	// alone and offered the client on the plan's MCP server only.
+	serverOnly bool
+	result     IdentityResult
 	// createCapabilities pins registration to the submitted form, before create-time discovery fills it in.
 	createCapabilities providerCapabilities
 }
@@ -490,14 +499,9 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		}
 	}
 
-	bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
-	if err != nil {
-		return err
-	}
 	switch c.plan.Bound {
 	case ReplaceBound:
-		// A new provider has no id yet, so every bound client belongs to another.
-		replaced, err := replacedClients(bound, c.provider.ID, c.plan.Client.keep())
+		replaced, _, err := c.planReplacement(ctx, c.committer.db)
 		if err != nil {
 			return err
 		}
@@ -514,6 +518,10 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 		}
 	case ReuseBound:
 		if c.provider.ID != uuid.Nil {
+			bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
+			if err != nil {
+				return err
+			}
 			switch countProviderClients(bound, c.provider.ID) {
 			case 0:
 			case 1:
@@ -903,14 +911,11 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 	reused := false
 	switch c.plan.Bound {
 	case ReplaceBound:
-		bound, err := listUserSessionIssuerClients(ctx, tx.q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
+		replaced, serverOnly, err := c.planReplacement(ctx, tx.tx)
 		if err != nil {
 			return err
 		}
-		replaced, err := replacedClients(bound, c.provider.ID, c.plan.Client.keep())
-		if err != nil {
-			return err
-		}
+		c.serverOnly = serverOnly
 		for _, current := range replaced {
 			if err := c.detachClient(ctx, tx, current); err != nil {
 				return err
@@ -950,11 +955,19 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 			return err
 		}
 	}
-	bindings, err := c.attach(ctx, tx, client, attached)
-	if err != nil {
-		return err
+	bindings := attached
+	if c.serverOnly {
+		if err := c.offerOnServerOnly(ctx, tx, client); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		bindings, err = c.attach(ctx, tx, client, attached)
+		if err != nil {
+			return err
+		}
 	}
-	if c.plan.MCPServerID != uuid.Nil {
+	if c.plan.MCPServerID != uuid.Nil && !c.serverOnly {
 		associated, err := upstreamclientsrepo.New(tx.tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 			OrganizationID:        c.plan.Scope.OrganizationID,
 			RemoteSessionClientID: client.ID,
@@ -1001,8 +1014,112 @@ func (c *IdentityCommit) Commit(ctx context.Context, tx *IdentityTx) (IdentityRe
 		return IdentityResult{}, fmt.Errorf("commit identity transaction: %w", err)
 	}
 	tx.committed = true
-	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.plan.UserSessionIssuerID})
+	// A commit that offered its client on the server only changed no binding,
+	// so nothing derived from the bindings moved.
+	if !c.serverOnly {
+		BestEffortResyncMCPServerRemoteSessionIssuers(ctx, c.committer.logger, c.committer.db, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, []uuid.UUID{c.plan.UserSessionIssuerID})
+	}
 	return c.result, nil
+}
+
+// planReplacement decides what a ReplaceBound commit does with the clients
+// bound to the user session issuer, from those bindings as db sees them.
+func (c *IdentityCommit) planReplacement(ctx context.Context, db repo.DBTX) ([]repo.RemoteSessionClient, bool, error) {
+	bound, err := listUserSessionIssuerClients(ctx, repo.New(db), c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
+	if err != nil {
+		return nil, false, err
+	}
+	// A new provider has no id yet, so every bound client belongs to another.
+	return decideReplacement(ctx, db, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID, c.plan.MCPServerID, bound, c.provider.ID, c.plan.Client.keep())
+}
+
+// decideReplacement decides what replacing the clients bound to a user session
+// issuer does, for a commit configuring mcpServerID, which is uuid.Nil for one
+// configuring the issuer alone. A binding is shared by every MCP server on the
+// issuer, so unbinding a client is this commit's change to make only when no
+// other server signs in through it.
+//
+// Without upstream auth enforcement the bindings are what serves the issuer's
+// servers, and one issuer cannot serve two of them through different clients:
+// a replacement that would take a client from another server is refused.
+//
+// Under enforcement each server is served from the auth clients it offers and
+// the bindings decide nothing. The commit unbinds only clients that are the
+// plan's MCP server's own, associated with it and with no other server. When
+// the bindings hold anything else, or name no single current provider,
+// serverOnly reports that Bind must leave them as they are and offer the new
+// client on that server alone. The bindings are read here only to choose
+// between those two writes.
+func decideReplacement(ctx context.Context, db repo.DBTX, organizationID string, userIssuerID, mcpServerID uuid.UUID, bound []repo.RemoteSessionClient, providerID, keep uuid.UUID) (replaced []repo.RemoteSessionClient, serverOnly bool, err error) {
+	replaced, ambiguous := replacedClients(bound, providerID, keep)
+	if ambiguous == nil && len(replaced) == 0 {
+		return nil, false, nil
+	}
+
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return nil, false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	// Only a commit that configures a server has somewhere to offer the client.
+	canOfferOnServer := enforced && mcpServerID != uuid.Nil
+	if ambiguous != nil {
+		if canOfferOnServer {
+			return nil, true, nil
+		}
+		return nil, false, ambiguous
+	}
+
+	ids := make([]uuid.UUID, 0, len(replaced))
+	for _, client := range replaced {
+		ids = append(ids, client.ID)
+	}
+	use, err := repo.New(db).DescribeReplacedClientUse(ctx, repo.DescribeReplacedClientUseParams{
+		OrganizationID:         organizationID,
+		RemoteSessionClientIds: ids,
+		McpServerID:            mcpServerID,
+		UserSessionIssuerID:    userIssuerID,
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("check who the replaced clients serve: %w", err)
+	}
+	switch {
+	case canOfferOnServer && (use.ServesOtherMcpServers || !use.AllAssociatedWithMcpServer):
+		return nil, true, nil
+	case use.ServesOtherMcpServers:
+		return nil, false, identityRefusal(ErrIdentityConflict, nil, clientServesOtherServerMessage)
+	}
+	return replaced, false, nil
+}
+
+// offerOnServerOnly offers client on the plan's MCP server as an auth client
+// of its own, without binding it to the user session issuer or associating it
+// with the server.
+func (c *IdentityCommit) offerOnServerOnly(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient) error {
+	err := authclients.OfferRegistrationOnServer(ctx, tx.tx, c.committer.audit, authclients.RegistrationOffer{
+		OrganizationID:   c.plan.Scope.OrganizationID,
+		ProjectID:        c.plan.Scope.ProjectID,
+		MCPServerID:      c.plan.MCPServerID,
+		RegistrationID:   client.ID,
+		ProviderName:     conv.PtrValOr(conv.FromPGText[string](c.provider.Name), ""),
+		Actor:            c.plan.Scope.Actor,
+		ActorDisplayName: c.plan.Scope.ActorDisplayName,
+	})
+	if err == nil {
+		return nil
+	}
+	var refused *authclients.AttachRefusedError
+	if !errors.As(err, &refused) {
+		return fmt.Errorf("offer client on mcp server: %w", err)
+	}
+	kind := ErrIdentityInvalid
+	switch refused.Code {
+	case authclients.AttachNotFound:
+		kind = ErrIdentityNotFound
+	case authclients.AttachConflict:
+		kind = ErrIdentityConflict
+	case authclients.AttachInvalid:
+	}
+	return identityRefusal(kind, nil, refused.Message)
 }
 
 // replacedClients picks, from the clients bound to the user session issuer,

@@ -164,6 +164,18 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS offered
+      ON offered.id = offer.auth_client_id
+     AND offered.organization_id = offer.organization_id
+     AND offered.deleted IS FALSE
+    WHERE offer.mcp_server_id = s.id
+      AND offer.source = 'admin'
+      AND offer.deleted IS FALSE
+      AND offered.remote_session_client_id <> c.id
+  )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id
 `
@@ -185,7 +197,10 @@ type CaptureGatewayDerivedAssociationsParams struct {
 // a grant the issuer offers for the server's remote upstream routes it to
 // another client (a grant minted through the issuer, or one for a client the
 // issuer binds, whichever issuer minted it; a tunnel's claimed resource
-// proves nothing), or when an explicit detach was recorded for the pair.
+// proves nothing), when an explicit detach was recorded for the pair, or when
+// an administrator or a server-only identity commit gave the server an offer for
+// another registration, so the gateway issuer's client is not what it was
+// configured with.
 func (q *Queries) CaptureGatewayDerivedAssociations(ctx context.Context, arg CaptureGatewayDerivedAssociationsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, captureGatewayDerivedAssociations, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
@@ -230,6 +245,21 @@ JOIN remote_session_clients AS c
 WHERE s.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND s.user_session_issuer_id = ANY($3::uuid[])
+  AND ($4::uuid[] IS NULL
+       OR c.id = ANY($4::uuid[]))
+  AND (NOT $5::boolean
+       OR NOT EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = s.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+           AND offered.remote_session_client_id <> c.id
+       ))
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
@@ -256,9 +286,11 @@ RETURNING mcp_server_id
 `
 
 type CaptureSoleConsumerAssociationsParams struct {
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	UserSessionIssuerIds []uuid.UUID
+	OrganizationID                        string
+	ProjectID                             uuid.UUID
+	UserSessionIssuerIds                  []uuid.UUID
+	RemoteSessionClientIds                []uuid.UUID
+	SkipServersOfferingOtherRegistrations bool
 }
 
 // Returns the server of each association it adds, so the caller can record
@@ -268,14 +300,27 @@ type CaptureSoleConsumerAssociationsParams struct {
 // organization. With one consumer the binding can only be meant for that
 // server, so the association is proven rather than guessed. Issuers shared by
 // several servers, or also fronting a gateway, prove nothing and are left for
-// explicit configuration.
+// explicit configuration. remote_session_client_ids limits the capture to those
+// clients; NULL captures every client bound to the issuer.
+// skip_servers_offering_other_registrations leaves out a server an administrator
+// or a server-only identity commit gave an offer for another registration, since
+// a binding on its issuer is not meant for it; a caller that has just configured
+// the binding for this server clears it.
+// Disabled admin offers still record explicit routing intent. Disabling that
+// registration must not authorize capture of a different issuer-bound client.
 //
 // Tenancy: the ids arrive from callers that already hold the issuer, but are
 // re-pinned to the caller's project and organization so a foreign id writes
 // nothing, and only the organization's own servers and gateways count as
 // other consumers.
 func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
+	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerIds,
+		arg.RemoteSessionClientIds,
+		arg.SkipServersOfferingOtherRegistrations,
+	)
 	if err != nil {
 		return nil, err
 	}

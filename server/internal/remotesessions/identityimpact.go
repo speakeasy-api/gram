@@ -190,7 +190,7 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
 	}
-	if err := s.planIdentityChange(ctx, q, projectID, orgID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
+	if err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
 		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
 	}
 
@@ -295,8 +295,10 @@ func (s *Service) authorizeServerIdentityImpact(ctx context.Context, logger *slo
 // planIdentityChange fills change.removed and change.added the way the
 // matching write would: the commit's ReplaceBound, a plain attach, or detaching
 // every client the caller's project sees. It applies the writes' org-wide
-// binding refusal.
-func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerOrgLevel, orgAdmin bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
+// binding refusal and the commit's refusal to take a client from another
+// server. A commit that would offer its client on the target server only
+// changes no binding, so it adds and removes nothing here.
+func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, projectID uuid.UUID, orgID string, userIssuerID, targetID uuid.UUID, userIssuerOrgLevel, orgAdmin bool, kind string, providerID, clientID uuid.NullUUID, change *identityChange) error {
 	var visible []repo.RemoteSessionClient
 	for _, client := range change.bound {
 		if client.visibleTo(projectID) {
@@ -352,9 +354,12 @@ func (s *Service) planIdentityChange(ctx context.Context, q *repo.Queries, proje
 	}
 
 	if kind == identityChangeReplace {
-		replaced, err := replacedClients(visible, conv.Ternary(providerID.Valid || clientID.Valid, added.providerID, uuid.Nil), conv.Ternary(clientID.Valid, added.id, uuid.Nil))
+		replaced, serverOnly, err := decideReplacement(ctx, s.db, orgID, userIssuerID, targetID, visible, conv.Ternary(providerID.Valid || clientID.Valid, added.providerID, uuid.Nil), conv.Ternary(clientID.Valid, added.id, uuid.Nil))
 		if err != nil {
 			return err
+		}
+		if serverOnly {
+			change.added = nil
 		}
 		for _, client := range replaced {
 			if err := refuseOrgWideBinding(userIssuerOrgLevel, orgAdmin, client.ProjectID); err != nil {

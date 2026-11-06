@@ -1,5 +1,6 @@
 import { requireKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
+import { describeApiError } from "@/lib/api-error";
 import { isForbiddenError, isNotFoundError } from "@/lib/errors";
 import { buildUserSessionResourceSlug } from "@/lib/externalMcpUserSessions";
 import { deriveRemoteSessionIssuerNameFromUrl } from "@/lib/sources";
@@ -274,12 +275,17 @@ export async function configureCreatedRemoteMcpIdentity({
       options,
     );
   } catch (error) {
+    // A conflict is the server refusing a change the current configuration
+    // cannot take, and its message says which part to change first.
+    const refusal = describeApiError(error);
     return setupRequired(
       mcpServer,
       identityMode,
       isForbiddenError(error)
         ? "This server shares its sign-in client with other projects. An organization admin can finish setup in Settings > Identity."
-        : "User Identity could not be configured. Open Settings > Identity to finish setup.",
+        : refusal.kind === "precondition"
+          ? refusal.message.charAt(0).toUpperCase() + refusal.message.slice(1)
+          : "User Identity could not be configured. Open Settings > Identity to finish setup.",
     );
   }
 

@@ -175,11 +175,16 @@ func TestGetServerIdentityImpactOrganizationIssuerAcrossProjects(t *testing.T) {
 	nextProviderID := createServerIdentityProvider(t, ctx, ti, "impact-org-next", "", false, []string{"none"})
 	bindServerIdentityClient(t, ctx, ti, "impact-org-project-client", currentProviderID, userIssuerID, false)
 
-	// A project-owned client is invisible to other projects, so replacing it
-	// leaves their upstream alone.
-	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
+	// The sibling signs in through the project's client, so the commit refuses
+	// to replace it and the preview says the same.
+	_, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "replace", &nextProviderID, nil))
+	requireOopsCode(t, err, oops.CodeConflict)
+
+	// A project-owned client is invisible to other projects, so changing the
+	// bindings beside it leaves their upstream alone.
+	result, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(userIssuerID, &targetID, "attach", &nextProviderID, nil))
 	require.NoError(t, err)
-	require.Equal(t, map[string]string{siblingID.String(): "repoint"}, impactsByServer(result))
+	require.Equal(t, map[string]string{siblingID.String(): "clear"}, impactsByServer(result))
 
 	require.NotContains(t, impactsByServer(result), otherServerID.String())
 	for _, server := range result.Servers {

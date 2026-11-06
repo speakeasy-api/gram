@@ -1003,17 +1003,23 @@ export function RemoteMcpIdentitySectionBody({
         <Dialog.Content className="max-w-md">
           <Dialog.Header>
             <Dialog.Title>
-              {confirmTitle({
-                removingSelf,
-                replacingSelf,
-                leavingUser,
-                replacingClient,
-                replacingCredential,
-                destructive,
-                upstreamName,
-              })}
+              {sharedIssuerImpact.refusal !== undefined
+                ? "Cannot save this identity change"
+                : confirmTitle({
+                    removingSelf,
+                    replacingSelf,
+                    leavingUser,
+                    replacingClient,
+                    replacingCredential,
+                    destructive,
+                    upstreamName,
+                  })}
             </Dialog.Title>
-            {destructive ? (
+            {sharedIssuerImpact.refusal !== undefined ? (
+              <Dialog.Description>
+                {sharedIssuerImpact.refusal}
+              </Dialog.Description>
+            ) : destructive ? (
               <Dialog.Description>
                 {removalConsequences({
                   removingSelf,
@@ -1030,10 +1036,12 @@ export function RemoteMcpIdentitySectionBody({
               </Dialog.Description>
             )}
           </Dialog.Header>
-          <RepointedServersNotice
-            impact={sharedIssuerImpact}
-            projectId={target.projectId}
-          />
+          {sharedIssuerImpact.refusal === undefined && (
+            <RepointedServersNotice
+              impact={sharedIssuerImpact}
+              projectId={target.projectId}
+            />
+          )}
           <Dialog.Footer>
             <Button
               variant="secondary"

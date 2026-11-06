@@ -1314,6 +1314,44 @@ func (q *Queries) RenameIssuanceProfile(ctx context.Context, arg RenameIssuanceP
 	return i, err
 }
 
+const serverOffersRegistration = `-- name: ServerOffersRegistration :one
+SELECT EXISTS (
+  SELECT 1
+  FROM mcp_server_auth_clients msac
+  JOIN mcp_auth_clients ac
+    ON ac.id = msac.auth_client_id
+   AND ac.organization_id = msac.organization_id
+   AND ac.deleted IS FALSE
+   AND ac.enabled IS TRUE
+  WHERE msac.mcp_server_id = $1
+    AND msac.project_id = $2
+    AND msac.organization_id = $3
+    AND msac.deleted IS FALSE
+    AND ac.remote_session_client_id = $4::uuid
+)::boolean AS offered
+`
+
+type ServerOffersRegistrationParams struct {
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	RemoteSessionClientID uuid.UUID
+}
+
+// Whether the MCP server already offers a live, enabled auth client that signs
+// in through the OAuth registration.
+func (q *Queries) ServerOffersRegistration(ctx context.Context, arg ServerOffersRegistrationParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverOffersRegistration,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.RemoteSessionClientID,
+	)
+	var offered bool
+	err := row.Scan(&offered)
+	return offered, err
+}
+
 const updateAuthClient = `-- name: UpdateAuthClient :one
 UPDATE mcp_auth_clients
 SET name = $1,

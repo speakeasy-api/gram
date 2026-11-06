@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -221,6 +222,9 @@ func (m *Migrator) switchServer(ctx context.Context, tx pgx.Tx, principal urn.Pr
 	if candidate.Row.UserSessionIssuerID.Valid {
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}); err != nil {
 			return fmt.Errorf("resync upstream issuer: %w", err)
+		}
+		if err := upstreamclients.CaptureSoleConsumers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, []uuid.UUID{candidate.Row.UserSessionIssuerID.UUID}, nil); err != nil {
+			return fmt.Errorf("capture upstream clients: %w", err)
 		}
 	}
 	after, err := servers.GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: toolset.ProjectID})

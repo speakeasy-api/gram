@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	assetsrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -618,9 +619,17 @@ func serverIdentityClientPath(providerID, clientID uuid.UUID) string {
 
 // requireSingleServerIssuer fails before registration and again under the
 // issuer lock. A setup save must never repoint sibling servers, even when the
-// caller has permission to change them all.
+// caller has permission to change them all. Under upstream auth enforcement
+// each server is served from its own auth clients, so no save repoints them.
 func requireSingleServerIssuer(ctx context.Context, db repo.DBTX, organizationID string, target mcpserversrepo.McpServer) error {
 	if !target.UserSessionIssuerID.Valid {
+		return nil
+	}
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "Could not check shared sign-in configuration.")
+	}
+	if enforced {
 		return nil
 	}
 	servers, err := repo.New(db).ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{OrganizationID: organizationID, UserSessionIssuerID: target.UserSessionIssuerID})
