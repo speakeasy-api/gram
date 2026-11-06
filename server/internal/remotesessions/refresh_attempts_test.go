@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -307,4 +308,63 @@ func TestRefreshFailureRecorded_NoRecorder(t *testing.T) {
 	_, err := refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)))
 	require.Error(t, err)
 	require.False(t, remotesessions.RefreshFailureRecorded(err))
+}
+
+// outageRecordFaultCache fails Redis reads or writes of the outage record only.
+type outageRecordFaultCache struct {
+	cache.Cache
+	key     string
+	failSet bool
+	failGet bool
+}
+
+func (c outageRecordFaultCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if c.failSet && key == c.key {
+		return errors.New("redis unavailable")
+	}
+	if err := c.Cache.Set(ctx, key, value, ttl); err != nil {
+		return fmt.Errorf("set %s: %w", key, err)
+	}
+	return nil
+}
+
+func (c outageRecordFaultCache) Get(ctx context.Context, key string, value any) error {
+	if c.failGet && key == c.key {
+		return errors.New("redis unavailable")
+	}
+	if err := c.Cache.Get(ctx, key, value); err != nil {
+		return fmt.Errorf("get %s: %w", key, err)
+	}
+	return nil
+}
+
+func TestRefreshNow_UnstoredOutageRecordStillNamesTheProvider(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "outage-unstored", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), outageRecordFaultCache{Cache: testenv.NewMemoryCache(), key: remotesessions.RefreshOutageKey(session), failSet: true, failGet: false})
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err), "the connect page can't see it")
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(err))
+}
+
+func TestRefreshNow_CooldownWithUnreadableOutageRecordIsCounted(t *testing.T) {
+	t.Parallel()
+	ctx, env := newSyntheticExpiryEnv(t, "outage-unreadable", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), outageRecordFaultCache{Cache: testenv.NewMemoryCache(), key: remotesessions.RefreshOutageKey(session), failSet: false, failGet: true})
+
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+
+	_, deferred := refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	var failure *remotesessions.RefreshError
+	require.ErrorAs(t, deferred, &failure)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(deferred))
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, remotesessions.ConnectionOutageHappened(deferred), "a cooldown is an outage, not a busy lock")
 }

@@ -157,12 +157,6 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 func resolveFailureHappened(err error) mcpconnectionattempts.Code {
 	switch {
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
-		if remotesessions.RefreshBusy(err) {
-			return mcpconnectionattempts.Code{}
-		}
-		if remotesessions.TokenEndpointCausedOutage(err) {
-			return mcpconnectionattempts.CodeRemoteSessionUnavailable
-		}
 		return remotesessions.ConnectionOutageHappened(err)
 	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
 		return mcpconnectionattempts.CodeCredentialMisconfigured

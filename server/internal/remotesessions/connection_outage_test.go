@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -22,10 +23,38 @@ func TestConnectionOutageHappened(t *testing.T) {
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			t.Parallel()
-			err := &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: tc.kind, err: errors.New("outage")}
+			err := &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, retryAfter: 0, outageKind: tc.kind, outage: tc.kind, err: errors.New("outage")}
 			require.Equal(t, tc.want, ConnectionOutageHappened(fmt.Errorf("check session: %w", &SessionOutageError{err: err})))
 		})
 	}
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, ConnectionOutageHappened(&SessionOutageError{err: errors.New("store unavailable")}))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, ConnectionOutageHappened(ErrRemoteSessionUnavailable))
+}
+
+// The connect page may not see an outage when Redis failed; the row still names the provider or tunnel.
+func TestConnectionOutageHappened_UnrecordedOutage(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		outcome remotesessionmetrics.RefreshOutcome
+		outage  RefreshOutageKind
+		want    mcpconnectionattempts.Code
+	}{
+		{"provider outage record not stored", remotesessionmetrics.RefreshOutcomeUpstreamError, RefreshOutageProvider, mcpconnectionattempts.CodeRemoteSessionUnavailable},
+		{"tunnel outage record not stored", remotesessionmetrics.RefreshOutcomeUnreachable, RefreshOutageTunnel, mcpconnectionattempts.CodeTunnelUnavailable},
+		{"cooldown with unreadable record", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageProvider, mcpconnectionattempts.CodeRemoteSessionUnavailable},
+		{"waited on another request", remotesessionmetrics.RefreshOutcomeDeferred, RefreshOutageNone, mcpconnectionattempts.Code{}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := &RefreshError{IssuerURL: "", Outcome: tc.outcome, retryAfter: 0, outageKind: RefreshOutageNone, outage: tc.outage, err: errors.New("outage")}
+			require.Equal(t, tc.want, ConnectionOutageHappened(&SessionOutageError{err: err}))
+		})
+	}
+}
+
+func TestConnectionOutageHappened_ClientCredentialTokenEndpoint(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, ConnectionOutageHappened(errors.Join(ErrRemoteSessionUnavailable, &TokenEndpointError{StatusCode: http.StatusServiceUnavailable})))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, ConnectionOutageHappened(errors.Join(ErrRemoteSessionUnavailable, &TokenEndpointError{Signing: true})))
 }

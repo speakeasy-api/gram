@@ -116,6 +116,18 @@ func TestTracker_ContinueIsSilent(t *testing.T) {
 	rec.RequireNothing()
 }
 
+// A refusal another request's row covers, such as a refresh that waited on it, writes nothing.
+func TestTracker_ZeroCodeRefusalIsSilent(t *testing.T) {
+	t.Parallel()
+
+	rec := New(t)
+	tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundToken)
+	tracked.Refuse(t.Context(), mcpconnectionattempts.Code{})
+	tracked.Finish(t.Context())
+
+	rec.RequireNothing()
+}
+
 // Until the state is spent the page stays usable, so a refusal does not end the attempt.
 func TestTracker_RefusalBeforeConsumedIsAStep(t *testing.T) {
 	t.Parallel()
