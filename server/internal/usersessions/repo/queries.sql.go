@@ -1905,6 +1905,37 @@ func (q *Queries) GetSharedUserSessionIssuerByID(ctx context.Context, id uuid.UU
 	return i, err
 }
 
+const getSpentUserSessionByRefreshTokenHash = `-- name: GetSpentUserSessionByRefreshTokenHash :one
+SELECT subject_urn, refresh_expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = $1
+  AND user_session_client_id = $2::uuid
+  AND refresh_token_hash = $3::text
+  AND refresh_token_hash IS NOT NULL
+  AND deleted IS TRUE
+LIMIT 1
+`
+
+type GetSpentUserSessionByRefreshTokenHashParams struct {
+	UserSessionIssuerID uuid.UUID
+	UserSessionClientID uuid.UUID
+	RefreshTokenHash    string
+}
+
+type GetSpentUserSessionByRefreshTokenHashRow struct {
+	SubjectUrn       urn.SessionSubject
+	RefreshExpiresAt pgtype.Timestamptz
+}
+
+// Finds a used or revoked session by refresh-token hash for the issuer and
+// client that presented it, so a refusal can say why the token is dead.
+func (q *Queries) GetSpentUserSessionByRefreshTokenHash(ctx context.Context, arg GetSpentUserSessionByRefreshTokenHashParams) (GetSpentUserSessionByRefreshTokenHashRow, error) {
+	row := q.db.QueryRow(ctx, getSpentUserSessionByRefreshTokenHash, arg.UserSessionIssuerID, arg.UserSessionClientID, arg.RefreshTokenHash)
+	var i GetSpentUserSessionByRefreshTokenHashRow
+	err := row.Scan(&i.SubjectUrn, &i.RefreshExpiresAt)
+	return i, err
+}
+
 const getUpstreamClientSelection = `-- name: GetUpstreamClientSelection :one
 SELECT sel.remote_session_client_id,
        chosen.remote_session_issuer_id AS remote_session_issuer_id,

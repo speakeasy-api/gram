@@ -1431,19 +1431,31 @@ func (s *Service) rotateRefreshToken(
 				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
 			}
 
-			published := s.storeRefreshTokenReplayFailure(
-				ctx, replayKey, clientRow.ID,
-				"refresh_token_unknown_or_already_used",
-				"refresh_token is unknown or already used", logger,
-			)
+			failureReason, description := "refresh_token_unknown_or_already_used", "refresh_token is unknown or already used"
+			var refuseOpts []mcpconnectionattempts.Option
+			spent, spentErr := usersessions_repo.New(s.db).GetSpentUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetSpentUserSessionByRefreshTokenHashParams{
+				UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				UserSessionClientID: clientRow.ID,
+				RefreshTokenHash:    refreshTokenHash,
+			})
+			switch {
+			case spentErr == nil && (!spent.RefreshExpiresAt.Valid || !spent.RefreshExpiresAt.Time.After(time.Now())):
+				// The session reached its length limit; that outlives the replay grace.
+				failureReason, description = "refresh_token_expired", "refresh_token has expired"
+				refuseOpts = append(refuseOpts, mcpconnectionattempts.Subject(&spent.SubjectUrn))
+			case spentErr != nil && !errors.Is(spentErr, pgx.ErrNoRows):
+				logger.WarnContext(ctx, "failed to load spent refresh token session", attr.SlogError(spentErr))
+			}
+
+			published := s.storeRefreshTokenReplayFailure(ctx, replayKey, clientRow.ID, failureReason, description, logger)
 			if !published {
 				if existing, existingErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); existingErr == nil {
 					return true, s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
 				}
 			}
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
-			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
-			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_unknown_or_already_used")
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", failureReason)
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", description)
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, failureReason, refuseOpts...)
 		}
 		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
 	}

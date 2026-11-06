@@ -1561,6 +1561,18 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND deleted IS FALSE
 RETURNING *;
 
+-- name: GetSpentUserSessionByRefreshTokenHash :one
+-- Finds a used or revoked session by refresh-token hash for the issuer and
+-- client that presented it, so a refusal can say why the token is dead.
+SELECT subject_urn, refresh_expires_at
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id::uuid
+  AND refresh_token_hash = @refresh_token_hash::text
+  AND refresh_token_hash IS NOT NULL
+  AND deleted IS TRUE
+LIMIT 1;
+
 -- name: GetUserSessionPolicyByJTI :one
 -- Serve-path lookup for immutable session policy, keyed the same way
 -- runtime requests are addressed (issuer + jti). Deliberately narrow: request

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestInboundRefresh_Refreshed(t *testing.T) {
@@ -275,4 +276,90 @@ func TestInboundRefresh_SuspendedAgentReplayIsNotAdmitted(t *testing.T) {
 	require.Contains(t, refused.body, "agent authorization is no longer valid")
 
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted)
+}
+
+// expireRefreshReplay removes the replay entry and lock a refresh left behind, as the grace TTL would.
+func expireRefreshReplay(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, refreshToken string) {
+	t.Helper()
+	replayKey, lockKey := refreshReplayKeys(issuerID, refreshToken)
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
+}
+
+func TestInboundRefresh_ExpiredStaysExpiredAfterReplayGrace(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(-time.Hour))
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token has expired"}`, first.body)
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	again := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, again.err)
+	require.Equal(t, http.StatusBadRequest, again.code)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token has expired"}`, again.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired)
+	require.Equal(t, urn.NewUserSubject("refresh-replay-user").String(), row.SubjectURN)
+}
+
+func TestInboundRefresh_RotatedTokenAfterReplayGraceIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusOK, first.code, first.body)
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	reused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, reused.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, reused.body)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+}
+
+func TestInboundRefresh_ExpiredTokenFromAnotherClientIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(-time.Hour))
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusBadRequest, first.code, first.body)
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	other, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuer.ID,
+		ClientID:                "test-client-" + uuid.New().String()[:8],
+		ClientName:              "other test client",
+		RedirectUris:            []string{"http://localhost:3000/callback"},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, refused.body)
+}
+
+func TestInboundRefresh_ExpiredTokenAtAnotherIssuerIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, _, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(-time.Hour))
+	first := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, first.err)
+	require.Equal(t, http.StatusBadRequest, first.code, first.body)
+
+	otherToolset, _, otherClient := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	refused := performRefreshRequest(ctx, ti, otherToolset.McpSlug.String, otherClient.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, refused.body)
 }
