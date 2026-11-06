@@ -252,9 +252,9 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 }
 
 // recordDialFailure records a member that could not be dialed for a call.
-// A stale choice is recorded with its refusal message instead.
+// A saved stale choice is recorded with its refusal message instead.
 func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) {
-	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok && stale.saved {
 		return
 	}
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
@@ -270,6 +270,9 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 type memberStaleChoiceError struct {
 	memberCredentialError
 	reason string
+
+	// saved is a choice the caller saved; a proposed one is a first connect, not a setup change.
+	saved bool
 }
 
 func (e memberStaleChoiceError) Unwrap() error { return e.memberCredentialError }

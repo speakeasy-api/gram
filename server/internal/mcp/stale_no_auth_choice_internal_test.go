@@ -88,7 +88,7 @@ func gapWithChoice(reason string) authClientResolution {
 }
 
 func staleMemberError(reason string) memberStaleChoiceError {
-	return memberStaleChoiceError{memberCredentialError{&metaMemberError{message: "stale"}}, reason}
+	return memberStaleChoiceError{memberCredentialError{&metaMemberError{message: "stale"}}, reason, true}
 }
 
 func TestStaleChoiceWarnsAtTheCallWithTheSubject(t *testing.T) {
@@ -515,4 +515,41 @@ func TestStaleChoiceCallRecordsTheMessageRemedy(t *testing.T) {
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
+}
+
+// A no-auth choice proposed for a first consent is a sign-in never done, not a setup change.
+func TestRecordConsentPage_ProposedNoAuthIsAFirstConnect(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_proposed_no_auth")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.oauthClient(authClientTypeRemoteSession)
+	rec := mcpconnectionattemptstest.New(t)
+	s := f.service
+	s.connections = rec.Recorder
+	member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "linear"}
+	res, err := s.resolveAuthClientForConsent(t.Context(), f.orgID, f.serverID, f.projectID, uuid.NullUUID{}, urn.NewUserSubject("user_1"))
+	s.applyMemberAuthClient(t.Context(), &member, res, err)
+	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
+	require.True(t, ok, "an OAuth member with nothing picked resolves as a proposed no-auth choice")
+	require.False(t, stale.saved)
+	view := &gatewayConsentView{members: []metaMember{member}, Servers: []gatewayServer{{ServerID: member.serverID.String(), Status: gatewayServerNotConnected}}}
+
+	s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
+
+	row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn)
+	require.Equal(t, string(gatewayServerNotConnected), row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+}
+
+// Only a choice read from the credential's saved choices is marked saved.
+func TestStaleChoiceSavedOnlyFromTheCredential(t *testing.T) {
+	t.Parallel()
+	saved := gapWithChoice(authClientReasonNoAuthForbidden)
+	saved.saved = true
+	member := metaMember{serverID: uuid.New(), slug: "linear"}
+	(&Service{}).applyMemberAuthClient(t.Context(), &member, saved, nil)
+	stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable)
+	require.True(t, ok)
+	require.True(t, stale.saved)
 }

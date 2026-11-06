@@ -128,6 +128,9 @@ type authClientResolution struct {
 	// noAuthChoice is a recorded no-auth choice, whether or not the server still needs none.
 	noAuthChoice bool
 
+	// saved is a choice read from the credential's saved choices, not one proposed for a new connection.
+	saved bool
+
 	// noAuthAllowed is a server that needs no upstream authentication: it
 	// offers no enabled auth client and has no upstream credentials an auth
 	// client does not record yet.
@@ -254,7 +257,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, saved: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -399,7 +402,9 @@ func (u *upstreamSelector) resolveAuthClients(ctx context.Context, serverIDs []u
 	}
 	choices := make(map[uuid.UUID]authClientResolution, len(rows))
 	for _, row := range rows {
-		choices[row.McpServerID] = decideAuthClient(row)
+		res := decideAuthClient(row)
+		res.saved = true
+		choices[row.McpServerID] = res
 	}
 	return choices, nil
 }

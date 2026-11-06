@@ -255,7 +255,7 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
-	if _, stale := errors.AsType[memberStaleChoiceError](unavailable); stale && (what == mcpconnectionattempts.CodeNeedsSignIn || what == mcpconnectionattempts.CodeUpstreamSignInNotSetUp) {
+	if stale, ok := errors.AsType[memberStaleChoiceError](unavailable); ok && stale.saved && (what == mcpconnectionattempts.CodeNeedsSignIn || what == mcpconnectionattempts.CodeUpstreamSignInNotSetUp) {
 		detail = memberSetupChangedDetail
 		if code, decided := staleChoiceHappened(gateway.staleChoiceRemedies[serverID]); decided {
 			what = code

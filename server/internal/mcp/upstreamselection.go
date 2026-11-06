@@ -958,8 +958,8 @@ func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.U
 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
-	if reason, stale := staleNoAuthReason(res, err); stale {
-		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason}
+	if reason, stale, saved := staleNoAuthReason(res, err); stale {
+		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason, saved}
 		return
 	}
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
@@ -984,15 +984,15 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
 }
 
-// staleNoAuthReason names why a member's no-auth choice is stale, if it is.
-func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
+// staleNoAuthReason names why a member's no-auth choice is stale, if it is, and whether the choice was saved.
+func staleNoAuthReason(res authClientResolution, err error) (string, bool, bool) {
 	switch {
 	case errors.Is(err, errUpstreamSelectionStaleNoAuth):
-		return authClientReasonNoAuthStale, true
+		return authClientReasonNoAuthStale, true, true
 	case err == nil && res.staleNoAuth():
-		return res.reason, true
+		return res.reason, true, res.saved
 	}
-	return "", false
+	return "", false, false
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
@@ -1126,7 +1126,7 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) (string, staleChoiceRemedy) {
 	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
 	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
-	if what, decided := staleChoiceHappened(remedy); decided {
+	if what, decided := staleChoiceHappened(remedy); decided && stale.saved {
 		s.recordMemberFailure(ctx, gate, member, what, mcpconnectionattempts.Detail(memberSetupChangedDetail))
 	}
 	return message, remedy
