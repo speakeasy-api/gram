@@ -322,21 +322,6 @@ func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
 }
 
-// ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
-func ListExternalMcpMigrationCandidatesAdminPath() string {
-	return "/admin/externalMcpMigration.listCandidates"
-}
-
-// PreviewExternalMcpMigrationAdminPath returns the URL path to the admin service previewExternalMcpMigration HTTP endpoint.
-func PreviewExternalMcpMigrationAdminPath() string {
-	return "/admin/externalMcpMigration.preview"
-}
-
-// MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
-func MigrateExternalMcpServersAdminPath() string {
-	return "/admin/externalMcpMigration.migrate"
-}
-
 // ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
 func ListRegistryPromotionCandidatesAdminPath() string {
 	return "/admin/registry.promotionCandidates"

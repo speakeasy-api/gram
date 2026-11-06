@@ -84,9 +84,6 @@ type Server struct {
 	DescribeMcpServerHealth                 http.Handler
 	GetMcpServerToolCalls                   http.Handler
 	GetHookClients                          http.Handler
-	ListExternalMcpMigrationCandidates      http.Handler
-	PreviewExternalMcpMigration             http.Handler
-	MigrateExternalMcpServers               http.Handler
 	ListRegistryPromotionCandidates         http.Handler
 	GetRegistryPromotionCandidate           http.Handler
 	PromoteRegistryCandidate                http.Handler
@@ -219,9 +216,6 @@ func New(
 			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
 			{"GetHookClients", "GET", "/admin/hookClients.get"},
-			{"ListExternalMcpMigrationCandidates", "GET", "/admin/externalMcpMigration.listCandidates"},
-			{"PreviewExternalMcpMigration", "POST", "/admin/externalMcpMigration.preview"},
-			{"MigrateExternalMcpServers", "POST", "/admin/externalMcpMigration.migrate"},
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
 			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
@@ -326,9 +320,6 @@ func New(
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
 		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
-		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesHandler(e.ListExternalMcpMigrationCandidates, mux, decoder, encoder, errhandler, formatter),
-		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationHandler(e.PreviewExternalMcpMigration, mux, decoder, encoder, errhandler, formatter),
-		MigrateExternalMcpServers:               NewMigrateExternalMcpServersHandler(e.MigrateExternalMcpServers, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
@@ -440,9 +431,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
 	s.GetHookClients = m(s.GetHookClients)
-	s.ListExternalMcpMigrationCandidates = m(s.ListExternalMcpMigrationCandidates)
-	s.PreviewExternalMcpMigration = m(s.PreviewExternalMcpMigration)
-	s.MigrateExternalMcpServers = m(s.MigrateExternalMcpServers)
 	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
 	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
 	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
@@ -553,9 +541,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
 	MountGetHookClientsHandler(mux, h.GetHookClients)
-	MountListExternalMcpMigrationCandidatesHandler(mux, h.ListExternalMcpMigrationCandidates)
-	MountPreviewExternalMcpMigrationHandler(mux, h.PreviewExternalMcpMigration)
-	MountMigrateExternalMcpServersHandler(mux, h.MigrateExternalMcpServers)
 	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
 	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
 	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
@@ -3976,168 +3961,6 @@ func NewGetHookClientsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHookClients")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountListExternalMcpMigrationCandidatesHandler configures the mux to serve
-// the "admin" service "listExternalMcpMigrationCandidates" endpoint.
-func MountListExternalMcpMigrationCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/admin/externalMcpMigration.listCandidates", f)
-}
-
-// NewListExternalMcpMigrationCandidatesHandler creates a HTTP handler which
-// loads the HTTP request and calls the "admin" service
-// "listExternalMcpMigrationCandidates" endpoint.
-func NewListExternalMcpMigrationCandidatesHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeListExternalMcpMigrationCandidatesRequest(mux, decoder)
-		encodeResponse = EncodeListExternalMcpMigrationCandidatesResponse(encoder)
-		encodeError    = EncodeListExternalMcpMigrationCandidatesError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listExternalMcpMigrationCandidates")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountPreviewExternalMcpMigrationHandler configures the mux to serve the
-// "admin" service "previewExternalMcpMigration" endpoint.
-func MountPreviewExternalMcpMigrationHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/admin/externalMcpMigration.preview", f)
-}
-
-// NewPreviewExternalMcpMigrationHandler creates a HTTP handler which loads the
-// HTTP request and calls the "admin" service "previewExternalMcpMigration"
-// endpoint.
-func NewPreviewExternalMcpMigrationHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodePreviewExternalMcpMigrationRequest(mux, decoder)
-		encodeResponse = EncodePreviewExternalMcpMigrationResponse(encoder)
-		encodeError    = EncodePreviewExternalMcpMigrationError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "previewExternalMcpMigration")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
-// MountMigrateExternalMcpServersHandler configures the mux to serve the
-// "admin" service "migrateExternalMcpServers" endpoint.
-func MountMigrateExternalMcpServersHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("POST", "/admin/externalMcpMigration.migrate", f)
-}
-
-// NewMigrateExternalMcpServersHandler creates a HTTP handler which loads the
-// HTTP request and calls the "admin" service "migrateExternalMcpServers"
-// endpoint.
-func NewMigrateExternalMcpServersHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeMigrateExternalMcpServersRequest(mux, decoder)
-		encodeResponse = EncodeMigrateExternalMcpServersResponse(encoder)
-		encodeError    = EncodeMigrateExternalMcpServersError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "migrateExternalMcpServers")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {
