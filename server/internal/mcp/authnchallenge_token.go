@@ -1389,7 +1389,7 @@ func (s *Service) rotateRefreshToken(
 		case err == nil && (signIn.Fenced || (signIn.RevokedAt.Valid && signIn.RevokeReason.String != string(signins.RevokeReasonSignOut))):
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_revoked")
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
-			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, "sign_in_revoked", mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, signInRevokedReason(signIn.RevokeReason), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 		}
 	}
 	oldSession, err := txRepo.RevokeUserSessionByRefreshTokenHash(ctx, usersessions_repo.RevokeUserSessionByRefreshTokenHashParams{
@@ -1802,7 +1802,7 @@ func (s *Service) writeRefreshTokenReplay(
 			tracker.Continue()
 			return err
 		}
-		// The owner's rotation stands, so only the presenting app is wrong.
+		// This path revokes nothing, so the presenting app is the one to fix.
 		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenClientMismatch, mcpconnectionattempts.Detail("refresh_token_client_mismatch"), mcpconnectionattempts.Subject(payload.Subject), mcpconnectionattempts.FromRequest(r))
 		return nil
 	}
@@ -1864,6 +1864,12 @@ func (s *Service) writeRefreshTokenReplay(
 				return refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_revoked", mcpconnectionattempts.Subject(payload.Subject))
 			}
 			return writeRefreshReplayLookupOutage(ctx, tracker, w, r, clientRow, presentedAuthMethod, payload.Subject, err, logger)
+		}
+		if replaySession.UserSessionClientID.Valid && replaySession.UserSessionClientID.UUID == clientRow.ID &&
+			replaySession.SubjectUrn.String() == payload.Subject.String() && replaySession.ExpiresAt.Valid && !replaySession.ExpiresAt.Time.After(time.Now()) {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
+			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
+			return refuseInboundRefresh(ctx, tracker, r, writeErr, "refresh_token_expired", mcpconnectionattempts.Subject(payload.Subject))
 		}
 		if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
 			replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
@@ -2551,7 +2557,7 @@ func (s *Service) humanReplayRevoked(ctx context.Context, endpoint *ResolvedMcpE
 		return replayLookupFailureReason(err, "sign_in_revoked"), false, err
 	}
 	if row.Fenced || (row.RevokedAt.Valid && row.RevokeReason.String != string(signins.RevokeReasonSignOut)) {
-		return "sign_in_revoked", false, nil
+		return signInRevokedReason(row.RevokeReason), false, nil
 	}
 	return "", true, nil
 }

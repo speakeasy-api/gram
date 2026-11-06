@@ -104,6 +104,7 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenClientMismatch},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeStoredSessionInvalid},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInRevokedByAdmin},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired},
 	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRetryable},

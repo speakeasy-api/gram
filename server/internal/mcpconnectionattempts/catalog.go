@@ -288,8 +288,9 @@ var (
 	CodeConsentNotApproved = defineResult("consent_not_approved", resultNeedsConsent, OutcomeBlocked, WhoPerson, "This server needs your approval for this connection.", "Connect again and approve the server.")
 	CodeCatalogTooLarge    = define("catalog_too_large", OutcomeFailed, WhoAdmin, "The tools for this connection are too large to approve.", "Choose fewer tools if you can, or ask for some to be removed.")
 
-	// Refresh refusals, by who is at fault.
+	// Refresh refusals.
 	CodeRefreshTokenClientMismatch = define("refresh_token_client_mismatch", OutcomeFailed, WhoApp, "The app sent a sign-in that belongs to a different app.", "Update the app, or report the problem to its makers.")
 	CodeRefreshTokenUsedByOtherApp = define("refresh_token_used_by_other_app", OutcomeFailed, WhoPerson, "This connection ended because another app used its sign-in.", "Connect to the server again. If it keeps happening, report it to the app's makers.")
-	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoSpeakeasy, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
+	CodeStoredSessionInvalid       = define("stored_session_invalid", OutcomeFailed, WhoPerson, "Your saved connection is damaged on our side.", "Connect to the server again. If it keeps happening, contact Speakeasy support.")
+	CodeSignInRevokedByAdmin       = define("sign_in_revoked_by_admin", OutcomeBlocked, WhoAdmin, "Your admin ended this sign-in.", "Ask your admin if you still need access.")
 )

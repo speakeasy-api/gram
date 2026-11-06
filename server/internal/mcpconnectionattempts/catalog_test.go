@@ -123,6 +123,7 @@ var frozenCodes = []string{
 	"refresh_token_client_mismatch",
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
+	"sign_in_revoked_by_admin",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -284,7 +285,8 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeAssertionInvalid, WhoApp, []string{"the app"}, []string{"sign-in setup"}},
 		{CodeRefreshTokenClientMismatch, WhoApp, []string{"different app"}, []string{"connect to the server again"}},
 		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
-		{CodeStoredSessionInvalid, WhoSpeakeasy, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
+		{CodeStoredSessionInvalid, WhoPerson, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
+		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {
@@ -333,7 +335,7 @@ func TestRecorder_StoresWhoFixesFromTheCatalog(t *testing.T) {
 	}
 }
 
-// Expiry and revocation are not policies, so their step result is failed.
+// Expiry and a revocation the person can recover from are not policies, so their step result is failed.
 func TestCatalog_ExpiryAndRevocationAreFailures(t *testing.T) {
 	t.Parallel()
 
@@ -344,6 +346,12 @@ func TestCatalog_ExpiryAndRevocationAreFailures(t *testing.T) {
 		require.Equal(t, resultFailed, meaning.result, code)
 		require.Equal(t, WhoPerson, meaning.WhoFixes, code)
 	}
+
+	byAdmin, ok := MeaningOf(CodeSignInRevokedByAdmin.String())
+	require.True(t, ok)
+	require.Equal(t, OutcomeBlocked, byAdmin.Outcome, "an admin chose to end it")
+	require.Equal(t, resultPolicyBlocked, byAdmin.result)
+	require.Equal(t, WhoAdmin, byAdmin.WhoFixes)
 }
 
 func TestDefine_RefusesADuplicateName(t *testing.T) {
