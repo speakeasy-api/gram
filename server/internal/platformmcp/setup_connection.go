@@ -72,7 +72,8 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 	}
 	subject := urn.NewUserSubject(userID)
 	registration := remotesessions.AuthClientTokenRequest{
-		ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
+		Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(organizationID, projectID, mcpServerID, mcpconnectionattempts.AppFirstParty)),
+		ProjectID:   projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 		Subject: subject, RegistrationID: clients[0].ID, SkipUnusable: false,
 	}
 	var reconnect bool
@@ -97,7 +98,7 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 		}
 	} else {
 		var authorization remotesessions.ResolvedAuthorization
-		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(organizationID, projectID, "dashboard")), projectID, organizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
+		authorization, err = p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ServerScope(organizationID, projectID, mcpServerID, mcpconnectionattempts.AppFirstParty)), projectID, organizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, subject, remote.Url)
 		accessToken = authorization.AccessToken
 	}
 	switch {

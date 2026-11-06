@@ -213,7 +213,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 		// among; the caller is ready through the first that yields a credential,
 		// and the first registration's failure is reported when none does.
 		for i, client := range clients {
-			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false})
+			tokens, resolveErr := p.sessions.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: principal.OrganizationID, UserSessionIssuerID: userSessionIssuerID, Subject: subject, RegistrationID: client.ID, SkipUnusable: false, Attribution: remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppOf(principal.ClientID)))})
 			token := tokens[client.RemoteSessionIssuerID]
 			if resolveErr == nil && token.Token == "" {
 				resolveErr = remotesessions.ErrNoValidToken
