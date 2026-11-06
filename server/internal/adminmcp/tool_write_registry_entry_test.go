@@ -94,7 +94,9 @@ func TestRegistryEntryWriterAcceptsMoreRemotesThanAReadPage(t *testing.T) {
 func TestRegistryCreateErrorMapsNameConflictToStaleState(t *testing.T) {
 	t.Parallel()
 	require.ErrorIs(t, registryCreateError(mcpregistry.ErrConflict), ErrStaleState)
-	require.ErrorIs(t, registryCreateError(&mcpregistry.InvalidError{}), ErrStaleState, "a state-dependent rejection after validation is stale")
+	invalid := registryCreateError(&mcpregistry.InvalidError{Issues: []mcpregistry.Issue{{Path: "/name", Message: "already mapped"}}})
+	require.NotErrorIs(t, invalid, ErrStaleState, "a rejected record is not stale state")
+	require.ErrorContains(t, invalid, "/name: already mapped")
 	err := registryCreateError(mcpregistry.ErrNotFound)
 	require.NotErrorIs(t, err, ErrStaleState)
 	require.ErrorIs(t, err, mcpregistry.ErrNotFound)

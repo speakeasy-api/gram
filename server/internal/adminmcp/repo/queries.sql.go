@@ -185,20 +185,6 @@ func (q *Queries) GetAuthorizationGrant(ctx context.Context, arg GetAuthorizatio
 	return i, err
 }
 
-const getConnectionGenerationFixture = `-- name: GetConnectionGenerationFixture :one
-SELECT active_generation
-FROM admin_mcp_connections
-WHERE id = $1
-`
-
-// Test-only: reads the connection generation after reconsent.
-func (q *Queries) GetConnectionGenerationFixture(ctx context.Context, id uuid.UUID) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, getConnectionGenerationFixture, id)
-	var active_generation uuid.UUID
-	err := row.Scan(&active_generation)
-	return active_generation, err
-}
-
 const getLiveOAuthClient = `-- name: GetLiveOAuthClient :one
 SELECT client_id, client_name, client_secret_hash, redirect_uris, client_secret_expires_at
 FROM admin_mcp_oauth_clients
@@ -726,24 +712,6 @@ type RotateStaffSessionParams struct {
 
 func (q *Queries) RotateStaffSession(ctx context.Context, arg RotateStaffSessionParams) error {
 	_, err := q.db.Exec(ctx, rotateStaffSession, arg.Now, arg.ReplacedBySessionID, arg.ID)
-	return err
-}
-
-const setConnectionScopesFixture = `-- name: SetConnectionScopesFixture :exec
-UPDATE admin_mcp_connections
-SET scopes = $1,
-    updated_at = clock_timestamp()
-WHERE id = $2
-`
-
-type SetConnectionScopesFixtureParams struct {
-	Scopes []string
-	ID     uuid.UUID
-}
-
-// Test-only: simulates a scope change on a live connection.
-func (q *Queries) SetConnectionScopesFixture(ctx context.Context, arg SetConnectionScopesFixtureParams) error {
-	_, err := q.db.Exec(ctx, setConnectionScopesFixture, arg.Scopes, arg.ID)
 	return err
 }
 

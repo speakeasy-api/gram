@@ -78,9 +78,6 @@ type AuthorizationError struct {
 	// Reason selects an explanation independently of the public error code.
 	Reason Reason
 
-	// Approval identifies a staff change approval rather than a connection.
-	Approval bool
-
 	// ErrorID is the public service error identifier, when available.
 	ErrorID string
 
@@ -226,9 +223,6 @@ type authorizationErrorView struct {
 	// Setup selects organization setup copy.
 	Setup bool
 
-	// Approval selects staff change approval wording.
-	Approval bool
-
 	// Check selects server connection check wording.
 	Check bool
 
@@ -369,7 +363,6 @@ func WriteAuthorizationError(ctx context.Context, w http.ResponseWriter, page Au
 		Recovery:       page.Recovery,
 		Styles:         consentpage.Styles,
 		Setup:          page.Setup,
-		Approval:       page.Approval,
 		Check:          page.Reason.check(),
 		ErrorID:        page.ErrorID,
 		Kind:           classifyError(page),

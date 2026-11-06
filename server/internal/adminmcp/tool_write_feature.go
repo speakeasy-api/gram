@@ -111,7 +111,7 @@ func (f *featureWriter) apply(ctx context.Context, input FeatureInput) (featureR
 		return featureReceipt{}, fmt.Errorf("lock feature change: %w", err)
 	}
 	defer release()
-	receipt, err := runWriteOn(ctx, f.runner, conn, authority, writeTarget{OrganizationID: input.OrganizationID}, func(ctx context.Context, tx pgx.Tx) (featureReceipt, error) {
+	receipt, err := runWriteOn(ctx, f.runner, conn, authority, writeTarget{OrganizationID: input.OrganizationID, ResourceKind: "feature", ResourceID: input.Feature}, func(ctx context.Context, tx pgx.Tx) (featureReceipt, error) {
 		state, err := f.readState(ctx, tx, input.OrganizationID, feature)
 		if err != nil {
 			return featureReceipt{}, err

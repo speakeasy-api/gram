@@ -193,22 +193,19 @@ func TestAuthorizationErrorPageWithoutCallback(t *testing.T) {
 func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name     string
-		reason   oauthui.Reason
-		approval bool
-		want     string
+		name   string
+		reason oauthui.Reason
+		want   string
 	}{
-		{"blocked", oauthui.ReasonOrganizationBlocked, false, "Your organization doesn't allow"},
-		{"expired", oauthui.ReasonExpired, false, "link expired or was already used"},
-		{"unavailable", oauthui.ReasonUnavailable, false, "This is a problem on our side"},
-		{"session", oauthui.ReasonSessionChanged, false, "current browser or sign-in session"},
-		{"approval-expired", oauthui.ReasonExpired, true, "This approval link expired"},
-		{"approval-session", oauthui.ReasonSessionChanged, true, "Your staff sign-in session changed"},
+		{"blocked", oauthui.ReasonOrganizationBlocked, "Your organization doesn't allow"},
+		{"expired", oauthui.ReasonExpired, "link expired or was already used"},
+		{"unavailable", oauthui.ReasonUnavailable, "This is a problem on our side"},
+		{"session", oauthui.ReasonSessionChanged, "current browser or sign-in session"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			response := httptest.NewRecorder()
-			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, Approval: tc.approval, ClientName: "Example Client", ServerName: "example-server"}))
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, ClientName: "Example Client", ServerName: "example-server"}))
 			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
 			require.Equal(t, oautherr.CodeInvalidClient, body.Code)
 			require.Contains(t, response.Body.String(), tc.want)
@@ -303,7 +300,6 @@ func TestAuthorizationErrorLeadsWithWhatHappened(t *testing.T) {
 		{"connection", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", ClientName: "Client", ServerName: "Server"}},
 		{"provider outage", oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonProviderUnavailable, ClientName: "Client", ServerName: "Server"}},
 		{"setup", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Setup: true}},
-		{"approval", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Approval: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

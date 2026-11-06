@@ -244,19 +244,6 @@ SET revoked_at = clock_timestamp(),
     updated_at = clock_timestamp()
 WHERE id = @id;
 
--- name: SetConnectionScopesFixture :exec
--- Test-only: simulates a scope change on a live connection.
-UPDATE admin_mcp_connections
-SET scopes = @scopes,
-    updated_at = clock_timestamp()
-WHERE id = @id;
-
--- name: GetConnectionGenerationFixture :one
--- Test-only: reads the connection generation after reconsent.
-SELECT active_generation
-FROM admin_mcp_connections
-WHERE id = @id;
-
 -- name: GetReauthorizationReasonFixture :one
 -- Test-only: reads why a connection now requires staff reauthorization.
 SELECT reauthorization_reason

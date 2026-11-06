@@ -95,12 +95,15 @@ func (w *catalogPromotionWriter) apply(ctx context.Context, input CatalogPromoti
 	if err != nil {
 		return catalogPromotionReceipt{}, catalogPromotionValidationError(err)
 	}
+	target := writeTarget{OrganizationID: request.Target.OrganizationID, ResourceKind: "mcp_server", ResourceID: request.Target.MCPServerID.String()}
 	if (!candidate.Eligible && (!request.OverrideEligibility || !candidate.CanOverrideEligibility())) || candidate.SourceRevision != request.SourceRevision || candidate.CurationRevision != request.CurationRevision || candidate.Status != "candidate" {
-		return catalogPromotionReceipt{}, ErrStaleState
+		// Refused here so discovery never probes a stale source; the write leaves the failure on the trail.
+		return runWrite(ctx, w.runner, authority, target, func(context.Context, pgx.Tx) (catalogPromotionReceipt, error) {
+			return catalogPromotionReceipt{}, ErrStaleState
+		})
 	}
 	// Discovery is a network call, so it stays outside the transaction.
 	request.AuthDiscovery = w.mutator.DiscoverAuth(ctx, request.Public.URL, request.Public.AuthMode)
-	target := writeTarget{OrganizationID: request.Target.OrganizationID, ResourceKind: "mcp_server", ResourceID: request.Target.MCPServerID.String()}
 	return runWrite(ctx, w.runner, authority, target, func(ctx context.Context, tx pgx.Tx) (catalogPromotionReceipt, error) {
 		if _, err := w.mutator.ValidateTx(ctx, tx, request.Target, request.SourceRevision, request.CurationRevision, request.Public, request.OverrideEligibility); err != nil {
 			return catalogPromotionReceipt{}, catalogPromotionValidationError(err)
@@ -140,8 +143,10 @@ func catalogPromotionValidationError(err error) error {
 		return catalogpromotion.ErrPublicTitleTooLong
 	case errors.Is(err, catalogpromotion.ErrPublicDescriptionTooLong):
 		return catalogpromotion.ErrPublicDescriptionTooLong
-	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrNotFound), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible), errors.Is(err, catalogpromotion.ErrInvalid):
+	case errors.Is(err, catalogpromotion.ErrStale), errors.Is(err, catalogpromotion.ErrNotFound), errors.Is(err, catalogpromotion.ErrConflict), errors.Is(err, catalogpromotion.ErrIneligible):
 		return ErrStaleState
+	case errors.Is(err, catalogpromotion.ErrInvalid):
+		return catalogpromotion.ErrInvalid
 	default:
 		return errors.New("catalogue promotion validation is temporarily unavailable; retry")
 	}

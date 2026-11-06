@@ -46,7 +46,7 @@ func (s *registryIconsWriter) apply(ctx context.Context, input SetRegistryIconsI
 	}
 	id := uuid.MustParse(input.EntryID)
 	target := writeTarget{ResourceKind: "registry_entry", ResourceID: input.EntryID}
-	var replaced json.RawMessage
+	var replaced, stored json.RawMessage
 	receipt, err := runWrite(ctx, s.runner, authority, target, func(ctx context.Context, tx pgx.Tx) (registryIconsReceipt, error) {
 		// The check locks the entry and verifies the revision, so old is the state
 		// this change replaces.
@@ -62,13 +62,17 @@ func (s *registryIconsWriter) apply(ctx context.Context, input SetRegistryIconsI
 		if err != nil {
 			return registryIconsReceipt{}, registryCreateError(err)
 		}
-		return registryIconsReceipt{EntryID: updated.ID.String(), UpdatedAt: mcpregistry.Token(updated), Before: mcpregistry.CatalogIcons{}, After: input.Icons}, nil
+		stored = updated.Data
+		return registryIconsReceipt{EntryID: updated.ID.String(), UpdatedAt: mcpregistry.Token(updated), Before: mcpregistry.CatalogIcons{}, After: mcpregistry.CatalogIcons{}}, nil
 	})
 	if err != nil {
 		return registryIconsReceipt{}, err
 	}
-	// Bounding icons reads through the pool, so it waits for the entry lock to go.
-	receipt.Before = boundedCatalogIcons(ctx, s.registry, replaced)
+	// Bounding icons reads through the pool, so it waits for the entry lock to
+	// go. The change has committed, so a client disconnect must not blank them.
+	readCtx := context.WithoutCancel(ctx)
+	receipt.Before = boundedCatalogIcons(readCtx, s.registry, replaced)
+	receipt.After = boundedCatalogIcons(readCtx, s.registry, stored)
 	return receipt, nil
 }
 
