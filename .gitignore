@@ -106,6 +106,10 @@ __pycache__/
 
 # Traces, videos and screenshots from the e2e suite (mise run test:wake-stack)
 e2e/.playwright
+# Flow check results, traces and heal-agent transcripts (mise run test:flows)
+e2e/.flows
+# Magellan explorer runs: findings, screenshots, transcripts (mise run magellan:explore)
+e2e/.magellan
 
 # Riptide artifacts (cloud-synced)
 .humanlayer/tasks/

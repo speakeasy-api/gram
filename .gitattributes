@@ -8,3 +8,5 @@ openrouter/** linguist-generated
 .speakeasy/out.openapi.yaml linguist-generated
 .speakeasy/out.admin.openapi.yaml linguist-generated
 **/descriptors.pb linguist-generated
+
+.github/workflows/*.lock.yml linguist-generated=true
