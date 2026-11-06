@@ -198,15 +198,17 @@ var Answers = map[PermissionKey]Scope{
 }
 
 // Composites are public permissions that answer no single scope: either of
-// two permissions allows. The old tables list them as "any of".
-var Composites = []PermissionKey{
-	{"project", "plugin_publication"},
-	{"project", "read_or_organization_read"},
-	{"project", "write_or_administer"},
-	{"mcp_server", "project_read_or_edit"},
-	{"chat", "read"},
-	{"chat", "write"},
-	{"agent", "is_owner"},
+// two permissions allows. The old tables list them as "any of". Each one
+// names the scopes its branches answer, so the table check can require every
+// block of those scopes on the subtracted side, as it does for Answers.
+var Composites = map[PermissionKey][]Scope{
+	{"project", "plugin_publication"}:        {ScopePluginWrite},
+	{"project", "read_or_organization_read"}: {ScopeProjectRead, ScopeOrgRead},
+	{"project", "write_or_administer"}:       {ScopeProjectWrite},
+	{"mcp_server", "project_read_or_edit"}:   {ScopeProjectRead, ScopeMCPWrite},
+	{"chat", "read"}:                         {ScopeChatRead},
+	{"chat", "write"}:                        {ScopeChatWrite},
+	{"agent", "is_owner"}:                    nil,
 }
 
 // PermissionKey names a permission on a type.

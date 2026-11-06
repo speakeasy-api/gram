@@ -43,6 +43,15 @@ func checkTables(reg *Registry) []error {
 						errs = append(errs, fmt.Errorf("%s#%s: only a named user can hold a _direct or _own row", def.Name, rel.Name))
 					}
 				}
+				// Land writes a _direct row next to its grant and an _own row in
+				// place of its block, so each needs that base relation here.
+				base, want := strings.TrimSuffix(rel.Name, "_direct"), RelationGrant
+				if rel.Kind == RelationOwnBlock {
+					base, want = strings.TrimSuffix(rel.Name, "_own"), RelationBlock
+				}
+				if b := def.Relations[base]; b == nil || b.Kind != want {
+					errs = append(errs, fmt.Errorf("%s#%s has no %s relation beside it", def.Name, rel.Name, base))
+				}
 			case RelationMembership:
 			}
 		}
@@ -52,12 +61,14 @@ func checkTables(reg *Registry) []error {
 				continue
 			}
 			key := PermissionKey{def.Name, perm.Name}
-			scope, answers := Answers[key]
-			if !answers && !slices.Contains(Composites, key) {
+			scopes, composite := Composites[key]
+			if scope, answers := Answers[key]; answers {
+				scopes = []Scope{scope}
+			} else if !composite {
 				errs = append(errs, fmt.Errorf("%s#%s is public but neither in Answers nor in Composites", def.Name, perm.Name))
 				continue
 			}
-			if answers {
+			for _, scope := range scopes {
 				errs = append(errs, checkBlocksSubtracted(reg, def, perm, scope)...)
 			}
 		}
