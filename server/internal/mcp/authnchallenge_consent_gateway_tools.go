@@ -223,7 +223,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		}
 		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
-	view.staleChoiceFixable = s.staleChoiceRemedies(ctx, logger, gate, members)
+	view.staleChoiceRemedies = s.staleChoiceRemedies(ctx, logger, gate, members)
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {
 		signInID = *challengeState.SignInID
@@ -317,10 +317,10 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	return tools, toolMembers, outcomes, nil
 }
 
-// staleChoiceRemedies decides, for each member with a stale choice, whether consent can replace it.
+// staleChoiceRemedies decides, for each member with a stale choice, whether this consent can replace it.
 // A member whose check failed is left out.
-func (s *Service) staleChoiceRemedies(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) map[uuid.UUID]bool {
-	remedies := map[uuid.UUID]bool{}
+func (s *Service) staleChoiceRemedies(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember) map[uuid.UUID]staleChoiceRemedy {
+	remedies := map[uuid.UUID]staleChoiceRemedy{}
 	for _, member := range members {
 		if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
 			continue
@@ -330,7 +330,10 @@ func (s *Service) staleChoiceRemedies(ctx context.Context, logger *slog.Logger, 
 			logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
 			continue
 		}
-		remedies[member.serverID] = fixable
+		remedies[member.serverID] = staleChoiceAskAdmin
+		if fixable {
+			remedies[member.serverID] = staleChoiceReconnect
+		}
 	}
 	return remedies
 }

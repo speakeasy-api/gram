@@ -228,8 +228,8 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 // distinguishable from one that is merely unavailable.
 func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
 	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
-		message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-		return &codemode.MemberRefusalError{Message: message, ConsentRequired: reconnect}
+		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
 	}
 	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired

@@ -257,8 +257,8 @@ func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (mem
 	what, detail := gatewayServerHappened(server.Status, authClient)
 	if _, stale := errors.AsType[memberStaleChoiceError](unavailable); stale && (what == mcpconnectionattempts.CodeNeedsSignIn || what == mcpconnectionattempts.CodeUpstreamSignInNotSetUp) {
 		detail = memberSetupChangedDetail
-		if fixable, decided := gateway.staleChoiceFixable[serverID]; decided {
-			what = staleChoiceHappened(fixable)
+		if code, decided := staleChoiceHappened(gateway.staleChoiceRemedies[serverID]); decided {
+			what = code
 		}
 	}
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
@@ -370,12 +370,16 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 // memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
 const memberSetupChangedDetail = "setup_changed"
 
-// staleChoiceHappened says who fixes a stale choice: the person when reconnecting replaces it, an admin otherwise.
-func staleChoiceHappened(reconnectFixes bool) mcpconnectionattempts.Code {
-	if reconnectFixes {
-		return mcpconnectionattempts.CodeNeedsSignIn
+// staleChoiceHappened records whoever the stale choice's message tells to act first; an unchecked remedy decides nothing.
+func staleChoiceHappened(remedy staleChoiceRemedy) (mcpconnectionattempts.Code, bool) {
+	switch remedy {
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
+		return mcpconnectionattempts.CodeNeedsSignIn, true
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, true
+	case staleChoiceUnchecked:
 	}
-	return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+	return mcpconnectionattempts.Code{}, false
 }
 
 // gatewayServerHappened maps a server's consent status, and any gap in its

@@ -245,8 +245,8 @@ func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind,
 
 // staleMemberStatus gives a stale choice the call's remedy; the connect page can't fix it.
 func (s *Service) staleMemberStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, string, *metamcp.ConnectionStatusOutage) {
-	message, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
-	if reconnect {
+	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+	if remedy == staleChoiceReconnect {
 		return metamcp.SignInNeedsConsent, message, nil
 	}
 	return metamcp.SignInActionRequired, message, nil

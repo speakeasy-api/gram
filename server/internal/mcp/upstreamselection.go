@@ -998,28 +998,42 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
 const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
+// staleChoiceRemedy is who a stale choice's message tells to act first.
+type staleChoiceRemedy string
+
+const (
+	// staleChoiceReconnect: a new consent replaces the choice.
+	staleChoiceReconnect staleChoiceRemedy = "reconnect"
+	// staleChoiceReconnectThenAdmin: the person reconnects first, and asks an administrator if that fails.
+	staleChoiceReconnectThenAdmin staleChoiceRemedy = "reconnect_then_admin"
+	// staleChoiceAskAdmin: reconnecting can't help, so the person asks an administrator or owner.
+	staleChoiceAskAdmin staleChoiceRemedy = "ask_admin"
+	// staleChoiceUnchecked: whether consent can replace the choice could not be checked.
+	staleChoiceUnchecked staleChoiceRemedy = "unchecked"
+)
+
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 // Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
-func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
+func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, staleChoiceRemedy) {
 	authentication := gate.authentication
 	choices := gate.memberChoices
 	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
 		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
 	if !person {
-		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", false
+		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", staleChoiceAskAdmin
 	}
 	if !authentication.refreshableUserSession {
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", false
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", staleChoiceReconnectThenAdmin
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return connectionNotCheckedMessage, false
+		return connectionNotCheckedMessage, staleChoiceUnchecked
 	case fixable:
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", staleChoiceReconnect
 	}
-	return "This server needs your administrator to finish setup or give you access.", false
+	return "This server needs your administrator to finish setup or give you access.", staleChoiceAskAdmin
 }
 
 // consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.

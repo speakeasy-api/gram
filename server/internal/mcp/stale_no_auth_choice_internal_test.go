@@ -128,8 +128,8 @@ func TestStaleChoiceEveryNonPersonGetsOwnerCopy(t *testing.T) {
 		gates[name] = &metaGateContext{authentication: &issuerGateAuthentication{refreshableUserSession: tc.refreshable, subject: tc.subject}, memberChoices: &memberChoices{}}
 	}
 	for name, gate := range gates {
-		message, reconnect := s.staleChoiceMessage(t.Context(), s.logger, gate, member)
-		require.False(t, reconnect, name)
+		message, remedy := s.staleChoiceMessage(t.Context(), s.logger, gate, member)
+		require.Equal(t, staleChoiceAskAdmin, remedy, name)
 		require.Contains(t, message, "Ask whoever set this up", name)
 		require.NotContains(t, message, "Reconnect this gateway", name)
 	}
@@ -268,6 +268,12 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 		require.Equal(t, want, refused.Message, name)
 		require.NotErrorIs(t, refusal, codemode.ErrConsentRequired, name)
 	}
+	rec := mcpconnectionattemptstest.New(t)
+	f.service.connections = rec.Recorder
+	gate.metaServerID = uuid.New()
+	f.service.recordDialFailure(t.Context(), logger, gate, member, member.upstreamUnavailable)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
+	require.Equal(t, memberSetupChangedDetail, row.SubReason, "an unchecked remedy blames no one new")
 	require.Zero(t, f.service.staleChoiceConsent.Len(), "a retry must look again")
 }
 
@@ -389,7 +395,7 @@ func TestRecordConsentPage_StaleChoiceIsSetupChanged(t *testing.T) {
 			{ServerID: neverSignedIn.String(), Status: gatewayServerNotConnected},
 		},
 	}
-	view.staleChoiceFixable = s.staleChoiceRemedies(t.Context(), testenv.NewLogger(t), gate, view.members[:2])
+	view.staleChoiceRemedies = s.staleChoiceRemedies(t.Context(), testenv.NewLogger(t), gate, view.members[:2])
 
 	s.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
 
@@ -444,7 +450,27 @@ func TestRecordDialFailure_StaleChoiceFollowsConsent(t *testing.T) {
 	s.recordDialFailure(t.Context(), s.logger, gate, metaMember{serverID: adminOnly, upstreamUnavailable: stale}, stale)
 	s.recordDialFailure(t.Context(), s.logger, gate, metaMember{serverID: notConnected}, memberCredentialError{&metaMemberError{message: "not connected"}})
 
+	unrefreshable := *gate
+	unrefreshable.authentication = &issuerGateAuthentication{refreshableUserSession: false, subject: gate.authentication.subject}
+	reconnectFirst := uuid.New()
+	s.recordDialFailure(t.Context(), s.logger, &unrefreshable, metaMember{serverID: reconnectFirst, upstreamUnavailable: stale}, stale)
+	owner := uuid.New()
+	s.recordDialFailure(t.Context(), s.logger, &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New(), authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}, metaMember{serverID: owner, upstreamUnavailable: stale}, stale)
+
 	rows := rec.Rows()
+	for name, tc := range map[string]struct {
+		member uuid.UUID
+		reason mcpconnectionattempts.Code
+		who    mcpconnectionattempts.WhoFixes
+	}{
+		"reconnect, then ask an administrator": {reconnectFirst, mcpconnectionattempts.CodeNeedsSignIn, mcpconnectionattempts.WhoPerson},
+		"ask whoever set this up":              {owner, mcpconnectionattempts.CodeUpstreamSignInNotSetUp, mcpconnectionattempts.WhoAdmin},
+	} {
+		row := rowForMember(t, rows, tc.member)
+		require.Equal(t, tc.reason.String(), row.Reason, name)
+		require.Equal(t, memberSetupChangedDetail, row.SubReason, name)
+		require.Equal(t, string(tc.who), row.WhoFixes, name)
+	}
 	row := rowForMember(t, rows, reconnectable)
 	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn.String(), row.Reason)
 	require.Equal(t, memberSetupChangedDetail, row.SubReason)

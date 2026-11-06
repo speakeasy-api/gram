@@ -254,8 +254,12 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 // recordDialFailure records a member that could not be dialed for a call.
 func (s *Service) recordDialFailure(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) {
 	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
-		_, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
-		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(reconnect), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+		_, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+		what, decided := staleChoiceHappened(remedy)
+		if !decided {
+			what = mcpconnectionattempts.CodeInvalidRemoteSession
+		}
+		s.recordMemberFailure(ctx, gate, member, what, mcpconnectionattempts.Detail(memberSetupChangedDetail))
 		return
 	}
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
