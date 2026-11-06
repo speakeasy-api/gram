@@ -291,10 +291,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
-			if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {
-				return fmt.Errorf("check connection: %w", oops.WithBrowserReason(err, failure.page))
-			}
-			return err
+			return checkFailureBrowserError(ctx, err)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil

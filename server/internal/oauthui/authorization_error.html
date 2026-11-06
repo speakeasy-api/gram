@@ -83,13 +83,14 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             Speakeasy couldn't check this server's connection. This is a problem
             on our side, not something you did.
             {{else if eq .Kind "check-unavailable"}}
-            Speakeasy couldn't check this server's connection right now. This
-            isn't something you did.
+            Speakeasy couldn't check this server's connection right now. This is
+            a problem on our side, not something you did.
+            {{else if eq .Kind "check-provider-unavailable"}}
+            The service this server uses isn't available right now, so Speakeasy
+            couldn't check the connection. This isn't something you did.
             {{else if eq .Kind "check-needs-admin"}}
             This server's connection isn't set up correctly, so Speakeasy couldn't
             check it.
-            {{else if eq .Kind "check-needs-reconnect"}}
-            Your connection to this service is missing or has expired.
             {{else}}
             {{template "Client" .}} couldn't connect to {{template "server" .}}.
             The connection could not be completed.
@@ -141,12 +142,13 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           Speakeasy support.
           {{else if eq .Kind "check-unavailable"}}
           Try again shortly. If it keeps happening, share the technical details
+          below with Speakeasy support.
+          {{else if eq .Kind "check-provider-unavailable"}}
+          Try again shortly. If it keeps happening, share the technical details
           below with your IT administrators.
           {{else if eq .Kind "check-needs-admin"}}
           Ask your IT administrators to check this server's connection settings.
           Share the technical details below with them.
-          {{else if eq .Kind "check-needs-reconnect"}}
-          Go back, reconnect to the service, then check it again.
           {{else}}
           Try connecting again from {{template "client" .}}. If it still fails,
           share the technical details below with your IT administrators.

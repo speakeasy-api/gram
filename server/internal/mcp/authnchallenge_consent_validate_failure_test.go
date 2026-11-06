@@ -14,11 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // recordValidationAttempts gives the fixture's challenge an attempt and records its rows.
@@ -138,4 +140,76 @@ func TestServeConsentAction_ValidateExpiredGrantRecordsReconnect(t *testing.T) {
 	require.Len(t, checkRows(rec), 1)
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInvalidRemoteSession)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+}
+
+// A Verify whose refresh fails writes the refresh's row on the attempt, and no second row for the check.
+func TestServeConsentAction_ValidateRefreshFailureWritesOneRow(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	reader, provider := newValidationMeterProvider()
+	ctx, ti := buildTestMCPService(t, testenv.NewLogger(t), provider, &mockIdentityResolver{hasAccessOK: true}, mcp.TunnelPublicConfig{}, nil, nil, false, mcp.MetaRuntimeConfig{MemberCallTimeout: 0, ValidationTimeout: validationProbeTimeout, AutoVerifyWait: 0, RecheckInterval: recheckTestInterval}, testenv.NewTracerProvider(t), nil, nil, "", false, rec.Recorder)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := seedMetaValidationFixtureOn(t, ctx, ti, reader, "check-refresh")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	projectID, orgID := consentTestTenant(t, ctx)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(upstream.Close)
+	rows, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
+		TokenEndpoint: conv.ToPGText(upstream.URL), RemoteSessionClientID: fx.clientID, ProjectID: projectID, OrganizationID: orgID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+	sess := storedSession(t, ctx, fx)
+	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	var refreshes int
+	for _, row := range rec.Rows() {
+		if row.Step == mcpconnectionattempts.StepProviderRefresh.String() {
+			refreshes++
+		}
+	}
+	require.Equal(t, 1, refreshes, "the refresh wrote its row: %+v", rec.Rows())
+	require.Empty(t, checkRows(rec), "the check adds no second row")
+}
+
+// A first-party sign-in the provider refused is the provider's: no fault page, and its code stays in the details.
+func TestHandleIDPCallback_FirstPartyProviderErrorIsTheProviders(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, memberMock())
+	rec := recordConnections(t, ti)
+	challengeID := seedIDPCallbackChallenge(t, ctx, ti)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	state.FirstParty = true
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?"+url.Values{"state": {challengeID}, "error": {"server_error"}}.Encode(), nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), ti.service.HandleIDPCallback).ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	page := strings.ReplaceAll(strings.Join(strings.Fields(w.Body.String()), " "), "&#39;", "'")
+	require.Contains(t, page, "sign-in provider returned an error: server_error")
+	require.NotContains(t, page, "problem on our side")
+	rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSignInProviderError)
 }

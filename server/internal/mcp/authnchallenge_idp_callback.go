@@ -283,7 +283,12 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
+			// The provider refused, not us: keep its registered code where an admin can read it.
+			message := "sign-in provider returned an error"
+			if oautherr.IsIETFRegisteredCode(idpErr) {
+				message += ": " + idpErr
+			}
+			return oops.E(oops.CodeBadRequest, nil, "%s", message).LogWarn(ctx, logger)
 		}
 		issuer, err := s.issuerURL(endpoint, baseURL)
 		if err != nil {

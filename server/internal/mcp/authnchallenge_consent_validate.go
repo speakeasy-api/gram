@@ -67,53 +67,81 @@ type checkFailure struct {
 	page oauthui.Reason
 }
 
+// noUsableCredentialError is a card whose grant yielded no token. cause is why,
+// nil when the card is not connected or its grant expired.
+type noUsableCredentialError struct {
+	cause error
+}
+
+func (e noUsableCredentialError) Error() string { return errRemoteSessionNoUsableCredential.Error() }
+
+func (e noUsableCredentialError) Unwrap() []error {
+	return []error{errRemoteSessionNoUsableCredential, e.cause}
+}
+
 // classifyCheckFailure explains a check that reached no verdict; false when it records nothing.
 func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
-	var code mcpconnectionattempts.Code
+	none := checkFailure{code: mcpconnectionattempts.Code{}, page: oauthui.ReasonDefault}
 	switch {
-	case err == nil, errors.Is(ctx.Err(), context.Canceled),
-		errors.Is(err, errValidationRateLimited), errors.Is(err, errRemoteSessionMemberOffline), errors.Is(err, errRemoteSessionVerdictNotRecorded):
-		// Nothing was checked, the person left, or the verdict has its own row.
-		return checkFailure{code: code, page: oauthui.ReasonDefault}, false
+	case err == nil, ctx.Err() != nil,
+		errors.Is(err, errValidationRateLimited), errors.Is(err, errRemoteSessionMemberOffline), errors.Is(err, errRemoteSessionVerdictNotRecorded),
+		remotesessions.RefreshFailureRecorded(err), remotesessions.RefreshStepRecorded(err):
+		// Nothing was checked, the request ended, or another row already says what happened.
+		return none, false
 	case errors.Is(err, errRemoteSessionNoUsableCredential):
-		return checkFailure{code: mcpconnectionattempts.CodeInvalidRemoteSession, page: oauthui.ReasonDefault}, true
+		code := mcpconnectionattempts.CodeInvalidRemoteSession
+		if refusal, ok := errors.AsType[noUsableCredentialError](err); ok && refusal.cause != nil {
+			code = checkFailureCode(ctx, refusal.cause)
+		}
+		return checkFailure{code: code, page: oauthui.ReasonDefault}, code != (mcpconnectionattempts.Code{})
 	case errors.Is(err, errRemoteSessionUnroutable):
-		code = mcpconnectionattempts.CodeCredentialMisconfigured
-	default:
-		code = resolveFailureHappened(err)
-		if member, ok := errors.AsType[memberConnectionError](err); ok {
-			code = member.code
-		}
-		if code == mcpconnectionattempts.CodeInternalError && verifyHitStoreOutage(ctx, err) {
-			code = mcpconnectionattempts.CodeAuthCheckUnavailable
-		}
+		return checkFailure{code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin}, true
 	}
+	code := checkFailureCode(ctx, err)
 	// A refresh another request holds is that request's row.
 	if code == (mcpconnectionattempts.Code{}) {
-		return checkFailure{code: code, page: oauthui.ReasonDefault}, false
+		return none, false
 	}
 	return checkFailure{code: code, page: checkFailurePage(code)}, true
 }
 
-// checkFailurePage suggests retrying only for an outage; a fault of ours or an unknown party points to support.
+// checkFailureCode names the cause of a failed check: a store outage, a credential or member failure, or our own fault.
+func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code {
+	code := resolveFailureHappened(err)
+	if member, ok := errors.AsType[memberConnectionError](err); ok {
+		code = member.code
+	}
+	if code == mcpconnectionattempts.CodeInternalError && verifyHitStoreOutage(ctx, err) {
+		code = mcpconnectionattempts.CodeAuthCheckUnavailable
+	}
+	return code
+}
+
+// checkFailureBrowserError explains a failed check on the error page the way its row records it.
+func checkFailureBrowserError(ctx context.Context, err error) error {
+	if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {
+		return fmt.Errorf("check connection: %w", oops.WithBrowserReason(err, failure.page))
+	}
+	return err
+}
+
+// checkFailurePage suggests retrying only for an outage. A party the page has no wording for gets the generic page.
 func checkFailurePage(code mcpconnectionattempts.Code) oauthui.Reason {
 	meaning, _ := mcpconnectionattempts.MeaningOf(code.String())
 	switch meaning.WhoFixes {
 	case mcpconnectionattempts.WhoAdmin:
 		return oauthui.ReasonCheckNeedsAdmin
-	case mcpconnectionattempts.WhoPerson:
-		return oauthui.ReasonCheckNeedsReconnect
 	case mcpconnectionattempts.WhoProvider:
-		return oauthui.ReasonCheckUnavailable
+		return oauthui.ReasonCheckProviderUnavailable
 	case mcpconnectionattempts.WhoSpeakeasy:
 		if code == mcpconnectionattempts.CodeInternalError {
 			return oauthui.ReasonCheckFailed
 		}
 		return oauthui.ReasonCheckUnavailable
-	case mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoNobody:
-		return oauthui.ReasonCheckFailed
+	case mcpconnectionattempts.WhoPerson, mcpconnectionattempts.WhoApp, mcpconnectionattempts.WhoNobody:
+		return oauthui.ReasonDefault
 	default:
-		return oauthui.ReasonCheckFailed
+		return oauthui.ReasonDefault
 	}
 }
 
@@ -185,6 +213,8 @@ func (s *Service) probeRemoteSession(
 ) (retErr error) {
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
+	skipped := new(remotesessions.SkippedClients)
+	attribution = attribution.NotingSkips(skipped)
 	defer func() {
 		if failure, ok := classifyCheckFailure(ctx, retErr); ok {
 			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code)
@@ -234,8 +264,8 @@ func (s *Service) probeRemoteSession(
 		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
 			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
 		}
-		message, reason := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client)
-		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
+		message, reason, cause := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, skipped, tokenProjectIDs)
+		return oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: cause}, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -343,15 +373,34 @@ func unservedCredentialReason(projects int, linked bool) string {
 	}
 }
 
-// noUsableCredentialRefusal is the person's message and the log reason for a grant that yielded no token.
-func (s *Service) noUsableCredentialRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client) (message, reason string) {
+// noUsableCredentialRefusal is the person's message, the log reason, and the
+// cause for a grant that yielded no token. The cause is nil when the card is
+// not connected or its grant expired, which the person fixes by reconnecting.
+func (s *Service) noUsableCredentialRefusal(
+	ctx context.Context,
+	logger *slog.Logger,
+	endpoint *ResolvedMcpEndpoint,
+	subject urn.SessionSubject,
+	client remotesessions.Client,
+	skipped *remotesessions.SkippedClients,
+	projectIDs []uuid.UUID,
+) (message, reason string, cause error) {
 	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
 	if err != nil {
 		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
-		return noWorkingSignInMessage, "grant state could not be read"
+		return noWorkingSignInMessage, "grant state could not be read", err
 	}
 	state, connected := statuses[client.ID]
-	return noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
+	message, reason = noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
+	if !connected || state.Status == remotesessions.RemoteSessionExpired {
+		return message, reason, nil
+	}
+	for _, projectID := range projectIDs {
+		if skip := skipped.Reason(projectID, client.RemoteSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}); skip != nil {
+			return message, reason, fmt.Errorf("skipped during token resolution: %w", skip)
+		}
+	}
+	return message, reason, errors.New(reason)
 }
 
 // noWorkingSignInMessage covers an outage, a broken client setup and an unreadable token: token resolution hides which.

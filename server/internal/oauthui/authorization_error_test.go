@@ -356,9 +356,9 @@ func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
 		wantRetry bool
 	}{
 		{oauthui.ReasonCheckFailed, "If it keeps happening, share the technical details below with Speakeasy support.", false},
-		{oauthui.ReasonCheckUnavailable, "Try again shortly.", true},
+		{oauthui.ReasonCheckUnavailable, "Try again shortly. If it keeps happening, share the technical details below with Speakeasy support.", true},
+		{oauthui.ReasonCheckProviderUnavailable, "Try again shortly. If it keeps happening, share the technical details below with your IT administrators.", true},
 		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
-		{oauthui.ReasonCheckNeedsReconnect, "reconnect to the service", false},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()

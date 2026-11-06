@@ -139,18 +139,18 @@ const (
 	ReasonProviderUnavailable Reason = "provider-unavailable"
 	// ReasonCheckFailed identifies a server connection check that failed on our side; retrying won't help.
 	ReasonCheckFailed Reason = "check-failed"
-	// ReasonCheckUnavailable identifies a server connection check stopped by an outage; retrying can help.
+	// ReasonCheckUnavailable identifies a server connection check stopped by a Speakeasy outage; retrying can help.
 	ReasonCheckUnavailable Reason = "check-unavailable"
+	// ReasonCheckProviderUnavailable identifies a server connection check stopped by the service's outage; retrying can help.
+	ReasonCheckProviderUnavailable Reason = "check-provider-unavailable"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
 	ReasonCheckNeedsAdmin Reason = "check-needs-admin"
-	// ReasonCheckNeedsReconnect identifies a server connection check the person can fix by reconnecting.
-	ReasonCheckNeedsReconnect Reason = "check-needs-reconnect"
 )
 
 // check reports a failed server connection check, rather than a failed connection.
 func (r Reason) check() bool {
 	switch r {
-	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNeedsReconnect:
+	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckProviderUnavailable, ReasonCheckNeedsAdmin:
 		return true
 	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonProviderUnavailable:
 		return false
