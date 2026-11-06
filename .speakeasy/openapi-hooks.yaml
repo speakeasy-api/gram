@@ -953,6 +953,8 @@ tags:
     description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
+  - name: orgEncryption
+    description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages

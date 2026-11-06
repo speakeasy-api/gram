@@ -70,6 +70,7 @@ import (
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
 	oktaresourceconnectionsc "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/client"
 	oktaserversuggestionsc "github.com/speakeasy-api/gram/server/gen/http/okta_server_suggestions/client"
+	orgencryptionc "github.com/speakeasy-api/gram/server/gen/http/org_encryption/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -171,6 +172,7 @@ func UsageCommands() []string {
 		"okta-resource-connections (list|confirm|reset)",
 		"okta-server-suggestions (list|dismiss|restore)",
 		"organizations (get|get-gateway|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
+		"org-encryption (get-config|list-keys|create-gcp-key|verify-key|delete-key|switch-key|complete-switch|rollback-switch|rotate-data-key|resume)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -2222,6 +2224,43 @@ func ParseEndpoint(
 		organizationsSubmitOnboardingSurveyFlags            = flag.NewFlagSet("submit-onboarding-survey", flag.ExitOnError)
 		organizationsSubmitOnboardingSurveyBodyFlag         = organizationsSubmitOnboardingSurveyFlags.String("body", "REQUIRED", "")
 		organizationsSubmitOnboardingSurveySessionTokenFlag = organizationsSubmitOnboardingSurveyFlags.String("session-token", "", "")
+
+		orgEncryptionFlags = flag.NewFlagSet("org-encryption", flag.ContinueOnError)
+
+		orgEncryptionGetConfigFlags            = flag.NewFlagSet("get-config", flag.ExitOnError)
+		orgEncryptionGetConfigSessionTokenFlag = orgEncryptionGetConfigFlags.String("session-token", "", "")
+
+		orgEncryptionListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
+		orgEncryptionListKeysSessionTokenFlag = orgEncryptionListKeysFlags.String("session-token", "", "")
+
+		orgEncryptionCreateGcpKeyFlags            = flag.NewFlagSet("create-gcp-key", flag.ExitOnError)
+		orgEncryptionCreateGcpKeyBodyFlag         = orgEncryptionCreateGcpKeyFlags.String("body", "REQUIRED", "")
+		orgEncryptionCreateGcpKeySessionTokenFlag = orgEncryptionCreateGcpKeyFlags.String("session-token", "", "")
+
+		orgEncryptionVerifyKeyFlags            = flag.NewFlagSet("verify-key", flag.ExitOnError)
+		orgEncryptionVerifyKeyIDFlag           = orgEncryptionVerifyKeyFlags.String("id", "REQUIRED", "")
+		orgEncryptionVerifyKeySessionTokenFlag = orgEncryptionVerifyKeyFlags.String("session-token", "", "")
+
+		orgEncryptionDeleteKeyFlags            = flag.NewFlagSet("delete-key", flag.ExitOnError)
+		orgEncryptionDeleteKeyIDFlag           = orgEncryptionDeleteKeyFlags.String("id", "REQUIRED", "")
+		orgEncryptionDeleteKeySessionTokenFlag = orgEncryptionDeleteKeyFlags.String("session-token", "", "")
+
+		orgEncryptionSwitchKeyFlags            = flag.NewFlagSet("switch-key", flag.ExitOnError)
+		orgEncryptionSwitchKeyBodyFlag         = orgEncryptionSwitchKeyFlags.String("body", "REQUIRED", "")
+		orgEncryptionSwitchKeySessionTokenFlag = orgEncryptionSwitchKeyFlags.String("session-token", "", "")
+
+		orgEncryptionCompleteSwitchFlags            = flag.NewFlagSet("complete-switch", flag.ExitOnError)
+		orgEncryptionCompleteSwitchSessionTokenFlag = orgEncryptionCompleteSwitchFlags.String("session-token", "", "")
+
+		orgEncryptionRollbackSwitchFlags            = flag.NewFlagSet("rollback-switch", flag.ExitOnError)
+		orgEncryptionRollbackSwitchSessionTokenFlag = orgEncryptionRollbackSwitchFlags.String("session-token", "", "")
+
+		orgEncryptionRotateDataKeyFlags            = flag.NewFlagSet("rotate-data-key", flag.ExitOnError)
+		orgEncryptionRotateDataKeyBodyFlag         = orgEncryptionRotateDataKeyFlags.String("body", "REQUIRED", "")
+		orgEncryptionRotateDataKeySessionTokenFlag = orgEncryptionRotateDataKeyFlags.String("session-token", "", "")
+
+		orgEncryptionResumeFlags            = flag.NewFlagSet("resume", flag.ExitOnError)
+		orgEncryptionResumeSessionTokenFlag = orgEncryptionResumeFlags.String("session-token", "", "")
 
 		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
 
@@ -5999,6 +6038,18 @@ func ParseEndpoint(
 	organizationsUpdateSetupTaskFlags.Usage = organizationsUpdateSetupTaskUsage
 	organizationsSubmitOnboardingSurveyFlags.Usage = organizationsSubmitOnboardingSurveyUsage
 
+	orgEncryptionFlags.Usage = orgEncryptionUsage
+	orgEncryptionGetConfigFlags.Usage = orgEncryptionGetConfigUsage
+	orgEncryptionListKeysFlags.Usage = orgEncryptionListKeysUsage
+	orgEncryptionCreateGcpKeyFlags.Usage = orgEncryptionCreateGcpKeyUsage
+	orgEncryptionVerifyKeyFlags.Usage = orgEncryptionVerifyKeyUsage
+	orgEncryptionDeleteKeyFlags.Usage = orgEncryptionDeleteKeyUsage
+	orgEncryptionSwitchKeyFlags.Usage = orgEncryptionSwitchKeyUsage
+	orgEncryptionCompleteSwitchFlags.Usage = orgEncryptionCompleteSwitchUsage
+	orgEncryptionRollbackSwitchFlags.Usage = orgEncryptionRollbackSwitchUsage
+	orgEncryptionRotateDataKeyFlags.Usage = orgEncryptionRotateDataKeyUsage
+	orgEncryptionResumeFlags.Usage = orgEncryptionResumeUsage
+
 	otelFlags.Usage = otelUsage
 	otelLogsFlags.Usage = otelLogsUsage
 	otelMetricsFlags.Usage = otelMetricsUsage
@@ -6812,6 +6863,8 @@ func ParseEndpoint(
 			svcf = oktaServerSuggestionsFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "org-encryption":
+			svcf = orgEncryptionFlags
 		case "otel":
 			svcf = otelFlags
 		case "packages":
@@ -8226,6 +8279,40 @@ func ParseEndpoint(
 
 			case "submit-onboarding-survey":
 				epf = organizationsSubmitOnboardingSurveyFlags
+
+			}
+
+		case "org-encryption":
+			switch epn {
+			case "get-config":
+				epf = orgEncryptionGetConfigFlags
+
+			case "list-keys":
+				epf = orgEncryptionListKeysFlags
+
+			case "create-gcp-key":
+				epf = orgEncryptionCreateGcpKeyFlags
+
+			case "verify-key":
+				epf = orgEncryptionVerifyKeyFlags
+
+			case "delete-key":
+				epf = orgEncryptionDeleteKeyFlags
+
+			case "switch-key":
+				epf = orgEncryptionSwitchKeyFlags
+
+			case "complete-switch":
+				epf = orgEncryptionCompleteSwitchFlags
+
+			case "rollback-switch":
+				epf = orgEncryptionRollbackSwitchFlags
+
+			case "rotate-data-key":
+				epf = orgEncryptionRotateDataKeyFlags
+
+			case "resume":
+				epf = orgEncryptionResumeFlags
 
 			}
 
@@ -11567,6 +11654,40 @@ func ParseEndpoint(
 			case "submit-onboarding-survey":
 				endpoint = c.SubmitOnboardingSurvey()
 				data, err = organizationsc.BuildSubmitOnboardingSurveyPayload(*organizationsSubmitOnboardingSurveyBodyFlag, *organizationsSubmitOnboardingSurveySessionTokenFlag)
+			}
+		case "org-encryption":
+			c := orgencryptionc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-config":
+				endpoint = c.GetConfig()
+				data, err = orgencryptionc.BuildGetConfigPayload(*orgEncryptionGetConfigSessionTokenFlag)
+			case "list-keys":
+				endpoint = c.ListKeys()
+				data, err = orgencryptionc.BuildListKeysPayload(*orgEncryptionListKeysSessionTokenFlag)
+			case "create-gcp-key":
+				endpoint = c.CreateGcpKey()
+				data, err = orgencryptionc.BuildCreateGcpKeyPayload(*orgEncryptionCreateGcpKeyBodyFlag, *orgEncryptionCreateGcpKeySessionTokenFlag)
+			case "verify-key":
+				endpoint = c.VerifyKey()
+				data, err = orgencryptionc.BuildVerifyKeyPayload(*orgEncryptionVerifyKeyIDFlag, *orgEncryptionVerifyKeySessionTokenFlag)
+			case "delete-key":
+				endpoint = c.DeleteKey()
+				data, err = orgencryptionc.BuildDeleteKeyPayload(*orgEncryptionDeleteKeyIDFlag, *orgEncryptionDeleteKeySessionTokenFlag)
+			case "switch-key":
+				endpoint = c.SwitchKey()
+				data, err = orgencryptionc.BuildSwitchKeyPayload(*orgEncryptionSwitchKeyBodyFlag, *orgEncryptionSwitchKeySessionTokenFlag)
+			case "complete-switch":
+				endpoint = c.CompleteSwitch()
+				data, err = orgencryptionc.BuildCompleteSwitchPayload(*orgEncryptionCompleteSwitchSessionTokenFlag)
+			case "rollback-switch":
+				endpoint = c.RollbackSwitch()
+				data, err = orgencryptionc.BuildRollbackSwitchPayload(*orgEncryptionRollbackSwitchSessionTokenFlag)
+			case "rotate-data-key":
+				endpoint = c.RotateDataKey()
+				data, err = orgencryptionc.BuildRotateDataKeyPayload(*orgEncryptionRotateDataKeyBodyFlag, *orgEncryptionRotateDataKeySessionTokenFlag)
+			case "resume":
+				endpoint = c.Resume()
+				data, err = orgencryptionc.BuildResumePayload(*orgEncryptionResumeSessionTokenFlag)
 			}
 		case "otel":
 			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -22626,6 +22747,216 @@ func organizationsSubmitOnboardingSurveyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations submit-onboarding-survey --body '{\n      \"use_case\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+// orgEncryptionUsage displays the usage of the org-encryption command and its
+// subcommands.
+func orgEncryptionUsage() {
+	fmt.Fprintln(os.Stderr, `Manage the key encryption key that protects an organization's data: Speakeasy-managed by default, or a customer-managed GCP KMS key.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] org-encryption COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-config: Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.`)
+	fmt.Fprintln(os.Stderr, `    list-keys: List the organization's encryption keys, Speakeasy-managed and customer-managed. Requires org:read.`)
+	fmt.Fprintln(os.Stderr, `    create-gcp-key: Register a customer-managed GCP KMS symmetric key the organization can switch to. Requires org:admin. The key is not used until the organization switches to it.`)
+	fmt.Fprintln(os.Stderr, `    verify-key: Probe that Speakeasy can reach an encryption key and use it: encrypt a probe payload and decrypt it again. Performs real KMS operations, billed to the key's owner and recorded in their audit log. Nothing is persisted. Rate limited per organization. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    delete-key: Delete a customer-managed encryption key. Requires org:admin. Refused with a conflict while the key is the organization's key, is being switched to or away from, or still wraps any data encryption key, because the data it protects would become unreadable. Speakeasy-managed keys cannot be deleted.`)
+	fmt.Fprintln(os.Stderr, `    switch-key: Start switching the organization to a customer-managed key. Requires org:admin. Speakeasy verifies the key, then wraps every data encryption key under it; the previous key keeps everything readable until the switch completes, either through completeSwitch or automatically after the grace period, or rolls back.`)
+	fmt.Fprintln(os.Stderr, `    complete-switch: Complete an in-flight key switch now instead of waiting for the grace period: drop the previous key's wraps. Requires org:admin. After this the previous key is no longer needed to read the organization's data.`)
+	fmt.Fprintln(os.Stderr, `    rollback-switch: Roll back an in-flight key switch: return to the previous key and drop the wraps made under the new one. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    rotate-data-key: Replace a use case's data encryption key with a new one. Requires org:admin. Values encrypted before the rotation stay readable and are re-encrypted under the new key when next written.`)
+	fmt.Fprintln(os.Stderr, `    resume: Resume a suspended organization after its key was fixed. Requires org:admin. Speakeasy first proves the key unwraps every data encryption key; the hourly health probe also resumes on its own once the key works again.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s org-encryption COMMAND --help\n", os.Args[0])
+}
+func orgEncryptionGetConfigUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption get-config", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption get-config --session-token \"abc123\"")
+}
+
+func orgEncryptionListKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption list-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the organization's encryption keys, Speakeasy-managed and customer-managed. Requires org:read.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption list-keys --session-token \"abc123\"")
+}
+
+func orgEncryptionCreateGcpKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption create-gcp-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Register a customer-managed GCP KMS symmetric key the organization can switch to. Requires org:admin. The key is not used until the organization switches to it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption create-gcp-key --body '{\n      \"customer_grant_reference\": \"abc123\",\n      \"external_credential_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"resource_name\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func orgEncryptionVerifyKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption verify-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Probe that Speakeasy can reach an encryption key and use it: encrypt a probe payload and decrypt it again. Performs real KMS operations, billed to the key's owner and recorded in their audit log. Nothing is persisted. Rate limited per organization. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption verify-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func orgEncryptionDeleteKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption delete-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Delete a customer-managed encryption key. Requires org:admin. Refused with a conflict while the key is the organization's key, is being switched to or away from, or still wraps any data encryption key, because the data it protects would become unreadable. Speakeasy-managed keys cannot be deleted.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption delete-key --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\"")
+}
+
+func orgEncryptionSwitchKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption switch-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Start switching the organization to a customer-managed key. Requires org:admin. Speakeasy verifies the key, then wraps every data encryption key under it; the previous key keeps everything readable until the switch completes, either through completeSwitch or automatically after the grace period, or rolls back.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption switch-key --body '{\n      \"external_key_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func orgEncryptionCompleteSwitchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption complete-switch", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Complete an in-flight key switch now instead of waiting for the grace period: drop the previous key's wraps. Requires org:admin. After this the previous key is no longer needed to read the organization's data.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption complete-switch --session-token \"abc123\"")
+}
+
+func orgEncryptionRollbackSwitchUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption rollback-switch", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Roll back an in-flight key switch: return to the previous key and drop the wraps made under the new one. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption rollback-switch --session-token \"abc123\"")
+}
+
+func orgEncryptionRotateDataKeyUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption rotate-data-key", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Replace a use case's data encryption key with a new one. Requires org:admin. Values encrypted before the rotation stay readable and are re-encrypted under the new key when next written.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption rotate-data-key --body '{\n      \"use_case\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func orgEncryptionResumeUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-encryption resume", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Resume a suspended organization after its key was fixed. Requires org:admin. Speakeasy first proves the key unwraps every data encryption key; the hourly health probe also resumes on its own once the key works again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-encryption resume --session-token \"abc123\"")
 }
 
 // otelUsage displays the usage of the otel command and its subcommands.

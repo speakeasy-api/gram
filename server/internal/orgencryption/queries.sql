@@ -356,3 +356,78 @@ WHERE ec.id = @id
   AND ec.project_id IS NULL
   AND ec.provider = 'gcp_iam'
   AND ec.deleted IS FALSE;
+
+-- The organization's encryption keys with their GCP resource and whether
+-- Speakeasy minted them, newest first.
+-- name: ListEncryptionExternalKeys :many
+SELECT
+  sqlc.embed(ek),
+  gcp.resource_name,
+  (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.organization_id = @organization_id::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+ORDER BY ek.id DESC;
+
+-- name: GetEncryptionExternalKey :one
+SELECT
+  sqlc.embed(ek),
+  gcp.resource_name,
+  (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+JOIN gcp_kms_keys AS gcp ON gcp.external_key_id = ek.id
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE;
+
+-- The organization credential a customer key is registered against. FOR SHARE
+-- holds it so a concurrent soft delete cannot commit between this check and
+-- the key insert.
+-- name: GetOrganizationGcpIamCredentialForKey :one
+SELECT ec.id, gic.skip_project_verification
+FROM external_credentials AS ec
+JOIN gcp_iam_credentials AS gic ON gic.external_credential_id = ec.id
+WHERE ec.id = @id
+  AND ec.organization_id = @organization_id
+  AND ec.project_id IS NULL
+  AND ec.provider = 'gcp_iam'
+  AND ec.deleted IS FALSE
+FOR SHARE OF ec;
+
+-- name: CreateCustomerEncryptionExternalKey :one
+INSERT INTO external_keys (organization_id, external_credential_id, provider, purpose, algorithm, name, customer_grant_reference)
+VALUES (@organization_id, @external_credential_id, 'gcp_kms', 'encrypt', @algorithm, @name, sqlc.narg(customer_grant_reference))
+RETURNING *;
+
+-- Locks a customer encryption key for delete. FOR UPDATE conflicts with the
+-- FOR KEY SHARE a wrap or configuration insert takes on the key, so the
+-- protection check below cannot be raced.
+-- name: LockEncryptionExternalKeyForDelete :one
+SELECT ek.id, (mek.external_key_id IS NOT NULL)::boolean AS managed
+FROM external_keys AS ek
+LEFT JOIN managed_encryption_keys AS mek
+       ON mek.external_key_id = ek.id
+      AND mek.organization_id = ek.organization_id
+WHERE ek.id = @id
+  AND ek.organization_id = @organization_id::text
+  AND ek.purpose = 'encrypt'
+  AND ek.deleted IS FALSE
+FOR UPDATE OF ek;
+
+-- name: SoftDeleteEncryptionExternalKey :one
+UPDATE external_keys
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id::text
+  AND purpose = 'encrypt'
+  AND deleted IS FALSE
+RETURNING *;
