@@ -59,11 +59,11 @@ func TestAttachWritesImageUploadNeedsAssetStorage(t *testing.T) {
 	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUploadPlatformImage: true}} //nolint:exhaustive // Only the upload operation is enabled.
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 
-	err := AttachWrites(NewRuntime(nil, ""), &StaffOAuth{Runner: &writeRunner{}}, deps, enabled)
+	err := AttachWrites(NewRuntime(nil, ""), &StaffOAuth{runner: &writeRunner{}}, deps, enabled)
 	require.ErrorContains(t, err, "not implemented")
 
 	runtime := NewRuntime(nil, "")
-	oauth := &StaffOAuth{Runner: &writeRunner{}}
+	oauth := &StaffOAuth{runner: &writeRunner{}}
 	deps.ImageUploads = &fakeImageUploads{}
 	require.NoError(t, AttachWrites(runtime, oauth, deps, enabled))
 	require.True(t, runtime.writes.implements(OperationUploadPlatformImage))

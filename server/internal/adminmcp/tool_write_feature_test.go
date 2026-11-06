@@ -59,15 +59,19 @@ func TestFeatureWriteChangesOnlyTheExactFeatureAndOrganization(t *testing.T) {
 		}
 	}
 	for i, feature := range writable {
+		// Prime the cache so a missing refresh cannot pass on a cache miss.
+		cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
+		require.NoError(t, err)
+		require.False(t, cached)
 		receipt, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(feature), Enabled: true})
 		require.NoError(t, err)
 		require.Equal(t, featureReceipt{OrganizationID: f.orgA, Name: "Synthetic A", Slug: receipt.Slug, Feature: string(feature), Before: false, After: true, Changed: true, SideEffects: writableFeatures[feature]}, receipt)
 		require.True(t, featureEnabled(t, f, f.orgA, feature))
 		require.False(t, featureEnabled(t, f, f.orgB, feature), "a write cannot affect a second tenant")
-		for _, later := range writable[i+1:] {
-			require.False(t, featureEnabled(t, f, f.orgA, later), "a write changes only the named feature")
+		for j, other := range writable {
+			require.Equal(t, j <= i, featureEnabled(t, f, f.orgA, other), "a write changes only the named feature")
 		}
-		cached, err := features.IsFeatureEnabled(ctx, f.orgA, feature)
+		cached, err = features.IsFeatureEnabled(ctx, f.orgA, feature)
 		require.NoError(t, err)
 		require.True(t, cached, "the cache follows the commit")
 		require.Equal(t, i+1, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))
@@ -188,11 +192,14 @@ func TestFeatureWriteAuditFailureRollsBack(t *testing.T) {
 	f := newWriteFixture(t, "admin_mcp_feature_rollback")
 	writer, features := newFeatureWriterFixture(t, f)
 	ctx := writeContext(t, f)
+	cached, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureSSO)
+	require.NoError(t, err)
+	require.False(t, cached)
 	require.NoError(t, audittest.RejectAction(ctx, f.db, audit.ActionOrganizationProductFeatureEnabled))
-	_, err := writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureSSO), Enabled: true})
+	_, err = writer.apply(ctx, FeatureInput{OrganizationID: f.orgA, Feature: string(productfeatures.FeatureSSO), Enabled: true})
 	require.Error(t, err)
 	require.False(t, featureEnabled(t, f, f.orgA, productfeatures.FeatureSSO))
-	cached, err := features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureSSO)
+	cached, err = features.IsFeatureEnabled(ctx, f.orgA, productfeatures.FeatureSSO)
 	require.NoError(t, err)
 	require.False(t, cached, "a failed write leaves the cache alone")
 	require.Zero(t, countWriteEvents(t, f.db, OperationSetOrganizationFeature, f.orgA, writeEventExecuted))

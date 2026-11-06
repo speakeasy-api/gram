@@ -268,12 +268,12 @@ type WriteDependencies struct {
 // operation that has no implementation is a startup error, so a misconfigured
 // server cannot expose an unreviewed write.
 func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, writes WriteConfig) error {
-	if runtime == nil || oauth == nil || oauth.Runner == nil || deps.Features == nil || deps.Registry == nil {
+	if runtime == nil || oauth == nil || oauth.runner == nil || deps.Features == nil || deps.Registry == nil {
 		return errors.New("staff write tools are not configured")
 	}
 	features, registry := deps.Features, deps.Registry
 	auditLogger := audit.NewLogger()
-	runner := oauth.Runner
+	runner := oauth.runner
 	tools := &writeTools{writes: writes, uploads: deps.ImageUploads, writers: map[WriteOperation]operationWriter{ //nolint:exhaustive // Only implemented operations are listed.
 		OperationSetOrganizationFeature:               &featureWriter{runner: runner, mutator: productfeatures.NewMutator(features, auditLogger), writes: writes},
 		OperationAssignOrganizationOnboardingPlaybook: &onboardingPlaybookWriter{runner: runner, audit: auditLogger, writes: writes},

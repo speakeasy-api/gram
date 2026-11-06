@@ -3,10 +3,13 @@ package adminmcp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
@@ -63,12 +66,21 @@ type supportMatrixWriter struct {
 	writes WriteConfig
 }
 
+// validSupportMatrixRevision matches the lowercase hex SHA-256 that reads return.
+func validSupportMatrixRevision(revision string) bool {
+	if len(revision) != sha256.Size*2 || strings.ToLower(revision) != revision {
+		return false
+	}
+	_, err := hex.DecodeString(revision)
+	return err == nil
+}
+
 func (s *supportMatrixWriter) apply(ctx context.Context, input SupportMatrixInput) (supportMatrixReceipt, error) {
 	authority, err := requireWriteAuthority(ctx, s.writes, OperationUpdateSupportMatrix)
 	if err != nil {
 		return supportMatrixReceipt{}, err
 	}
-	if input.Revision == "" || len(input.Revision) > maxSupportMatrixText {
+	if !validSupportMatrixRevision(input.Revision) {
 		return supportMatrixReceipt{}, errors.New("provide the current matrix revision")
 	}
 	if len(input.Changes) == 0 || len(input.Changes) > maxSupportMatrixChanges {

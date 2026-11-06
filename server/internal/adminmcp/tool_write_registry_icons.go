@@ -3,6 +3,7 @@ package adminmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -45,26 +46,30 @@ func (s *registryIconsWriter) apply(ctx context.Context, input SetRegistryIconsI
 	}
 	id := uuid.MustParse(input.EntryID)
 	target := writeTarget{ResourceKind: "registry_entry", ResourceID: input.EntryID}
-	return runWrite(ctx, s.runner, authority, target, func(ctx context.Context, tx pgx.Tx) (registryIconsReceipt, error) {
-		// The check locks the entry and verifies the revision, so the read below
-		// sees the state this change replaces.
-		_, err := s.registry.CheckCatalogIconsTx(ctx, tx, id, input.ExpectedUpdatedAt, input.Icons)
+	var replaced json.RawMessage
+	receipt, err := runWrite(ctx, s.runner, authority, target, func(ctx context.Context, tx pgx.Tx) (registryIconsReceipt, error) {
+		// The check locks the entry and verifies the revision, so old is the state
+		// this change replaces.
+		old, err := s.registry.CheckCatalogIconsTx(ctx, tx, id, input.ExpectedUpdatedAt, input.Icons)
 		if errors.Is(err, mcpregistry.ErrConflict) {
 			return registryIconsReceipt{}, ErrStaleState
 		}
 		if err != nil {
 			return registryIconsReceipt{}, fmt.Errorf("check registry icons: %w", err)
 		}
-		old, err := s.registry.Get(ctx, id)
-		if err != nil {
-			return registryIconsReceipt{}, fmt.Errorf("get registry entry: %w", err)
-		}
+		replaced = old.Data
 		updated, err := s.registry.SetCatalogIconsTx(ctx, tx, id, input.ExpectedUpdatedAt, input.Icons)
 		if err != nil {
 			return registryIconsReceipt{}, registryCreateError(err)
 		}
-		return registryIconsReceipt{EntryID: updated.ID.String(), UpdatedAt: mcpregistry.Token(updated), Before: boundedCatalogIcons(ctx, s.registry, old.Data), After: input.Icons}, nil
+		return registryIconsReceipt{EntryID: updated.ID.String(), UpdatedAt: mcpregistry.Token(updated), Before: mcpregistry.CatalogIcons{}, After: input.Icons}, nil
 	})
+	if err != nil {
+		return registryIconsReceipt{}, err
+	}
+	// Bounding icons reads through the pool, so it waits for the entry lock to go.
+	receipt.Before = boundedCatalogIcons(ctx, s.registry, replaced)
+	return receipt, nil
 }
 
 func (s *registryIconsWriter) register(server *mcp.Server) {

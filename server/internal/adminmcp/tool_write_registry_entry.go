@@ -98,7 +98,7 @@ func (s *registryEntryWriter) apply(ctx context.Context, input CreateRegistryEnt
 		if err != nil {
 			return registryCreateReceipt{}, registryCreateError(err)
 		}
-		return registryCreateReceipt{ID: created.ID.String(), Name: projection.Name, Version: projection.Version, Description: projection.Description, Transports: projection.Transports, UpdatedAt: mcpregistry.Token(created), Record: record}, nil
+		return registryCreateReceipt{ID: created.ID.String(), Name: projection.Name, Version: projection.Version, Description: projection.Description, Transports: projection.Transports, UpdatedAt: mcpregistry.Token(created), Record: created.Data}, nil
 	})
 }
 

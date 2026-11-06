@@ -124,7 +124,7 @@ func TestRunWriteOnRunsOnTheCallersConnection(t *testing.T) {
 
 func TestAttachWritesRejectsUnimplementedOperation(t *testing.T) {
 	t.Parallel()
-	oauth := &StaffOAuth{Runner: &writeRunner{}}
+	oauth := &StaffOAuth{runner: &writeRunner{}}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateGlobalIssuer: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
 	require.ErrorContains(t, AttachWrites(&Runtime{}, oauth, deps, writes), "not implemented")
@@ -142,7 +142,7 @@ func TestEveryWriteToolAsksForConfirmation(t *testing.T) {
 	runtime := NewRuntime(nil, "")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
 
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	_, err := runtime.server.Connect(t.Context(), serverTransport, nil)
@@ -204,7 +204,7 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			}
 			runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 			if tc.attached {
-				oauth := &StaffOAuth{Runner: &writeRunner{}}
+				oauth := &StaffOAuth{runner: &writeRunner{}}
 				config := WriteConfig{Enabled: tc.enabled, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // One operation tests registration and discovery.
 				require.NoError(t, AttachWrites(runtime, oauth, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, config))
 			}

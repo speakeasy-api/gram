@@ -104,6 +104,12 @@ func TestSupportMatrixWriterRejectsInvalidTargetsNoOpsAndBounds(t *testing.T) {
 	tooMany := make([]SupportMatrixChange, maxSupportMatrixChanges+1)
 	_, err = writer.apply(ctx, SupportMatrixInput{Revision: matrix.Revision, Changes: tooMany})
 	require.ErrorContains(t, err, "between 1 and")
+	failuresBefore := countWriteEvents(t, f.db, OperationUpdateSupportMatrix, "", writeEventFailed)
+	for _, revision := range []string{"", "not-a-revision", strings.ToUpper(matrix.Revision), matrix.Revision + "0"} {
+		_, err = writer.apply(ctx, SupportMatrixInput{Revision: revision, Changes: []SupportMatrixChange{{Kind: "mapping", MethodID: "device", ProductID: "claude-code-cli"}}})
+		require.ErrorContains(t, err, "provide the current matrix revision")
+	}
+	require.Equal(t, failuresBefore, countWriteEvents(t, f.db, OperationUpdateSupportMatrix, "", writeEventFailed), "a malformed revision never reaches the trail")
 }
 
 func TestSupportMatrixWriterRefusesStaleRevision(t *testing.T) {

@@ -33,7 +33,7 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
 	verifier := &fakeAdminVerifier{result: &contextvalues.AdminAuthContext{SessionID: "browser-session", OIDCSubject: "staff-subject", Email: "staff@example.test"}}
 	session := &StaffOAuthAuthorization{verifier: verifier}
 	request := httptest.NewRequest(http.MethodGet, Path+"/tools", nil)
@@ -79,7 +79,7 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 func TestToolDirectoryReflectsDisabledWritesAndRegistryChanges(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Runner: &writeRunner{}}, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}, WriteConfig{}))
 	directory, err := runtime.toolDirectory(t.Context())
 	require.NoError(t, err)
 	require.NotEmpty(t, directory.Tools)
@@ -142,7 +142,7 @@ func TestToolDirectoryListsOnlyEnabledWriteOperations(t *testing.T) {
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 	writes := WriteConfig{Enabled: true, Operations: make(map[WriteOperation]bool)}
 	writes.Operations[OperationSetOrganizationFeature] = true
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Runner: &writeRunner{}}, deps, writes))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, writes))
 	directory, err := runtime.toolDirectory(t.Context())
 	require.NoError(t, err)
 	mutatingNames := []string{}

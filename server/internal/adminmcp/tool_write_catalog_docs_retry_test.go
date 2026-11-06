@@ -64,7 +64,7 @@ func TestCatalogDocsRetryRejectsChangedDeliveryAndOtherTenant(t *testing.T) {
 	otherTenant.OrganizationID = f.orgB
 	_, err := w.apply(ctx, otherTenant)
 	require.ErrorIs(t, err, ErrStaleState)
-	input.DocsRevision = uuid.NewString()
+	mutator.candidate.DocsRevision = uuid.NewString()
 	_, err = w.apply(ctx, input)
 	require.ErrorIs(t, err, ErrStaleState)
 	require.Zero(t, mutator.calls.Load())

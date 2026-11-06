@@ -32,7 +32,7 @@ func listAllAdminTools(t *testing.T) []json.RawMessage {
 	runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
 	handler := runtime.Handler()
 
 	tools := []json.RawMessage{}

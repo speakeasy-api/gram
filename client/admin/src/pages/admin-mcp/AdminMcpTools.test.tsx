@@ -23,14 +23,14 @@ const tools: AdminMcpTool[] = [
   },
   {
     name: "curate_registry_promotion_candidate",
-    title: "Prepare Catalogue Candidate Review Status",
+    title: "Curate Catalogue Candidate",
     description: "Reject, archive, or restore a candidate.",
     access: "write",
   },
   {
     name: "create_image_upload_url",
     title: "Create Image Upload URL",
-    description: "Upload a public image for a later approved listing.",
+    description: "Upload a public image for a later listing.",
     access: "write",
   },
 ];
@@ -48,7 +48,7 @@ it("loads live tool descriptions and access labels without MCP installation", as
   });
   expect(within(list).getAllByRole("listitem")).toHaveLength(3);
   expect(within(list).getByText("Read-only")).toBeTruthy();
-  expect(within(list).getAllByText("Write").length).toBeGreaterThan(0);
+  expect(within(list).getAllByText("Write")).toHaveLength(2);
   expect(within(list).getByText(tools[0]!.description)).toBeTruthy();
   expect(fetchTools).toHaveBeenCalledWith("/admin-mcp/tools", {
     signal: expect.any(AbortSignal),

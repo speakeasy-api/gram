@@ -1,6 +1,7 @@
 package adminmcp
 
 import (
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestOrganizationWhitelistApplies(t *testing.T) {
 	require.JSONEq(t, `{"whitelisted":false}`, string(entry.BeforeSnapshot))
 	require.JSONEq(t, `{"whitelisted":true}`, string(entry.AfterSnapshot))
 	_, err = writer.apply(ctx, input)
-	require.Error(t, err, "repeating the call changes nothing")
+	require.ErrorContains(t, err, "nothing would change", "repeating the call changes nothing")
 	require.Equal(t, int64(1), auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
 	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationWhitelist, f.orgA, "executed"))
 }
@@ -113,6 +114,7 @@ func TestOrganizationWhitelistConcurrentCallsWriteOnce(t *testing.T) {
 	}
 	wg.Wait()
 	require.NotEqual(t, errs[0] == nil, errs[1] == nil, "exactly one call changes the setting")
+	require.ErrorContains(t, errors.Join(errs[0], errs[1]), "nothing would change", "the other call finds nothing to do")
 	require.Equal(t, int64(1), auditCount(t, f, audit.ActionOrganizationWhitelistUpdated))
 	require.Equal(t, 1, countWriteEvents(t, f.db, OperationSetOrganizationWhitelist, f.orgA, "executed"))
 }

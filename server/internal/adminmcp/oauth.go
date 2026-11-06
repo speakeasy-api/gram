@@ -22,7 +22,7 @@ type StaffOAuth struct {
 	Clients              *StaffOAuthClients
 	Authorization        *StaffOAuthAuthorization
 	Tokens               *StaffOAuthTokens
-	Runner               *writeRunner
+	runner               *writeRunner
 	issuer               string
 	resource             string
 	protectedResourceURL string
@@ -59,7 +59,7 @@ func NewStaffOAuth(baseURL *url.URL, db *pgxpool.Pool, challengeCache cache.Cach
 		Clients:              clients,
 		Authorization:        authorization,
 		Tokens:               NewStaffOAuthTokens(clientStore, postgresStaffGrantStore{db: db}, verifier, cipher, signer, issuer, resource),
-		Runner:               newWriteRunner(db, logger),
+		runner:               newWriteRunner(db, logger),
 		issuer:               issuer,
 		resource:             resource,
 		protectedResourceURL: protectedResourceURL,
