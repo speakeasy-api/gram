@@ -317,11 +317,7 @@ func (g *Gateway) Poll(ctx context.Context) {
 	}
 	stops.Wait()
 	for _, want := range toStart {
-		g.starts.Add(1)
-		go func(want desiredIngress) {
-			defer g.starts.Done()
-			g.startHost(ctx, want)
-		}(want)
+		g.starts.Go(func() { g.startHost(ctx, want) })
 	}
 	g.heartbeatAll(ctx)
 }
@@ -656,11 +652,7 @@ func (g *Gateway) drain(ctx context.Context) {
 
 	var wg sync.WaitGroup
 	for _, h := range hosts {
-		wg.Add(1)
-		go func(h *host) {
-			defer wg.Done()
-			g.stopHost(ctx, h, NodeStatusStopped)
-		}(h)
+		wg.Go(func() { g.stopHost(ctx, h, NodeStatusStopped) })
 	}
 	wg.Wait()
 }
