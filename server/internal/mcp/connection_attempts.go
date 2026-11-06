@@ -359,6 +359,22 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 	return changed
 }
 
+// memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
+const memberSetupChangedDetail = "setup_changed"
+
+// staleChoiceHappened records whoever the stale choice's message tells to act first.
+// An unchecked remedy is our failed lookup, not the person's or an admin's.
+func staleChoiceHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
+	switch remedy {
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
+		return mcpconnectionattempts.CodeNeedsSignIn
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+	case staleChoiceUnchecked:
+	}
+	return mcpconnectionattempts.CodeInternalError
+}
+
 // gatewayServerHappened maps a server's consent status, and any gap in its
 // connection choice, to what it records. The detail is the status or the gap.
 // A member not connected yet with no client named has no choice to be stale.
