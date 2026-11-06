@@ -33,11 +33,13 @@ const (
 	// probe payload and decrypted it again.
 	ReasonVerified VerifyReason = "verified"
 
-	// ReasonInvalidResourceName means the stored resource name is not a
-	// fully-qualified key version. Speakeasy's own record is wrong; no call was made.
+	// ReasonInvalidResourceName means the stored resource name is malformed: not
+	// a fully-qualified key version for a signing key, or not a crypto key for
+	// an encryption key. Speakeasy's own record is wrong; no call was made.
 	ReasonInvalidResourceName VerifyReason = "invalid_resource_name"
 
-	// ReasonKeyNotFound means the key version does not exist.
+	// ReasonKeyNotFound means the key version (signing) or crypto key
+	// (encryption) does not exist.
 	ReasonKeyNotFound VerifyReason = "key_not_found"
 
 	// ReasonPermissionDenied means the credential's identity cannot use the key.
