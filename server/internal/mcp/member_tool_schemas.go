@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"maps"
+	"slices"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -41,15 +43,19 @@ const (
 // parameterHeaderAnnotation marks a schema that may declare parameter headers.
 var parameterHeaderAnnotation = []byte(`"x-mcp-header"`)
 
-// memberToolSchemas records the tools a member last listed in full, so a
-// gateway call can send the Mcp-Param headers its tool requires without
-// listing first.
+// memberToolSchemas records the tools the member's recent listings included,
+// so a gateway call can send the Mcp-Param headers its tool requires without
+// listing first. Listings pass through per-caller filters, so a tool absent
+// from the record is unknown, never known to need no headers.
 type memberToolSchemas struct {
 	// Destination is the member's routed backend, so a swapped backend
 	// never reuses another backend's schemas.
 	Destination string `json:"destination"`
 
-	// Tools holds every listed tool by name.
+	// StoredAt is when the record was last written.
+	StoredAt time.Time `json:"stored_at"`
+
+	// Tools holds each recently listed tool by name.
 	Tools map[string]memberToolSchema `json:"tools"`
 }
 
@@ -61,6 +67,10 @@ type memberToolSchema struct {
 	// Oversized marks an annotated schema over the record's byte limits,
 	// which a call lists instead.
 	Oversized bool `json:"oversized,omitempty"`
+
+	// SeenAt is when a listing last included the tool. Tools unseen for
+	// memberToolSchemasTTL are dropped, so removed tools do not accumulate.
+	SeenAt time.Time `json:"seen_at"`
 }
 
 func (m memberToolSchemas) CacheKey() string { return memberToolSchemasKey(m.Destination) }
@@ -80,25 +90,12 @@ func declaresParameterHeaders(schema json.RawMessage) bool {
 }
 
 // knownMemberToolSchema returns the tool's input schema from the freshest
-// record the gateway holds: the member's last complete listing, then the
-// consented catalog. A listing that omits the tool still makes it known, with
-// no schema. known is false when neither record covers the tool.
+// record the gateway holds: the member's recent listings, then the consented
+// catalog. known is false when neither covers the tool.
 func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateContext, member metaMember, toolName string) (schema json.RawMessage, known bool) {
 	destination := codeMemberDestination(member)
-	key := memberToolSchemasKey(destination)
-	record, err := s.memberToolSchemaCache.Get(ctx, key)
-	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
-		// The shared cache is unavailable; this process's copy avoids a
-		// listing per call.
-		local, ok := s.memberToolSchemaLocal.Get(key)
-		record, err = local, nil
-		if !ok {
-			err = errors.New("no local member tool schemas")
-		}
-	}
-	if err == nil && record.Destination == destination {
-		tool, listed := record.Tools[toolName]
-		if !tool.Oversized && (listed || len(record.Tools) > 0) {
+	if record, ok := s.readMemberToolSchemas(ctx, destination); ok {
+		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized {
 			return tool.InputSchema, true
 		}
 	}
@@ -113,31 +110,59 @@ func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateConte
 	return nil, false
 }
 
-// rememberMemberToolSchemas replaces a member's record with a complete
-// listing. Only annotated schemas within the byte limits are kept; an
-// annotated tool over them is marked, so a call lists it instead.
-func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Logger, member metaMember, catalog *memberCatalog) {
-	if catalog.incomplete {
-		return
+// readMemberToolSchemas reads the shared record, or this process's copy when
+// the shared cache is unavailable, so an outage does not cost a listing per call.
+func (s *Service) readMemberToolSchemas(ctx context.Context, destination string) (memberToolSchemas, bool) {
+	key := memberToolSchemasKey(destination)
+	record, err := s.memberToolSchemaCache.Get(ctx, key)
+	switch {
+	case errors.Is(err, redisCache.ErrCacheMiss):
+		return memberToolSchemas{Destination: "", StoredAt: time.Time{}, Tools: nil}, false
+	case err != nil:
+		local, ok := s.memberToolSchemaLocal.Get(key)
+		if !ok {
+			return memberToolSchemas{Destination: "", StoredAt: time.Time{}, Tools: nil}, false
+		}
+		record = local
 	}
+	return record, record.Destination == destination
+}
+
+// rememberMemberToolSchemas merges a listing into the member's record. Only
+// annotated schemas within the byte limits are kept, spent in tool-name
+// order; an annotated tool over them is marked, so a call lists it instead.
+// An unchanged record is rewritten once it is half its lifetime old.
+func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Logger, member metaMember, catalog *memberCatalog, now time.Time) {
 	destination := codeMemberDestination(member)
-	record := memberToolSchemas{Destination: destination, Tools: make(map[string]memberToolSchema, len(catalog.byName))}
-	total := 0
+	previous, found := s.readMemberToolSchemas(ctx, destination)
+	record := memberToolSchemas{Destination: destination, StoredAt: now, Tools: make(map[string]memberToolSchema, len(previous.Tools)+len(catalog.byName))}
+	for name, tool := range previous.Tools {
+		if now.Sub(tool.SeenAt) < memberToolSchemasTTL {
+			record.Tools[name] = tool
+		}
+	}
 	for name, entry := range catalog.byName {
-		if !declaresParameterHeaders(entry.InputSchema) {
-			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: false}
+		tool := memberToolSchema{InputSchema: nil, Oversized: false, SeenAt: now}
+		if declaresParameterHeaders(entry.InputSchema) {
+			tool.InputSchema = entry.InputSchema
+		}
+		record.Tools[name] = tool
+	}
+	total := 0
+	for _, name := range slices.Sorted(maps.Keys(record.Tools)) {
+		tool := record.Tools[name]
+		if len(tool.InputSchema) == 0 {
 			continue
 		}
-		if len(entry.InputSchema) > maxMemberToolSchemaBytes || total+len(entry.InputSchema) > maxMemberToolSchemasBytes {
-			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: true}
+		if len(tool.InputSchema) > maxMemberToolSchemaBytes || total+len(tool.InputSchema) > maxMemberToolSchemasBytes {
+			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: true, SeenAt: tool.SeenAt}
 			continue
 		}
-		total += len(entry.InputSchema)
-		record.Tools[name] = memberToolSchema{InputSchema: entry.InputSchema, Oversized: false}
+		total += len(tool.InputSchema)
 	}
 	key := record.CacheKey()
 	s.memberToolSchemaLocal.Add(key, record)
-	if previous, err := s.memberToolSchemaCache.Get(ctx, key); err == nil && sameMemberToolSchemas(previous, record) {
+	if found && sameMemberToolSchemas(previous, record) && now.Sub(previous.StoredAt) < memberToolSchemasTTL/2 {
 		return
 	}
 	if err := s.memberToolSchemaCache.Store(ctx, record); err != nil {
@@ -145,6 +170,7 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 	}
 }
 
+// sameMemberToolSchemas compares the tools and schemas, not when they were seen.
 func sameMemberToolSchemas(a, b memberToolSchemas) bool {
 	if a.Destination != b.Destination || len(a.Tools) != len(b.Tools) {
 		return false

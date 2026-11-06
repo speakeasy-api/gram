@@ -279,6 +279,11 @@ func TestServePublic_MetaEndpoint_ExecuteTool_LargeSchemaWithoutAnnotationsCalls
 
 	gateway.execute(t)
 	require.Equal(t, 1, rpcMethodCounts(upstream)["tools/call"])
+	for _, req := range upstream.journal() {
+		if req.rpcMethod == "tools/call" {
+			require.Empty(t, req.paramHeaders, "an unannotated tool gets no parameter headers")
+		}
+	}
 	gateway.recorder.RequireNothing()
 }
 

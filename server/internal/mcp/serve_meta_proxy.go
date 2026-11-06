@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -632,7 +633,7 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 	}
 	defer ms.release(ctx, logger)
 	negotiated := ms.session.InitializeResult()
-	mirrorsHeaders := negotiated != nil && negotiated.ProtocolVersion >= mcpversions.Version20260728
+	mirrorsHeaders := negotiated != nil && mcpversions.AtLeast(negotiated.ProtocolVersion, mcpversions.Version20260728)
 	if mirrorsHeaders {
 		var schema json.RawMessage
 		known := false
@@ -645,20 +646,25 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 				// A member that refuses the headerless call gets one retry.
 				logger.WarnContext(ctx, "list member tools for parameter headers", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
 			} else {
-				s.rememberMemberToolSchemas(ctx, logger, member, catalog)
+				s.rememberMemberToolSchemas(ctx, logger, member, catalog, time.Now())
 				// An unlisted tool is called as named, so the member reports it.
 				if tool, ok := catalog.byName[toolName]; ok {
 					schema = tool.InputSchema
 				}
 			}
 		}
+		// An empty set still replaces any Mcp-Param headers the SDK derived.
+		headers := http.Header{}
 		if declaresParameterHeaders(schema) {
-			headers, err := externalmcp.ParameterHeaders(schema, arguments)
+			computed, err := externalmcp.ParameterHeaders(schema, arguments)
 			if err != nil {
 				return nil, memberCallRetryNone, &metaMemberError{message: fmt.Sprintf("server %q tool %q has parameter headers the gateway cannot send: %s", member.slug, toolName, err.Error())}
 			}
-			ctx = context.WithValue(ctx, memberParameterHeadersKey{}, headers)
+			if computed != nil {
+				headers = computed
+			}
 		}
+		ctx = context.WithValue(ctx, memberParameterHeadersKey{}, headers)
 	}
 	// The remotemcp interceptor writes this call's log row and never sees the
 	// gate, so carry down which auth client signs the member in. A recheck
@@ -742,7 +748,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		ms.fail(ctx)
 		return nil, err
 	}
-	s.rememberMemberToolSchemas(ctx, logger, member, catalog)
+	s.rememberMemberToolSchemas(ctx, logger, member, catalog, time.Now())
 	return catalog, nil
 }
 

@@ -31,6 +31,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -61,6 +62,9 @@ type recordedRequest struct {
 
 	// authorization is the Authorization header as it arrived, empty when absent.
 	authorization string
+
+	// paramHeaders names the Mcp-Param-* headers the request carried.
+	paramHeaders []string
 
 	// apiKey and setCookie are configured headers a header policy test looks
 	// for, empty when absent.
@@ -217,6 +221,7 @@ func (u *recordingUpstream) record(r *http.Request) (string, error) {
 		path:          r.URL.Path,
 		rpcMethod:     rpcMethod,
 		authorization: r.Header.Get("Authorization"),
+		paramHeaders:  paramHeaderNames(r.Header),
 		apiKey:        r.Header.Get("X-Api-Key"),
 		setCookie:     r.Header.Get("Set-Cookie"),
 	})
@@ -805,4 +810,14 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnreachedProxiedMemberLogsFailedRo
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	requireTelemetryRowCount(t, failedRows, 2, projectID.String(), meta.ID.String())
+}
+
+func paramHeaderNames(header http.Header) []string {
+	var names []string
+	for name := range header {
+		if httpheaders.IsParamHeader(name) {
+			names = append(names, name)
+		}
+	}
+	return names
 }
