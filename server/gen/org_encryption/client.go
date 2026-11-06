@@ -55,6 +55,8 @@ func NewClient(getConfig, listKeys, createGcpKey, verifyKey, deleteKey, switchKe
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) GetConfig(ctx context.Context, p *GetConfigPayload) (res *OrgEncryptionConfig, err error) {
 	var ires any
@@ -77,6 +79,8 @@ func (c *Client) GetConfig(ctx context.Context, p *GetConfigPayload) (res *OrgEn
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListOrgEncryptionKeysResult, err error) {
 	var ires any
@@ -100,6 +104,8 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListOrg
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) CreateGcpKey(ctx context.Context, p *CreateGcpKeyPayload) (res *OrgEncryptionKey, err error) {
 	var ires any
@@ -123,6 +129,8 @@ func (c *Client) CreateGcpKey(ctx context.Context, p *CreateGcpKeyPayload) (res 
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) VerifyKey(ctx context.Context, p *VerifyKeyPayload) (res *VerifyOrgEncryptionKeyResult, err error) {
 	var ires any
@@ -145,6 +153,8 @@ func (c *Client) VerifyKey(ctx context.Context, p *VerifyKeyPayload) (res *Verif
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) DeleteKey(ctx context.Context, p *DeleteKeyPayload) (err error) {
 	_, err = c.DeleteKeyEndpoint(ctx, p)
@@ -163,6 +173,8 @@ func (c *Client) DeleteKey(ctx context.Context, p *DeleteKeyPayload) (err error)
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) SwitchKey(ctx context.Context, p *SwitchKeyPayload) (res *OrgEncryptionConfig, err error) {
 	var ires any
@@ -186,6 +198,8 @@ func (c *Client) SwitchKey(ctx context.Context, p *SwitchKeyPayload) (res *OrgEn
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) CompleteSwitch(ctx context.Context, p *CompleteSwitchPayload) (res *OrgEncryptionConfig, err error) {
 	var ires any
@@ -209,6 +223,8 @@ func (c *Client) CompleteSwitch(ctx context.Context, p *CompleteSwitchPayload) (
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) RollbackSwitch(ctx context.Context, p *RollbackSwitchPayload) (res *OrgEncryptionConfig, err error) {
 	var ires any
@@ -232,6 +248,8 @@ func (c *Client) RollbackSwitch(ctx context.Context, p *RollbackSwitchPayload) (
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) RotateDataKey(ctx context.Context, p *RotateDataKeyPayload) (res *OrgEncryptionConfig, err error) {
 	var ires any
@@ -254,6 +272,8 @@ func (c *Client) RotateDataKey(ctx context.Context, p *RotateDataKeyPayload) (re
 //   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
 //   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
 //   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - "unavailable" (type *goa.ServiceError): service temporarily unavailable
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - error: internal error
 func (c *Client) Resume(ctx context.Context, p *ResumePayload) (res *OrgEncryptionConfig, err error) {
 	var ires any

@@ -18,6 +18,23 @@ var _ = Service("orgEncryption", func() {
 	Description("Manage the key encryption key that protects an organization's data: Speakeasy-managed by default, or a customer-managed GCP KMS key.")
 	Security(security.Session)
 	shared.DeclareErrorResponses()
+	// unavailable: organization encryption is not configured on this
+	// deployment. failed_precondition: the organization's encryption is
+	// suspended, or its current key cannot unwrap its data keys.
+	Error(string(oops.CodeUnavailable), func() {
+		Description(oops.CodeUnavailable.UserMessage())
+		Fault()
+	})
+	Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+	HTTP(func() {
+		shared.DeclareHTTPErrorResponses()
+		Response(string(oops.CodeUnavailable), StatusServiceUnavailable, func() {
+			ContentType("application/json")
+		})
+		Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+			ContentType("application/json")
+		})
+	})
 
 	Method("getConfig", func() {
 		Description("Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.")

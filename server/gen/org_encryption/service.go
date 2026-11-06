@@ -281,6 +281,16 @@ func MakeGatewayError(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "gateway_error", false, false, true)
 }
 
+// MakeUnavailable builds a goa.ServiceError from an error.
+func MakeUnavailable(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "unavailable", false, false, true)
+}
+
+// MakeFailedPrecondition builds a goa.ServiceError from an error.
+func MakeFailedPrecondition(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "failed_precondition", false, false, false)
+}
+
 // MakeRateLimitExceeded builds a goa.ServiceError from an error.
 func MakeRateLimitExceeded(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "rate_limit_exceeded", false, false, false)

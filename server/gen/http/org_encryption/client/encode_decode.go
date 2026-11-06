@@ -63,6 +63,8 @@ func EncodeGetConfigRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeGetConfigResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -241,6 +243,34 @@ func DecodeGetConfigResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("orgEncryption", "getConfig", err)
 			}
 			return nil, NewGetConfigGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body GetConfigUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "getConfig", err)
+			}
+			err = ValidateGetConfigUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "getConfig", err)
+			}
+			return nil, NewGetConfigUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body GetConfigFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "getConfig", err)
+			}
+			err = ValidateGetConfigFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "getConfig", err)
+			}
+			return nil, NewGetConfigFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "getConfig", resp.StatusCode, string(body))
@@ -293,6 +323,8 @@ func EncodeListKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*ht
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -471,6 +503,34 @@ func DecodeListKeysResponse(decoder func(*http.Response) goahttp.Decoder, restor
 				return nil, goahttp.ErrValidationError("orgEncryption", "listKeys", err)
 			}
 			return nil, NewListKeysGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ListKeysUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "listKeys", err)
+			}
+			err = ValidateListKeysUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "listKeys", err)
+			}
+			return nil, NewListKeysUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body ListKeysFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "listKeys", err)
+			}
+			err = ValidateListKeysFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "listKeys", err)
+			}
+			return nil, NewListKeysFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "listKeys", resp.StatusCode, string(body))
@@ -527,6 +587,8 @@ func EncodeCreateGcpKeyRequest(encoder func(*http.Request) goahttp.Encoder) func
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeCreateGcpKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -705,6 +767,34 @@ func DecodeCreateGcpKeyResponse(decoder func(*http.Response) goahttp.Decoder, re
 				return nil, goahttp.ErrValidationError("orgEncryption", "createGcpKey", err)
 			}
 			return nil, NewCreateGcpKeyGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CreateGcpKeyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "createGcpKey", err)
+			}
+			err = ValidateCreateGcpKeyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "createGcpKey", err)
+			}
+			return nil, NewCreateGcpKeyUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body CreateGcpKeyFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "createGcpKey", err)
+			}
+			err = ValidateCreateGcpKeyFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "createGcpKey", err)
+			}
+			return nil, NewCreateGcpKeyFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "createGcpKey", resp.StatusCode, string(body))
@@ -761,6 +851,8 @@ func EncodeVerifyKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeVerifyKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -953,6 +1045,34 @@ func DecodeVerifyKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("orgEncryption", "verifyKey", err)
 			}
 			return nil, NewVerifyKeyGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body VerifyKeyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body VerifyKeyFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "verifyKey", err)
+			}
+			err = ValidateVerifyKeyFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "verifyKey", err)
+			}
+			return nil, NewVerifyKeyFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "verifyKey", resp.StatusCode, string(body))
@@ -1008,6 +1128,8 @@ func EncodeDeleteKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeDeleteKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1173,6 +1295,34 @@ func DecodeDeleteKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("orgEncryption", "deleteKey", err)
 			}
 			return nil, NewDeleteKeyGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body DeleteKeyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "deleteKey", err)
+			}
+			err = ValidateDeleteKeyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "deleteKey", err)
+			}
+			return nil, NewDeleteKeyUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body DeleteKeyFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "deleteKey", err)
+			}
+			err = ValidateDeleteKeyFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "deleteKey", err)
+			}
+			return nil, NewDeleteKeyFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "deleteKey", resp.StatusCode, string(body))
@@ -1229,6 +1379,8 @@ func EncodeSwitchKeyRequest(encoder func(*http.Request) goahttp.Encoder) func(*h
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeSwitchKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1407,6 +1559,34 @@ func DecodeSwitchKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 				return nil, goahttp.ErrValidationError("orgEncryption", "switchKey", err)
 			}
 			return nil, NewSwitchKeyGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SwitchKeyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "switchKey", err)
+			}
+			err = ValidateSwitchKeyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "switchKey", err)
+			}
+			return nil, NewSwitchKeyUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body SwitchKeyFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "switchKey", err)
+			}
+			err = ValidateSwitchKeyFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "switchKey", err)
+			}
+			return nil, NewSwitchKeyFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "switchKey", resp.StatusCode, string(body))
@@ -1459,6 +1639,8 @@ func EncodeCompleteSwitchRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeCompleteSwitchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1637,6 +1819,34 @@ func DecodeCompleteSwitchResponse(decoder func(*http.Response) goahttp.Decoder, 
 				return nil, goahttp.ErrValidationError("orgEncryption", "completeSwitch", err)
 			}
 			return nil, NewCompleteSwitchGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body CompleteSwitchUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "completeSwitch", err)
+			}
+			err = ValidateCompleteSwitchUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "completeSwitch", err)
+			}
+			return nil, NewCompleteSwitchUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body CompleteSwitchFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "completeSwitch", err)
+			}
+			err = ValidateCompleteSwitchFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "completeSwitch", err)
+			}
+			return nil, NewCompleteSwitchFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "completeSwitch", resp.StatusCode, string(body))
@@ -1689,6 +1899,8 @@ func EncodeRollbackSwitchRequest(encoder func(*http.Request) goahttp.Encoder) fu
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeRollbackSwitchResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -1867,6 +2079,34 @@ func DecodeRollbackSwitchResponse(decoder func(*http.Response) goahttp.Decoder, 
 				return nil, goahttp.ErrValidationError("orgEncryption", "rollbackSwitch", err)
 			}
 			return nil, NewRollbackSwitchGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RollbackSwitchUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "rollbackSwitch", err)
+			}
+			err = ValidateRollbackSwitchUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "rollbackSwitch", err)
+			}
+			return nil, NewRollbackSwitchUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body RollbackSwitchFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "rollbackSwitch", err)
+			}
+			err = ValidateRollbackSwitchFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "rollbackSwitch", err)
+			}
+			return nil, NewRollbackSwitchFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "rollbackSwitch", resp.StatusCode, string(body))
@@ -1923,6 +2163,8 @@ func EncodeRotateDataKeyRequest(encoder func(*http.Request) goahttp.Encoder) fun
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeRotateDataKeyResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2101,6 +2343,34 @@ func DecodeRotateDataKeyResponse(decoder func(*http.Response) goahttp.Decoder, r
 				return nil, goahttp.ErrValidationError("orgEncryption", "rotateDataKey", err)
 			}
 			return nil, NewRotateDataKeyGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body RotateDataKeyUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "rotateDataKey", err)
+			}
+			err = ValidateRotateDataKeyUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "rotateDataKey", err)
+			}
+			return nil, NewRotateDataKeyUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body RotateDataKeyFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "rotateDataKey", err)
+			}
+			err = ValidateRotateDataKeyFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "rotateDataKey", err)
+			}
+			return nil, NewRotateDataKeyFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "rotateDataKey", resp.StatusCode, string(body))
@@ -2153,6 +2423,8 @@ func EncodeResumeRequest(encoder func(*http.Request) goahttp.Encoder) func(*http
 //   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - "failed_precondition" (type *goa.ServiceError): http.StatusPreconditionFailed
 //   - error: internal error
 func DecodeResumeResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
@@ -2331,6 +2603,34 @@ func DecodeResumeResponse(decoder func(*http.Response) goahttp.Decoder, restoreB
 				return nil, goahttp.ErrValidationError("orgEncryption", "resume", err)
 			}
 			return nil, NewResumeGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body ResumeUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "resume", err)
+			}
+			err = ValidateResumeUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "resume", err)
+			}
+			return nil, NewResumeUnavailable(&body)
+		case http.StatusPreconditionFailed:
+			var (
+				body ResumeFailedPreconditionResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("orgEncryption", "resume", err)
+			}
+			err = ValidateResumeFailedPreconditionResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("orgEncryption", "resume", err)
+			}
+			return nil, NewResumeFailedPrecondition(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("orgEncryption", "resume", resp.StatusCode, string(body))

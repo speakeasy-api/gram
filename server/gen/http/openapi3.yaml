@@ -49916,6 +49916,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -49940,6 +49946,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: completeSwitch orgEncryption
@@ -50003,6 +50015,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50027,6 +50045,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: createGcpKey orgEncryption
@@ -50089,6 +50113,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50113,6 +50143,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: deleteKey orgEncryption
@@ -50170,6 +50206,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50194,6 +50236,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: getConfig orgEncryption
@@ -50251,6 +50299,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50275,6 +50329,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: listKeys orgEncryption
@@ -50332,6 +50392,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50356,6 +50422,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: resume orgEncryption
@@ -50413,6 +50485,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50437,6 +50515,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: rollbackSwitch orgEncryption
@@ -50500,6 +50584,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50524,6 +50614,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: rotateDataKey orgEncryption
@@ -50587,6 +50683,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50611,6 +50713,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: switchKey orgEncryption
@@ -50677,6 +50785,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -50707,6 +50821,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
             security:
                 - session_header_Gram-Session: []
             summary: verifyKey orgEncryption

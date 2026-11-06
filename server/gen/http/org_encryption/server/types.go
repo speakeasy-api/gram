@@ -440,6 +440,43 @@ type GetConfigGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetConfigUnavailableResponseBody is the type of the "orgEncryption" service
+// "getConfig" endpoint HTTP response body for the "unavailable" error.
+type GetConfigUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetConfigFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "getConfig" endpoint HTTP response body for the
+// "failed_precondition" error.
+type GetConfigFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListKeysUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "listKeys" endpoint HTTP response body for the "unauthorized" error.
 type ListKeysUnauthorizedResponseBody struct {
@@ -607,6 +644,43 @@ type ListKeysUnexpectedResponseBody struct {
 // ListKeysGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "listKeys" endpoint HTTP response body for the "gateway_error" error.
 type ListKeysGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysUnavailableResponseBody is the type of the "orgEncryption" service
+// "listKeys" endpoint HTTP response body for the "unavailable" error.
+type ListKeysUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListKeysFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "listKeys" endpoint HTTP response body for the "failed_precondition"
+// error.
+type ListKeysFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -793,6 +867,44 @@ type CreateGcpKeyUnexpectedResponseBody struct {
 // service "createGcpKey" endpoint HTTP response body for the "gateway_error"
 // error.
 type CreateGcpKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGcpKeyUnavailableResponseBody is the type of the "orgEncryption"
+// service "createGcpKey" endpoint HTTP response body for the "unavailable"
+// error.
+type CreateGcpKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CreateGcpKeyFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "createGcpKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type CreateGcpKeyFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1009,6 +1121,43 @@ type VerifyKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// VerifyKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "verifyKey" endpoint HTTP response body for the "unavailable" error.
+type VerifyKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// VerifyKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "verifyKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type VerifyKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // DeleteKeyUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "deleteKey" endpoint HTTP response body for the "unauthorized" error.
 type DeleteKeyUnauthorizedResponseBody struct {
@@ -1191,6 +1340,43 @@ type DeleteKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DeleteKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "deleteKey" endpoint HTTP response body for the "unavailable" error.
+type DeleteKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DeleteKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "deleteKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type DeleteKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SwitchKeyUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "switchKey" endpoint HTTP response body for the "unauthorized" error.
 type SwitchKeyUnauthorizedResponseBody struct {
@@ -1358,6 +1544,43 @@ type SwitchKeyUnexpectedResponseBody struct {
 // SwitchKeyGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "switchKey" endpoint HTTP response body for the "gateway_error" error.
 type SwitchKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchKeyUnavailableResponseBody is the type of the "orgEncryption" service
+// "switchKey" endpoint HTTP response body for the "unavailable" error.
+type SwitchKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SwitchKeyFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "switchKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type SwitchKeyFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1562,6 +1785,44 @@ type CompleteSwitchGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CompleteSwitchUnavailableResponseBody is the type of the "orgEncryption"
+// service "completeSwitch" endpoint HTTP response body for the "unavailable"
+// error.
+type CompleteSwitchUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CompleteSwitchFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "completeSwitch" endpoint HTTP response body for the
+// "failed_precondition" error.
+type CompleteSwitchFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // RollbackSwitchUnauthorizedResponseBody is the type of the "orgEncryption"
 // service "rollbackSwitch" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -1736,6 +1997,44 @@ type RollbackSwitchUnexpectedResponseBody struct {
 // service "rollbackSwitch" endpoint HTTP response body for the "gateway_error"
 // error.
 type RollbackSwitchGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackSwitchUnavailableResponseBody is the type of the "orgEncryption"
+// service "rollbackSwitch" endpoint HTTP response body for the "unavailable"
+// error.
+type RollbackSwitchUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RollbackSwitchFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "rollbackSwitch" endpoint HTTP response body for the
+// "failed_precondition" error.
+type RollbackSwitchFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1938,6 +2237,44 @@ type RotateDataKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// RotateDataKeyUnavailableResponseBody is the type of the "orgEncryption"
+// service "rotateDataKey" endpoint HTTP response body for the "unavailable"
+// error.
+type RotateDataKeyUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RotateDataKeyFailedPreconditionResponseBody is the type of the
+// "orgEncryption" service "rotateDataKey" endpoint HTTP response body for the
+// "failed_precondition" error.
+type RotateDataKeyFailedPreconditionResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ResumeUnauthorizedResponseBody is the type of the "orgEncryption" service
 // "resume" endpoint HTTP response body for the "unauthorized" error.
 type ResumeUnauthorizedResponseBody struct {
@@ -2105,6 +2442,43 @@ type ResumeUnexpectedResponseBody struct {
 // ResumeGatewayErrorResponseBody is the type of the "orgEncryption" service
 // "resume" endpoint HTTP response body for the "gateway_error" error.
 type ResumeGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeUnavailableResponseBody is the type of the "orgEncryption" service
+// "resume" endpoint HTTP response body for the "unavailable" error.
+type ResumeUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ResumeFailedPreconditionResponseBody is the type of the "orgEncryption"
+// service "resume" endpoint HTTP response body for the "failed_precondition"
+// error.
+type ResumeFailedPreconditionResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -2441,6 +2815,34 @@ func NewGetConfigGatewayErrorResponseBody(res *goa.ServiceError) *GetConfigGatew
 	return body
 }
 
+// NewGetConfigUnavailableResponseBody builds the HTTP response body from the
+// result of the "getConfig" endpoint of the "orgEncryption" service.
+func NewGetConfigUnavailableResponseBody(res *goa.ServiceError) *GetConfigUnavailableResponseBody {
+	body := &GetConfigUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetConfigFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "getConfig" endpoint of the "orgEncryption" service.
+func NewGetConfigFailedPreconditionResponseBody(res *goa.ServiceError) *GetConfigFailedPreconditionResponseBody {
+	body := &GetConfigFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListKeysUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "listKeys" endpoint of the "orgEncryption" service.
 func NewListKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListKeysUnauthorizedResponseBody {
@@ -2571,6 +2973,34 @@ func NewListKeysUnexpectedResponseBody(res *goa.ServiceError) *ListKeysUnexpecte
 // result of the "listKeys" endpoint of the "orgEncryption" service.
 func NewListKeysGatewayErrorResponseBody(res *goa.ServiceError) *ListKeysGatewayErrorResponseBody {
 	body := &ListKeysGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysUnavailableResponseBody builds the HTTP response body from the
+// result of the "listKeys" endpoint of the "orgEncryption" service.
+func NewListKeysUnavailableResponseBody(res *goa.ServiceError) *ListKeysUnavailableResponseBody {
+	body := &ListKeysUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListKeysFailedPreconditionResponseBody builds the HTTP response body from
+// the result of the "listKeys" endpoint of the "orgEncryption" service.
+func NewListKeysFailedPreconditionResponseBody(res *goa.ServiceError) *ListKeysFailedPreconditionResponseBody {
+	body := &ListKeysFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2713,6 +3143,35 @@ func NewCreateGcpKeyUnexpectedResponseBody(res *goa.ServiceError) *CreateGcpKeyU
 // the result of the "createGcpKey" endpoint of the "orgEncryption" service.
 func NewCreateGcpKeyGatewayErrorResponseBody(res *goa.ServiceError) *CreateGcpKeyGatewayErrorResponseBody {
 	body := &CreateGcpKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGcpKeyUnavailableResponseBody builds the HTTP response body from
+// the result of the "createGcpKey" endpoint of the "orgEncryption" service.
+func NewCreateGcpKeyUnavailableResponseBody(res *goa.ServiceError) *CreateGcpKeyUnavailableResponseBody {
+	body := &CreateGcpKeyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCreateGcpKeyFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "createGcpKey" endpoint of the "orgEncryption"
+// service.
+func NewCreateGcpKeyFailedPreconditionResponseBody(res *goa.ServiceError) *CreateGcpKeyFailedPreconditionResponseBody {
+	body := &CreateGcpKeyFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -2877,6 +3336,34 @@ func NewVerifyKeyGatewayErrorResponseBody(res *goa.ServiceError) *VerifyKeyGatew
 	return body
 }
 
+// NewVerifyKeyUnavailableResponseBody builds the HTTP response body from the
+// result of the "verifyKey" endpoint of the "orgEncryption" service.
+func NewVerifyKeyUnavailableResponseBody(res *goa.ServiceError) *VerifyKeyUnavailableResponseBody {
+	body := &VerifyKeyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewVerifyKeyFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "verifyKey" endpoint of the "orgEncryption" service.
+func NewVerifyKeyFailedPreconditionResponseBody(res *goa.ServiceError) *VerifyKeyFailedPreconditionResponseBody {
+	body := &VerifyKeyFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewDeleteKeyUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "deleteKey" endpoint of the "orgEncryption" service.
 func NewDeleteKeyUnauthorizedResponseBody(res *goa.ServiceError) *DeleteKeyUnauthorizedResponseBody {
@@ -3017,6 +3504,34 @@ func NewDeleteKeyGatewayErrorResponseBody(res *goa.ServiceError) *DeleteKeyGatew
 	return body
 }
 
+// NewDeleteKeyUnavailableResponseBody builds the HTTP response body from the
+// result of the "deleteKey" endpoint of the "orgEncryption" service.
+func NewDeleteKeyUnavailableResponseBody(res *goa.ServiceError) *DeleteKeyUnavailableResponseBody {
+	body := &DeleteKeyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDeleteKeyFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "deleteKey" endpoint of the "orgEncryption" service.
+func NewDeleteKeyFailedPreconditionResponseBody(res *goa.ServiceError) *DeleteKeyFailedPreconditionResponseBody {
+	body := &DeleteKeyFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSwitchKeyUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "switchKey" endpoint of the "orgEncryption" service.
 func NewSwitchKeyUnauthorizedResponseBody(res *goa.ServiceError) *SwitchKeyUnauthorizedResponseBody {
@@ -3147,6 +3662,34 @@ func NewSwitchKeyUnexpectedResponseBody(res *goa.ServiceError) *SwitchKeyUnexpec
 // result of the "switchKey" endpoint of the "orgEncryption" service.
 func NewSwitchKeyGatewayErrorResponseBody(res *goa.ServiceError) *SwitchKeyGatewayErrorResponseBody {
 	body := &SwitchKeyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchKeyUnavailableResponseBody builds the HTTP response body from the
+// result of the "switchKey" endpoint of the "orgEncryption" service.
+func NewSwitchKeyUnavailableResponseBody(res *goa.ServiceError) *SwitchKeyUnavailableResponseBody {
+	body := &SwitchKeyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSwitchKeyFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "switchKey" endpoint of the "orgEncryption" service.
+func NewSwitchKeyFailedPreconditionResponseBody(res *goa.ServiceError) *SwitchKeyFailedPreconditionResponseBody {
+	body := &SwitchKeyFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3299,6 +3842,35 @@ func NewCompleteSwitchGatewayErrorResponseBody(res *goa.ServiceError) *CompleteS
 	return body
 }
 
+// NewCompleteSwitchUnavailableResponseBody builds the HTTP response body from
+// the result of the "completeSwitch" endpoint of the "orgEncryption" service.
+func NewCompleteSwitchUnavailableResponseBody(res *goa.ServiceError) *CompleteSwitchUnavailableResponseBody {
+	body := &CompleteSwitchUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCompleteSwitchFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "completeSwitch" endpoint of the "orgEncryption"
+// service.
+func NewCompleteSwitchFailedPreconditionResponseBody(res *goa.ServiceError) *CompleteSwitchFailedPreconditionResponseBody {
+	body := &CompleteSwitchFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewRollbackSwitchUnauthorizedResponseBody builds the HTTP response body from
 // the result of the "rollbackSwitch" endpoint of the "orgEncryption" service.
 func NewRollbackSwitchUnauthorizedResponseBody(res *goa.ServiceError) *RollbackSwitchUnauthorizedResponseBody {
@@ -3431,6 +4003,35 @@ func NewRollbackSwitchUnexpectedResponseBody(res *goa.ServiceError) *RollbackSwi
 // the result of the "rollbackSwitch" endpoint of the "orgEncryption" service.
 func NewRollbackSwitchGatewayErrorResponseBody(res *goa.ServiceError) *RollbackSwitchGatewayErrorResponseBody {
 	body := &RollbackSwitchGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackSwitchUnavailableResponseBody builds the HTTP response body from
+// the result of the "rollbackSwitch" endpoint of the "orgEncryption" service.
+func NewRollbackSwitchUnavailableResponseBody(res *goa.ServiceError) *RollbackSwitchUnavailableResponseBody {
+	body := &RollbackSwitchUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRollbackSwitchFailedPreconditionResponseBody builds the HTTP response
+// body from the result of the "rollbackSwitch" endpoint of the "orgEncryption"
+// service.
+func NewRollbackSwitchFailedPreconditionResponseBody(res *goa.ServiceError) *RollbackSwitchFailedPreconditionResponseBody {
+	body := &RollbackSwitchFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -3583,6 +4184,35 @@ func NewRotateDataKeyGatewayErrorResponseBody(res *goa.ServiceError) *RotateData
 	return body
 }
 
+// NewRotateDataKeyUnavailableResponseBody builds the HTTP response body from
+// the result of the "rotateDataKey" endpoint of the "orgEncryption" service.
+func NewRotateDataKeyUnavailableResponseBody(res *goa.ServiceError) *RotateDataKeyUnavailableResponseBody {
+	body := &RotateDataKeyUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRotateDataKeyFailedPreconditionResponseBody builds the HTTP response body
+// from the result of the "rotateDataKey" endpoint of the "orgEncryption"
+// service.
+func NewRotateDataKeyFailedPreconditionResponseBody(res *goa.ServiceError) *RotateDataKeyFailedPreconditionResponseBody {
+	body := &RotateDataKeyFailedPreconditionResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewResumeUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "resume" endpoint of the "orgEncryption" service.
 func NewResumeUnauthorizedResponseBody(res *goa.ServiceError) *ResumeUnauthorizedResponseBody {
@@ -3713,6 +4343,34 @@ func NewResumeUnexpectedResponseBody(res *goa.ServiceError) *ResumeUnexpectedRes
 // result of the "resume" endpoint of the "orgEncryption" service.
 func NewResumeGatewayErrorResponseBody(res *goa.ServiceError) *ResumeGatewayErrorResponseBody {
 	body := &ResumeGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeUnavailableResponseBody builds the HTTP response body from the
+// result of the "resume" endpoint of the "orgEncryption" service.
+func NewResumeUnavailableResponseBody(res *goa.ServiceError) *ResumeUnavailableResponseBody {
+	body := &ResumeUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewResumeFailedPreconditionResponseBody builds the HTTP response body from
+// the result of the "resume" endpoint of the "orgEncryption" service.
+func NewResumeFailedPreconditionResponseBody(res *goa.ServiceError) *ResumeFailedPreconditionResponseBody {
+	body := &ResumeFailedPreconditionResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

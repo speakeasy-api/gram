@@ -293,23 +293,41 @@ func (p *Provisioner) disableManagedKey(ctx context.Context, client gcpkms.Encry
 // out. No KMS call was made.
 const ProbeOutcomeCredentialUnusable gcpkms.VerifyReason = "credential_unusable" //nolint:gosec // a probe outcome name, not a credential
 
+// verifyFailedDetail is the detail returned when verification failed for an
+// internal reason. The underlying error is logged, never returned.
+const verifyFailedDetail = "key verification could not be completed; try again shortly"
+
 // VerifyKey proves Speakeasy can encrypt and decrypt with one of the
-// organization's keys. Nothing is persisted.
+// organization's keys. It first proves Speakeasy can assume the key's
+// credential, so a missing impersonation grant reports as an unusable
+// credential rather than as a KMS permission error. Nothing is persisted.
 func (p *Provisioner) VerifyKey(ctx context.Context, organizationID string, keyID uuid.UUID) gcpkms.VerifyResult {
 	logger := p.logger.With(attr.SlogOrganizationID(organizationID))
 
 	key, err := p.keys.open(ctx, logger, repo.New(p.db), organizationID, keyID)
 	if err != nil {
-		reason := ProbeOutcomeCredentialUnusable
 		switch {
 		case errors.Is(err, gcpkms.ErrInvalidResourceName):
-			reason = gcpkms.ReasonInvalidResourceName
-		case !errors.Is(err, ErrInvalidKey) && !errors.Is(err, ErrPlatformCredentialUnusable):
-			reason = gcpkms.ReasonForError(err)
+			return unverified(gcpkms.ReasonInvalidResourceName, err.Error())
+		case errors.Is(err, ErrInvalidKey), errors.Is(err, ErrPlatformCredentialUnusable):
+			return unverified(ProbeOutcomeCredentialUnusable, err.Error())
+		default:
+			logger.ErrorContext(ctx, "open encryption key for verification", attr.SlogError(err))
+			return unverified(gcpkms.ReasonUnexpected, verifyFailedDetail)
 		}
-		return gcpkms.VerifyResult{Verified: false, Reason: reason, Algorithm: "", Detail: err.Error()}
 	}
 	defer o11y.LogDefer(ctx, logger, "close kms encryption client", key.Close)
 
+	// Resolving the principal is what separates "Speakeasy cannot assume this
+	// identity" from a key-level permission problem; the token source is lazy.
+	if _, err := p.identity.ResolvePrincipal(ctx, key.credential); err != nil {
+		logger.InfoContext(ctx, "encryption key verification could not assume the credential", attr.SlogError(err))
+		return unverified(ProbeOutcomeCredentialUnusable, "cannot authenticate as the key's credential: "+err.Error())
+	}
+
 	return gcpkms.VerifyEncryptionKey(ctx, key.client, key.resourceName)
+}
+
+func unverified(reason gcpkms.VerifyReason, detail string) gcpkms.VerifyResult {
+	return gcpkms.VerifyResult{Verified: false, Reason: reason, Algorithm: "", Detail: detail}
 }
