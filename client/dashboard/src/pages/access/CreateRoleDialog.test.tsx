@@ -209,13 +209,25 @@ function renderEditor(
 function openPlatformTab() {
   fireEvent.mouseDown(screen.getByRole("tab", { name: "Platform access" }));
 }
-/** Save or create. A save that adds a permission is reviewed first. */
-function submit(label: "Save Changes" | "Create Role") {
+type SubmitLabel = "Save Changes" | "Create Role";
+function reviewButtonName(label: SubmitLabel) {
+  return label === "Save Changes" ? "Save role" : "Create role";
+}
+/** Save or create a role whose save adds a permission: the review step must
+ *  open, and the save goes through from there. */
+function submitReviewed(label: SubmitLabel) {
   fireEvent.click(screen.getByRole("button", { name: label }));
-  const review = screen.queryByRole("button", {
-    name: label === "Save Changes" ? "Save role" : "Create role",
-  });
-  if (review) fireEvent.click(review);
+  fireEvent.click(
+    screen.getByRole("button", { name: reviewButtonName(label) }),
+  );
+}
+/** Save or create a role whose save adds nothing to review: the save goes
+ *  through at once, and no review step opens. */
+function submitDirect(label: SubmitLabel) {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  expect(
+    screen.queryByRole("button", { name: reviewButtonName(label) }),
+  ).toBeNull();
 }
 afterEach(cleanup);
 beforeEach(() => {
@@ -333,7 +345,7 @@ describe("agent assignment", () => {
     });
     openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View organization" }));
-    submit("Create Role");
+    submitReviewed("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
@@ -380,7 +392,7 @@ describe("while the permission catalogue is unavailable", () => {
 
 describe("a role pre-filled from an access request", () => {
   function createdGrants() {
-    submit("Create Role");
+    submitReviewed("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     return mocks.create.mock.calls[0]![0].request.createRoleForm.grants;
   }
@@ -631,8 +643,8 @@ describe("the access grid", () => {
     renderEditor(editingRole);
   }
 
-  function savedForm() {
-    submit("Save Changes");
+  function savedForm(how: "reviewed" | "direct") {
+    (how === "reviewed" ? submitReviewed : submitDirect)("Save Changes");
     expect(mocks.update).toHaveBeenCalledOnce();
     return mocks.update.mock.calls[0]![0].request.updateRoleForm;
   }
@@ -646,7 +658,7 @@ describe("the access grid", () => {
         .getByRole("button", { name: "Connect GitHub" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
-    expect(savedForm().addGrants).toEqual([
+    expect(savedForm("reviewed").addGrants).toEqual([
       {
         scope: "mcp:write",
         selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
@@ -688,7 +700,7 @@ describe("the access grid", () => {
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: "Block Linear" }));
-    const form = savedForm();
+    const form = savedForm("direct");
     const linear = [{ resourceKind: "mcp", resourceId: "server-b" }];
     expect(form.addGrants).toEqual(
       expect.arrayContaining([
@@ -721,7 +733,7 @@ describe("the access grid", () => {
     fireEvent.change(screen.getByDisplayValue("Original description"), {
       target: { value: "New description" },
     });
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.addGrants ?? []).toEqual([]);
     expect(form.removeGrants ?? []).toEqual([]);
   });
@@ -849,8 +861,8 @@ describe("a role read again while the editor is open", () => {
       target: { value: "Renamed role" },
     });
   }
-  function savedForm() {
-    submit("Save Changes");
+  function savedForm(how: "reviewed" | "direct") {
+    (how === "reviewed" ? submitReviewed : submitDirect)("Save Changes");
     expect(mocks.update).toHaveBeenCalledOnce();
     return mocks.update.mock.calls[0]![0].request.updateRoleForm;
   }
@@ -864,7 +876,7 @@ describe("a role read again while the editor is open", () => {
     reread({ ...role, grants: [personalAuth] });
 
     rename();
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.name).toBe("Renamed role");
     expect(form.removeGrants ?? []).toEqual([]);
     expect(form.addGrants ?? []).toEqual([]);
@@ -880,7 +892,7 @@ describe("a role read again while the editor is open", () => {
   it("keeps a credential rule the editor started with", () => {
     renderEditor({ ...role, grants: [personalAuth] });
     rename();
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.removeGrants ?? []).toEqual([]);
     expect(form.addGrants ?? []).toEqual([]);
   });
@@ -890,7 +902,7 @@ describe("a role read again while the editor is open", () => {
     reread({ ...role, grants: [personalAuth, blockedAuth] });
 
     rename();
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.removeGrants ?? []).toEqual([]);
     expect(form.addGrants ?? []).toEqual([]);
   });
@@ -907,7 +919,7 @@ describe("a role read again while the editor is open", () => {
     reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
 
     rename();
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.removeGrants ?? []).toEqual([]);
     expect(form.addGrants ?? []).toEqual([]);
   });
@@ -928,7 +940,7 @@ describe("a role read again while the editor is open", () => {
     choose("Each person's own account", "Can use");
     reread({ ...role, grants: [blockedAuth] });
 
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.addGrants).toEqual([personalAuth]);
     expect(form.removeGrants ?? []).toEqual([]);
     expect(chosen("Each person's own account")).toEqual(["Can use"]);
@@ -940,7 +952,7 @@ describe("a role read again while the editor is open", () => {
     // name the selector the role stores so the server matches it.
     renderEditor({ ...role, grants: [personalAuth] });
     choose("Each person's own account", "Not set");
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.removeGrants).toEqual([personalAuth]);
     expect(form.addGrants ?? []).toEqual([]);
   });
@@ -962,7 +974,7 @@ describe("a role read again while the editor is open", () => {
       ],
     });
 
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.removeGrants).toEqual([
       { scope: "mcp:connect", selectors: github },
     ]);
