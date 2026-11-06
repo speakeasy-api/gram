@@ -263,6 +263,30 @@ describe("ChatLogsTable", () => {
     expect(screen.getByTitle("Duration").textContent).toBe("3d 20h");
   });
 
+  it("does not round a session just under a day up to 1d", () => {
+    const createdAt = new Date("2026-11-02T16:00:00Z");
+    // 23h 59m 59.6s after it started.
+    const lastMessageTimestamp = new Date(createdAt.getTime() + 86_399_600);
+
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          { ...makeChat("chat-almost-day"), createdAt, lastMessageTimestamp },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByTitle("Duration").textContent).toBe("1440m");
+  });
+
   it.each([true, false])(
     "shows last message time, falling back to creation when absent (has messages: %s)",
     (hasMessages) => {

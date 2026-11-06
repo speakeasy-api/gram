@@ -77,7 +77,8 @@ export function formatDurationFromNanos(
     if (millis < 10_000) return `${(millis / 1000).toFixed(1)}s`;
     const roundedSeconds = Math.round(millis / 1000);
     if (roundedSeconds < 60) return `${roundedSeconds}s`;
-    const daysHours = formatDaysHours(roundedSeconds);
+    // Days use whole elapsed seconds, so 23:59:59.6 is not rounded up to 1d.
+    const daysHours = formatDaysHours(Math.floor(millis / 1000));
     if (daysHours) return daysHours;
     const minutes = Math.floor(roundedSeconds / 60);
     const remainder = roundedSeconds % 60;

@@ -598,11 +598,11 @@ function SessionLineageIcons({
 function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
-  const seconds = Math.round(
-    (endTime.getTime() - chat.createdAt.getTime()) / 1000,
-  );
+  const elapsedMs = endTime.getTime() - chat.createdAt.getTime();
+  const seconds = Math.round(elapsedMs / 1000);
   if (seconds < 60) return `${seconds}s`;
-  const daysHours = formatDaysHours(seconds);
+  // Days use whole elapsed seconds, so 23:59:59.6 is not rounded up to 1d.
+  const daysHours = formatDaysHours(Math.floor(elapsedMs / 1000));
   if (daysHours) return daysHours;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;

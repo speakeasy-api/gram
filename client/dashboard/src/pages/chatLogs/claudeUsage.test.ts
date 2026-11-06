@@ -127,6 +127,11 @@ describe("formatDurationFromNanos", () => {
     expect(formatDurationFromNanos("0", "86399000000000")).toBe("1439m 59s");
   });
 
+  it("does not round a duration just under a day up to 1d", () => {
+    // 23h 59m 59.6s rounds to 86400 s but is still under a day.
+    expect(formatDurationFromNanos("0", "86399600000000")).toBe("1440m 0s");
+  });
+
   it("reads a day or more in days and hours", () => {
     // 5570m 34s
     expect(formatDurationFromNanos("0", "334234000000000")).toBe("3d 20h");
