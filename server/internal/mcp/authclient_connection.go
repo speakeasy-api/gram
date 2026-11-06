@@ -63,7 +63,8 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	if lookup == nil || !permit.RegistrationID.Valid || permit.Subject.IsZero() {
 		return fallback, nil
 	}
-	conn, attached, err := lookup.AuthClientAttachedConnection(ctx, remotesessions.AuthClientTokenRequest{
+	conn, attached, err := lookup.AuthClientAttachedConnection(ctx, remotesessions.AuthClientTokenRequest{Resource: "",
+
 		ProjectID:           permit.ProjectID,
 		OrganizationID:      permit.OrganizationID,
 		UserSessionIssuerID: permit.UserSessionIssuerID,

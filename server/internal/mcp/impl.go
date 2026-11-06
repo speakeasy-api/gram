@@ -610,6 +610,7 @@ func NewService(
 		authClientPermitter:       nil,
 		attachedConnections:       nil,
 		upstreamTokens:            nil,
+		upstreamResource:          nil,
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,

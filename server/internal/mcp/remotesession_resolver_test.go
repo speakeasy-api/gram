@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 
@@ -217,7 +219,7 @@ func insertRemoteSessionAccessToken(
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
 
-	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionResourceFixture(ctx, testrepo.SetRemoteSessionResourceFixtureParams{SubjectUrn: subject, RemoteSessionClientID: remoteSessionClientID, Resource: pgtype.Text{}}))
+	setExistingFixtureSessionResource(t, ctx, ti.conn, subject, remoteSessionClientID, pgtype.Text{})
 	session, err := remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
@@ -271,4 +273,16 @@ func persistTestUserSession(t *testing.T, ti *testInstance, issuerID uuid.UUID, 
 		SignInID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	})
 	require.NoError(t, err)
+}
+
+func setExistingFixtureSessionResource(t *testing.T, ctx context.Context, conn *pgxpool.Pool, subject urn.SessionSubject, clientID uuid.UUID, resource pgtype.Text) {
+	t.Helper()
+	// Some fixtures deliberately start with one grant for the wrong audience.
+	// Select that source explicitly; never rewrite all of a registration's rows.
+	current, err := remotesessions_repo.New(conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: ""})
+	if err != nil {
+		require.ErrorIs(t, err, pgx.ErrNoRows)
+		return
+	}
+	require.NoError(t, testrepo.New(conn).SetRemoteSessionResourceByIDFixture(ctx, testrepo.SetRemoteSessionResourceByIDFixtureParams{ID: current.ID, Resource: resource}))
 }

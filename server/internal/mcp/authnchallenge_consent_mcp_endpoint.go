@@ -430,7 +430,8 @@ func (s *Service) serveConsentProxiedMCP(
 	case auth.choice.clientID.Valid:
 		backendIssuerID = auth.choice.remoteSessionIssuerID
 		chosenClient = auth.choice.clientID.UUID
-		tokens, err = s.resolveResourceQualifiedTokens(ctx, serverRow.ID, remotesessions.AuthClientTokenRequest{
+		tokens, err = s.resolveResourceQualifiedTokens(ctx, serverRow.ID, remotesessions.AuthClientTokenRequest{Resource: endpoint.UpstreamResource,
+
 			Attribution: consentRefreshAttribution(r, endpoint, challengeState),
 			ProjectID:   endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject,

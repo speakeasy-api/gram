@@ -27,7 +27,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -316,7 +315,7 @@ func insertQualifiedRemoteSessionToken(
 
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionResourceFixture(ctx, testrepo.SetRemoteSessionResourceFixtureParams{SubjectUrn: subject, RemoteSessionClientID: remoteSessionClientID, Resource: conv.ToPGTextEmpty(resource)}))
+	setExistingFixtureSessionResource(t, ctx, ti.conn, subject, remoteSessionClientID, conv.ToPGTextEmpty(resource))
 	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,
