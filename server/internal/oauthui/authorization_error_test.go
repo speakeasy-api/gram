@@ -332,7 +332,10 @@ func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
 		wantRetry bool
 	}{
 		{"internal fault", http.StatusInternalServerError, "If it keeps happening, share the technical details below with Speakeasy support.", false},
+		{"not implemented", http.StatusNotImplemented, "If it keeps happening, share the technical details below with Speakeasy support.", false},
+		{"bad gateway", http.StatusBadGateway, "Try connecting again shortly.", true},
 		{"outage", http.StatusServiceUnavailable, "Try connecting again shortly.", true},
+		{"gateway timeout", http.StatusGatewayTimeout, "Try connecting again shortly.", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -358,7 +361,6 @@ func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
 		{oauthui.ReasonCheckFailed, "If it keeps happening, share the technical details below with Speakeasy support.", false},
 		{oauthui.ReasonCheckUnavailable, "Try again shortly. If it keeps happening, share the technical details below with Speakeasy support.", true},
 		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
-		{oauthui.ReasonCheckNetworkDenied, "This server is only available on your company network.", false},
 	} {
 		t.Run(string(tc.reason), func(t *testing.T) {
 			t.Parallel()
@@ -385,4 +387,14 @@ func TestAuthorizationErrorPageAsksToSignInAgain(t *testing.T) {
 	require.Contains(t, page, "Your sign-in service needs you to sign in again")
 	require.Contains(t, page, "sign in when your sign-in service asks")
 	require.NotContains(t, strings.ToLower(page), "your mcp client")
+}
+
+// A fault on organization setup keeps setup wording rather than calling the link incomplete.
+func TestAuthorizationErrorPageSetupFault(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Setup: true, Status: http.StatusInternalServerError, Code: oautherr.CodeServerError}))
+	page := pageText(response)
+	require.Contains(t, page, "Speakeasy couldn't finish checking your setup. This is a problem on our side")
+	require.NotContains(t, page, "incomplete")
 }

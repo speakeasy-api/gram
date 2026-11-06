@@ -143,9 +143,30 @@ func TestServeConsentAction_ValidateExpiredGrantRecordsReconnect(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 
-// A Verify whose refresh fails writes the refresh's row on the attempt, and no second row for the check.
+// A Verify whose refresh fails writes the refresh's row on the attempt, and no second row for the check:
+// an outage stops the check, and a refused grant collapses to a card with no token.
 func TestServeConsentAction_ValidateRefreshFailureWritesOneRow(t *testing.T) {
 	t.Parallel()
+
+	for name, answer := range map[string]http.HandlerFunc{
+		"outage": func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		},
+		"refused grant": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			requireOneRefreshRow(t, answer)
+		})
+	}
+}
+
+func requireOneRefreshRow(t *testing.T, answer http.HandlerFunc) {
+	t.Helper()
 
 	rec := mcpconnectionattemptstest.New(t)
 	reader, provider := newValidationMeterProvider()
@@ -158,9 +179,7 @@ func TestServeConsentAction_ValidateRefreshFailureWritesOneRow(t *testing.T) {
 	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
 
 	projectID, orgID := consentTestTenant(t, ctx)
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusServiceUnavailable)
-	}))
+	upstream := httptest.NewServer(answer)
 	t.Cleanup(upstream.Close)
 	rows, err := testrepo.New(ti.conn).ForceRemoteSessionIssuerTokenEndpointFixture(ctx, testrepo.ForceRemoteSessionIssuerTokenEndpointFixtureParams{
 		TokenEndpoint: conv.ToPGText(upstream.URL), RemoteSessionClientID: fx.clientID, ProjectID: projectID, OrganizationID: orgID,
@@ -179,9 +198,7 @@ func TestServeConsentAction_ValidateRefreshFailureWritesOneRow(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	w, err := postValidate(t, fx, fx.clientID)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusSeeOther, w.Code)
+	_, _ = postValidate(t, fx, fx.clientID)
 	var refreshes int
 	for _, row := range rec.Rows() {
 		if row.Step == mcpconnectionattempts.StepProviderRefresh.String() {

@@ -94,8 +94,6 @@ func classifyCheckFailure(ctx context.Context, err error) (checkFailure, bool) {
 			code = checkFailureCode(ctx, refusal.cause)
 		}
 		return checkFailure{code: code, page: oauthui.ReasonDefault}, code != (mcpconnectionattempts.Code{})
-	case errors.Is(err, errClientOffNetwork):
-		return checkFailure{code: mcpconnectionattempts.CodeNetworkDenied, page: oauthui.ReasonCheckNetworkDenied}, true
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return checkFailure{code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin}, true
 	}
@@ -223,9 +221,6 @@ func (s *Service) probeRemoteSession(
 	}()
 
 	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
-	if errors.Is(err, errClientOffNetwork) {
-		return oops.E(oops.CodeForbidden, err, "This server is only available on your company network.").LogWarn(ctx, logger)
-	}
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
 	}
@@ -378,8 +373,9 @@ func unservedCredentialReason(projects int, linked bool) string {
 }
 
 // noUsableCredentialRefusal is the person's message, the log reason, and the
-// cause for a grant that yielded no token. The cause is nil when the card is
-// not connected or its grant expired, which the person fixes by reconnecting.
+// cause for a grant that yielded no token. The cause is nil when token
+// resolution gave no reason and the card is not connected or its grant
+// expired, which the person fixes by reconnecting.
 func (s *Service) noUsableCredentialRefusal(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -396,13 +392,14 @@ func (s *Service) noUsableCredentialRefusal(
 	}
 	state, connected := statuses[client.ID]
 	message, reason = noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
-	if !connected || state.Status == remotesessions.RemoteSessionExpired {
-		return message, reason, nil
-	}
+	// Token resolution's own reason wins: it carries whether a refresh already wrote this failure's row.
 	for _, projectID := range projectIDs {
 		if skip := skipped.Reason(projectID, client.RemoteSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}); skip != nil {
 			return message, reason, fmt.Errorf("skipped during token resolution: %w", skip)
 		}
+	}
+	if !connected || state.Status == remotesessions.RemoteSessionExpired {
+		return message, reason, nil
 	}
 	return message, reason, errors.New(reason)
 }

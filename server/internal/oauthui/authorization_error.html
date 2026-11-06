@@ -45,6 +45,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{if .Setup}}
             {{if eq .Kind "not-allowed"}}Your account can't continue this organization's setup.
             {{else if eq .Kind "unavailable"}}Speakeasy couldn't finish checking your setup. Please try again.
+            {{else if eq .Kind "internal"}}Speakeasy couldn't finish checking your setup. This is a problem on our side, not something you did.
             {{else}}This setup link is incomplete or no longer valid.{{end}}
             {{else if .Approval}}
             {{if eq .Kind "expired"}}This approval link expired or was already used.
@@ -85,8 +86,6 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{else if eq .Kind "check-unavailable"}}
             Speakeasy couldn't check this server's connection right now. This is
             a problem on our side, not something you did.
-            {{else if eq .Kind "check-network-denied"}}
-            This server is only available on your company network.
             {{else if eq .Kind "sign-in-required"}}
             Your sign-in service needs you to sign in again before
             {{template "client" .}} can connect to {{template "server" .}}.
@@ -145,9 +144,6 @@ consent page shows, so the person recognizes the flow they started. */ -}}
           {{else if eq .Kind "check-unavailable"}}
           Try again shortly. If it keeps happening, share the technical details
           below with Speakeasy support.
-          {{else if eq .Kind "check-network-denied"}}
-          Connect from your company network, then check again. If you need it
-          from elsewhere, ask your IT administrators.
           {{else if eq .Kind "sign-in-required"}}
           Start connecting again, and sign in when your sign-in service asks.
           {{else if eq .Kind "check-needs-admin"}}

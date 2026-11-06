@@ -684,12 +684,5 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 			projectIDs = append(projectIDs, row.ProjectID)
 		}
 	}
-	if len(projectIDs) == 0 && len(rows) > 0 {
-		return nil, errClientOffNetwork
-	}
 	return projectIDs, nil
 }
-
-// errClientOffNetwork marks a client whose servers all take only private-network
-// requests, and this request came from elsewhere.
-var errClientOffNetwork = errors.New("remote session client serves only private-network servers")

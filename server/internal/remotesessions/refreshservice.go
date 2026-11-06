@@ -114,9 +114,16 @@ func RefreshFailureRecorded(err error) bool {
 	return ok && failure != nil && failure.failureRecorded
 }
 
+// errRefreshStepRecorded marks a collapsed refresh error whose step on a carried attempt was already written.
+var errRefreshStepRecorded = errors.New("refresh failure step recorded")
+
 // RefreshStepRecorded reports whether this fresh refresh error already wrote a
-// failed provider_refresh step on its carried attempt. Cached/deferred errors do not qualify.
+// failed provider_refresh step on its carried attempt, including when the token
+// service collapsed it to an error carrying errRefreshStepRecorded. Cached/deferred errors do not qualify.
 func RefreshStepRecorded(err error) bool {
+	if errors.Is(err, errRefreshStepRecorded) {
+		return true
+	}
 	failure, ok := errors.AsType[*RefreshError](err)
 	return ok && failure != nil && failure.stepRecorded
 }

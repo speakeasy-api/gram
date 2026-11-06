@@ -87,6 +87,9 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 			description := payload.Message
 			if payload.Fault {
 				description = CodeUnexpected.UserMessage()
+				if reason == oauthui.ReasonDefault {
+					reason = oauthui.ReasonInternal
+				}
 			}
 			page := oauthui.AuthorizationError{
 				Recovery:       recovery,

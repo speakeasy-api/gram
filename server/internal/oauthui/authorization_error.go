@@ -135,14 +135,14 @@ const (
 	ReasonInvalidLink Reason = "invalid-link"
 	// ReasonUnavailable identifies a dependency failure independently of HTTP status.
 	ReasonUnavailable Reason = "unavailable"
+	// ReasonInternal identifies a Speakeasy-side fault independently of HTTP status.
+	ReasonInternal Reason = "internal"
 	// ReasonProviderUnavailable identifies a sign-in provider that is down or rate limiting.
 	ReasonProviderUnavailable Reason = "provider-unavailable"
 	// ReasonCheckFailed identifies a server connection check that failed on our side; retrying won't help.
 	ReasonCheckFailed Reason = "check-failed"
 	// ReasonCheckUnavailable identifies a server connection check stopped by a Speakeasy outage; retrying can help.
 	ReasonCheckUnavailable Reason = "check-unavailable"
-	// ReasonCheckNetworkDenied identifies a server connection check from outside the network the server allows.
-	ReasonCheckNetworkDenied Reason = "check-network-denied"
 	// ReasonSignInRequired identifies a sign-in service that needs the person to sign in again.
 	ReasonSignInRequired Reason = "sign-in-required"
 	// ReasonCheckNeedsAdmin identifies a server connection check that an administrator's setup stopped.
@@ -152,9 +152,9 @@ const (
 // check reports a failed server connection check, rather than a failed connection.
 func (r Reason) check() bool {
 	switch r {
-	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin, ReasonCheckNetworkDenied:
+	case ReasonCheckFailed, ReasonCheckUnavailable, ReasonCheckNeedsAdmin:
 		return true
-	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonProviderUnavailable, ReasonSignInRequired:
+	case ReasonDefault, ReasonCanceled, ReasonOrganizationBlocked, ReasonExpired, ReasonSessionChanged, ReasonInvalidClient, ReasonInvalidLink, ReasonUnavailable, ReasonInternal, ReasonProviderUnavailable, ReasonSignInRequired:
 		return false
 	default:
 		return false
@@ -178,7 +178,7 @@ const (
 	// errorKindUnavailable: a Speakeasy-side outage that retrying may clear.
 	errorKindUnavailable errorKind = "unavailable"
 	// errorKindInternal: a Speakeasy-side fault that retrying is not known to clear.
-	errorKindInternal errorKind = "internal"
+	errorKindInternal errorKind = errorKind(ReasonInternal)
 	// errorKindOther: any code not classified above.
 	errorKindOther errorKind = "other"
 )
@@ -187,11 +187,13 @@ func classifyError(page AuthorizationError) errorKind {
 	if page.Reason != ReasonDefault {
 		return errorKind(page.Reason)
 	}
-	if page.Status == http.StatusInternalServerError {
-		return errorKindInternal
-	}
-	if page.Status > http.StatusInternalServerError {
+	switch page.Status {
+	case http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		// A dependency failed for now; retrying can clear it.
 		return errorKindUnavailable
+	}
+	if page.Status >= http.StatusInternalServerError {
+		return errorKindInternal
 	}
 	if page.Status == http.StatusForbidden || page.Status == http.StatusUnauthorized {
 		return errorKindNotAllowed
