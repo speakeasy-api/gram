@@ -63,6 +63,9 @@ function agentSelectorNarrowing(
   return parts.join(" · ");
 }
 
+/** Scopes whose grants also satisfy mcp:connect on the servers they name. */
+const MCP_SCOPES_THAT_CONNECT = new Set(["mcp:read", "mcp:write"]);
+
 /**
  * What a grant on every resource of its kind reaches. An org grant still
  * narrowed, e.g. to a project, is not the whole organization.
@@ -413,6 +416,20 @@ export function AgentIdentityPermissions({
   // setup flow, beside the sign-in each server needs.
   const servers = visible.filter((grant) => grant.scope === CONNECT_SCOPE);
   const rows = visible.filter((grant) => grant.scope !== CONNECT_SCOPE);
+  // mcp:read and mcp:write also satisfy mcp:connect. They are edited with the
+  // other permissions, so they stay listed there, but the server section
+  // must not say the agent cannot connect while they let it.
+  const connectingScopes = [
+    ...new Set(
+      rows
+        .filter(
+          (grant) =>
+            MCP_SCOPES_THAT_CONNECT.has(grant.scope) &&
+            grant.selector.resourceKind === "mcp",
+        )
+        .map((grant) => grant.scope),
+    ),
+  ];
   // Only a grant naming a specific MCP server needs the org inventories;
   // project names come from the session.
   const maps = useResourceLinkMaps(
@@ -491,11 +508,7 @@ export function AgentIdentityPermissions({
           refreshFailed={grants.isError && visible.length > 0}
           onRetry={() => void grants.refetch()}
         >
-          {servers.length === 0 ? (
-            <IdentityPanelEmpty>
-              This agent cannot connect to any MCP server.
-            </IdentityPanelEmpty>
-          ) : (
+          {servers.length > 0 && (
             <ScopeGrants
               agentId={agent.id}
               scope={CONNECT_SCOPE}
@@ -503,6 +516,17 @@ export function AgentIdentityPermissions({
               maps={maps}
               authNames={authNames}
             />
+          )}
+          {servers.length === 0 && connectingScopes.length === 0 && (
+            <IdentityPanelEmpty>
+              This agent cannot connect to any MCP server.
+            </IdentityPanelEmpty>
+          )}
+          {connectingScopes.length > 0 && (
+            <Text small muted className="px-4 py-3">
+              Its {connectingScopes.join(" and ")} permissions, listed with its
+              other permissions, also let it connect to the servers they name.
+            </Text>
           )}
         </IdentityPanel>
       )}

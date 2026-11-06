@@ -289,6 +289,24 @@ describe("Agent profile permissions", () => {
     ).toBeTruthy();
     expect(screen.getByRole("link", { name: "Edit servers" })).toBeTruthy();
   });
+  it("does not say the agent cannot connect when mcp:write lets it", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "write_grant",
+        scope: "mcp:write",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText(
+        /Its mcp:write permissions, listed with its other permissions, also let it connect/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This agent cannot connect to any MCP server."),
+    ).toBeNull();
+  });
   it("shows an org permission as the whole organization unless narrowed to a project", async () => {
     mocks.list.mockResolvedValue([
       {
