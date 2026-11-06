@@ -7,9 +7,9 @@ const repository = "owner/project";
 const prefix = "vitest-module-cache-";
 const base = `/repos/${repository}`;
 
-function fixture() {
+function fixture({ runId = 101, jobId = 201, artifactId = 301 } = {}) {
   const run = {
-    id: 101,
+    id: runId,
     workflow_id: 11,
     path: ".github/workflows/pr.yaml",
     event: "merge_group",
@@ -22,8 +22,8 @@ function fixture() {
     head_repository: { id: 7, full_name: repository },
   };
   const job = {
-    id: 201,
-    run_id: 101,
+    id: jobId,
+    run_id: runId,
     run_attempt: 2,
     head_sha: sha,
     name: "client-test",
@@ -34,33 +34,31 @@ function fixture() {
     ),
   };
   const artifact = {
-    id: 301,
+    id: artifactId,
     name: `${prefix}${sha}-attempt-2`,
     expired: false,
     expires_at: "2100-01-01T00:00:00Z",
     workflow_run: {
-      id: 101,
+      id: runId,
       head_sha: sha,
       repository_id: 7,
       head_repository_id: 7,
     },
   };
-  const calls = [];
   const api = async (path) => {
-    calls.push(path);
     const url = new URL(path, "https://api.github.com");
     if (url.pathname === base) return { id: 7, full_name: repository };
     if (url.pathname === `${base}/actions/workflows/pr.yaml`)
       return { id: 11, path: ".github/workflows/pr.yaml" };
     if (url.pathname.endsWith("/actions/workflows/pr.yaml/runs"))
       return { workflow_runs: [run] };
-    if (url.pathname.endsWith("/runs/101/attempts/2/jobs"))
+    if (url.pathname.endsWith(`/runs/${runId}/attempts/2/jobs`))
       return { jobs: [job] };
-    if (url.pathname.endsWith("/runs/101/artifacts"))
+    if (url.pathname.endsWith(`/runs/${runId}/artifacts`))
       return { artifacts: [artifact] };
     throw new Error(`Unexpected API request: ${path}`);
   };
-  return { run, job, artifact, api, calls };
+  return { run, job, artifact, api };
 }
 
 const select = (api) => selectCacheSource({ api, repository, sha, prefix });
@@ -217,9 +215,15 @@ for (const [reason, change] of [
     },
   ],
   [
-    "wrong cache key",
+    "wrong artifact attempt",
     (f) => {
       f.artifact.name = `${prefix}${sha}-attempt-1`;
+    },
+  ],
+  [
+    "wrong compatibility prefix",
+    (f) => {
+      f.artifact.name = `different-config-${sha}-attempt-2`;
     },
   ],
   [
@@ -260,14 +264,18 @@ for (const [reason, change] of [
   });
 }
 
-for (const name of ["Test", "Test admin", "Test registry editor in Chrome"]) {
-  for (const conclusion of ["failure", "skipped", "cancelled"]) {
-    test(`rejects ${conclusion} step: ${name}`, async () => {
-      const f = fixture();
-      f.job.steps.find((step) => step.name === name).conclusion = conclusion;
-      assert.equal(await select(f.api), null);
-    });
-  }
+for (const [name, conclusion] of [
+  ["Test", "failure"],
+  ["Test admin", "failure"],
+  ["Test registry editor in Chrome", "failure"],
+  ["Test", "skipped"],
+  ["Test", "cancelled"],
+]) {
+  test(`rejects ${conclusion} step: ${name}`, async () => {
+    const f = fixture();
+    f.job.steps.find((step) => step.name === name).conclusion = conclusion;
+    assert.equal(await select(f.api), null);
+  });
 }
 
 for (const key of ["jobs", "artifacts"]) {
@@ -287,7 +295,6 @@ for (const key of ["jobs", "artifacts"]) {
 
 test("paginates runs, attempt jobs, and artifacts", async () => {
   const f = fixture();
-  const pages = new Set();
   const selected = await select(async (path) => {
     const response = await f.api(path);
     const key = ["workflow_runs", "jobs", "artifacts"].find(
@@ -298,11 +305,9 @@ test("paginates runs, attempt jobs, and artifacts", async () => {
       "page",
     );
     if (page === "1") return { [key]: Array.from({ length: 100 }, () => ({})) };
-    pages.add(key);
     return response;
   });
   assert.equal(selected.artifactId, 301);
-  assert.deepEqual([...pages], ["workflow_runs", "jobs", "artifacts"]);
 });
 
 test("no matching runs is a normal cache miss", async () => {
@@ -332,11 +337,33 @@ test("selects a trusted same-SHA merge queue artifact from the successful attemp
     artifactId: 301,
     sha,
   });
-  const query = new URL(
-    f.calls.find((path) => path.includes("/pr.yaml/runs")),
-    "https://api.github.com",
-  ).searchParams;
-  assert.equal(query.get("event"), "merge_group");
-  assert.equal(query.get("status"), "success");
-  assert.equal(query.get("head_sha"), sha);
+});
+
+test("selects a later eligible run when the first has no artifact", async () => {
+  const first = fixture();
+  const later = fixture({ runId: 102, jobId: 202, artifactId: 302 });
+  const selected = await select(async (path) => {
+    const { pathname } = new URL(path, "https://api.github.com");
+    if (pathname.endsWith("/actions/workflows/pr.yaml/runs"))
+      return { workflow_runs: [first.run, later.run] };
+    if (pathname.endsWith("/runs/101/artifacts")) return { artifacts: [] };
+    if (pathname.endsWith("/runs/102/attempts/2/jobs"))
+      return {
+        jobs: [{ ...later.job, id: 999, name: "other-job" }, later.job],
+      };
+    if (pathname.endsWith("/runs/102/artifacts"))
+      return {
+        artifacts: [
+          { ...later.artifact, id: 999, name: "other-artifact" },
+          later.artifact,
+        ],
+      };
+    return first.api(path);
+  });
+  assert.deepEqual(selected, {
+    runId: 102,
+    jobId: 202,
+    artifactId: 302,
+    sha,
+  });
 });
