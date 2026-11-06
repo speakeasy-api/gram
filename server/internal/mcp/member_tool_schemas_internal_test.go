@@ -84,6 +84,21 @@ func TestRememberMemberToolSchemas(t *testing.T) {
 	require.False(t, known)
 }
 
+// A tool last seen a whole lifetime ago is unknown even before a write prunes it.
+func TestKnownMemberToolSchemaIgnoresStaleTools(t *testing.T) {
+	t.Parallel()
+
+	s := newMemberToolSchemaService(t)
+	member := metaMember{slug: "repo"}
+	annotated := json.RawMessage(`{"type":"object","properties":{"owner":{"type":"string","x-mcp-header":"owner"}}}`)
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, &memberCatalog{byName: map[string]*toolListEntry{
+		"annotated": {Name: "annotated", InputSchema: annotated},
+	}, incomplete: false}, time.Now().Add(-memberToolSchemasTTL-time.Minute))
+
+	_, known := s.knownMemberToolSchema(t.Context(), &metaGateContext{}, member, "annotated")
+	require.False(t, known)
+}
+
 // The total budget is spent in tool-name order; later schemas are marked oversized.
 func TestRememberMemberToolSchemasTotalBudget(t *testing.T) {
 	t.Parallel()

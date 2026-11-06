@@ -95,7 +95,7 @@ func declaresParameterHeaders(schema json.RawMessage) bool {
 func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateContext, member metaMember, toolName string) (schema json.RawMessage, known bool) {
 	destination := codeMemberDestination(member)
 	if record, ok := s.readMemberToolSchemas(ctx, destination); ok {
-		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized {
+		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized && time.Since(tool.SeenAt) < memberToolSchemasTTL {
 			return tool.InputSchema, true
 		}
 	}
@@ -128,7 +128,8 @@ func (s *Service) readMemberToolSchemas(ctx context.Context, destination string)
 	return record, record.Destination == destination
 }
 
-// rememberMemberToolSchemas merges a listing into the member's record. Only
+// rememberMemberToolSchemas merges a listing into the member's record. Concurrent
+// merges are not locked: a lost update only costs a later listing. Only
 // annotated schemas within the byte limits are kept, spent in tool-name
 // order; an annotated tool over them is marked, so a call lists it instead.
 // An unchanged record is rewritten once it is half its lifetime old.
@@ -162,12 +163,23 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 	}
 	key := record.CacheKey()
 	s.memberToolSchemaLocal.Add(key, record)
-	if found && sameMemberToolSchemas(previous, record) && now.Sub(previous.StoredAt) < memberToolSchemasTTL/2 {
+	if found && sameMemberToolSchemas(previous, record) && now.Sub(previous.StoredAt) < memberToolSchemasTTL/2 && seenRecently(previous, catalog, now) {
 		return
 	}
 	if err := s.memberToolSchemaCache.Store(ctx, record); err != nil {
 		logger.WarnContext(ctx, "store member tool schemas", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
 	}
+}
+
+// seenRecently reports whether every tool in the listing was seen in the stored
+// record within half its lifetime, so skipping the write cannot expire it.
+func seenRecently(previous memberToolSchemas, catalog *memberCatalog, now time.Time) bool {
+	for name := range catalog.byName {
+		if now.Sub(previous.Tools[name].SeenAt) >= memberToolSchemasTTL/2 {
+			return false
+		}
+	}
+	return true
 }
 
 // sameMemberToolSchemas compares the tools and schemas, not when they were seen.
