@@ -809,10 +809,9 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			if tc.providedBy != "" {
 				setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, tc.providedBy)
 			}
-			key := ti.createTestAPIKey(ctx, t)
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
-			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
+			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
 			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
 			require.Empty(t, response.Body.String())
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
@@ -823,38 +822,25 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 	}
 }
 
-// Only an identified caller's tool calls record, as on direct servers: handshakes,
-// notifications and anonymous callers still get the 401 but write no row.
-func TestDirectHostedMissingSecurityRecordsOnlyIdentifiedToolCalls(t *testing.T) {
+// A notification gets the 401 but writes no row; a tool call missing the caller's credentials does.
+func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		name      string
-		body      []byte
-		anonymous bool
-	}{
-		{name: "initialize", body: makeInitializeBody()},
-		{name: "notification", body: []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`)},
-		{name: "tools list", body: []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`)},
-		{name: "anonymous tools call", body: makeToolsCallBody("test_tool"), anonymous: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			ctx, ti := newTestMCPService(t)
-			auth := requireProjectAuthContext(t, ctx)
-			ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
-			ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
-			setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, "user")
-			key := ""
-			if !tc.anonymous {
-				key = ti.createTestAPIKey(ctx, t)
-			}
-			rec := mcpconnectionattemptstest.New(t)
-			ti.service.SetConnectionRecorder(rec.Recorder)
-			_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, tc.body, key, nil)
-			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
-			rec.RequireNothing()
-		})
-	}
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, "user")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
+	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	rec.RequireNothing()
+
+	_, err = servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
+	require.Len(t, rec.Rows(), 1)
 }
 
 // Our own failure during the security check writes a row naming us.
@@ -942,7 +928,7 @@ func TestExternalOAuthTokenWithUnmetSchemeRecords(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeToolsCallBody("test_tool"), "external-token", nil)
+	response, err := servePublicHTTP(t, context.Background(), ti, external.McpSlug, makeInitializeBody(), "external-token", nil)
 	require.Error(t, err)
 	require.Contains(t, response.Header().Get("WWW-Authenticate"), "resource_metadata=")
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
