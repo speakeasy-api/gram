@@ -21,7 +21,7 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": false
+      "agent_eligible": true
     },
     {
       "slug": "org:admin",
@@ -45,7 +45,7 @@
       "sensitive": false,
       "sub_scopes": [],
       "visibility": "internal",
-      "agent_eligible": false
+      "agent_eligible": true
     },
     {
       "slug": "org:device_agent_sync",

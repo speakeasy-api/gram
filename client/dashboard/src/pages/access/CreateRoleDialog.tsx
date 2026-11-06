@@ -1325,7 +1325,7 @@ export function CreateRoleDialog({
             >
               {isMutating && (
                 <Button.LeftIcon>
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>
