@@ -20,7 +20,7 @@ func ConnectionOutageHappened(err error) mcpconnectionattempts.Code {
 	if !ok {
 		return mcpconnectionattempts.CodeInternalError
 	}
-	switch refreshErr.outage {
+	switch refreshErr.outageCause {
 	case RefreshOutageProvider:
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
 	case RefreshOutageTunnel:

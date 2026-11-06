@@ -88,6 +88,16 @@ func (s *Service) refusedWithoutRow(ctx context.Context, t *mcpconnectionattempt
 	s.metrics.RecordConnectionRefusalWithoutRow(ctx, reason)
 }
 
+// refuseRemoteSessionUnavailable records an outage under its owner; a lock-held refresh is the lock holder's row.
+func (s *Service) refuseRemoteSessionUnavailable(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) {
+	code := remotesessions.ConnectionOutageHappened(err)
+	if code == (mcpconnectionattempts.Code{}) {
+		s.refusedWithoutRow(ctx, t, "refresh_busy")
+		return
+	}
+	t.Refuse(ctx, code)
+}
+
 // recordWrongConsentBrowser leaves the page usable for the right browser. The
 // endpoint comes from the route, so the state must belong to it before writing.
 func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {

@@ -23,7 +23,7 @@ func TestConnectionOutageHappened(t *testing.T) {
 	} {
 		t.Run(string(tc.kind), func(t *testing.T) {
 			t.Parallel()
-			err := &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, retryAfter: 0, outageKind: tc.kind, outage: tc.kind, err: errors.New("outage")}
+			err := &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, retryAfter: 0, visibleOutage: tc.kind, outageCause: tc.kind, err: errors.New("outage")}
 			require.Equal(t, tc.want, ConnectionOutageHappened(fmt.Errorf("check session: %w", &SessionOutageError{err: err})))
 		})
 	}
@@ -35,11 +35,11 @@ func TestConnectionOutageHappened(t *testing.T) {
 func TestConnectionOutageHappened_UnrecordedOutage(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
-		outcome remotesessionmetrics.RefreshOutcome
-		outage  RefreshOutageKind
-		cause   error
-		want    mcpconnectionattempts.Code
+		name        string
+		outcome     remotesessionmetrics.RefreshOutcome
+		outageCause RefreshOutageKind
+		cause       error
+		want        mcpconnectionattempts.Code
 	}{
 		{"provider outage record not stored", remotesessionmetrics.RefreshOutcomeUpstreamError, RefreshOutageProvider, errors.New("outage"), mcpconnectionattempts.CodeRemoteSessionUnavailable},
 		{"tunnel outage record not stored", remotesessionmetrics.RefreshOutcomeUnreachable, RefreshOutageTunnel, errors.New("outage"), mcpconnectionattempts.CodeTunnelUnavailable},
@@ -50,7 +50,7 @@ func TestConnectionOutageHappened_UnrecordedOutage(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := &RefreshError{IssuerURL: "", Outcome: tc.outcome, retryAfter: 0, outageKind: RefreshOutageNone, outage: tc.outage, err: tc.cause}
+			err := &RefreshError{IssuerURL: "", Outcome: tc.outcome, retryAfter: 0, visibleOutage: RefreshOutageNone, outageCause: tc.outageCause, err: tc.cause}
 			require.Equal(t, tc.want, ConnectionOutageHappened(&SessionOutageError{err: err}))
 		})
 	}

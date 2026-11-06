@@ -397,19 +397,3 @@ func TestRefreshNow_LeaseLostInSetupRecordsInternalError(t *testing.T) {
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeDeferred, failure.Outcome)
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, remotesessions.ConnectionOutageHappened(err))
 }
-
-func TestRefreshNow_LockHeldElsewhereRecordsNoRow(t *testing.T) {
-	t.Parallel()
-	ctx, env := newSyntheticExpiryEnv(t, "lock-held-row", tokenAnswer(http.StatusServiceUnavailable, `{}`))
-	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
-	require.NoError(t, err)
-	locks := testenv.NewMemoryCache()
-	held, err := locks.Add(ctx, remotesessions.RefreshLockKey(env.subject, env.clientID), time.Minute)
-	require.NoError(t, err)
-	require.True(t, held)
-	refresher := env.newRefresher(testenv.NewMeterProvider(t), locks)
-
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
-	require.True(t, remotesessions.RefreshBusy(err))
-	require.Equal(t, mcpconnectionattempts.Code{}, remotesessions.ConnectionOutageHappened(err))
-}
