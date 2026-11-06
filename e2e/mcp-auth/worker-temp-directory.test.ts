@@ -47,7 +47,8 @@ for (const signal of [undefined, "SIGTERM", "SIGINT"] as const) {
     );
     let stderr = "";
     child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-    const exited = once(child, "exit");
+    // Close waits for stdout/stderr to drain as well as process termination.
+    const closed = once(child, "close");
     const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
     let ready = false;
     let existedBeforeSignal = false;
@@ -59,7 +60,7 @@ for (const signal of [undefined, "SIGTERM", "SIGINT"] as const) {
       }
     });
     try {
-      const [code, actualSignal] = await exited;
+      const [code, actualSignal] = await closed;
       assert.ok(ready, stderr);
       if (signal) assert.ok(existedBeforeSignal);
       assert.equal(actualSignal, signal ?? null, stderr);
@@ -71,12 +72,14 @@ for (const signal of [undefined, "SIGTERM", "SIGINT"] as const) {
     } finally {
       clearTimeout(timeout);
       child.kill("SIGKILL");
+      await closed.catch(() => {});
       rmSync(root, { recursive: true, force: true });
     }
   });
 }
 
 test("existing worker signal handler receives termination only once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "worker-handler-test-"));
   const child = spawn(
     process.execPath,
     [
@@ -84,12 +87,10 @@ test("existing worker signal handler receives termination only once", async () =
       "-e",
       `
     import assert from 'node:assert/strict';
-    import { mkdtempSync, existsSync } from 'node:fs';
-    import { tmpdir } from 'node:os';
-    import { join } from 'node:path';
+    import { existsSync } from 'node:fs';
     import { registerWorkerTempDirectory } from ${JSON.stringify(new URL("./worker-temp-directory.ts", import.meta.url).href)};
     let deliveries = 0;
-    let directory;
+    const directory = ${JSON.stringify(directory)};
     process.on('SIGTERM', () => {
       deliveries++;
       setTimeout(() => {
@@ -98,7 +99,6 @@ test("existing worker signal handler receives termination only once", async () =
         process.exit(42);
       }, 30);
     });
-    directory = mkdtempSync(join(tmpdir(), 'worker-handler-test-'));
     registerWorkerTempDirectory(directory);
     setInterval(() => {}, 1000);
     process.stdout.write('ready');
@@ -108,15 +108,17 @@ test("existing worker signal handler receives termination only once", async () =
   );
   let stderr = "";
   child.stderr.setEncoding("utf8").on("data", (chunk) => (stderr += chunk));
-  const exited = once(child, "exit");
+  const closed = once(child, "close");
   const timeout = setTimeout(() => child.kill("SIGKILL"), 10_000);
   child.stdout.once("data", () => child.kill("SIGTERM"));
   try {
-    const [code, signal] = await exited;
+    const [code, signal] = await closed;
     assert.equal(code, 42, stderr);
     assert.equal(signal, null, stderr);
   } finally {
     clearTimeout(timeout);
     child.kill("SIGKILL");
+    await closed.catch(() => {});
+    rmSync(directory, { recursive: true, force: true });
   }
 });
