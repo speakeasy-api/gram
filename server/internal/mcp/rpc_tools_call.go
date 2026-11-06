@@ -480,6 +480,15 @@ func handleToolsCall(
 		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		// A call the gateway answered with an error has no tool output, so
+		// the row carries the error's most specific client-safe message.
+		if rw.failure != nil {
+			message := deepestShareableError(rw.failure).Error()
+			logAttrs[attr.ErrorMessageKey] = message
+			if rw.body.Len() == 0 {
+				logAttrs.RecordResponseBodyContent([]byte(message))
+			}
+		}
 
 		if toolCallEnv.GramChatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
@@ -707,6 +716,19 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 // sync with the status represented by an error returned from the MCP boundary.
 // The response writer starts at 200 because successful tool implementations may
 // write only a body, so failures that occur before WriteHeader must update it.
+// deepestShareableError is the innermost ShareableError wrapped by err, or err
+// itself. Every ShareableError's public message is written to be client-safe,
+// and the innermost one names the actionable cause.
+func deepestShareableError(err *oops.ShareableError) *oops.ShareableError {
+	deepest := err
+	for inner := errors.Unwrap(error(err)); inner != nil; inner = errors.Unwrap(inner) {
+		if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
+			deepest = innerShareable
+		}
+	}
+	return deepest
+}
+
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)

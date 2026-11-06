@@ -9,6 +9,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
@@ -214,4 +215,110 @@ func TestServePublic_MetaEndpoint_HostedMemberCallStampsMemberBesideCanonical(t 
 		1, authCtx.ProjectID.String(), meta.ID.String(), member.serverID.String())
 	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND mcp_server_id = ?`,
 		0, authCtx.ProjectID.String(), canonical.ID.String())
+}
+
+// A gateway execute_tool whose member dispatch fails after it has committed to
+// writing the member's row leaves that row carrying the error the caller was
+// told, so the failure reads with its cause on the member.
+func TestServePublic_MetaEndpoint_ExecuteDispatchFailureRowCarriesError(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+
+	// The seeded HTTP tool has no server URL configured, so the proxy refuses
+	// it after the member dispatch has registered its row.
+	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
+		"name":      member.slug + "--alpha_tool",
+		"arguments": map[string]any{},
+	})
+	text, isError := metaToolResultText(t, envelope)
+	require.True(t, isError)
+	require.Contains(t, text, "no server URL provided for tool")
+
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND tool_name = 'alpha_tool'
+		   AND gram_urn = ?
+		   AND meta_mcp_server_id = ?
+		   AND mcp_server_id = ?
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
+		   AND toString(attributes.error.message) = 'no server URL provided for tool'`,
+		1, authCtx.ProjectID.String(), member.toolURNs["alpha_tool"].String(), meta.ID.String(), member.serverID.String())
+	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'`,
+		1, authCtx.ProjectID.String())
+}
+
+// A describe_server whose member cannot be reached is answered as an isError
+// result. The gateway's discovery row records that failure instead of a
+// success, and the member gets one failed tool_call row with the reason, so
+// the member's failure counts include the call. That row is not stamped with
+// the gateway, which counts the call from its discovery row.
+func TestServePublic_MetaEndpoint_DescribeServerMemberFailureLogsFailedRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	f.down.Store(true)
+	memberID := mcpServerBySlug(t, ctx, ti, f.project, "member")
+
+	resp, err := servePublicHTTP(t, ctx, ti, f.metaSlug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      metamcp.ToolDescribeServer,
+		"arguments": map[string]any{"server": "member"},
+	}), f.bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.True(t, isError)
+
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'meta_discovery'
+		   AND tool_name = 'describe_server'
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
+		   AND toString(attributes.error.message) = ?`,
+		1, f.project.String(), text)
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND tool_name = 'describe_server'
+		   AND startsWith(gram_urn, 'tools:')
+		   AND mcp_server_id = ?
+		   AND meta_mcp_server_id = ''
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
+		   AND toString(attributes.error.message) = ?`,
+		1, f.project.String(), memberID.String(), text)
+}
+
+// A describe_tools that names a member it cannot reach still answers, listing
+// the member under failed, and the member gets one failed tool_call row.
+func TestServePublic_MetaEndpoint_DescribeToolsMemberFailureLogsFailedRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	f.down.Store(true)
+	memberID := mcpServerBySlug(t, ctx, ti, f.project, "member")
+
+	resp, err := servePublicHTTP(t, ctx, ti, f.metaSlug, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      metamcp.ToolDescribeTools,
+		"arguments": map[string]any{"tools": []string{"member--ping"}},
+	}), f.bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.Code, "body=%s", resp.Body.String())
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.False(t, isError)
+	require.Contains(t, text, `"failed"`)
+
+	requireTelemetryRowCount(t, `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND tool_name = 'describe_tools'
+		   AND mcp_server_id = ?
+		   AND meta_mcp_server_id = ''
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
+		   AND toString(attributes.error.message) != ''`,
+		1, f.project.String(), memberID.String())
 }
