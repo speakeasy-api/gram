@@ -271,6 +271,35 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 	return clientUpstreamResource(rows), nil
 }
 
+// fallbackResourceForGrant derives the resource for a grant stored with none.
+// Where the organization it was consented in enforces typed auth clients, the
+// servers that offer its client decide; a client with no offer, and any client
+// elsewhere, falls back to its attached servers.
+func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
+	q := remotesessions_repo.New(s.db)
+	organizationID, err := q.GetUserSessionIssuerOrganizationID(ctx, sess.UserSessionIssuerID)
+	if err != nil {
+		return "", fmt.Errorf("get grant organization: %w", err)
+	}
+	rows, err := q.ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: []uuid.UUID{sess.RemoteSessionClientID},
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("list mcp servers offering client: %w", err)
+	}
+	offering := make([]remotesessions_repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
+	for _, row := range rows {
+		if row.Offered {
+			offering = append(offering, remotesessions_repo.ListOrganizationMcpServersForClientRow{ID: row.ID, ProjectID: row.ProjectID, ProjectSlug: row.ProjectSlug, Name: row.Name, Slug: row.Slug, Url: row.Resource})
+		}
+	}
+	if len(offering) > 0 {
+		return clientUpstreamResource(offering), nil
+	}
+	return s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+}
+
 // ResourceForClientAtUpstream derives the RFC 8707 resource for a client
 // connected through upstream, weighed against the other clients bound to the
 // same endpoint; see claimableUpstream. Siblings are only consulted when the
@@ -300,6 +329,12 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 
 // attachmentsForClients loads the MCP servers attached to each client in one
 // round trip, within organizationID. A client with no attachments has no entry.
+//
+// Where the organization enforces typed auth clients, the servers that offer a
+// client through one replace the servers behind its user session issuer links:
+// a client with an offer has its resource decided by the servers configured to
+// use it, linked to their sign-in or not. A client with no offer keeps the
+// servers behind its links.
 func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
@@ -309,14 +344,21 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
 	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	// Offered rows sort first for each client.
+	offered := make(map[uuid.UUID]bool, len(clientIDs))
 	for _, row := range rows {
+		if row.Offered {
+			offered[row.ClientID] = true
+		} else if offered[row.ClientID] {
+			continue
+		}
 		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
 			ID:          row.ID,
 			ProjectID:   row.ProjectID,
 			ProjectSlug: row.ProjectSlug,
 			Name:        row.Name,
 			Slug:        row.Slug,
-			Url:         row.Url,
+			Url:         row.Resource,
 		})
 	}
 	return attachments, nil
@@ -892,7 +934,7 @@ func (s *RefreshService) refresh(
 		// derive the client's own so it is never replayed against another
 		// upstream's audience.
 		var err error
-		resource, err = s.FallbackResourceForClient(ctx, sess.RemoteSessionClientID)
+		resource, err = s.fallbackResourceForGrant(ctx, sess)
 		if err != nil {
 			return zero, nil, nil, fmt.Errorf("derive fallback resource: %w", err)
 		}

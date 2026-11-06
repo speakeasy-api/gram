@@ -93,6 +93,7 @@ func (s *Service) validateRemoteSession(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
+	offered map[uuid.UUID]uuid.UUID,
 ) error {
 	if s.validationLimiter != nil {
 		res, lerr := s.validationLimiter.Allow(ctx, challengeState.ID)
@@ -104,13 +105,18 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, client, offered, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
 // the verdict. Callers pace it: the consent action through the per-challenge
 // limiter, the connect path by running it once per committed grant, the
 // keepalive through its claim lease and per-host limiter.
+//
+// offered maps each registration the endpoint offers through a typed auth
+// client to the project it is served in. Such a card's credential resolves as
+// serving resolves it, from that offer, whether or not the sign-in links the
+// registration.
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
 	attribution remotesessions.RefreshAttribution,
@@ -119,15 +125,23 @@ func (s *Service) probeRemoteSession(
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
+	offered map[uuid.UUID]uuid.UUID,
 	expectedGrant *remotesessions.RemoteGrant,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) error {
 	subject := *challengeState.Subject
 	logger = logger.With(attr.SlogRemoteSessionClientID(client.ID.String()))
 
-	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
+	servedIn, offer := offered[client.ID]
+	var tokenProjectIDs []uuid.UUID
+	if offer {
+		tokenProjectIDs = []uuid.UUID{servedIn}
+	} else {
+		var err error
+		tokenProjectIDs, err = s.clientTokenProjectIDs(ctx, endpoint, client)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
+		}
 	}
 	var (
 		tokens         map[uuid.UUID]remotesessions.UpstreamToken
@@ -136,7 +150,26 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		var resolved map[uuid.UUID]remotesessions.UpstreamToken
+		var rerr error
+		if offer {
+			resolved, rerr = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+				Attribution:         attribution,
+				ProjectID:           projectID,
+				OrganizationID:      endpoint.OrganizationID,
+				UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject:             subject,
+				RegistrationID:      client.ID,
+				SkipUnusable:        true,
+			})
+			// A registration that left the project's reach since the page
+			// listed it has no credential to present.
+			if errors.Is(rerr, remotesessions.ErrChosenClientUnbound) {
+				continue
+			}
+		} else {
+			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		}
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
@@ -161,14 +194,19 @@ func (s *Service) probeRemoteSession(
 		}
 	}
 	if !usable {
-		linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+		// The offer reaches the registration in place of a sign-in link.
+		linked := offer
+		if !offer {
+			var err error
+			linked, err = s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+			}
 		}
 		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
 			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
 		}
-		message, reason := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client)
+		message, reason := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, offered)
 		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
@@ -246,7 +284,7 @@ func (s *Service) probeRemoteSession(
 	return nil
 }
 
-// clientLinkedToSignIn reports whether token resolution can reach client: a typed registration need not be linked to the sign-in.
+// clientLinkedToSignIn reports whether the endpoint's sign-in links client in any of projectIDs, which is how token resolution reaches a registration no typed auth client offers.
 func (s *Service) clientLinkedToSignIn(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, projectIDs []uuid.UUID) (bool, error) {
 	for _, projectID := range projectIDs {
 		linked, err := remotesessions_repo.New(s.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
@@ -278,8 +316,12 @@ func unservedCredentialReason(projects int, linked bool) string {
 }
 
 // noUsableCredentialRefusal is the person's message and the log reason for a grant that yielded no token.
-func (s *Service) noUsableCredentialRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client) (message, reason string) {
+// A registration in offered reports its state from the offer, whether or not the sign-in links it.
+func (s *Service) noUsableCredentialRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client, offered map[uuid.UUID]uuid.UUID) (message, reason string) {
 	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	if err == nil {
+		statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, subject, statuses, offered)
+	}
 	if err != nil {
 		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
 		return noWorkingSignInMessage, "grant state could not be read"

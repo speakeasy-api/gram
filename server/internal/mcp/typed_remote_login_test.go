@@ -149,6 +149,10 @@ func TestTypedRemoteLoginConsentCallback(t *testing.T) {
 			} else {
 				require.Equal(t, &remotesessions.TypedAuthorization{OrganizationID: orgID, ProjectID: projectID, ServerID: serverID, AuthClientID: authClientID, RemoteSessionClientID: registration, Subject: subject}, state.TypedAuthorization)
 			}
+			if scenario == "typed" || scenario == "ema" {
+				require.Equal(t, consentUpstreamA, state.Resource, "a registration the server offers connects qualified to that server's upstream, with no sign-in link")
+				require.Equal(t, consentUpstreamA, loc.Query().Get("resource"), "the authorization request names the resource")
+			}
 			switch scenario {
 			case "revoked_link":
 				require.NoError(t, q.SoftDeleteServerAuthClientLinksFixture(ctx, serverID))

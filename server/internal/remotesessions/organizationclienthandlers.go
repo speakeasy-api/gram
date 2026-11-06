@@ -28,6 +28,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -165,14 +167,18 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 		return nil, oops.E(oops.CodeUnexpected, err, "count remote sessions").LogError(ctx, logger)
 	}
 
-	mcpRows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	mcpRows, enforced, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
 
 	names := make([]string, 0, len(mcpRows))
 	for _, row := range mcpRows {
-		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), row.Url))
+		fallback := row.Url
+		if enforced {
+			fallback = conv.Default(row.Url, row.Slug.String)
+		}
+		names = append(names, orgDisplayName(conv.FromPGText[string](row.Name), fallback))
 	}
 	trustedRows, err := r.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientID(ctx, repo.ListOrganizationTrustedUserSessionIssuersByRemoteSessionClientIDParams{
 		RemoteSessionClientID: clientID,
@@ -220,6 +226,56 @@ func (s *Service) GetClientDeletePreflight(ctx context.Context, payload *orgclie
 	}, nil
 }
 
+// serversUsingClient is every server an administrator's change to the client
+// affects, newest first, and whether the organization enforces typed auth
+// clients. Where it does, these are the organization's servers behind the
+// client's user session issuer links and those that offer it, each once.
+// Elsewhere they are the servers behind its links, whichever project owns them.
+func serversUsingClient(ctx context.Context, db repo.DBTX, organizationID string, clientID uuid.UUID) ([]repo.ListOrganizationMcpServersForClientRow, bool, error) {
+	enforced, err := productfeaturesrepo.New(db).IsFeatureEnabled(ctx, productfeaturesrepo.IsFeatureEnabledParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	if !enforced {
+		linked, err := repo.New(db).ListOrganizationMcpServersForClient(ctx, clientID)
+		if err != nil {
+			return nil, false, fmt.Errorf("list mcp servers for client: %w", err)
+		}
+		return linked, false, nil
+	}
+
+	rows, err := repo.New(db).ListOrganizationMcpServersForClients(ctx, repo.ListOrganizationMcpServersForClientsParams{
+		RemoteSessionClientIds: []uuid.UUID{clientID},
+		OrganizationID:         organizationID,
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("list mcp servers for client: %w", err)
+	}
+	seen := make(map[uuid.UUID]bool, len(rows))
+	servers := make([]repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
+	for _, row := range rows {
+		if seen[row.ID] {
+			continue
+		}
+		seen[row.ID] = true
+		servers = append(servers, repo.ListOrganizationMcpServersForClientRow{
+			ID:          row.ID,
+			ProjectID:   row.ProjectID,
+			ProjectSlug: row.ProjectSlug,
+			Name:        row.Name,
+			Slug:        row.Slug,
+			Url:         row.Url,
+		})
+	}
+	slices.SortFunc(servers, func(a, b repo.ListOrganizationMcpServersForClientRow) int {
+		return strings.Compare(b.ID.String(), a.ID.String())
+	})
+	return servers, true, nil
+}
+
 // ListClientMcpServers lists the MCP servers a client is attached to in the
 // caller's organization.
 func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsgen.ListClientMcpServersPayload) (*orgclientsgen.ListOrganizationMcpServersResult, error) {
@@ -252,7 +308,7 @@ func (s *Service) ListClientMcpServers(ctx context.Context, payload *orgclientsg
 		return nil, oops.E(oops.CodeUnexpected, err, "get organization admin remote session client").LogError(ctx, logger)
 	}
 
-	rows, err := r.ListOrganizationMcpServersForClient(ctx, clientID)
+	rows, _, err := serversUsingClient(ctx, s.db, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list mcp servers for client").LogError(ctx, logger)
 	}
