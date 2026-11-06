@@ -28,8 +28,9 @@ import (
 
 // consentToolNameLimit caps how many explicit tool names one approve form
 // may submit. Matches consentInventoryMaxTools so any subset of a full
-// inventory — including all of it — is submittable; the approve POST's 1 MiB
-// body cap covers the worst case with URL-encoding inflation.
+// single-server inventory — including all of it — is submittable; the approve
+// POST's 1 MiB body cap covers the worst case with URL-encoding inflation.
+// Gateway inventories may exceed it; approving every tool sends no names.
 const consentToolNameLimit = consentInventoryMaxTools
 
 // consentPrefillAttr serializes the subject's stored selection for the

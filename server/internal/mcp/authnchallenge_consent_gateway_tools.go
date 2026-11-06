@@ -70,7 +70,7 @@ func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *Reso
 	draft := reservation
 	draft.MemberOutcomes = outcomes
 	draft.MemberBindings = members
-	draft, err = mergeConsentInventoryPage(draft, "", tools, "")
+	draft, err = mergeConsentInventoryPage(draft, "", tools, "", gatewayInventoryMaxTools)
 	if err != nil {
 		return "", fmt.Errorf("cannot approve this gateway because its tool inventory could not be captured: %w", err)
 	}

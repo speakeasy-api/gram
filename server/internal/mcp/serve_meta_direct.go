@@ -223,8 +223,8 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
-			if len(tools) > 10000 {
-				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+			if len(tools) > gatewayInventoryMaxTools {
+				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds %d tools", gatewayInventoryMaxTools)
 			}
 		}
 	}

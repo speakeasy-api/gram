@@ -888,7 +888,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			gatewayInventory, err = s.captureGatewayConsentInventory(r, endpoint, challengeState, gateway)
 			if err != nil {
 				logger.WarnContext(ctx, "gateway consent capture failed", attr.SlogError(err))
-				approvalError = &consentApprovalError{Message: "Tools could not be captured. This gateway cannot be approved. Try again later.", ActionURL: "", ActionLabel: ""}
+				approvalError = &consentApprovalError{Message: "We could not load this gateway's tools, so you cannot approve it yet. Reload the page to try again. If this keeps happening, contact your administrator.", ActionURL: "", ActionLabel: ""}
 				consentProblem = mcpconnectionattempts.CodeMemberToolsMissing
 				if errors.Is(err, errConsentInventoryUnavailable) {
 					consentProblem = mcpconnectionattempts.CodeInternalError
@@ -903,6 +903,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 							approvalError.ActionURL = mcpaccess.AuthorizationChallengesURL(s.siteURL, auth.OrganizationSlug)
 						}
 					}
+				}
+				if errors.Is(err, errConsentInventoryTooManyTools) {
+					consentProblem = mcpconnectionattempts.CodeCatalogTooLarge
+					approvalError.Message = "This gateway has too many tools to approve. Ask an administrator to reduce the tool inventory."
 				}
 				if errors.Is(err, errConnectionCatalogTooLarge) {
 					consentProblem = mcpconnectionattempts.CodeCatalogTooLarge

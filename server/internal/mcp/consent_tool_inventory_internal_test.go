@@ -386,7 +386,27 @@ func TestAppendConsentInventoryPage_RejectsBlankOverlongAndOverCap(t *testing.T)
 		over[i] = consentInventoryTool{Name: strings.Repeat("t", 3) + string(rune('a'+i%26)) + strings.Repeat("x", i/26)}
 	}
 	_, err = s.appendConsentInventoryPage(t.Context(), emptyDraft(), "", over, "")
-	require.Error(t, err)
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
+}
+
+func TestMergeConsentInventoryPage_GatewayCapAllowsMoreThanServerCap(t *testing.T) {
+	t.Parallel()
+
+	tools := func(n int) []consentInventoryTool {
+		out := make([]consentInventoryTool, n)
+		for i := range out {
+			out[i] = consentInventoryTool{Name: fmt.Sprintf("member__tool_%05d", i)}
+		}
+		return out
+	}
+
+	draft, err := mergeConsentInventoryPage(emptyDraft(), "", tools(consentInventoryMaxTools+1), "", gatewayInventoryMaxTools)
+	require.NoError(t, err)
+	require.True(t, draft.Complete)
+	require.Len(t, draft.Tools, consentInventoryMaxTools+1)
+
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(gatewayInventoryMaxTools+1), "", gatewayInventoryMaxTools)
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 
 func TestConsentRoleHiddenMeta_CapsNamesKeepsCount(t *testing.T) {
