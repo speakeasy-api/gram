@@ -15,6 +15,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 )
@@ -40,9 +41,6 @@ const (
 	memberToolSchemasLocalSize = 1024
 )
 
-// parameterHeaderAnnotation marks a schema that may declare parameter headers.
-var parameterHeaderAnnotation = []byte(`"x-mcp-header"`)
-
 // memberToolSchemas records the tools the member's recent listings included,
 // so a gateway call can send the Mcp-Param headers its tool requires without
 // listing first. Listings pass through per-caller filters, so a tool absent
@@ -66,7 +64,8 @@ type memberToolSchemas struct {
 
 // memberToolSchema is one listed tool.
 type memberToolSchema struct {
-	// InputSchema is set only when the schema declares x-mcp-header annotations.
+	// InputSchema is set only when the schema declares valid x-mcp-header
+	// annotations; a tool whose annotations are invalid is called without headers.
 	InputSchema json.RawMessage `json:"input_schema,omitempty"`
 
 	// Oversized marks an annotated schema over the record's byte limits,
@@ -87,13 +86,6 @@ func memberToolSchemasKey(destination, caller string) string {
 	return "member_tool_schemas:" + hex.EncodeToString(sum[:])
 }
 
-// declaresParameterHeaders reports whether schema may carry x-mcp-header
-// annotations. Schemas without one never need headers, so their size and
-// shape are never checked.
-func declaresParameterHeaders(schema json.RawMessage) bool {
-	return bytes.Contains(schema, parameterHeaderAnnotation)
-}
-
 // knownMemberToolSchema returns the tool's input schema from the freshest
 // record the gateway holds: the caller's private listings, the member's
 // public listings, then the consented catalog. caller fingerprints the
@@ -105,9 +97,15 @@ func (s *Service) knownMemberToolSchema(ctx context.Context, gate *metaGateConte
 		if !ok {
 			continue
 		}
-		if tool, listed := record.Tools[toolName]; listed && !tool.Oversized && now.Before(tool.ExpiresAt) {
-			return tool.InputSchema, true
+		tool, listed := record.Tools[toolName]
+		if !listed || !now.Before(tool.ExpiresAt) {
+			continue
 		}
+		// An oversized schema is never looked up in a wider scope; the call lists it.
+		if tool.Oversized {
+			return nil, false
+		}
+		return tool.InputSchema, true
 	}
 	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		qualified := metamcp.QualifyName(member.slug, toolName)
@@ -164,8 +162,16 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 	expiresAt := now.Add(ttl)
 	for name, entry := range catalog.byName {
 		tool := memberToolSchema{InputSchema: nil, Oversized: false, ExpiresAt: expiresAt}
-		if declaresParameterHeaders(entry.InputSchema) {
-			tool.InputSchema = entry.InputSchema
+		switch {
+		case !externalmcp.MayDeclareParameterHeaders(entry.InputSchema):
+		case len(entry.InputSchema) > maxMemberToolSchemaBytes:
+			tool.Oversized = true
+		default:
+			// Validated once here, so calls never re-check a recorded schema
+			// that is invalid: it is sent without headers for the member to decide.
+			if _, err := externalmcp.ParameterHeaders(entry.InputSchema, nil); err == nil {
+				tool.InputSchema = entry.InputSchema
+			}
 		}
 		record.Tools[name] = tool
 	}
@@ -175,7 +181,7 @@ func (s *Service) rememberMemberToolSchemas(ctx context.Context, logger *slog.Lo
 		if len(tool.InputSchema) == 0 {
 			continue
 		}
-		if len(tool.InputSchema) > maxMemberToolSchemaBytes || total+len(tool.InputSchema) > maxMemberToolSchemasBytes {
+		if total+len(tool.InputSchema) > maxMemberToolSchemasBytes {
 			record.Tools[name] = memberToolSchema{InputSchema: nil, Oversized: true, ExpiresAt: tool.ExpiresAt}
 			continue
 		}

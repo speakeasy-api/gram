@@ -176,3 +176,80 @@ func TestMemberToolSchemasSharedCacheScopes(t *testing.T) {
 	_, known = writer.knownMemberToolSchema(t.Context(), gate, public, "caller-a", "annotated", now)
 	require.False(t, known, "a shared-cache miss is not answered from this process's copy")
 }
+
+// An active oversized private entry is listed by the call, never answered from
+// the public record.
+func TestKnownMemberToolSchemaOversizedPrivateIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	backing, _ := newRedisSchemaCache(t)
+	s := newMemberToolSchemaService(t, backing)
+	member := metaMember{slug: "repo", serverID: uuid.New()}
+	oversized := json.RawMessage(`{"type":"object","description":"` + strings.Repeat("a", maxMemberToolSchemaBytes) + `","properties":{"owner":{"type":"string","x-mcp-header":"owner"}}}`)
+	now := time.Now()
+
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "caller", listedCatalog(time.Hour, false, map[string]json.RawMessage{"annotated": annotatedToolSchema}), now)
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "caller", listedCatalog(time.Hour, true, map[string]json.RawMessage{"annotated": oversized}), now)
+
+	_, known := s.knownMemberToolSchema(t.Context(), &metaGateContext{}, member, "caller", "annotated", now)
+	require.False(t, known)
+}
+
+// A recorded schema with invalid annotations is known, with no schema, so
+// calls go out without headers and never re-validate it.
+func TestRememberMemberToolSchemasRecordsInvalidAsHeaderless(t *testing.T) {
+	t.Parallel()
+
+	backing, _ := newRedisSchemaCache(t)
+	s := newMemberToolSchemaService(t, backing)
+	member := metaMember{slug: "repo", serverID: uuid.New()}
+	invalid := json.RawMessage(`{"type":"object","properties":{"paths":{"type":"array","items":{"type":"string","x-mcp-header":"path"}}}}`)
+	now := time.Now()
+
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "", listedCatalog(time.Hour, false, map[string]json.RawMessage{"invalid": invalid}), now)
+
+	schema, known := s.knownMemberToolSchema(t.Context(), &metaGateContext{}, member, "", "invalid", now)
+	require.True(t, known)
+	require.Empty(t, schema)
+}
+
+// On the Redis-backed store, an unchanged listing within half its lifetime is
+// not rewritten; a later one refreshes every tool's expiry; an expired tool is
+// dropped from the next write.
+func TestRememberMemberToolSchemasRedisLifecycle(t *testing.T) {
+	t.Parallel()
+
+	backing, _ := newRedisSchemaCache(t)
+	s := newMemberToolSchemaService(t, backing)
+	member := metaMember{slug: "repo", serverID: uuid.New()}
+	gate := &metaGateContext{}
+	key := memberToolSchemasKey(codeMemberDestination(member), "")
+	listing := func() *memberCatalog {
+		return listedCatalog(time.Hour, false, map[string]json.RawMessage{"annotated": annotatedToolSchema})
+	}
+	now := time.Now()
+
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "", listing(), now)
+	first, err := s.memberToolSchemaCache.Get(t.Context(), key)
+	require.NoError(t, err)
+	require.WithinDuration(t, now.Add(time.Hour), first.Tools["annotated"].ExpiresAt, time.Second)
+
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "", listing(), now.Add(10*time.Minute))
+	unchanged, err := s.memberToolSchemaCache.Get(t.Context(), key)
+	require.NoError(t, err)
+	require.True(t, first.StoredAt.Equal(unchanged.StoredAt), "a fresh unchanged listing is not rewritten")
+
+	later := now.Add(40 * time.Minute)
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "", listing(), later)
+	refreshed, err := s.memberToolSchemaCache.Get(t.Context(), key)
+	require.NoError(t, err)
+	require.WithinDuration(t, later.Add(time.Hour), refreshed.Tools["annotated"].ExpiresAt, time.Second)
+
+	_, known := s.knownMemberToolSchema(t.Context(), gate, member, "", "annotated", later.Add(time.Hour))
+	require.False(t, known, "an expired tool is not returned")
+
+	s.rememberMemberToolSchemas(t.Context(), testenv.NewLogger(t), member, "", listedCatalog(time.Hour, false, map[string]json.RawMessage{}), later.Add(time.Hour))
+	pruned, err := s.memberToolSchemaCache.Get(t.Context(), key)
+	require.NoError(t, err)
+	require.NotContains(t, pruned.Tools, "annotated", "an expired tool is dropped from the next write")
+}

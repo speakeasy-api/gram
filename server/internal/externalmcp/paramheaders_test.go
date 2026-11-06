@@ -350,5 +350,33 @@ func TestParameterHeadersIgnoresAnnotationNamesInData(t *testing.T) {
 	schema := json.RawMessage(`{"properties":{"x-mcp-header":{"type":"string","default":{"x-mcp-header":"Data"}},"owner":{"type":"string","x-mcp-header":"Owner"}}}`)
 	headers, err := ParameterHeaders(schema, json.RawMessage(`{"owner":"octo"}`))
 	require.NoError(t, err)
-	require.Equal(t, "octo", headers.Get("Mcp-Param-Owner"))
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
+}
+
+func TestParameterHeadersRejectsEscapedAnnotationOutsideProperties(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParameterHeaders(json.RawMessage(`{"properties":{"list":{"type":"array","items":{"type":"string","x\u002dmcp-header":"Item"}}}}`), json.RawMessage(`{}`))
+	require.Error(t, err)
+}
+
+func TestParameterHeadersAcceptsHugeNumbersInMetadata(t *testing.T) {
+	t.Parallel()
+
+	schema := json.RawMessage(`{"properties":{"owner":{"type":"string","x-mcp-header":"Owner","maxLength":1e400}}}`)
+	headers, err := ParameterHeaders(schema, json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
+}
+
+func TestParameterHeadersPlacementWalkBudgets(t *testing.T) {
+	t.Parallel()
+
+	deep := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"$defs":` + strings.Repeat(`{"a":`, maxParameterHeaderJSONDepth) + `{}` + strings.Repeat(`}`, maxParameterHeaderJSONDepth) + `}`
+	_, err := ParameterHeaders(json.RawMessage(deep), nil)
+	require.ErrorContains(t, err, "depth limit")
+
+	wide := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"examples":[` + strings.TrimSuffix(strings.Repeat(`{},`, maxParameterHeaderNodes), ",") + `]}`
+	_, err = ParameterHeaders(json.RawMessage(wide), nil)
+	require.ErrorContains(t, err, "node limit")
 }

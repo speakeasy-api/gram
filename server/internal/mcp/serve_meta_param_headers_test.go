@@ -406,4 +406,50 @@ func TestServePublic_MetaEndpoint_ExecuteTool_PrivateMemberColdCallListsOnce(t *
 	methods := rpcMethodCounts(upstream)
 	require.Equal(t, 1, methods["tools/call"])
 	require.Equal(t, 1, methods["tools/list"], "the tool catalog and the parameter headers share one listing")
+
+	// The member's own public ttlMs counts, not the proxy's private relabel.
+	gateway.execute(t)
+	methods = rpcMethodCounts(upstream)
+	require.Equal(t, 2, methods["tools/call"])
+	require.Equal(t, 1, methods["tools/list"], "the private-visibility member's public listing is reused")
+}
+
+// credentialedMemberCalls runs execute_tool for two callers who each hold
+// their own upstream token for one member, and returns the member's journal.
+func credentialedMemberCalls(t *testing.T, opts ...recordingUpstreamOption) *recordingUpstream {
+	t.Helper()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	slug := "meta-param-cred-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuerID)
+	upstream := newRecordingUpstream(t, "get_file_contents", append([]recordingUpstreamOption{withInputSchema(parameterHeaderSchema()), withStatelessUpstream()}, opts...)...)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, projectID, meta.ID, "Repo", "repo", 0, upstream.url)
+	client := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-param-cred", "", []uuid.UUID{issuerID})
+	for i := range 2 {
+		subject := createTestUser(t, ctx, ti, fmt.Sprintf("meta-param-cred-%d-%s", i, uuid.NewString()))
+		insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client, subject, fmt.Sprintf("token-%d", i), upstream.url)
+		gateway := parameterHeaderGateway{ti: ti, slug: slug, metaID: meta.ID, bearer: mintMetaIssuerBearer(t, ti, slug, issuerID, subject), recorder: nil}
+		gateway.execute(t)
+	}
+	require.Equal(t, 2, rpcMethodCounts(upstream)["tools/call"])
+	return upstream
+}
+
+// A member's public listing serves every caller, whatever credential each sends.
+func TestServePublic_MetaEndpoint_ExecuteTool_PublicListingSharedAcrossCredentials(t *testing.T) {
+	t.Parallel()
+
+	upstream := credentialedMemberCalls(t)
+	require.Equal(t, 1, rpcMethodCounts(upstream)["tools/list"])
+}
+
+// A member's private listing serves only the credential that listed it.
+func TestServePublic_MetaEndpoint_ExecuteTool_PrivateListingPerCredential(t *testing.T) {
+	t.Parallel()
+
+	upstream := credentialedMemberCalls(t, withListCaching(time.Hour, "private"))
+	require.Equal(t, 2, rpcMethodCounts(upstream)["tools/list"])
 }

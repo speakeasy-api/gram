@@ -22,6 +22,8 @@ const (
 	maxParameterHeaderDepth = 32
 	// 4,096 visited schemas (including the root) cap wide property traversal.
 	maxParameterHeaderNodes = 4096
+	// The placement walk spends two JSON levels per property edge, plus the root.
+	maxParameterHeaderJSONDepth = 2*maxParameterHeaderDepth + 1
 )
 
 // ParameterHeaders implements the x-mcp-header rules in go-sdk v1.7.0's
@@ -39,12 +41,12 @@ func ParameterHeaders(schema json.RawMessage, arguments json.RawMessage) (http.H
 	if err := collectParameterHeaders(schema, nil, make(map[string]bool), &bindings, &remainingNodes); err != nil {
 		return nil, err
 	}
-	if bytes.Contains(schema, []byte(`"x-mcp-header"`)) {
-		var decoded any
-		if err := json.Unmarshal(schema, &decoded); err != nil {
-			return nil, parameterHeaderJSONError("invalid MCP tool input schema", err)
+	if MayDeclareParameterHeaders(schema) {
+		count, err := countSchemaAnnotations(schema)
+		if err != nil {
+			return nil, err
 		}
-		if countSchemaAnnotations(decoded, false) != len(bindings) {
+		if count != len(bindings) {
 			return nil, errors.New("x-mcp-header outside a chain of properties keys")
 		}
 	}
@@ -207,31 +209,82 @@ func parameterHeaderValue(raw json.RawMessage) (string, bool) {
 	return value, true
 }
 
+// MayDeclareParameterHeaders reports whether schema could carry an
+// x-mcp-header annotation, spelled plainly or with JSON escapes. A schema
+// without either never needs headers or placement checks.
+func MayDeclareParameterHeaders(schema json.RawMessage) bool {
+	return bytes.Contains(schema, []byte(`"x-mcp-header"`)) || bytes.Contains(schema, []byte(`\u`))
+}
+
 // parameterHeaderDataKeywords hold instance values, not schemas, so an
 // x-mcp-header key inside them is data rather than an annotation.
 var parameterHeaderDataKeywords = map[string]bool{"const": true, "default": true, "enum": true, "examples": true}
 
-// countSchemaAnnotations counts x-mcp-header annotations anywhere in a decoded
-// schema. inProperties marks a properties map, whose keys are property names.
-func countSchemaAnnotations(node any, inProperties bool) int {
-	count := 0
-	switch n := node.(type) {
-	case map[string]any:
-		if _, ok := n["x-mcp-header"]; ok && !inProperties {
-			count++
-		}
-		for key, child := range n {
-			switch {
-			case inProperties:
-				count += countSchemaAnnotations(child, false)
-			case !parameterHeaderDataKeywords[key]:
-				count += countSchemaAnnotations(child, key == "properties")
+// countSchemaAnnotations counts x-mcp-header annotations anywhere in schema,
+// on decoded member names, within the depth and node budgets.
+func countSchemaAnnotations(schema json.RawMessage) (int, error) {
+	decoder := json.NewDecoder(bytes.NewReader(schema))
+	// Numbers in unrelated metadata need not fit a float64.
+	decoder.UseNumber()
+	walk := &annotationWalk{decoder: decoder, remainingNodes: maxParameterHeaderNodes, count: 0}
+	if err := walk.value(1, false, false); err != nil {
+		return 0, err
+	}
+	return walk.count, nil
+}
+
+// annotationWalk streams a schema's tokens, counting x-mcp-header members.
+type annotationWalk struct {
+	decoder *json.Decoder
+
+	// remainingNodes is the object and array budget left.
+	remainingNodes int
+
+	// count is the annotations found so far.
+	count int
+}
+
+// value consumes one JSON value at depth. inProperties marks a properties
+// map, whose member names are property names; data marks instance values,
+// which never hold annotations.
+func (w *annotationWalk) value(depth int, inProperties, data bool) error {
+	token, err := w.decoder.Token()
+	if err != nil {
+		return parameterHeaderJSONError("invalid MCP tool input schema", err)
+	}
+	delim, ok := token.(json.Delim)
+	if !ok {
+		return nil
+	}
+	if depth > maxParameterHeaderJSONDepth {
+		return errors.New("MCP tool input schema exceeds depth limit")
+	}
+	if w.remainingNodes <= 0 {
+		return errors.New("MCP tool input schema exceeds node limit")
+	}
+	w.remainingNodes--
+	for w.decoder.More() {
+		if delim == '[' {
+			if err := w.value(depth+1, false, data); err != nil {
+				return err
 			}
+			continue
 		}
-	case []any:
-		for _, child := range n {
-			count += countSchemaAnnotations(child, false)
+		keyToken, err := w.decoder.Token()
+		if err != nil {
+			return parameterHeaderJSONError("invalid MCP tool input schema", err)
+		}
+		key, _ := keyToken.(string)
+		schemaMember := !inProperties && !data
+		if schemaMember && key == "x-mcp-header" {
+			w.count++
+		}
+		if err := w.value(depth+1, schemaMember && key == "properties", data || (schemaMember && parameterHeaderDataKeywords[key])); err != nil {
+			return err
 		}
 	}
-	return count
+	if _, err := w.decoder.Token(); err != nil {
+		return parameterHeaderJSONError("invalid MCP tool input schema", err)
+	}
+	return nil
 }

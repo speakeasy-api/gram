@@ -48,7 +48,8 @@ type Server struct {
 	// requires to negotiate protocol 2026-07-28 and its request headers.
 	Stateless bool
 
-	// ListTTL is the ttlMs every tools/list result carries; zero leaves it absent.
+	// ListTTL is the ttlMs every tools/list result carries. The SDK always
+	// writes ttlMs, so zero sends ttlMs 0: immediately stale.
 	ListTTL time.Duration
 
 	// ListCacheScope is the cacheScope every tools/list result carries when set.

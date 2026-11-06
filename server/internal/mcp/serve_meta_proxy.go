@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -674,7 +675,7 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		}
 		// An empty set still replaces any Mcp-Param headers the SDK derived.
 		headers := http.Header{}
-		if declaresParameterHeaders(schema) {
+		if externalmcp.MayDeclareParameterHeaders(schema) {
 			computed, err := externalmcp.ParameterHeaders(schema, arguments)
 			switch {
 			case err != nil:
@@ -784,6 +785,8 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	seenCursors := map[string]bool{}
 	cacheTTL := time.Duration(-1)
 	cachePrivate := false
+	hints := &memberListHints{mu: sync.Mutex{}, seen: false, ttl: 0, private: false}
+	ctx = context.WithValue(ctx, memberListHintsKey{}, hints)
 	for page := 0; ; page++ {
 		if page >= maxProxiedListPages {
 			logger.WarnContext(ctx, "meta MCP member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
@@ -794,12 +797,18 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 		if cerr != nil {
 			return nil, memberClientFailure(ctx, logger, rt, dial, member, cerr)
 		}
-		// The listing is as fresh as its stalest page; an absent or negative ttlMs is stale at once.
-		pageTTL := time.Duration(max(pageResult.TTLMs, 0)) * time.Millisecond
+		// The listing is as fresh as its stalest page; an absent or negative
+		// ttlMs is stale at once. The member's own hints count, not the ones
+		// the proxy relabelled for this session.
+		pageTTL, pagePrivate, captured := hints.take()
+		if !captured {
+			pageTTL = time.Duration(max(pageResult.TTLMs, 0)) * time.Millisecond
+			pagePrivate = pageResult.CacheScope == "private"
+		}
 		if cacheTTL < 0 || pageTTL < cacheTTL {
 			cacheTTL = pageTTL
 		}
-		cachePrivate = cachePrivate || pageResult.CacheScope == "private"
+		cachePrivate = cachePrivate || pagePrivate
 		upstreamResult, merr := json.Marshal(pageResult)
 		if merr != nil {
 			return nil, fmt.Errorf("marshal member tool listing: %w", merr)
