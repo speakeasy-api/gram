@@ -163,6 +163,10 @@ var (
 	// Re-linking goes through the same configuration, so only an
 	// administrator can repair it.
 	ErrRemoteSessionMisconfigured = fmt.Errorf("%w: remote session client misconfigured", ErrNoValidToken)
+
+	// ErrStoredSignInUnreadable means no stored token of the grant can be
+	// decrypted and no refresh replaced them. Only a new sign-in recreates it.
+	ErrStoredSignInUnreadable = fmt.Errorf("%w: stored sign-in unreadable", ErrNoValidToken)
 )
 
 // ResolvedAuthorization is the ephemeral result of resolving one reviewed
@@ -194,11 +198,10 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 //
 // Returns ("", nil) when there is no usable token for this binding —
 // no row, expired with no refresh path, refresh failed past the
-// deadline. The empty string is the "no token"
+// deadline, nothing stored can be decrypted. The empty string is the "no token"
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
-// Returns errors for unexpected failures, including a stored token that
-// can't be decrypted, and ErrInvalidAuthorizationRequest
+// Returns errors for unexpected failures and ErrInvalidAuthorizationRequest
 // for principal credentials, which must use the tenant-scoped resolver.
 // "No token available" otherwise returns an empty string, not an error.
 //
@@ -297,15 +300,13 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
 			return zero, fmt.Errorf("refresh canceled: %w", err)
 		}
-		// Our key or row is broken: fail the call, never dial without the credential or ask for a reconnect.
+		// Nothing stored can be read, so only a new sign-in recreates the grant.
+		// The entry keeps a gateway from calling the member without it.
 		if errors.Is(err, errStoredTokenUnreadable) {
-			m.logger.ErrorContext(ctx, "remote session unusable: stored access token could not be decrypted",
-				attr.SlogRemoteSessionID(sess.ID.String()),
-				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
-				attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
-				attr.SlogError(err),
-			)
-			return unavailableSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
+			unreadable := withRecordedRefresh(fmt.Errorf("%w: %w", ErrStoredSignInUnreadable, err), zero)
+			entry := failedSessionCredential(selectedID, clientID, selectedResource, unreadable)
+			entry.refreshFailureRecorded, entry.refreshStepRecorded = zero.refreshFailureRecorded, zero.refreshStepRecorded
+			return entry, unreadable
 		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its deadline) and could not be
@@ -317,12 +318,12 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
 		// A broken query is ours to fix: neither an outage nor a reconnect.
 		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
-			return unavailableSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
+			return failedSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
 		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
 			outage := &SessionOutageError{err: err}
-			return unavailableSessionCredential(selectedID, clientID, selectedResource, outage), outage
+			return failedSessionCredential(selectedID, clientID, selectedResource, outage), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
 			// Keep the bare remedy; only the already-recorded facts travel.
 			return zero, withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
@@ -448,7 +449,7 @@ type UpstreamToken struct {
 	// obtained, which only ResolveAvailableAccessTokens returns, and
 	// ClientCredentialErr says why.
 	//
-	// A CredentialOwnerSubject entry with ClientCredentialErr set is SessionUnavailable.
+	// A CredentialOwnerSubject entry with ClientCredentialErr set is SessionUnavailable or SignInUnreadable.
 	CredentialOwner CredentialOwner
 
 	// RemoteSessionClientID is the remote_session_client the credential
@@ -845,7 +846,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				switch {
 				case self:
 					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
-				case errors.Is(err, ErrRemoteSessionUnavailable):
+				case errors.Is(err, ErrRemoteSessionUnavailable), errors.Is(err, ErrStoredSignInUnreadable):
 					tokens[c.RemoteSessionIssuerID] = resolved
 				}
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
@@ -933,8 +934,8 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 	}
 }
 
-// unavailableSessionCredential keeps the grant's identity so an outage routes and pins as its token would.
-func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string, outage error) UpstreamToken {
+// failedSessionCredential keeps the identity of a grant that could not be used, so its failure routes and pins as its token would.
+func failedSessionCredential(sessionID, clientID uuid.UUID, resource string, failure error) UpstreamToken {
 	return UpstreamToken{
 		Token:                              "",
 		Resource:                           resource,
@@ -943,7 +944,7 @@ func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string
 		RemoteSessionID:                    sessionID,
 		RemoteSessionUpdatedAt:             time.Time{},
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
-		ClientCredentialErr:                outage,
+		ClientCredentialErr:                failure,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
 		refreshStepRecorded:                false,
@@ -973,11 +974,11 @@ func OutageKindOf(err error) RefreshOutageKind {
 	return RefreshOutageNone
 }
 
-// errRefreshStoreFault marks a broken query or write, or a stored token we can't decrypt: a retry can't help, and it fails only this member on a gateway.
+// errRefreshStoreFault marks a broken query or write: a retry can't help, and it fails only this member on a gateway.
 var errRefreshStoreFault = errors.New("refresh store fault")
 
-// errStoredTokenUnreadable marks a stored access token that can't be decrypted: our fault, never the person's.
-var errStoredTokenUnreadable = errors.New("stored access token unreadable")
+// errStoredTokenUnreadable marks a stored token the current key can't decrypt. A retry never helps; a new token does.
+var errStoredTokenUnreadable = errors.New("stored token unreadable")
 
 // TokenEndpointCausedOutage reports a client credential outage the token endpoint caused, not signing or our own stores.
 func TokenEndpointCausedOutage(err error) bool {
@@ -1004,6 +1005,11 @@ func OutageProviderHost(err error) string {
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
 	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
+}
+
+// SignInUnreadable reports a subject's connection with nothing stored that can be read; only a new sign-in replaces it.
+func (t UpstreamToken) SignInUnreadable() bool {
+	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrStoredSignInUnreadable)
 }
 
 // SessionUnavailable reports a subject's connection that an outage stopped refreshing.
@@ -1139,13 +1145,15 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 			return true, nil
 		}
 		if accessTokenUsable(sess, now) {
-			// Resolution forwards this token without attempting a refresh. An
-			// undecryptable one fails as our error, which reconnecting can't fix.
+			// Resolution forwards this token without a refresh, or refreshes it
+			// when it can't be read, which the refresh check below judges.
 			plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
-			if err == nil && plain == "" {
+			if err == nil && plain != "" {
+				continue
+			}
+			if err == nil {
 				return true, nil
 			}
-			continue
 		}
 		if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
 			if plain, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err == nil && plain != "" {
@@ -1202,12 +1210,19 @@ func (m *ChallengeManager) validateAndRefresh(
 	// The skew and its refresh-grant condition are pinned by
 	// accessTokenUsable's unit tests; they cover this path only while the
 	// deadline check stays on the shared predicate rather than inlined.
+	unreadable := false
 	if accessTokenUsable(sess, now) {
 		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
-		if err != nil {
+		if err == nil {
+			return plain, sess, sess.UpdatedAt.Time, nil
+		}
+		// A refresh (RFC 6749 section 6) stores a new pair under the current key.
+		unreadable = true
+		m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted", storedTokenAttrs(sess, err)...)
+		if !hasRefresh || !refreshTokenUsable(sess, now) {
+			m.refresher.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenAccess, false)
 			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("%w: decrypt access token: %w", errStoredTokenUnreadable, err)
 		}
-		return plain, sess, sess.UpdatedAt.Time, nil
 	}
 
 	if !hasRefresh {
@@ -1215,6 +1230,9 @@ func (m *ChallengeManager) validateAndRefresh(
 	}
 
 	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest, attribution)
+	if unreadable {
+		m.refresher.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenAccess, err == nil && res.AccessToken != "")
+	}
 	if err != nil {
 		// Inside the skew window the stored token is still within its stated
 		// lifetime, so a refresh that fails there — an upstream 5xx or 429, a
@@ -1222,12 +1240,15 @@ func (m *ChallengeManager) validateAndRefresh(
 		// attempt. Forwarding it keeps the early refresh a pure optimization:
 		// nobody is sent to reconnect while holding a token that still works.
 		// Past the deadline there is nothing to fall back to.
-		if !accessTokenLive(sess, time.Now()) {
+		if unreadable || !accessTokenLive(sess, time.Now()) {
 			return "", sess, sess.UpdatedAt.Time, err
 		}
 		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
 		if derr != nil {
-			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("%w: decrypt access token after failed refresh: %w", errStoredTokenUnreadable, derr)
+			// Nothing readable to fall back to, so the refresh failure decides.
+			m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted", storedTokenAttrs(sess, derr)...)
+			m.refresher.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenAccess, false)
+			return "", sess, sess.UpdatedAt.Time, err
 		}
 		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
 		return plain, sess, sess.UpdatedAt.Time, nil
@@ -1273,6 +1294,16 @@ func refreshFailureAttrs(sess remotesessions_repo.RemoteSession, err error) []an
 	return args
 }
 
+// storedTokenAttrs names the session whose stored token could not be decrypted.
+func storedTokenAttrs(sess remotesessions_repo.RemoteSession, err error) []any {
+	return []any{
+		attr.SlogRemoteSessionID(sess.ID.String()),
+		attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+		attr.SlogUserSessionIssuerID(sess.UserSessionIssuerID.String()),
+		attr.SlogError(err),
+	}
+}
+
 // refreshSessionTokens POSTs grant_type=refresh_token to the upstream token
 // endpoint and persists the new token pair on success, returning the updated
 // remote_session row and the decoded token response the caller restates
@@ -1307,7 +1338,9 @@ func (s *RefreshService) refreshSessionTokens(
 
 	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
 	if err != nil {
-		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err, refreshRemedyReconnect)
+		s.logger.ErrorContext(ctx, "remote session stored refresh token could not be decrypted", storedTokenAttrs(sess, err)...)
+		s.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenRefresh, false)
+		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", fmt.Errorf("%w: %w", errStoredTokenUnreadable, err), refreshRemedyReconnect)
 	}
 
 	var clientSecret string

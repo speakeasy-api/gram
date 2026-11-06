@@ -196,7 +196,7 @@ func (s *Service) resolveMemberTokensSkipping(ctx context.Context, gate *metaGat
 		if err == nil && gate.agentID != uuid.Nil && member.chosenClientID.Valid {
 			usable := false
 			for _, token := range tokens {
-				usable = usable || token.Token != "" || token.SessionUnavailable()
+				usable = usable || token.Token != "" || token.SessionUnavailable() || token.SignInUnreadable()
 			}
 			if !usable {
 				if shared := sharedCredentialError(member, tokens); shared != nil {

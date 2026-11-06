@@ -1351,7 +1351,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if recoveryErr, ok := s.connectionRecoveryError(ctx, authentication, err); ok {
 			return recoveryErr
 		}
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, err)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: upstream remote session missing or unusable", issuerGateReasonInvalidRemoteSession, resolveFailureHappened(err), err)
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}

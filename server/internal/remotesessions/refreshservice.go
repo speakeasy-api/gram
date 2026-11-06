@@ -912,7 +912,7 @@ func (s *RefreshService) refresh(
 		if accessTokenLive(current, time.Now()) {
 			plain, err := s.enc.Decrypt(current.AccessTokenEncrypted)
 			if err != nil {
-				return zero, nil, nil, fmt.Errorf("%w: decrypt concurrently refreshed access token: %w", errStoredTokenUnreadable, err)
+				return zero, nil, nil, fmt.Errorf("decrypt concurrently refreshed access token: %w", err)
 			}
 			return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
 		}

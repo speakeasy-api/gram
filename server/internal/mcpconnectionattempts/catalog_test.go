@@ -124,6 +124,7 @@ var frozenCodes = []string{
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
+	"stored_sign_in_unreadable",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -287,6 +288,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
 		{CodeStoredSessionInvalid, WhoPerson, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
 		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
+		{CodeStoredSignInUnreadable, WhoPerson, []string{"saved sign-in", "reconnect"}, []string{"try again", "few minutes"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {

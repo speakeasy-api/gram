@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -147,6 +148,9 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 // outage recorded by an exchange the attempt itself made can clear on a retry,
 // and the caller that observed that exchange marks it retryable.
 func metaMemberClientCredentialError(member metaMember, err error) error {
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		return memberSignInUnreadableError(member, "")
+	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
@@ -158,6 +162,16 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry", member.slug)}
+}
+
+// memberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
+func memberSignInUnreadableError(member metaMember, connectURL string) error {
+	where := "to reconnect it"
+	if connectURL != "" {
+		where = "to open " + connectURL + " to reconnect it"
+	}
+	message := fmt.Sprintf("server %q can't use the user's saved sign-in anymore. Ask the user %s, then retry", member.slug, where)
+	return memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}
 }
 
 // outageWaitWords is when to retry, in words: a provider can ask for minutes.

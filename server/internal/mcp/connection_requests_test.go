@@ -1110,8 +1110,8 @@ func upsertUnreadableRemoteSession(t *testing.T, ctx context.Context, ti *testIn
 	require.NoError(t, err)
 }
 
-// An unreadable stored token is our fault: a 500 recorded as internal_error, never a reconnect challenge.
-func TestUnreadableUpstreamTokenDirectServerIsInternalError(t *testing.T) {
+// With nothing stored readable, a direct server asks the person to reconnect and records why.
+func TestUnreadableUpstreamTokenDirectServerAsksToReconnect(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -1125,51 +1125,80 @@ func TestUnreadableUpstreamTokenDirectServerIsInternalError(t *testing.T) {
 	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
 
 	w, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
-	requireOopsCode(t, err, oops.CodeUnexpected)
-	require.Empty(t, w.Header().Get("WWW-Authenticate"), "reconnecting can't fix a token we can't read")
+	require.Equal(t, reconnectDescription, requireOopsCode(t, err, oops.CodeUnauthorized))
+	require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 	require.Equal(t, subject.String(), row.SubjectURN)
 }
 
-// An unreadable stored token fails its gateway member as our error and never dials it without the credential.
-func TestUnreadableUpstreamTokenGatewayMemberIsInternalError(t *testing.T) {
+// With nothing stored readable, a gateway never calls the member without credentials and asks for a reconnect.
+func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 	t.Parallel()
 
-	ctx, ti := newTestMCPService(t)
-	authCtx := requireProjectAuthContext(t, ctx)
-	rec := mcpconnectionattemptstest.New(t)
-	ti.service.SetConnectionRecorder(rec.Recorder)
-	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	for _, tc := range []struct {
+		name     string
+		resource bool
+	}{
+		{name: "grant names the member", resource: true},
+		{name: "grant names no resource", resource: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var memberCalls atomic.Int32
-	// Answers anyone, so an anonymous dial would succeed.
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost {
-			memberCalls.Add(1)
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	t.Cleanup(upstream.Close)
+			ctx, ti := newTestMCPService(t)
+			authCtx := requireProjectAuthContext(t, ctx)
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
 
-	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
-	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
-	subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
-	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
-	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstream.URL)
+			var memberCalls atomic.Int32
+			// Answers anyone, so an anonymous call would succeed.
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method == http.MethodPost {
+					memberCalls.Add(1)
+				}
+				w.WriteHeader(http.StatusOK)
+			}))
+			t.Cleanup(upstream.Close)
 
-	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
-	require.True(t, isError)
-	require.Contains(t, text, "contact Speakeasy support")
-	require.NotContains(t, strings.ToLower(text), "connect")
-	require.Zero(t, memberCalls.Load(), "never an anonymous call")
+			issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+			metaSlug := "meta-unreadable-" + uuid.NewString()[:8]
+			meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable", "", []uuid.UUID{issuerID})
+			createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+			subject := createTestUser(t, ctx, ti, "meta-unreadable-user-"+uuid.NewString())
+			bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+			resource := ""
+			if tc.resource {
+				resource = upstream.URL
+			}
+			upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, resource)
 
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, meta.ID.String(), row.ServerID)
-	require.NotEmpty(t, row.MemberID)
-	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+			text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+			require.True(t, isError)
+			require.Contains(t, text, "can't use the user's saved sign-in anymore")
+			require.Contains(t, text, "to reconnect it")
+			require.NotContains(t, strings.ToLower(text), "retry shortly")
+			require.Zero(t, memberCalls.Load(), "never an anonymous call")
+
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable)
+			require.Equal(t, meta.ID.String(), row.ServerID)
+			require.NotEmpty(t, row.MemberID)
+			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+
+			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
+			resp, err := servePublicHTTP(t, ctx, ti, metaSlug, body, bearer, nil)
+			require.NoError(t, err)
+			var status struct {
+				StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+			}
+			require.NoError(t, json.Unmarshal(decodeRPCResponse(t, resp)["result"], &status))
+			require.Len(t, status.StructuredContent.Servers, 1)
+			require.Equal(t, metamcp.SignInNotConnected, status.StructuredContent.Servers[0].Status)
+			require.Nil(t, status.StructuredContent.Servers[0].Outage, "not an outage to wait out")
+			require.Zero(t, memberCalls.Load())
+		})
+	}
 }

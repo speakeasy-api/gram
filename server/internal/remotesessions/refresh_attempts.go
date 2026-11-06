@@ -121,6 +121,9 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
+		if errors.Is(err, errStoredTokenUnreadable) {
+			return mcpconnectionattempts.CodeStoredSignInUnreadable, true
+		}
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			switch tokenErr.remedy {
 			case refreshRemedyAdministrator:

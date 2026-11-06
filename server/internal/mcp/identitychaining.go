@@ -244,10 +244,10 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 			return false
 		}
 		entry, ok := tokens[backendIssuerID.UUID]
-		return ok && !entry.SessionUnavailable() && grantRoutesToUpstream(entry.Resource, want, true)
+		return ok && !entry.SessionUnavailable() && !entry.SignInUnreadable() && grantRoutesToUpstream(entry.Resource, want, true)
 	}
 	for issuerID, entry := range tokens {
-		if !entry.SessionUnavailable() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
+		if !entry.SessionUnavailable() && !entry.SignInUnreadable() && upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			return true
 		}
 	}

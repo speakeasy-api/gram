@@ -74,7 +74,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if member.tunneledServerID.Valid {
 		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
 		if err != nil {
-			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() {
+			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() || entry.SignInUnreadable() {
 				return entry, metaMemberClientCredentialError(member, err)
 			}
 			return none, metaMemberClientCredentialError(member, err)
@@ -87,7 +87,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	var matched, outage remotesessions.UpstreamToken
 	found := 0
 	for issuerID, entry := range tokens {
-		if entry.SessionUnavailable() {
+		if entry.SessionUnavailable() || entry.SignInUnreadable() {
 			// A grant from before resources were recorded still names its member by issuer.
 			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
 				outage = entry
@@ -101,7 +101,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
-		if outage.SessionUnavailable() {
+		if outage.SessionUnavailable() || outage.SignInUnreadable() {
 			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
 		}
 		if member.remoteSessionIssuerID.Valid {
@@ -270,6 +270,9 @@ func memberCredentialLoadError(member metaMember, err error) error {
 
 // chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
+	if routed.SignInUnreadable() {
+		return routed, "", memberSignInUnreadableError(member, gate.memberReconnectURL(member))
+	}
 	outage := routed.SessionUnavailable()
 	if outage {
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
@@ -295,7 +298,11 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 		return
 	}
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
-		s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
+		code := mcpconnectionattempts.CodeInvalidRemoteSession
+		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {
+			code = failure.code
+		}
+		s.recordMemberFailure(ctx, gate, member, code)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {

@@ -683,52 +683,6 @@ func TestResolveAccessTokens_InvalidGrantNeedsReconnect(t *testing.T) {
 	require.True(t, reconnect)
 }
 
-// An unreadable stored access token is our fault: it fails the call, never
-// reads as "no token" (an anonymous gateway dial) or as a reconnect.
-func TestResolveAccessTokens_UnreadableAccessTokenIsInternalError(t *testing.T) {
-	t.Parallel()
-
-	var refreshAttempts atomic.Int32
-	ctx, env := newSyntheticExpiryEnv(t, "unreadable-access-token", func(w http.ResponseWriter, r *http.Request) {
-		if err := r.ParseForm(); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			return
-		}
-		if r.Form.Get("grant_type") == "refresh_token" {
-			refreshAttempts.Add(1)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"access_token":"live-access","refresh_token":"live-refresh"}`))
-	})
-
-	_, err := env.q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
-		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID,
-		ExpectedUpdatedAt: env.session.UpdatedAt, AccessTokenEncrypted: "not-ciphertext",
-		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), RefreshTokenEncrypted: env.session.RefreshTokenEncrypted,
-		Scopes: env.session.Scopes,
-	})
-	require.NoError(t, err)
-
-	_, err = env.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.Error(t, err)
-	require.NotErrorIs(t, err, remotesessions.ErrNoValidToken, "a direct server must not challenge a reconnect")
-	require.Zero(t, refreshAttempts.Load(), "a live access token is forwarded without refreshing")
-
-	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.NoError(t, err, "a gateway keeps serving its other members")
-	require.Len(t, tokens, 1)
-	for _, entry := range tokens {
-		require.Empty(t, entry.Token)
-		require.True(t, entry.SessionUnavailable(), "never an anonymous dial")
-		require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(entry.ClientCredentialErr))
-		require.Equal(t, mcpconnectionattempts.CodeInternalError, remotesessions.ConnectionOutageHappened(entry.ClientCredentialErr))
-	}
-
-	reconnect, err := env.mgr.RemoteSessionsNeedReconnect(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
-	require.NoError(t, err)
-	require.False(t, reconnect, "reconnecting can't fix a token we can't read")
-}
-
 func TestRemoteSessionsNeedReconnect_RenewableGrantDoesNotContactUpstream(t *testing.T) {
 	t.Parallel()
 
