@@ -25,7 +25,7 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 				Instructions:        instructions,
 				UserSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: gated},
 			}
-			bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta, metamcp.DiscoveryModeProgressive, false), mcpversions.SupportedMetaServer())
+			bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta, metamcp.DiscoveryModeProgressive, false, nil), mcpversions.SupportedMetaServer())
 			require.NoError(t, err)
 			var response struct {
 				Result struct {
@@ -49,4 +49,22 @@ func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
 			require.Zero(t, *response.Result.TTLMs)
 		}
 	}
+}
+
+func TestMetaServerDiscover_MemberSummaryIsPrivate(t *testing.T) {
+	t.Parallel()
+
+	meta := &metamcprepo.MetaMcpServer{}
+	bs, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), mcpjsonrpc.NumberID(7), describeMetaServer(meta, metamcp.DiscoveryModeProgressive, false, []metamcp.MemberLabel{{Slug: "linear", Name: "Linear"}}), mcpversions.SupportedMetaServer())
+	require.NoError(t, err)
+	var response struct {
+		Result struct {
+			Instructions string `json:"instructions"`
+			CacheScope   string `json:"cacheScope"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(bs, &response))
+	require.True(t, strings.HasPrefix(response.Result.Instructions, `Tools from these servers: "Linear".`+"\n\n"))
+	require.True(t, strings.HasSuffix(response.Result.Instructions, metamcp.Instructions))
+	require.Equal(t, "private", response.Result.CacheScope)
 }

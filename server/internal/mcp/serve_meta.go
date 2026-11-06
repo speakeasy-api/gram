@@ -345,7 +345,10 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)), mcpversions.SupportedMetaServer())
+		if !req.ID.IsSet() {
+			return nil, nil
+		}
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsCancelled:
 		if gate.discoveryMode == metamcp.DiscoveryModeCode {
 			return nil, s.cancelMetaCode(ctx, gate, req)
@@ -477,7 +480,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -486,6 +489,42 @@ func (s *Service) handleMetaInitialize(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// metaInstructionMembers names the servers this caller's tool listing would
+// offer. A failed snapshot only drops the summary: the handshake must not fail.
+func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
+	if gate.organizationID == "" || metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
+		return nil
+	}
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = true
+	}
+	// Only servers the connection approved are named; an expired or
+	// unreadable approval names none.
+	if gate.catalogRef != nil && gate.catalog == nil {
+		if gate.authentication == nil {
+			return nil
+		}
+		catalog, err := s.loadConnectionCatalog(ctx, gate.authentication.endpoint, gate.authentication.subject, gate.catalogRef, time.Now())
+		if err != nil {
+			if !errors.Is(err, errConnectionCatalogExpired) {
+				logger.WarnContext(ctx, "failed to load approved tools for instructions", attr.SlogError(err))
+			}
+			return nil
+		}
+		gate.catalog = catalog
+	}
+	_, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
+	if err != nil {
+		return nil
+	}
+	selected := catalogSelectedMembers(gate, members)
+	labels := make([]metamcp.MemberLabel, 0, len(selected))
+	for _, member := range selected {
+		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name})
+	}
+	return labels
 }
 
 func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
