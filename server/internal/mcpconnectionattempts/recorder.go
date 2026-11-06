@@ -495,9 +495,9 @@ func (r *Recorder) Start(ctx context.Context, attempt Attempt, step Step, what H
 	r.record(ctx, attempt, step, what, false, limitStart, opts)
 }
 
-// Step records a step that does not end the attempt.
-func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, false, limitNone, opts)
+// Step records a step that does not end the attempt. It reports capture/queue acceptance.
+func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) bool {
+	return r.record(ctx, attempt, step, what, false, limitNone, opts)
 }
 
 // End records the step that ends the attempt. Its outcome is Connected for a
