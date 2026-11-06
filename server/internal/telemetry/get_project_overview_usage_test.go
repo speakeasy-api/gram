@@ -2,6 +2,7 @@ package telemetry_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -98,6 +99,7 @@ func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
 	ts := now.Add(-9 * time.Minute)
 	userA := "ext-user-a-" + uuid.NewString()
 	userB := "ext-user-b-" + uuid.NewString()
+	emailUser := "email-only-" + uuid.NewString() + "@example.com"
 	const (
 		search = "tools:http:api:search"
 		create = "tools:http:api:create"
@@ -107,8 +109,9 @@ func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
 		insertToolCallLogWithUser(t, ctx, projectID, uuid.NewString(), ts, urn, status, 0.5, "", externalUserID)
 	}
 
-	// search: 4 calls, 1 failure (25%). create: 2 calls, 1 failure (50%).
-	// delete: 1 call, no failures. userA makes 5 calls, userB 2.
+	// search: 5 calls, 1 failure (20%). create: 2 calls, 1 failure (50%).
+	// delete: 1 call, no failures. userA makes 5 calls, userB 2, and the
+	// email-only caller 1: rows without an external id key on user_email.
 	insertCall(search, 200, userA)
 	insertCall(search, 200, userA)
 	insertCall(search, 200, userB)
@@ -116,6 +119,7 @@ func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
 	insertCall(create, 200, userA)
 	insertCall(create, 404, userB)
 	insertCall(remove, 200, userA)
+	insertToolCallLogWithEmail(t, ctx, projectID, ts, search, 200, emailUser)
 	// No external user: never counted.
 	insertCall(search, 500, "")
 
@@ -124,19 +128,20 @@ func TestGetProjectOverview_UsageMCPViewWhenNoAgentUsage(t *testing.T) {
 	require.NotNil(t, res.UsageByUser)
 	require.Nil(t, res.UsageByAgent)
 	require.Equal(t, &gen.ProjectMcpUsage{
-		EndUsersCount: 2,
+		EndUsersCount: 3,
 		TopEndUsers: []*gen.ProjectMcpEndUser{
 			{UserID: userA, ToolCalls: 5},
 			{UserID: userB, ToolCalls: 2},
+			{UserID: emailUser, ToolCalls: 1},
 		},
 		TopTools: []*gen.ProjectMcpToolUsage{
-			{Urn: search, Calls: 4, Failures: 1},
+			{Urn: search, Calls: 5, Failures: 1},
 			{Urn: create, Calls: 2, Failures: 1},
 			{Urn: remove, Calls: 1, Failures: 0},
 		},
 		TopFailingTools: []*gen.ProjectMcpToolUsage{
 			{Urn: create, Calls: 2, Failures: 1},
-			{Urn: search, Calls: 4, Failures: 1},
+			{Urn: search, Calls: 5, Failures: 1},
 		},
 	}, res.McpUsage)
 }
@@ -155,6 +160,36 @@ func TestGetProjectOverview_UsageWithoutOrgReadFallsBackToMCPView(t *testing.T) 
 	require.Nil(t, res.UsageByUser, "agent usage needs org:read")
 	require.Nil(t, res.UsageByAgent)
 	require.NotNil(t, res.McpUsage, "MCP view section must settle")
+}
+
+// insertToolCallLogWithEmail inserts a hosted MCP tool call identified only by
+// user email, with no external user id.
+func insertToolCallLogWithEmail(t *testing.T, ctx context.Context, projectID string, timestamp time.Time, toolURN string, statusCode int32, email string) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+
+	id, err := uuid.NewV7()
+	require.NoError(t, err)
+
+	attrsJSON, err := json.Marshal(map[string]any{
+		"gram.tool.urn":             toolURN,
+		"http.response.status_code": statusCode,
+		"user.email":                email,
+	})
+	require.NoError(t, err)
+
+	err = conn.Exec(ctx, `
+		INSERT INTO telemetry_logs (
+			id, time_unix_nano, observed_time_unix_nano, severity_text, body,
+			trace_id, span_id, attributes, resource_attributes,
+			gram_project_id, gram_deployment_id, gram_urn, service_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, id.String(), timestamp.UnixNano(), timestamp.UnixNano(), "INFO", "tool call",
+		nil, nil, string(attrsJSON), "{}",
+		projectID, uuid.NewString(), toolURN, "gram-tools")
+	require.NoError(t, err)
 }
 
 func groupValues(rows []*gen.QueryRow) []string {

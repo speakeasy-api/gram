@@ -48,31 +48,32 @@ type ProjectMcpUsage struct {
 }
 
 // GetProjectMcpUsage returns the external end user count, the top end users by
-// tool calls, and per-tool calls and failures for a project. Rows count only
-// when they carry an external_user_id; unlike SearchUsers' external grouping,
-// rows identified only by user_email are not end users here. Tool calls,
-// failures and tool keys use SearchUsers' expressions (toolCallExprsFor).
+// tool calls, and per-tool calls and failures for a project. It keys end users
+// exactly as SearchUsers' external grouping does (external_user_id, else
+// user_email) and counts tool calls with the same expressions, so these counts
+// equal the sums of that read's per-user breakdowns.
 //
 // It reads raw telemetry_logs: no summary view is keyed by external_user_id.
 //
 //nolint:errcheck,wrapcheck // Replicating SQLC syntax which doesn't comply to this lint rule
 func (q *Queries) GetProjectMcpUsage(ctx context.Context, arg GetProjectMcpUsageParams) (ProjectMcpUsage, error) {
 	tc := toolCallExprsFor("")
+	userKey := searchUsersGroupExpr("external_user_id", "")
 	base := sq.Select().
 		From("telemetry_logs").
 		Where("gram_project_id = ?", arg.GramProjectID).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
-		Where("external_user_id != ''")
+		Where(userKey + " != ''")
 
 	// count() OVER () runs after GROUP BY and before LIMIT, so it counts every
 	// end user, not just the returned top rows.
 	usersQuery, usersArgs, err := base.Columns(
-		"external_user_id AS user_id",
+		userKey+" AS user_id",
 		"countIf("+tc.isCall+") AS tool_calls",
 		"count() OVER () AS end_users_count",
 	).
-		GroupBy("external_user_id").
+		GroupBy(userKey).
 		OrderBy("tool_calls DESC", "user_id ASC").
 		Limit(projectMcpTopEndUsersLimit).
 		ToSql()
