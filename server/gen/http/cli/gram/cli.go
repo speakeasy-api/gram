@@ -217,7 +217,7 @@ func UsageCommands() []string {
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
 	}
 }
 
@@ -5387,6 +5387,9 @@ func ParseEndpoint(
 		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
 		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
 
+		accessListAgentPolicyScopesFlags            = flag.NewFlagSet("list-agent-policy-scopes", flag.ExitOnError)
+		accessListAgentPolicyScopesSessionTokenFlag = accessListAgentPolicyScopesFlags.String("session-token", "", "")
+
 		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
 		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
 		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
@@ -6668,6 +6671,7 @@ func ParseEndpoint(
 	accessGetDirectoryReviewSettingsFlags.Usage = accessGetDirectoryReviewSettingsUsage
 	accessUpdateDirectoryReviewSettingsFlags.Usage = accessUpdateDirectoryReviewSettingsUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
+	accessListAgentPolicyScopesFlags.Usage = accessListAgentPolicyScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
@@ -10143,6 +10147,9 @@ func ParseEndpoint(
 			case "list-scopes":
 				epf = accessListScopesFlags
 
+			case "list-agent-policy-scopes":
+				epf = accessListAgentPolicyScopesFlags
+
 			case "list-members":
 				epf = accessListMembersFlags
 
@@ -13497,6 +13504,9 @@ func ParseEndpoint(
 			case "list-scopes":
 				endpoint = c.ListScopes()
 				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
+			case "list-agent-policy-scopes":
+				endpoint = c.ListAgentPolicyScopes()
+				data, err = accessc.BuildListAgentPolicyScopesPayload(*accessListAgentPolicyScopesSessionTokenFlag)
 			case "list-members":
 				endpoint = c.ListMembers()
 				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
@@ -36373,6 +36383,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    get-directory-review-settings: Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
 	fmt.Fprintln(os.Stderr, `    update-directory-review-settings: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
+	fmt.Fprintln(os.Stderr, `    list-agent-policy-scopes: List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
@@ -36783,6 +36794,24 @@ func accessListScopesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --apikey-token \"abc123\" --session-token \"abc123\"")
+}
+
+func accessListAgentPolicyScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-agent-policy-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-agent-policy-scopes --session-token \"abc123\"")
 }
 
 func accessListMembersUsage() {

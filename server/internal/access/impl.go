@@ -311,6 +311,37 @@ func scopeCatalogueResult() *gen.ListScopesResult {
 	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}
 }
 
+// ListAgentPolicyScopes lists the catalogue scopes an agent policy may hold.
+// It needs a session and no organization grant: an owner configuring their
+// own agent holds no RBAC grant, and the list is product configuration that
+// names nothing about the organization. The dashboard's agent permission
+// editor reads it instead of keeping a copy of the runtime-safe set.
+func (s *Service) ListAgentPolicyScopes(ctx context.Context, _ *gen.ListAgentPolicyScopesPayload) (*gen.ListAgentPolicyScopesResult, error) {
+	ac, err := s.authContext(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
+	}
+	trace.SpanFromContext(ctx).SetAttributes(
+		attr.OrganizationID(ac.ActiveOrganizationID),
+		attr.UserID(ac.UserID),
+	)
+
+	catalog := authz.ScopeCatalog()
+	result := make([]*gen.ScopeDefinition, 0, len(catalog))
+	for _, entry := range catalog {
+		definition := scopeDefinition(entry)
+		// Only what a person could also tick in a role: the runtime registry
+		// decides eligibility, exception scopes are not a choice, and shared
+		// auth-client access is provisioned by the auth client editor rather
+		// than chosen as a permission.
+		if !definition.AgentEligible || definition.Visibility != authz.ScopeVisibilityUserVisible || entry.Category == authz.ScopeCategoryMCPAuthClient {
+			continue
+		}
+		result = append(result, definition)
+	}
+	return &gen.ListAgentPolicyScopesResult{Scopes: result}, nil
+}
+
 func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
 	var exclusionScope *string
 	if exclusion, ok := authz.ExclusionScopeFor(entry.Scope); ok {

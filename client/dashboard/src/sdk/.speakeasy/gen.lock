@@ -45,6 +45,7 @@ trackedFiles:
   src/funcs/accessGetShadowMCPInventoryServer.ts: {}
   src/funcs/accessListAIDetectionUsers.ts: {}
   src/funcs/accessListAIDetections.ts: {}
+  src/funcs/accessListAgentPolicyScopes.ts: {}
   src/funcs/accessListAudienceOptions.ts: {}
   src/funcs/accessListChallengeBuckets.ts: {}
   src/funcs/accessListChallenges.ts: {}
@@ -1455,6 +1456,7 @@ trackedFiles:
   src/models/components/linkskillrequestbody.ts: {}
   src/models/components/listactorattributesresult.ts: {}
   src/models/components/listagentconnectionblocksresult.ts: {}
+  src/models/components/listagentpolicyscopesresult.ts: {}
   src/models/components/listagentsresult.ts: {}
   src/models/components/listaidetectionsresult.ts: {}
   src/models/components/listaidetectionusersresult.ts: {}
@@ -2688,6 +2690,7 @@ trackedFiles:
   src/models/operations/listagentconnectionblocks.ts: {}
   src/models/operations/listagentdelegablegrants.ts: {}
   src/models/operations/listagentpolicygrants.ts: {}
+  src/models/operations/listagentpolicyscopes.ts: {}
   src/models/operations/listagents.ts: {}
   src/models/operations/listagentsessions.ts: {}
   src/models/operations/listaidetections.ts: {}
@@ -3674,6 +3677,8 @@ trackedFiles:
   src/react-query/listAPIKeys.ts: {}
   src/react-query/listAgentDelegableGrants.core.ts: {}
   src/react-query/listAgentDelegableGrants.ts: {}
+  src/react-query/listAgentPolicyScopes.core.ts: {}
+  src/react-query/listAgentPolicyScopes.ts: {}
   src/react-query/listAllowedOrigins.core.ts: {}
   src/react-query/listAllowedOrigins.ts: {}
   src/react-query/listAssets.core.ts: {}
@@ -9601,6 +9606,15 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listAgentPolicyScopes:
+    speakeasy-default-list-agent-policy-scopes:
+      responses:
+        "200":
+          application/json: {"scopes": [{"agent_eligible": false, "category": "environment", "description": "chip proliferate furthermore emotional marten moralise aha idolized", "label": "<value>", "resource_type": "chat", "sensitive": false, "slug": "agent:transfer", "sub_scopes": [], "visibility": "user_visible"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listAgentSessions:
     speakeasy-default-list-agent-sessions:
       parameters:

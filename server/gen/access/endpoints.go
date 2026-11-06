@@ -34,6 +34,7 @@ type Endpoints struct {
 	GetDirectoryReviewSettings           goa.Endpoint
 	UpdateDirectoryReviewSettings        goa.Endpoint
 	ListScopes                           goa.Endpoint
+	ListAgentPolicyScopes                goa.Endpoint
 	ListMembers                          goa.Endpoint
 	ListGrants                           goa.Endpoint
 	UpdateMemberRoles                    goa.Endpoint
@@ -85,6 +86,7 @@ func NewEndpoints(s Service) *Endpoints {
 		GetDirectoryReviewSettings:           NewGetDirectoryReviewSettingsEndpoint(s, a.APIKeyAuth),
 		UpdateDirectoryReviewSettings:        NewUpdateDirectoryReviewSettingsEndpoint(s, a.APIKeyAuth),
 		ListScopes:                           NewListScopesEndpoint(s, a.APIKeyAuth),
+		ListAgentPolicyScopes:                NewListAgentPolicyScopesEndpoint(s, a.APIKeyAuth),
 		ListMembers:                          NewListMembersEndpoint(s, a.APIKeyAuth),
 		ListGrants:                           NewListGrantsEndpoint(s, a.APIKeyAuth),
 		UpdateMemberRoles:                    NewUpdateMemberRolesEndpoint(s, a.APIKeyAuth),
@@ -134,6 +136,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.GetDirectoryReviewSettings = m(e.GetDirectoryReviewSettings)
 	e.UpdateDirectoryReviewSettings = m(e.UpdateDirectoryReviewSettings)
 	e.ListScopes = m(e.ListScopes)
+	e.ListAgentPolicyScopes = m(e.ListAgentPolicyScopes)
 	e.ListMembers = m(e.ListMembers)
 	e.ListGrants = m(e.ListGrants)
 	e.UpdateMemberRoles = m(e.UpdateMemberRoles)
@@ -777,6 +780,29 @@ func NewListScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.
 			return nil, err
 		}
 		return s.ListScopes(ctx, p)
+	}
+}
+
+// NewListAgentPolicyScopesEndpoint returns an endpoint function that calls the
+// method "listAgentPolicyScopes" of service "access".
+func NewListAgentPolicyScopesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListAgentPolicyScopesPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListAgentPolicyScopes(ctx, p)
 	}
 }
 

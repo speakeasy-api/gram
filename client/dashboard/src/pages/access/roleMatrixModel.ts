@@ -527,6 +527,12 @@ const CATEGORY_COPY: Record<string, { label: string; description: string }> = {
     label: "Environments",
     description: "Variables and secrets that servers use",
   },
+  // The role matrix gives MCP servers their own table; the agent permission
+  // editor lists them under this heading.
+  mcp: {
+    label: "MCP servers",
+    description: "MCP servers and their tools",
+  },
   skill: { label: "Skills", description: "Skills shared in a project" },
   plugin: { label: "Plugins", description: "Plugins published in a project" },
   assistant: { label: "Assistants", description: "Assistants in a project" },
@@ -549,7 +555,7 @@ const CATEGORY_COPY: Record<string, { label: string; description: string }> = {
   },
 };
 
-function categoryCopy(category: string): {
+export function categoryCopy(category: string): {
   label: string;
   description: string;
 } {

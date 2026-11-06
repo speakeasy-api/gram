@@ -1343,6 +1343,88 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAgentPolicyScopes:
+    get:
+      description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
+      operationId: listAgentPolicyScopes
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAgentPolicyScopesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAgentPolicyScopes access
+      tags:
+        - access
+      x-speakeasy-name-override: listAgentPolicyScopes
+      x-speakeasy-react-hook:
+        name: ListAgentPolicyScopes
   /rpc/access.listAudienceOptions:
     get:
       description: 'List the principals that can be given access: everyone, roles, people, and agents.'
@@ -102292,6 +102374,16 @@ components:
           description: Cursor for the next page; absent when exhausted.
       required:
         - items
+    ListAgentPolicyScopesResult:
+      type: object
+      properties:
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeDefinition'
+          description: The scopes an agent policy may hold, in catalogue order.
+      required:
+        - scopes
     ListAgentsResult:
       type: object
       properties:

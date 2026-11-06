@@ -9,11 +9,11 @@ import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
-  AGENT_POLICY_SCOPES,
   agentPolicyUnrestrictedLabel,
   isAgentPolicyConstraint,
   isAgentPolicySelectorUnrestricted,
 } from "@/pages/agents/agent-policy-grants";
+import { useAgentPolicyScopes } from "@/pages/agents/useAgentPolicyScopes";
 import { ANY_RESOURCE } from "@/pages/agents/agent-api-key-grants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
@@ -314,6 +314,7 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
+  const { catalogue, isError: catalogueError } = useAgentPolicyScopes();
   // Credential restrictions are listed and edited in their own panel.
   const rows = canRead
     ? (grants.data ?? []).filter(
@@ -354,19 +355,31 @@ export function AgentIdentityPermissions({
     }
     content = (
       <>
+        {catalogueError && (
+          <Text small muted className="px-4 pt-3">
+            Permission names could not be loaded, so only their identifiers are
+            shown.
+          </Text>
+        )}
         {[...byScope].map(([scope, grants]) => {
           // `Text` with no children is a loading skeleton, so a scope the
-          // mirror does not describe (e.g. `mcp:blocked_*`) must skip the
-          // line rather than pass `undefined`.
+          // catalogue does not describe (e.g. `mcp:blocked_*`, or any scope
+          // while it loads) must skip the line rather than pass `undefined`.
+          const entry = catalogue.get(scope);
           const description =
-            AGENT_POLICY_SCOPES.find((definition) => definition.slug === scope)
-              ?.description ?? LOCKED_SCOPE_DESCRIPTIONS[scope];
+            entry?.description ?? LOCKED_SCOPE_DESCRIPTIONS[scope];
           return (
             <div
               key={scope}
               className="border-border space-y-1 border-b px-4 py-3 last:border-b-0"
             >
-              <Text className="font-mono">{scope}</Text>
+              {/* "Run inference (inference:execute)", as scopeTitle reads;
+                  the slug keeps its own span so it stays monospaced. */}
+              <Text>
+                {entry?.label ? `${entry.label} (` : ""}
+                <span className="font-mono">{scope}</span>
+                {entry?.label ? ")" : ""}
+              </Text>
               {description && (
                 <Text small muted>
                   {description}

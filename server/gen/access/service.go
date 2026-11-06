@@ -86,6 +86,10 @@ type Service interface {
 	UpdateDirectoryReviewSettings(context.Context, *UpdateDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
+	// List the scopes an agent policy may hold, as the catalogue describes them.
+	// Needs a session and no organization grant: an owner configuring their own
+	// agent holds no RBAC grant, and the list is product configuration.
+	ListAgentPolicyScopes(context.Context, *ListAgentPolicyScopesPayload) (res *ListAgentPolicyScopesResult, err error)
 	// List all team members with their role assignments.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// List the current user's effective grants, including inherited role grants.
@@ -231,7 +235,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [44]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
+var MethodNames = [45]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -927,6 +931,19 @@ type ListAIDetectionsPayload struct {
 type ListAIDetectionsResult struct {
 	// Detected AI tools aggregated per target, most recently seen first.
 	Detections []*AIDetection
+}
+
+// ListAgentPolicyScopesPayload is the payload type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesPayload struct {
+	SessionToken *string
+}
+
+// ListAgentPolicyScopesResult is the result type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesResult struct {
+	// The scopes an agent policy may hold, in catalogue order.
+	Scopes []*ScopeDefinition
 }
 
 // ListAudienceOptionsPayload is the payload type of the access service
