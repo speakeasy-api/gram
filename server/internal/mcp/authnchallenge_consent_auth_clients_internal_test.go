@@ -256,3 +256,16 @@ func TestGatewayConsentAuthChoicesUsesMemberQualifiedCards(t *testing.T) {
 	require.Equal(t, client, choices[second].Options[0].ID)
 	require.Nil(t, choices[second].Selected(), "another member's connected card must not preselect B")
 }
+
+func TestGatewayConsentPicksDoNotBorrowAnotherMembersResource(t *testing.T) {
+	t.Parallel()
+	registration, a, b := uuid.New(), uuid.New(), uuid.New()
+	members := []metaMember{
+		{serverID: a, associatedClients: map[uuid.UUID]bool{registration: true}, typedRegistrations: true},
+		{serverID: b, associatedClients: map[uuid.UUID]bool{registration: true}, typedRegistrations: true},
+	}
+	ready := []remoteSessionCard{{ClientID: registration.String(), Connected: true}}
+	reconnect := []remoteSessionCard{{ClientID: registration.String(), Unroutable: true}}
+	got := chooseConsentUpstreamClientPicks(&ResolvedMcpEndpoint{MetaMcpServerID: validUUID(uuid.New())}, members, ready, map[uuid.UUID][]remoteSessionCard{a: ready, b: reconnect})
+	require.Equal(t, map[uuid.UUID]uuid.UUID{a: registration}, got)
+}
