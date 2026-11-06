@@ -91,7 +91,7 @@ const (
 	identityChainingBindingsMessage      = "active identity-chaining bindings reference this configuration; explicitly unlink them before changing or deleting it"
 	ambiguousCurrentProviderMessage      = "this MCP server's user session issuer is bound to more than one Remote Identity Provider; remove the extra clients from the Remote Identity Provider settings before changing it"
 	clientTakenMessage                   = "a remote session client is already bound to this user session issuer for the same remote session issuer"
-	clientServesOtherServerMessage       = "Another MCP server signs in through the client bound to this server's User Identity issuer, and one issuer cannot serve two servers through different clients. Assign this server a dedicated User Identity issuer in server settings, then configure its Remote Identity Provider."
+	clientServesOtherServerMessage       = "Another MCP server signs in through the client bound to this server's User Identity issuer, and one issuer cannot serve two servers through different clients. If the Remote Identity Provider is the same, reuse the existing bound client. To use a different client, assign this server a dedicated User Identity issuer in server settings, then configure its Remote Identity Provider."
 )
 
 // IdentityError is a refusal whose Message is safe to show the caller. Kind is

@@ -2334,30 +2334,35 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("blocks the save when the server refuses the change", async () => {
+  it("shows the refusal instead of replacement copy and blocks the save", async () => {
+    const refusal =
+      "Another MCP server signs in through this client. If the Remote Identity Provider is the same, reuse the existing bound client. To use a different client, assign this server a dedicated User Identity issuer in server settings.";
     mocks.impact.mockReturnValue({
       data: undefined,
       isLoading: false,
       isError: true,
-      error: Object.assign(
-        new Error(
-          "change it from the organization's authorization server settings",
-        ),
-        { statusCode: 409 },
-      ),
+      error: Object.assign(new Error(refusal), { statusCode: 409 }),
     });
     swapClientWithImpact(null);
 
+    const dialog = screen.getByRole("dialog", {
+      name: "Cannot save this identity change",
+    });
+    expect(dialog.getAttribute("aria-describedby")).toBe(
+      within(dialog).getByText(refusal).id,
+    );
     expect(
-      screen.getByText(
-        /change it from the organization's authorization server/,
-      ),
-    ).toBeDefined();
+      within(dialog).queryByText("Replace the connected client?"),
+    ).toBeNull();
+    expect(within(dialog).queryByText(/Saving replaces the client/)).toBeNull();
+    expect(within(dialog).queryByText(/old client stays available/)).toBeNull();
     expect(
       screen.queryByText(/Could not check which other servers share/),
     ).toBeNull();
     const confirm = screen.getByRole("button", { name: "Save changes" });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(confirm);
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
 
   it("holds the confirm while a cached preview is refetched", async () => {

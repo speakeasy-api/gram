@@ -272,6 +272,8 @@ func TestCommitServerIdentityConfigurationRefusesTakingAnotherServersClientWitho
 			_, err := ti.service.CommitServerIdentityConfiguration(ctx, autoServerIdentityPayload(shared.second, providerID))
 			requireOopsCode(t, err, oops.CodeConflict)
 			require.ErrorContains(t, err, "Another MCP server signs in through the client")
+			require.ErrorContains(t, err, "If the Remote Identity Provider is the same, reuse the existing bound client.")
+			require.ErrorContains(t, err, "assign this server a dedicated User Identity issuer in server settings")
 			require.Zero(t, requests.Load(), "the refusal must come before an upstream client is registered")
 
 			requireFirstServerKeepsItsClient(t, ctx, ti, shared)
@@ -327,6 +329,8 @@ func TestGetServerIdentityImpactForAnotherServersClient(t *testing.T) {
 		_, err := ti.service.GetServerIdentityImpact(ctx, impactPayload(shared.userIssuerID, &shared.second, "replace", &providerID, nil))
 		requireOopsCode(t, err, oops.CodeConflict)
 		require.ErrorContains(t, err, "Another MCP server signs in through the client")
+		require.ErrorContains(t, err, "If the Remote Identity Provider is the same, reuse the existing bound client.")
+		require.ErrorContains(t, err, "assign this server a dedicated User Identity issuer in server settings")
 	})
 }
 
