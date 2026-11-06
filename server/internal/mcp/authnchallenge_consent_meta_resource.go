@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -88,41 +89,48 @@ func (s *Service) resolveMetaMemberResource(
 	return resource, member, true, nil
 }
 
-// focusedMetaMemberResource selects only a current admitted member and its persisted
-// resource. A server slug is navigation input, never upstream resource authority.
+var errConsentMemberTarget = errors.New("connection is not offered by this admitted gateway member")
+
+// consentMemberResource reads only the admitted member's persisted backend.
+func (s *Service) consentMemberResource(ctx context.Context, member metaMember) (string, error) {
+	if member.remoteServerID.Valid {
+		remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: member.remoteServerID.UUID, ProjectID: member.projectID})
+		if err != nil {
+			return "", fmt.Errorf("load consent member resource: %w", err)
+		}
+		return remote.Url, nil
+	}
+	if member.tunneledServerID.Valid {
+		return member.tunneledResourceIdentifier, nil
+	}
+	return "", errConsentMemberTarget
+}
+
+// focusedMetaMemberResource selects an admitted member and its persisted resource;
+// a navigation slug never supplies upstream authority.
 func (s *Service) focusedMetaMemberResource(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, client remotesessions.Client, focus string) (string, chosenMetaMember, error) {
 	none := chosenMetaMember{serverID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, projectID: uuid.Nil}
 	members, err := s.consentSubjectMembers(ctx, endpoint, state)
 	if err != nil {
 		return "", none, err
 	}
-	var target *metaMember
-	for i := range members {
-		if members[i].slug == focus {
-			target = &members[i]
-			break
+	for _, member := range members {
+		if member.slug != focus {
+			continue
 		}
-	}
-	if target == nil {
-		return "", none, errors.New("server is not an admitted gateway member")
-	}
-	if target.backend != metaMemberBackendProxied {
-		return "", none, nil
-	}
-	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
-	if err != nil {
-		return "", none, err
-	}
-	rows, _, err := s.claimingMetaMembers(memberCtx, endpoint, client)
-	if err != nil {
-		return "", none, err
-	}
-	for _, row := range rows {
-		if row.McpServerID == target.serverID && row.ProjectID == target.projectID && row.UpstreamUrl != "" {
-			return row.UpstreamUrl, chosenMetaMember{serverID: uuid.NullUUID{UUID: row.McpServerID, Valid: true}, projectID: row.ProjectID}, nil
+		if !memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+			return "", none, errConsentMemberTarget
 		}
+		if member.backend != metaMemberBackendProxied {
+			return "", none, nil
+		}
+		resource, err := s.consentMemberResource(ctx, member)
+		if err != nil {
+			return "", none, err
+		}
+		return resource, chosenMetaMember{serverID: uuid.NullUUID{UUID: member.serverID, Valid: true}, projectID: member.projectID}, nil
 	}
-	return "", none, errors.New("registration has no resource on this gateway member")
+	return "", none, errConsentMemberTarget
 }
 
 // claimingMetaMembers lists the proxied members authenticating against the

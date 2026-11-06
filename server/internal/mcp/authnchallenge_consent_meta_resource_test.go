@@ -2,13 +2,17 @@ package mcp_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -566,7 +570,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 // requireConnectActionFailsClosed drives one client's connect action and
 // asserts it errored before minting anything: no upstream redirect, no login
 // state, and therefore no grant that could carry a wrongly derived resource.
-func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID) {
+func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID, expected ...oops.Code) {
 	t.Helper()
 
 	form := url.Values{}
@@ -587,7 +591,11 @@ func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clie
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
+	code := oops.CodeUnexpected
+	if len(expected) > 0 {
+		code = expected[0]
+	}
+	require.Equal(t, code, oopsErr.Code)
 	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
 }
 
@@ -826,7 +834,7 @@ func TestServeConsentAction_MetaMCPFocusedForeignMemberFailsClosed(t *testing.T)
 	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
 	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
 	fx.server = "not-a-member"
-	requireConnectActionFailsClosed(t, fx, clientID)
+	requireConnectActionFailsClosed(t, fx, clientID, oops.CodeBadRequest)
 }
 
 func TestServeConsent_MetaMCPSharedRegistrationCardsAreMemberQualified(t *testing.T) {
@@ -869,11 +877,73 @@ func TestServeConsentAction_MetaMCPMemberActionsNeverMutateSiblingGrant(t *testi
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		response := httptest.NewRecorder()
 		err := fx.ti.service.ServeConsentAction(response, request, fx.endpoint)
-		var refusal *oops.ShareableError
-		require.ErrorAs(t, err, &refusal)
-		require.Equal(t, oops.CodeBadRequest, refusal.Code)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, response.Code)
+		if action == "validate" {
+			require.Contains(t, response.Header().Get("Location"), "validate_failed="+clientID.String())
+		}
+
 		after, err := manager.AuthClientRemoteSessionStatusesForResource(ctx, fx.subject, fx.projectID, fx.orgID, []uuid.UUID{clientID}, "https://member-a.example.com/mcp")
 		require.NoError(t, err)
 		require.Equal(t, before, after, "a B action cannot mutate A's connection")
+	}
+}
+
+// The fixture expands only a private cloned test database, never the application DB.
+func TestServeConsentAction_MemberLifecycleAcrossResourceIndexShapes(t *testing.T) {
+	t.Parallel()
+	for _, expanded := range []bool{false, true} {
+		t.Run(map[bool]string{false: "old", true: "expanded"}[expanded], func(t *testing.T) {
+			t.Parallel()
+			ctx, fx, metaID := seedMetaConsentEndpoint(t, "member-lifecycle")
+			if expanded {
+				require.NoError(t, testrepo.New(fx.ti.conn).ExpandRemoteSessionResourceIndexesFixture(ctx))
+			}
+			require.NoError(t, fx.ti.productFeatures.SetFeatureEnabled(ctx, fx.orgID, productfeatures.FeatureRemoteSessionAutoRefresh, true))
+			clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "member-lifecycle-client", "", []uuid.UUID{fx.shared})
+			issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
+			const a = "https://resource-a.example.test/mcp"
+			const b = "https://resource-b.example.test/mcp/"
+			createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", a, conv.ToNullUUID(issuerID), 0)
+			createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-b", b, conv.ToNullUUID(issuerID), 1)
+			store := func(resource string) error {
+				encrypted, err := fx.ti.enc.Encrypt([]byte("synthetic-upstream-token"))
+				require.NoError(t, err)
+				_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{SubjectUrn: fx.subject, UserSessionIssuerID: fx.shared, RemoteSessionClientID: clientID, AccessTokenEncrypted: encrypted, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: conv.ToPGText(resource), AutoRefresh: true, Scopes: []string{}})
+				if err != nil {
+					return fmt.Errorf("store resource-qualified fixture: %w", err)
+				}
+				return nil
+			}
+			require.NoError(t, store(a))
+			err := store(b)
+			if expanded {
+				require.NoError(t, err)
+			} else {
+				require.ErrorIs(t, err, pgx.ErrNoRows, "the compatibility upsert refuses a second audience on the old index without overwriting A")
+			}
+			manager := fx.ti.service.RemoteChallengeManager()
+			read := func(resource string) map[uuid.UUID]remotesessions.RemoteSessionState {
+				states, err := manager.AuthClientRemoteSessionStatusesForResource(ctx, fx.subject, fx.projectID, fx.orgID, []uuid.UUID{clientID}, resource)
+				require.NoError(t, err)
+				return states
+			}
+			before := read(a)
+			require.Len(t, before, 1)
+			require.True(t, before[clientID].AutoRefresh)
+			for _, action := range []string{"set_auto_refresh", "disconnect"} {
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {action}, "client_id": {clientID.String()}, "server": {"member-b"}, "resource": {a}}
+				request := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				require.NoError(t, fx.ti.service.ServeConsentAction(response, request, fx.endpoint))
+				require.Equal(t, http.StatusSeeOther, response.Code)
+				require.Equal(t, before, read(a), "B action and forged posted resource must never change A")
+				if expanded && action == "set_auto_refresh" {
+					require.False(t, read(b)[clientID].AutoRefresh)
+				}
+			}
+			require.Empty(t, read(b))
+		})
 	}
 }

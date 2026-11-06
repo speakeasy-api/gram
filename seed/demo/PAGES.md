@@ -161,6 +161,7 @@ upstream client. Each binding retains its source session’s exact ID, not a cop
 its credential. Both release agents belong to the first demo member; the original three
 agent lifecycle fixtures remain unchanged.
 Both accounts have invalid ciphertext, no refresh token and auto-refresh disabled.
+Attachment and validation-state fixtures carry the seeded server’s persisted upstream resource, so resource-qualified connection status does not borrow another server’s grant.
 Its client sits under Linear's remote identity provider (reserved example
 endpoints), so Linear's user session issuer binds clients of one remote issuer
 and the `mcp_servers.remote_session_issuer_id` stamp stays derivable. It is

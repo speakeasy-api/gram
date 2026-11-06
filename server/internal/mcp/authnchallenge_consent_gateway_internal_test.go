@@ -409,3 +409,14 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }
+
+func TestGatewayInlineConnectPostsExactMember(t *testing.T) {
+	t.Parallel()
+	issuer, project := uuid.New(), uuid.New()
+	member := gatewayTestMember("member-b", "Member B", issuer, project)
+	card := gatewayTestCard("exact-registration", issuer, uuid.NullUUID{UUID: project, Valid: true})
+	view := gatewayServersView([]metaMember{member}, []remoteSessionCard{card})
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `name="client_id" value="exact-registration"`)
+	require.Contains(t, page, `name="server" value="member-b"`)
+}

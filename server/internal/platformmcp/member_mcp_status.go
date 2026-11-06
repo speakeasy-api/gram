@@ -42,9 +42,9 @@ var ErrMemberMCPStatusTargetNotFound = errors.New("member MCP status target not 
 
 type MemberMCPConnectionReader interface {
 	ListClients(ctx context.Context, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) ([]remotesessions.Client, error)
-	RemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
+	RemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, resource string) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 	ListAuthClientRegistrations(ctx context.Context, projectID uuid.UUID, organizationID string, ids []uuid.UUID) ([]remotesessions.Client, error)
-	AuthClientRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
+	AuthClientRemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, clientIDs []uuid.UUID, resource string) (map[uuid.UUID]remotesessions.RemoteSessionState, error)
 }
 
 type GetMyMCPStatusInput struct {
@@ -190,6 +190,11 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 
+	resource, _, err := s.memberMCPUpstreamResource(ctx, target)
+	if err != nil {
+		return GetMyMCPConnectionStatusOutput{}, err
+	}
+
 	// Where the auth client resolver serves the organization, a proxied
 	// server's registrations and the member's grants are read as the runtime
 	// reads them, without the sign-in link.
@@ -205,12 +210,12 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 		for _, c := range clients {
 			ids = append(ids, c.ID)
 		}
-		statuses, err := s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, ids)
+		statuses, err := s.remoteSessions.AuthClientRemoteSessionStatusesForResource(ctx, urn.NewUserSubject(principal.UserID), target.projectID, principal.OrganizationID, ids, resource)
 		if err != nil {
 			return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 		}
 		for _, status := range statuses {
-			if status.Status == remotesessions.RemoteSessionActive && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
+			if status.Status == remotesessions.RemoteSessionActive && (!target.remoteMCPServerID.Valid || status.Resource != "") && status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
 				output.State = MCPConnectionStateActive
 				output.NextAction = "use_mcp"
 				return output, nil
@@ -243,15 +248,22 @@ func (s *PluginsService) memberConnectionStatus(ctx context.Context, principal P
 	subject := urn.NewUserSubject(principal.UserID)
 	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
 	if resolver {
-		statuses, err = s.remoteSessions.AuthClientRemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, []uuid.UUID{clientID})
+		statuses, err = s.remoteSessions.AuthClientRemoteSessionStatusesForResource(ctx, subject, target.projectID, principal.OrganizationID, []uuid.UUID{clientID}, resource)
 	} else {
-		statuses, err = s.remoteSessions.RemoteSessionStatuses(ctx, subject, target.projectID, principal.OrganizationID, target.userSessionIssuerID)
+		statuses, err = s.remoteSessions.RemoteSessionStatusesForResource(ctx, subject, target.projectID, principal.OrganizationID, target.userSessionIssuerID, resource)
 	}
 	if err != nil {
 		return GetMyMCPConnectionStatusOutput{}, fmt.Errorf("read MCP authorization status: %w", err)
 	}
 	status, ok := statuses[clientID]
-	if ok && status.Status == remotesessions.RemoteSessionActive {
+	if ok && target.remoteMCPServerID.Valid && status.Status == remotesessions.RemoteSessionActive && status.Resource == "" {
+		// Legacy unbound grants cannot authorize this remote audience.
+		output.State = MCPConnectionStateReauthorizationRequired
+		output.Reason = "resource_authorization_required"
+		output.NextAction = "reconnect"
+		return output, nil
+	}
+	if ok && status.Status == remotesessions.RemoteSessionActive && (!target.remoteMCPServerID.Valid || status.Resource != "") {
 		// The runtime forwards an active interactive token even when validation rejected it, and never chains around it.
 		if status.ValidationStatus != remotesessions.ValidationOutcomeRejectedByMember && status.ValidationStatus != remotesessions.ValidationOutcomeInactive {
 			output.State = MCPConnectionStateActive
@@ -377,31 +389,15 @@ func (s *PluginsService) memberMCPIdentityChaining(ctx context.Context, principa
 	if s.identityChaining == nil {
 		return false, false, nil
 	}
-	var upstream string
-	tunneled := false
-	switch {
-	case target.remoteMCPServerID.Valid:
-		remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: target.remoteMCPServerID.UUID, ProjectID: target.projectID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, false, nil
-		}
-		if err != nil {
-			return false, false, fmt.Errorf("load member MCP remote upstream: %w", err)
-		}
-		upstream = remote.Url
-	case target.tunneledMCPServerID.Valid:
-		server, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{ID: target.tunneledMCPServerID.UUID, ProjectID: target.projectID})
-		if errors.Is(err, pgx.ErrNoRows) {
-			return false, false, nil
-		}
-		if err != nil {
-			return false, false, fmt.Errorf("load member MCP tunneled upstream: %w", err)
-		}
-		upstream = server.ResourceIdentifier.String
-		tunneled = true
-	default:
+
+	upstream, tunneled, err := s.memberMCPUpstreamResource(ctx, target)
+	if errors.Is(err, ErrMemberMCPStatusTargetNotFound) {
 		return false, false, nil
 	}
+	if err != nil {
+		return false, false, err
+	}
+
 	tunnelIssuer := uuid.NullUUID{UUID: target.remoteSessionIssuerID, Valid: target.remoteSessionIssuerID != uuid.Nil}
 	if tunneled {
 		// A tunneled upstream routes, and chains, by the chosen client's own
@@ -491,4 +487,34 @@ func memberMCPReauthorizationReason(status remotesessions.RemoteSessionState, no
 		return "authorization_rejected"
 	}
 	return "access_expired"
+}
+
+// memberMCPUpstreamResource reads only the backend of the already admitted target.
+func (s *PluginsService) memberMCPUpstreamResource(ctx context.Context, target memberMCPStatusTarget) (string, bool, error) {
+	var upstream string
+	tunneled := false
+	switch {
+	case target.remoteMCPServerID.Valid:
+		remote, err := remotemcprepo.New(s.db).GetServerByID(ctx, remotemcprepo.GetServerByIDParams{ID: target.remoteMCPServerID.UUID, ProjectID: target.projectID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, ErrMemberMCPStatusTargetNotFound
+		}
+		if err != nil {
+			return "", false, fmt.Errorf("load member MCP remote upstream: %w", err)
+		}
+		upstream = remote.Url
+	case target.tunneledMCPServerID.Valid:
+		server, err := tunneledmcprepo.New(s.db).GetServerByID(ctx, tunneledmcprepo.GetServerByIDParams{ID: target.tunneledMCPServerID.UUID, ProjectID: target.projectID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, ErrMemberMCPStatusTargetNotFound
+		}
+		if err != nil {
+			return "", false, fmt.Errorf("load member MCP tunneled upstream: %w", err)
+		}
+		upstream = server.ResourceIdentifier.String
+		tunneled = true
+	default:
+		return "", false, nil
+	}
+	return upstream, tunneled, nil
 }

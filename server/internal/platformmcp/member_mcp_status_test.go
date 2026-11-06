@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -93,13 +94,21 @@ type testMemberMCPConnectionReader struct {
 	statuses     map[uuid.UUID]remotesessions.RemoteSessionState
 	authClients  []remotesessions.Client
 	authStatuses map[uuid.UUID]remotesessions.RemoteSessionState
+	byResource   map[string]map[uuid.UUID]remotesessions.RemoteSessionState
+	onStatusRead func(urn.SessionSubject, uuid.UUID, string, string)
 }
 
 func (r testMemberMCPConnectionReader) ListClients(context.Context, uuid.UUID, string, uuid.UUID) ([]remotesessions.Client, error) {
 	return r.clients, nil
 }
 
-func (r testMemberMCPConnectionReader) RemoteSessionStatuses(context.Context, urn.SessionSubject, uuid.UUID, string, uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+func (r testMemberMCPConnectionReader) RemoteSessionStatusesForResource(_ context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, _ uuid.UUID, resource string) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+	if r.onStatusRead != nil {
+		r.onStatusRead(subject, projectID, organizationID, resource)
+	}
+	if r.byResource != nil {
+		return r.byResource[resource], nil
+	}
 	return r.statuses, nil
 }
 
@@ -107,7 +116,13 @@ func (r testMemberMCPConnectionReader) ListAuthClientRegistrations(context.Conte
 	return r.authClients, nil
 }
 
-func (r testMemberMCPConnectionReader) AuthClientRemoteSessionStatuses(context.Context, urn.SessionSubject, uuid.UUID, string, []uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+func (r testMemberMCPConnectionReader) AuthClientRemoteSessionStatusesForResource(_ context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, _ []uuid.UUID, resource string) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
+	if r.onStatusRead != nil {
+		r.onStatusRead(subject, projectID, organizationID, resource)
+	}
+	if r.byResource != nil {
+		return r.byResource[resource], nil
+	}
 	return r.authStatuses, nil
 }
 
@@ -148,7 +163,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	clientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 	client := remotesessions.Client{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}
-	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}
+	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp"}}
 	resolverFlags := &feature.InMemory{}
 	resolverFlags.SetFlag(feature.FlagAuthClientResolver, principal.OrganizationID, true)
 	secondID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
@@ -166,11 +181,12 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		{name: "resolver does not report a grant it would not serve", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active, authClients: []remotesessions.Client{client}}, resolver: true, state: MCPConnectionStateNotConnected, nextAction: "connect"},
 		{name: "resolver with no reachable registration", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active}, resolver: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "resolver lets the member choose among several credentials", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client, second}}, resolver: true, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect"},
-		{name: "resolver reports any active connection among several", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client, second}, authStatuses: map[uuid.UUID]remotesessions.RemoteSessionState{secondID: {Status: remotesessions.RemoteSessionActive}}}, resolver: true, state: MCPConnectionStateActive, nextAction: "use_mcp"},
+		{name: "resolver reports any active connection among several", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client, second}, authStatuses: map[uuid.UUID]remotesessions.RemoteSessionState{secondID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp"}}}, resolver: true, state: MCPConnectionStateActive, nextAction: "use_mcp"},
 		{name: "resolver off reads the sign-in link", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client}, authStatuses: active}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "not connected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}}, state: MCPConnectionStateNotConnected, nextAction: "connect"},
-		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
-		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
+		{name: "legacy unbound remote grant needs qualification", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateReauthorizationRequired, reason: "resource_authorization_required", nextAction: "reconnect"},
+		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp"}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},
+		{name: "rejected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp", ValidationStatus: remotesessions.ValidationOutcomeInactive, ValidationReason: "sensitive provider reason"}}}, state: MCPConnectionStateReauthorizationRequired, reason: "authorization_rejected", nextAction: "reconnect"},
 		{name: "setup required", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{}}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "server holds its own credential", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID, CredentialOwner: remotesessions.CredentialOwnerSelf}}}, state: MCPConnectionStateNotApplicable, reason: "upstream_credential_managed", nextAction: "use_mcp"},
 	} {
@@ -320,4 +336,102 @@ func associateMemberMCPClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		RemoteSessionClientID: client.ID,
 	}))
 	return client.ID
+}
+
+func TestMemberMCPConnectionStatusQualifiesSharedRegistrationByTargetResource(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "member_status_qualified_resource")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	clientID, issuerID := uuid.New(), uuid.New()
+	client := remotesessions.Client{ID: clientID, RemoteSessionIssuerID: issuerID}
+	resources := []string{"https://resource-a.example.test/mcp", "https://resource-b.example.test/mcp/"}
+	targets := make([]memberMCPStatusTarget, 0, 2)
+	for i, resource := range resources {
+		remote, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: project.ID, TransportType: "sse", Url: resource})
+		require.NoError(t, err)
+		targets = append(targets, memberMCPStatusTarget{projectID: project.ID, mcpID: uuid.New(), name: "Target", endpointSlug: "member-" + string(rune('a'+i)), canRead: true, canConnect: true, userSessionIssuerID: uuid.New(), remoteSessionIssuerID: issuerID, remoteMCPServerID: conv.ToNullUUID(remote.ID)})
+	}
+	baseURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	for _, resolver := range []bool{false, true} {
+		for _, several := range []bool{false, true} {
+			if several && !resolver {
+				continue
+			}
+			states := map[string]map[uuid.UUID]remotesessions.RemoteSessionState{resources[0]: {clientID: {Status: remotesessions.RemoteSessionActive, Resource: resources[0]}}}
+			reader := testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, authClients: []remotesessions.Client{client}, byResource: states, onStatusRead: func(subject urn.SessionSubject, projectID uuid.UUID, organizationID, resource string) {
+				require.Equal(t, urn.NewUserSubject(principal.UserID), subject)
+				require.Equal(t, project.ID, projectID)
+				require.Equal(t, principal.OrganizationID, organizationID)
+				require.Contains(t, resources, resource, "only the persisted target resource may select status")
+			}}
+			if several {
+				reader.authClients = append(reader.authClients, remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()})
+			}
+			service := NewPluginsService(conn, allowBudget(), "qualified-member-status").withMemberMCPConnectionReader(reader).WithInstallLinks(baseURL, baseURL)
+			flags := &feature.InMemory{}
+			flags.SetFlag(feature.FlagAuthClientResolver, principal.OrganizationID, resolver)
+			service.WithAuthClientResolver(flags)
+			for i := range targets {
+				targets[i].associatedClients = nil
+				if resolver {
+					targets[i].associatedClients = map[uuid.UUID]bool{clientID: true}
+				}
+			}
+			a, err := service.memberConnectionStatus(ctx, principal, targets[0])
+			require.NoError(t, err)
+			require.Equal(t, MCPConnectionStateActive, a.State)
+			b, err := service.memberConnectionStatus(ctx, principal, targets[1])
+			require.NoError(t, err)
+			require.Equal(t, MCPConnectionStateNotConnected, b.State)
+			states[resources[1]] = map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: resources[1]}}
+			b, err = service.memberConnectionStatus(ctx, principal, targets[1])
+			require.NoError(t, err)
+			require.Equal(t, MCPConnectionStateActive, b.State)
+			a, err = service.memberConnectionStatus(ctx, principal, targets[0])
+			require.NoError(t, err)
+			require.Equal(t, MCPConnectionStateActive, a.State)
+		}
+	}
+}
+
+func TestMemberMCPQualifiedStatusDoesNotReadForeignTargets(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "member_status_qualified_scope")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	rows, err := platformrepo.New(conn).ListPlatformMCPInventoryAuthorizationCandidates(ctx, principal.OrganizationID)
+	require.NoError(t, err)
+	var mcpID uuid.UUID
+	for _, row := range rows {
+		if row.ProjectID == project.ID {
+			mcpID = row.ID
+			break
+		}
+	}
+	require.NotEqual(t, uuid.Nil, mcpID)
+	baseURL, err := url.Parse("https://app.example.test")
+	require.NoError(t, err)
+	reader := testMemberMCPConnectionReader{onStatusRead: func(urn.SessionSubject, uuid.UUID, string, string) {
+		t.Fatal("status reader must not observe an unadmitted target")
+	}}
+	service := NewPluginsService(conn, allowBudget(), "qualified-status-scope").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(reader).WithInstallLinks(baseURL, baseURL)
+	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
+	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, mcpID.String())})
+	_, err = service.GetMyMCPConnectionStatus(ctx, principal, GetMyMCPStatusInput{ProjectID: uuid.NewString(), MCPID: mcpID.String()})
+	require.ErrorIs(t, err, ErrMemberMCPStatusTargetNotFound)
+	_, err = service.GetMyMCPConnectionStatus(ctx, principal, GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: uuid.NewString()})
+	require.ErrorIs(t, err, ErrMemberMCPStatusTargetNotFound)
+	foreign := principal
+	foreign.OrganizationID = "org_foreign_scope"
+	_, err = service.GetMyMCPConnectionStatus(ctx, foreign, GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()})
+	require.ErrorIs(t, err, ErrMemberMCPStatusTargetNotFound)
+	denied := authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeMCPRead, mcpID.String()), authz.NewGrant(authz.ScopeMCPBlockedConnect, mcpID.String())})
+	output, err := service.GetMyMCPConnectionStatus(denied, principal, GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()})
+	require.NoError(t, err)
+	require.Equal(t, MCPConnectionStateNotApplicable, output.State)
+	require.Equal(t, MCPConnectionReasonPermissionRequired, output.Reason)
 }

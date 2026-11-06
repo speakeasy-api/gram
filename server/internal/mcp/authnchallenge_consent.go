@@ -1884,11 +1884,7 @@ func (c remoteSessionCard) needsAction() bool {
 }
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
-func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, resources ...string) (unavailable, tunnel bool) {
-	resource := ""
-	if len(resources) > 0 {
-		resource = resources[0]
-	}
+func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, resource string) (unavailable, tunnel bool) {
 	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutageForResource(ctx, subject, clientID, resource)
 	switch {
 	case !known:
@@ -2233,27 +2229,32 @@ func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint
 		return nil, err
 	}
 	resource := ""
+
 	if member != nil && member.backend == metaMemberBackendProxied {
-		unqualified := statuses
-		statuses = make(map[uuid.UUID]remotesessions.RemoteSessionState)
+		resource, err = s.consentMemberResource(ctx, *member)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]uuid.UUID, 0, len(clients))
 		for _, client := range clients {
-			if !memberUsesClient(*member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+			if memberUsesClient(*member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+				ids = append(ids, client.ID)
+			}
+		}
+		unqualified := statuses
+		statuses, err = s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, *challengeState.Subject, member.projectID, endpoint.OrganizationID, ids, resource)
+		if err != nil {
+			return nil, fmt.Errorf("member remote session statuses: %w", err)
+		}
+		for _, id := range ids {
+			if _, ok := statuses[id]; ok {
 				continue
 			}
-			selected, _, rerr := s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, member.slug)
-			if rerr != nil {
-				return nil, rerr
-			}
-			resource = selected
-			found, serr := s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, *challengeState.Subject, member.projectID, endpoint.OrganizationID, []uuid.UUID{client.ID}, selected)
-			if serr != nil {
-				return nil, fmt.Errorf("member remote session statuses: %w", serr)
-			}
-			if state, ok := found[client.ID]; ok {
-				statuses[client.ID] = state
-			} else if elsewhere, ok := unqualified[client.ID]; ok && elsewhere.Resource != "" {
-				// Display a reconnect remedy, never another member's readiness.
-				statuses[client.ID] = elsewhere
+			if elsewhere, ok := unqualified[id]; ok && elsewhere.Resource != "" {
+				// Only a reconnect marker, never another audience's grant details/actions.
+				var marker remotesessions.RemoteSessionState
+				marker.Status, marker.Resource, marker.AutoRefresh = remotesessions.RemoteSessionActive, elsewhere.Resource, true
+				statuses[id] = marker
 			}
 		}
 		routing = consentRouting{backend: consentBackendRemote, upstream: resource, members: nil}
@@ -2261,6 +2262,7 @@ func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint
 			routing.backend = consentBackendTunneled
 		}
 	}
+
 	// The member's scopes only feed the reconnect hint, which needs a session.
 	connectedClients := make([]remotesessions.Client, 0, len(clients))
 	for _, c := range clients {
