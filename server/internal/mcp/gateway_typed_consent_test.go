@@ -66,7 +66,7 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 			}
 
 			var signIns []uuid.UUID
-			if tc.signInLink {
+			if tc.signInLink && !tc.orgClient {
 				signIns = []uuid.UUID{fx.shared}
 			}
 			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-gw-"+uuid.NewString()[:8], "", signIns)
@@ -99,6 +99,7 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 			}
 
 			if tc.resourceDisplay {
+				registerPageClient(t, ctx, fx)
 				_, err := remotesessionsrepo.New(fx.ti.conn).UpdateRemoteSessionClientResourceDisplay(ctx, remotesessionsrepo.UpdateRemoteSessionClientResourceDisplayParams{
 					ID: registration, ProjectID: fx.projectID, OrganizationID: fx.orgID,
 					ResourceIdentifier: conv.ToPGText(upstream), ResourceName: "Typed member resource",
