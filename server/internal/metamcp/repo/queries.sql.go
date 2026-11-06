@@ -97,23 +97,17 @@ WHERE l.remote_session_client_id = c.id
     JOIN remote_session_issuers AS provider
       ON provider.id = consumer_client.remote_session_issuer_id
      AND provider.deleted IS FALSE
+    JOIN meta_mcp_server_members AS m
+      ON m.project_id = s.project_id
+     AND m.mcp_server_id = s.id
+     AND m.deleted IS FALSE
+    JOIN meta_mcp_servers AS mm
+      ON mm.project_id = m.project_id
+     AND mm.id = m.meta_mcp_server_id
+     AND mm.deleted IS FALSE
     WHERE s.deleted IS FALSE
       AND s.project_id = $3
-      AND (
-        s.user_session_issuer_id = $1
-        OR EXISTS (
-          SELECT 1
-          FROM meta_mcp_server_members AS m
-          JOIN meta_mcp_servers AS mm
-            ON mm.project_id = m.project_id
-           AND mm.id = m.meta_mcp_server_id
-           AND mm.deleted IS FALSE
-          WHERE m.project_id = s.project_id
-            AND m.mcp_server_id = s.id
-            AND m.deleted IS FALSE
-            AND mm.user_session_issuer_id = $1
-        )
-      )
+      AND mm.user_session_issuer_id = $1
   )
 `
 
@@ -126,9 +120,10 @@ type AutoDetachMemberProviderClientParams struct {
 // Reverse of AutoAttachMemberProviderClient: unbind the gateway issuer's
 // client(s) for a removed member's upstream so the provider stops appearing on
 // the gateway's consent screen. The binding is scoped to the user_session_issuer,
-// so it must survive as long as ANY live consumer of that issuer still fronts
-// the upstream — a live member of a meta server on the issuer, or a server
-// directly issuer-gated to it (issuers can be shared across gateways/servers).
+// so it must survive as long as ANY live member of a meta server on the issuer
+// (issuers can be shared across gateways) still fronts the upstream. Callers
+// must check CountServersOnGatewayIssuer first: a server directly on the issuer
+// has no association to prove which provider it uses.
 // Run after the member row is soft-deleted so the just-removed member is
 // already excluded by the deleted filter below.
 func (q *Queries) AutoDetachMemberProviderClient(ctx context.Context, arg AutoDetachMemberProviderClientParams) (int64, error) {
@@ -183,6 +178,32 @@ func (q *Queries) CountMetaMCPMembersSharingBackend(ctx context.Context, arg Cou
 		arg.ToolsetID,
 		arg.UnproxiedMcpServerID,
 	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countServersOnGatewayIssuer = `-- name: CountServersOnGatewayIssuer :one
+SELECT count(*)
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = $1
+ AND p.deleted IS FALSE
+WHERE s.user_session_issuer_id = $2
+  AND s.deleted IS FALSE
+`
+
+type CountServersOnGatewayIssuerParams struct {
+	OrganizationID  string
+	GatewayIssuerID uuid.NullUUID
+}
+
+// Live servers signing in directly through a gateway's issuer, across the
+// organization because an issuer can be organization-level. A gateway's issuer
+// is expected to serve only gateways, so this should be zero.
+func (q *Queries) CountServersOnGatewayIssuer(ctx context.Context, arg CountServersOnGatewayIssuerParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countServersOnGatewayIssuer, arg.OrganizationID, arg.GatewayIssuerID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err

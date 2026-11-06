@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -292,10 +293,31 @@ func (w GatewayWriter) attachMemberProviderClient(ctx context.Context, tx pgx.Tx
 }
 
 // detachMemberProviderClient unbinds provider's client from the gateway's
-// issuer unless another consumer of that issuer still fronts the provider.
+// issuer unless another member on that issuer still fronts the provider, or a
+// server signs in directly through the issuer.
 func (w GatewayWriter) detachMemberProviderClient(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, server mcpserversrepo.McpServer, provider uuid.UUID) error {
 	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, provider); err != nil {
 		return fmt.Errorf("lock remote session issuer for client binding: %w", err)
+	}
+	// TODO(AIM-925): THIS BETTER HECKING GET REMOVED once challenge state and
+	// token resolution read from a server's associations, not its issuer's
+	// bindings. Until then a server directly on a gateway's issuer depends on
+	// these bindings, and nothing says which provider it uses, so keep them.
+	outsiders, err := repo.New(tx).CountServersOnGatewayIssuer(ctx, repo.CountServersOnGatewayIssuerParams{
+		OrganizationID:  meta.OrganizationID,
+		GatewayIssuerID: meta.UserSessionIssuerID,
+	})
+	if err != nil {
+		return fmt.Errorf("count servers on gateway issuer: %w", err)
+	}
+	if err := inv.Check("metamcp.detachMemberProviderClient", "no MCP server signs in directly through a gateway's issuer", outsiders == 0); err != nil {
+		// Logged rather than returned: the member is still removable, and
+		// keeping a binding costs a stale consent tile at worst.
+		w.Logger.ErrorContext(ctx, "kept provider client on a gateway issuer shared with an MCP server",
+			attr.SlogError(err),
+			attr.SlogMetaMcpServerID(meta.ID.String()),
+			attr.SlogMcpServerID(server.ID.String()))
+		return nil
 	}
 	detached, err := repo.New(tx).AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
 		GatewayIssuerID: meta.UserSessionIssuerID.UUID,

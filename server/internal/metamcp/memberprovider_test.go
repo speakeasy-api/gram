@@ -1,16 +1,21 @@
 package metamcp_test
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/meta_mcp"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -271,4 +276,46 @@ func TestMemberProvider_SeveralClientsOfOneProviderPreferTheMemberIssuer(t *test
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Equal(t, own, rows[0].ClientID)
+}
+
+func TestMemberProvider_RemoveKeepsBindingWhileAServerSharesTheGatewayIssuer(t *testing.T) {
+	t.Parallel()
+	ctx, f := newMemberProviderFixture(t)
+
+	leaving := seedMcpServer(t, ctx, f.ti.conn, f.projectID)
+	provider := f.addProvider(t, ctx, leaving)
+	memberID := uuid.MustParse(f.add(t, ctx, leaving))
+
+	outsiderID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(f.ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  outsiderID,
+		ProjectID:           f.projectID,
+		Name:                conv.ToPGText("outsider"),
+		Slug:                conv.ToPGText("outsider-" + uuid.NewString()),
+		RemoteMcpServerID:   conv.ToNullUUID(seedRemoteBackend(t, ctx, f.ti.conn, f.projectID)),
+		UserSessionIssuerID: conv.ToNullUUID(f.gatewayIssuerID),
+		Visibility:          "disabled",
+	})
+	require.NoError(t, err)
+
+	meta, err := metamcprepo.New(f.ti.conn).GetMetaMCPServer(ctx, metamcprepo.GetMetaMCPServerParams{
+		ID:             uuid.MustParse(f.metaID),
+		OrganizationID: f.organizationID,
+		ProjectID:      f.projectID,
+	})
+	require.NoError(t, err)
+
+	var logs bytes.Buffer
+	writer := metamcp.GatewayWriter{Logger: slog.New(slog.NewTextHandler(&logs, nil)), Audit: audit.NewLogger(), Authz: nil, Admission: nil}
+	tx, err := f.ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: GatewayWriter takes a caller-owned transaction; statements use generated queries.
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = writer.RemoveMember(ctx, tx, metamcp.Actor{OrganizationID: f.organizationID, ProjectID: f.projectID, UserID: "user", Email: nil}, meta, memberID)
+	require.NoError(t, err, "the violation is reported, not returned")
+	require.NoError(t, tx.Commit(ctx))
+
+	require.Equal(t, 1, f.bound(t, ctx, f.gatewayIssuerID, provider), "the outsider may depend on the binding")
+	require.Contains(t, logs.String(), "level=ERROR")
+	require.Contains(t, logs.String(), "no MCP server signs in directly through a gateway's issuer")
 }
