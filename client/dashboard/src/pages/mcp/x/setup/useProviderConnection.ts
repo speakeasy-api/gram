@@ -335,6 +335,11 @@ export function useProviderConnection(
         authorized: false,
         tested: false,
         ...(!status.data ? { saved: false } : {}),
+        ...(providerKey === "snowflake" &&
+        status.data &&
+        !sameScopes(status.data.client.scope, requestedScopes)
+          ? { saved: false, configChanged: true }
+          : {}),
       });
       if (!preparing) {
         generation.current++;
@@ -343,7 +348,15 @@ export function useProviderConnection(
       }
     }
     observedClient.current = fingerprint;
-  }, [status.isSuccess, status.data, preparing, dispatch, cancelPopup]);
+  }, [
+    status.isSuccess,
+    status.data,
+    preparing,
+    dispatch,
+    cancelPopup,
+    providerKey,
+    requestedScopes,
+  ]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
     hydrated.current = true;
@@ -366,14 +379,15 @@ export function useProviderConnection(
             ? "all"
             : "read",
         });
+      const scopeMismatch =
+        (providerKey === "snowflake" || s.accessChosen) &&
+        !sameScopes(status.data.client.scope, requestedScopes);
       dispatch({
         type: "connection",
-        saved: true,
+        saved: providerKey !== "snowflake" || !scopeMismatch,
         authorized: false,
         tested: false,
-        configChanged:
-          s.accessChosen &&
-          !sameScopes(status.data.client.scope, requestedScopes),
+        configChanged: scopeMismatch,
       });
     }
   }, [

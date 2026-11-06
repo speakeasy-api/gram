@@ -2012,6 +2012,82 @@ describe("Snowflake shared actions", () => {
     clientId: "app-id",
     clientSecret: "app-secret",
   };
+
+  it.each([{ scope: [] }, { scope: ["session:role:OTHER"] }])(
+    "requires corrected credentials for saved Snowflake scopes $scope",
+    async ({ scope }) => {
+      const url = oldUrl.replace("/OLD/", "/APP/");
+      mocks.remote.mockResolvedValue({ id: "upstream", url });
+      mocks.associations.mockResolvedValue({
+        associations: [
+          {
+            issuerUrl: "https://example.snowflakecomputing.com",
+            remoteSessionClientId: "client",
+            serverCount: 1,
+          },
+        ],
+      });
+      mocks.client.mockResolvedValue({
+        id: "client",
+        clientId: "saved-app",
+        scope,
+        callbackUrl: "https://platform.example/callback",
+      });
+      const { result } = mount(
+        "snowflake",
+        { step: "test", values: { ...values, clientId: "", clientSecret: "" } },
+        { url, instanceUrl: "" },
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.state.saved).toBe(false);
+      expect(result.current.state.configChanged).toBe(true);
+      act(() => {
+        result.current.signIn();
+        result.current.testConnection();
+      });
+      expect(window.open).not.toHaveBeenCalled();
+      expect(mocks.probe).not.toHaveBeenCalled();
+    },
+  );
+  it("invalidates a restored Snowflake client when its saved scopes change", async () => {
+    const url = oldUrl.replace("/OLD/", "/APP/");
+    mocks.remote.mockResolvedValue({ id: "upstream", url });
+    mocks.associations.mockResolvedValue({
+      associations: [
+        {
+          issuerUrl: "https://example.snowflakecomputing.com",
+          remoteSessionClientId: "client",
+          serverCount: 1,
+        },
+      ],
+    });
+    const client = {
+      id: "client",
+      clientId: "saved-app",
+      scope: ["session:role:all"],
+      callbackUrl: "https://platform.example/callback",
+    };
+    mocks.client.mockResolvedValue(client);
+    const { result } = mount(
+      "snowflake",
+      { step: "test", values: { ...values, clientId: "", clientSecret: "" } },
+      { url, instanceUrl: "" },
+    );
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.configChanged).toBe(false);
+    act(() => {
+      clients
+        .at(-1)
+        ?.setQueryData(queryKeyRemoteSessionClient({ id: "client" }), {
+          ...client,
+          scope: ["session:role:OTHER"],
+        });
+    });
+    await waitFor(() => expect(result.current.state.saved).toBe(false));
+    expect(result.current.state.configChanged).toBe(true);
+    act(() => result.current.signIn());
+    expect(window.open).not.toHaveBeenCalled();
+  });
   it("saves the native endpoint and confidential account OAuth configuration", async () => {
     mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
     mocks.provider.mockRejectedValue({ statusCode: 404 });
