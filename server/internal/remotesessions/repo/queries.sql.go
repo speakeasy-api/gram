@@ -3297,6 +3297,9 @@ type GetActiveRemoteSessionByIDParams struct {
 	RemoteSessionClientID uuid.UUID
 }
 
+// Internal reload of a previously tenant/owner-authorized source snapshot, not
+// a credential discovery query. Exact ID, subject and registration prevent
+// adopting a sibling grant after refresh; provenance is not fresh authority.
 func (q *Queries) GetActiveRemoteSessionByID(ctx context.Context, arg GetActiveRemoteSessionByIDParams) (RemoteSession, error) {
 	row := q.db.QueryRow(ctx, getActiveRemoteSessionByID, arg.ID, arg.SubjectUrn, arg.RemoteSessionClientID)
 	var i RemoteSession
@@ -14851,6 +14854,55 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionAutoRefreshByRef = `-- name: SetRemoteSessionAutoRefreshByRef :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $4
+  AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
+  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = $7
+  AND s.updated_at = $8
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshByRefParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Explicit source-reference operation, including legacy NULL-resource grants.
+// Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+func (q *Queries) SetRemoteSessionAutoRefreshByRef(ctx context.Context, arg SetRemoteSessionAutoRefreshByRefParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefreshByRef,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionClientJsonWebKeySet = `-- name: SetRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients
 SET
@@ -15183,6 +15235,82 @@ type SoftDeleteOrganizationRemoteSessionClientFixtureParams struct {
 func (q *Queries) SoftDeleteOrganizationRemoteSessionClientFixture(ctx context.Context, arg SoftDeleteOrganizationRemoteSessionClientFixtureParams) error {
 	_, err := q.db.Exec(ctx, softDeleteOrganizationRemoteSessionClientFixture, arg.ID, arg.OrganizationID)
 	return err
+}
+
+const softDeleteRemoteSessionByRef = `-- name: SoftDeleteRemoteSessionByRef :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $3
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
+  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = $6
+  AND s.updated_at = $7
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionByRefParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+type SoftDeleteRemoteSessionByRefRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// Explicit source-reference operation, including legacy NULL-resource grants.
+// Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+func (q *Queries) SoftDeleteRemoteSessionByRef(ctx context.Context, arg SoftDeleteRemoteSessionByRefParams) ([]SoftDeleteRemoteSessionByRefRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionByRef,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionByRefRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionByRefRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many

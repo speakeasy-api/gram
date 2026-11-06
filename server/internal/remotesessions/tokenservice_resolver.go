@@ -92,7 +92,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attri
 		return m.resolveTenantUpstreamToken(ctx, attribution, projectID, organizationID, clientID, caller, resource)
 	}
 	if !attached {
-		return m.resolveUpstreamToken(ctx, attribution, clientID, caller, resource, false)
+		return m.resolveUpstreamToken(ctx, attribution, clientID, caller, resource)
 	}
 	if projectID == uuid.Nil || organizationID == "" || userSessionIssuerID == uuid.Nil || clientID == uuid.Nil {
 		return zero, ErrInvalidAuthorizationRequest

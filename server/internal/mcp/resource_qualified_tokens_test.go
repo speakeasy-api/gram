@@ -71,13 +71,19 @@ func TestResourceQualifiedTokens_DirectAndGatewayKeepBothResources(t *testing.T)
 			require.Equal(t, target.token, legacyGateway[f.issuerID].Token)
 		}
 	}
-	// A selected legacy request cannot adopt B's singleton token after A is revoked.
+	// Legacy issuer-derived serving retains singleton metadata for final routing,
+	// but a remote A backend must never receive B's bearer after A is revoked.
 	selectedA, err := q.GetActiveRemoteSession(ctx, remotesessionsrepo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: f.registration, Resource: targets[0].resource})
 	require.NoError(t, err)
 	_, err = q.RevokeRemoteSession(ctx, remotesessionsrepo.RevokeRemoteSessionParams{ID: selectedA.ID, ProjectID: f.projectID, OrganizationID: f.orgID})
 	require.NoError(t, err)
 	endpointA := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: f.signIn, McpServerID: validUUID(targets[0].id), UpstreamResource: targets[0].resource}
-	_, err = f.service.resolveSelectedAccessTokens(ctx, &issuerGateAuthentication{endpoint: endpointA, subject: subject, chosenClient: validUUID(f.registration)}, false)
+	legacy, err := f.service.resolveSelectedAccessTokens(ctx, &issuerGateAuthentication{endpoint: endpointA, subject: subject, chosenClient: validUUID(f.registration)}, false)
+	require.NoError(t, err)
+	routed, err := routeUpstreamToken(ctx, f.service.logger, legacy, targets[0].resource, false, validUUID(f.issuerID))
+	require.Error(t, err)
+	require.Empty(t, routed.Token)
+	_, err = f.service.resolveSelectedAccessTokens(ctx, &issuerGateAuthentication{endpoint: endpointA, subject: subject, chosenClient: validUUID(f.registration), checkedRegistration: true}, false)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 	request.ProjectID = uuid.New()
 	_, err = f.service.resourceQualifiedRequest(ctx, f.serverID, request)

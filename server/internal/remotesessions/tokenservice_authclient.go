@@ -282,6 +282,9 @@ func tenantUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries
 		OrganizationID:        organizationID,
 		UserSessionIssuerID:   userSessionIssuerID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) && resource != "" {
+		sess, err = q.GetTenantUserRemoteSession(ctx, remotesessions_repo.GetTenantUserRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, ProjectID: projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID, Resource: ""})
+	}
 	if err != nil {
 		return sess, fmt.Errorf("get tenant user remote session: %w", err)
 	}
@@ -312,6 +315,9 @@ func activeUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) && resource != "" {
+		sess, err = q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: ""})
+	}
 	if err != nil {
 		return sess, fmt.Errorf("get active remote_session: %w", err)
 	}
