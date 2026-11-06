@@ -1,0 +1,31 @@
+.speakeasy/out.admin.openapi.yaml
+  s_014d2c750dff0d::t_3f3d3bfb2c9b8d 873-949,8685-8703,11679-11685
+client/admin/src/sdk/.speakeasy/gen.lock
+  s_014d2c750dff0d::t_55ce5d61917808 37,156,263,391,594-604
+client/admin/src/sdk/src/funcs/adminBackfillMcpConnectGrants.ts
+  s_014d2c750dff0d::t_aa154002feaa66 1-178
+client/admin/src/sdk/src/models/components/adminbackfillmcpconnectgrantsresult.ts
+  s_014d2c750dff0d::t_848dbb5a6d7b08 1-52
+client/admin/src/sdk/src/models/components/backfillmcpconnectgrantsrequestbody.ts
+  s_014d2c750dff0d::t_bf2386dc5a5b20 1-45
+client/admin/src/sdk/src/react-query/adminBackfillMcpConnectGrants.ts
+  s_014d2c750dff0d::t_7e5a869a8b2c77 1-112
+client/admin/src/sdk/src/sdk/admin.ts
+  s_014d2c750dff0d::t_c812d700fa45dc 7,110,159,406-422
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0c34cf4b7c969643fdb870d02825ac56a18ef24b",
+  "prompts": {},
+  "sessions": {
+    "s_014d2c750dff0d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "1ac75a5e-2040-4d89-bbe5-aab37b25398d",
+        "model": "claude-opus-5-5"
+      },
+      "human_author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
