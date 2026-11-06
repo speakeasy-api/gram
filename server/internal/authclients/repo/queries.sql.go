@@ -1731,6 +1731,26 @@ func (q *Queries) ServerHasGitHubAppAuthClient(ctx context.Context, arg ServerHa
 	return present, err
 }
 
+const serverHasHistoricalGitHubAppAuthClient = `-- name: ServerHasHistoricalGitHubAppAuthClient :one
+SELECT EXISTS (
+ SELECT 1 FROM mcp_server_auth_clients a
+ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+ WHERE a.mcp_server_id = $1 AND a.organization_id = $2
+) AS present
+`
+
+type ServerHasHistoricalGitHubAppAuthClientParams struct {
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ServerHasHistoricalGitHubAppAuthClient(ctx context.Context, arg ServerHasHistoricalGitHubAppAuthClientParams) (bool, error) {
+	row := q.db.QueryRow(ctx, serverHasHistoricalGitHubAppAuthClient, arg.McpServerID, arg.OrganizationID)
+	var present bool
+	err := row.Scan(&present)
+	return present, err
+}
+
 const setGitHubAppCredential = `-- name: SetGitHubAppCredential :exec
 INSERT INTO mcp_auth_client_github_apps
 (auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)

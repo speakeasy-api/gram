@@ -339,12 +339,13 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	if selector == nil {
 		choice, handled, err := s.directPrincipalChoice(ctx, w, authentication, mode)
 		if githubRequired && !handled && err == nil {
+			s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: GitHub App requires typed upstream selection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
 			return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 		}
 		return choice, handled, err
 	}
 	if mode == feature.AuthClientResolverEnforced {
-		choice, err := s.enforceAuthClient(ctx, w, authentication, selector)
+		choice, err := s.enforceAuthClientWithCompatibility(ctx, w, authentication, selector, !githubRequired)
 		return choice, true, err
 	}
 	choice, err := selector.forServer(ctx, endpoint.McpServerID.UUID)

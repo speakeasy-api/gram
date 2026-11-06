@@ -55,7 +55,7 @@ func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 				(auth_client_id, organization_id, instance_url, app_id, installation_id, private_key_encrypted, upstream_origin)
 				VALUES ($1, $2, 'https://git.example.com', 123, 456, 'unused-test-key', $3)`, appID, orgID, member.url)
 			require.NoError(t, err)
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: server.ID, AuthClientID: appID}))
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: server.ID, AuthClientID: appID, Source: "admin"}))
 			if tc.detach {
 				n, err := authclientsrepo.New(ti.conn).DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: orgID, McpServerID: server.ID, AuthClientID: appID})
 				require.NoError(t, err)
@@ -72,7 +72,7 @@ func TestServeConsentMCP_DetachedGitHubAppReplacement(t *testing.T) {
 				_, err = fixtures.SeedRemoteHeaderFixture(ctx, authclientfixtures.SeedRemoteHeaderFixtureParams{RemoteMcpServerID: remote.ID, Name: "Authorization", Value: value})
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedAuthClientHeaderFixture(ctx, authclientfixtures.SeedAuthClientHeaderFixtureParams{AuthClientID: staticID, OrganizationID: orgID, Name: "Authorization", Value: value}))
-				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: server.ID, AuthClientID: staticID}))
+				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: server.ID, AuthClientID: staticID, Source: "admin"}))
 			}
 
 			queries := authclientsrepo.New(ti.conn)

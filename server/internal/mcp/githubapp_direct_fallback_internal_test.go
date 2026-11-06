@@ -7,7 +7,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -31,6 +35,10 @@ func TestDirectUpstreamChoiceGitHubAppRejectsLegacyFallback(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			f := newAuthClientFixture(t, pool)
+			reader := sdkmetric.NewManualReader()
+			provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
+			t.Cleanup(func() { require.NoError(t, provider.Shutdown(t.Context())) })
+			f.service.metrics = mcpmetrics.NewMetrics(provider.Meter("test"), f.service.logger)
 			ctx := t.Context()
 			f.service.features = new(feature.InMemory)
 			f.service.authClientPermitter = &recordingPermitter{asked: nil}
@@ -105,6 +113,27 @@ func TestDirectUpstreamChoiceGitHubAppRejectsLegacyFallback(t *testing.T) {
 			require.Contains(t, w.Header().Get("WWW-Authenticate"), `error="invalid_token"`)
 			require.False(t, choice.clientID.Valid, "an App-required server must not return the legacy OAuth credential")
 			require.False(t, authentication.chosenClient.Valid)
+			if mapped {
+				var collected metricdata.ResourceMetrics
+				require.NoError(t, reader.Collect(ctx, &collected))
+				var rejections int64
+				for _, scope := range collected.ScopeMetrics {
+					for _, metric := range scope.Metrics {
+						if metric.Name != mcpmetrics.InstrumentMCPRequestRejected {
+							continue
+						}
+						sum, ok := metric.Data.(metricdata.Sum[int64])
+						require.True(t, ok)
+						for _, point := range sum.DataPoints {
+							reason, ok := point.Attributes.Value(attr.OAuthFailureReasonKey)
+							require.True(t, ok)
+							require.Equal(t, issuerGateReasonUpstreamSelectionUnavailable, reason.AsString())
+							rejections += point.Value
+						}
+					}
+				}
+				require.EqualValues(t, 1, rejections, "App legacy handback records exactly one issuer-gate rejection")
+			}
 		})
 	}
 }

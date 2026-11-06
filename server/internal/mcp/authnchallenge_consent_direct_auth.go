@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 )
 
@@ -17,7 +18,9 @@ func (s *Service) consentDirectAuthChoicesEnforced(ctx context.Context, endpoint
 	if err != nil || enforced || !endpoint.McpServerID.Valid || endpoint.ToolsetID.Valid || endpoint.MetaMcpServerID.Valid {
 		return enforced, err
 	}
-	return s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, endpoint.McpServerID.UUID)
+	// A replacement still uses typed consent: historical OAuth credentials must
+	// not override the identity explicitly attached after the GitHub App.
+	return authclientsrepo.New(s.db).ServerHasHistoricalGitHubAppAuthClient(ctx, authclientsrepo.ServerHasHistoricalGitHubAppAuthClientParams{OrganizationID: endpoint.OrganizationID, McpServerID: endpoint.McpServerID.UUID})
 }
 
 // consentDirectPreviewAuth uses the same offered choices and authorization as

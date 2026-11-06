@@ -586,6 +586,13 @@ FROM mcp_auth_clients ac
 WHERE ac.id = @auth_client_id AND ac.organization_id = @organization_id AND NOT ac.deleted
 ON CONFLICT (mcp_server_id, auth_client_id) WHERE deleted IS FALSE DO UPDATE SET source = 'admin', updated_at = clock_timestamp();
 
+-- name: ServerHasHistoricalGitHubAppAuthClient :one
+SELECT EXISTS (
+ SELECT 1 FROM mcp_server_auth_clients a
+ JOIN mcp_auth_client_github_apps g ON g.auth_client_id = a.auth_client_id AND g.organization_id = a.organization_id
+ WHERE a.mcp_server_id = @mcp_server_id AND a.organization_id = @organization_id
+) AS present;
+
 -- name: ServerHasGitHubAppAuthClient :one
 SELECT EXISTS (
  SELECT 1 FROM mcp_server_auth_clients a

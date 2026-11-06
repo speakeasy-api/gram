@@ -15,6 +15,8 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -383,7 +385,25 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	if err != nil {
 		return nil, err
 	}
-	return choices[serverID], nil
+	auth := choices[serverID]
+	requiresApp, err := s.serverRequiresGitHubApp(ctx, endpoint.OrganizationID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	if requiresApp {
+		selected := auth.Selected()
+		if selected == nil {
+			return nil, errConsentConfigurationChanged
+		}
+		_, err := authclientsrepo.New(s.db).GetGitHubAppConfiguration(ctx, authclientsrepo.GetGitHubAppConfigurationParams{OrganizationID: endpoint.OrganizationID, AuthClientID: selected.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, errConsentConfigurationChanged
+		}
+		if err != nil {
+			return nil, fmt.Errorf("check consent GitHub App selection: %w", err)
+		}
+	}
+	return auth, nil
 }
 
 // errConsentNoUsableConnection refuses an approval no connection could serve.

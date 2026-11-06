@@ -815,13 +815,19 @@ func annotateAuthClient(ctx context.Context, logger *slog.Logger, res authClient
 // profile's choice has no compatibility path, so one the resolver does not
 // serve itself is a gap.
 func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector) (upstreamChoice, error) {
+	return s.enforceAuthClientWithCompatibility(ctx, w, authentication, selector, true)
+}
+
+// enforceAuthClientWithCompatibility resolves once and rejects legacy handback
+// before serving when the provider has no legacy credential equivalent.
+func (s *Service) enforceAuthClientWithCompatibility(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector, allowLegacy bool) (upstreamChoice, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
 	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, connectionSubject(ctx, authentication.subject))
 	if err != nil {
 		return none, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
-	if res.outcome == authClientLegacy && selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession {
+	if res.outcome == authClientLegacy && (!allowLegacy || selector.credentialKindOrDefault() != upstreamclients.CredentialKindUserSession) {
 		res.outcome = authClientGap
 	}
 	return s.serveAuthClient(ctx, w, authentication, res)

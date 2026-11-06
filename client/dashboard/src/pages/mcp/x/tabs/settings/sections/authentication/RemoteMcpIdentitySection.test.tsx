@@ -3571,7 +3571,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /Shared credential/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: /Shared credential/ }),
+    ).toBeNull();
     expect(screen.queryByLabelText("Token")).toBeNull();
   });
 
@@ -3592,7 +3594,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     renderIdentity();
 
     expect(screen.getByText("Identity is unavailable.")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /Shared credential/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: /Shared credential/ }),
+    ).toBeNull();
   });
 
   it("removes the Service Account credential only once Save is confirmed", async () => {
@@ -3911,21 +3915,32 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.detachGitHub).not.toHaveBeenCalled();
   });
 
-  it("does not allow a hidden App to be replaced through an Authorization header", () => {
-    boundGitHubApp();
-    mocks.hasScope.mockImplementation(
-      (scope: string, resourceId?: string) =>
-        scope === "mcp:write" && resourceId === "mcp-server-1",
-    );
-    renderIdentity();
-    addCustomHeader("Authorization", "Bearer replacement-token");
-    expect(
-      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
-    expect(mocks.create).not.toHaveBeenCalled();
-    expect(mocks.detachGitHub).not.toHaveBeenCalled();
-  });
+  it.each([
+    "https://api.githubcopilot.com/mcp",
+    "https://proxy.example.com/mcp",
+  ])(
+    "does not replace a hidden App on %s through an Authorization header",
+    (url) => {
+      mocks.source.mockReturnValue({
+        data: { slug: "fixture", url },
+        isLoading: false,
+        isError: false,
+      });
+      boundGitHubApp();
+      mocks.hasScope.mockImplementation(
+        (scope: string, resourceId?: string) =>
+          scope === "mcp:write" && resourceId === "mcp-server-1",
+      );
+      renderIdentity();
+      addCustomHeader("Authorization", "Bearer replacement-token");
+      expect(
+        (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
+          .disabled,
+      ).toBe(true);
+      expect(mocks.create).not.toHaveBeenCalled();
+      expect(mocks.detachGitHub).not.toHaveBeenCalled();
+    },
+  );
 
   it("describes replacing the GitHub App with a Bearer credential", () => {
     boundGitHubApp();
