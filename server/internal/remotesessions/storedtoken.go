@@ -17,6 +17,10 @@ import (
 // errStoredTokenUnreadable marks a stored token the current key can't decrypt. A retry never helps; a new token does.
 var errStoredTokenUnreadable = errors.New("stored token unreadable")
 
+// errStoredTokenHeldForAdministrator marks an unreadable access token whose renewal the configuration refused:
+// the grant is held for the administrator rather than dropped to an anonymous call.
+var errStoredTokenHeldForAdministrator = errors.New("unreadable access token held for administrator")
+
 // storedTokens is what the current key can read of a grant's stored tokens.
 type storedTokens struct {
 	// access is the decrypted access token; empty when none is stored or it can't be read.
@@ -77,6 +81,9 @@ func (m *ChallengeManager) renewedUnreadableAccess(ctx context.Context, sess rem
 	if err == nil && res.AccessToken != "" {
 		m.refresher.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenAccess, remotesessionmetrics.StoredTokenHealed)
 		return res.AccessToken, res.Session, res.SourceUpdatedAt, nil
+	}
+	if errors.Is(err, ErrRemoteSessionMisconfigured) {
+		return "", sess, sess.UpdatedAt.Time, fmt.Errorf("%w: %w", errStoredTokenHeldForAdministrator, err)
 	}
 	if err != nil && refreshLeftGrantUnjudged(err) {
 		return "", sess, sess.UpdatedAt.Time, err

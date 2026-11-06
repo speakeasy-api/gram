@@ -324,7 +324,11 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 			return failedSessionCredential(selectedID, clientID, selectedResource, outage, false, false), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
 			// Keep the bare remedy; only the already-recorded facts travel.
-			return zero, withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
+			misconfigured := withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
+			if errors.Is(err, errStoredTokenHeldForAdministrator) {
+				return failedSessionCredential(selectedID, clientID, selectedResource, misconfigured, zero.refreshFailureRecorded, zero.refreshStepRecorded), misconfigured
+			}
+			return zero, misconfigured
 		}
 		return zero, nil
 	}
@@ -844,7 +848,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				switch {
 				case self:
 					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
-				case errors.Is(err, ErrRemoteSessionUnavailable), errors.Is(err, ErrStoredSignInUnreadable):
+				case resolved.HeldWithoutToken():
 					tokens[c.RemoteSessionIssuerID] = resolved
 				}
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
@@ -1004,7 +1008,7 @@ func RefreshBusy(err error) bool {
 
 // HeldWithoutToken reports a subject's connection kept without a token so routing never calls its server without it.
 func (t UpstreamToken) HeldWithoutToken() bool {
-	return t.SessionUnavailable() || t.SignInUnreadable()
+	return t.CredentialOwner == CredentialOwnerSubject && t.Token == "" && t.ClientCredentialErr != nil
 }
 
 // SignInUnreadable reports a subject's connection with nothing stored that can be read; only a new sign-in replaces it.

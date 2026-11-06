@@ -1252,3 +1252,59 @@ func TestUnreadableUpstreamRefreshTokenGatewayMemberAsksToReconnect(t *testing.T
 	require.Zero(t, f.memberCalls.Load(), "never an anonymous call")
 	require.Zero(t, f.refreshes.Load(), "an unreadable refresh token is never sent")
 }
+
+// A gateway member whose unreadable access token can't be renewed for a configuration fault names the administrator and is never dialed.
+func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	var refreshes atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		refreshes.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"error":"unauthorized_client"}`)
+	}))
+	t.Cleanup(provider.Close)
+	var memberCalls atomic.Int32
+	// Answers anyone, so an anonymous call would succeed.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			memberCalls.Add(1)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(upstream.Close)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-unreadable-admin-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreadable-admin", provider.URL, []uuid.UUID{issuerID})
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", upstream.URL, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)), 0)
+	subject := createTestUser(t, ctx, ti, "meta-unreadable-admin-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	refresh, err := ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: subject, UserSessionIssuerID: issuerID, RemoteSessionClientID: clientID,
+		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText(refresh), RefreshExpiresAt: pgtype.Timestamptz{Valid: false},
+		Scopes: []string{}, Resource: pgtype.Text{String: upstream.URL, Valid: true},
+	})
+	require.NoError(t, err)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	require.Equal(t, `server "member" has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator`, text)
+	require.Zero(t, memberCalls.Load(), "never an anonymous call")
+	require.Positive(t, refreshes.Load())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.NotEmpty(t, row.MemberID)
+}

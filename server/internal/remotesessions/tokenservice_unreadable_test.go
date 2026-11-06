@@ -377,3 +377,27 @@ func TestReconnect_RewritesUnreadableSignIn(t *testing.T) {
 	}
 	require.False(t, needsReconnect(t, env))
 }
+
+// A renewal the configuration refuses holds the grant for the administrator: never dropped to an anonymous call, never a new sign-in.
+func TestResolveAccessTokens_UnreadableAccessMisconfiguredRenewalHeldForAdministrator(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "unreadable-access-misconfigured", &refreshes, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"unauthorized_client"}`))
+	})
+	storeTokens(t, env, "", "live-refresh", time.Hour)
+
+	entry := resolveAvailable(t, env)
+	require.Empty(t, entry.Token)
+	require.True(t, entry.HeldWithoutToken())
+	require.False(t, entry.SignInUnreadable())
+	require.ErrorIs(t, entry.ClientCredentialErr, remotesessions.ErrRemoteSessionMisconfigured)
+
+	_, err := resolveAll(t, env)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionMisconfigured)
+	require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable)
+	require.EqualValues(t, 2, refreshes.Load())
+	require.Zero(t, storedTokenUnreadableCount(t, env, remotesessionmetrics.StoredTokenAccess, remotesessionmetrics.StoredTokenNeedsSignIn))
+}
