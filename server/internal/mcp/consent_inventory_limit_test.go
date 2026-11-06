@@ -91,3 +91,36 @@ func TestGatewayLargeSelectedInventoryApproval(t *testing.T) {
 		})
 	}
 }
+
+func TestGatewayLargeInventoryConsentBoundary(t *testing.T) {
+	t.Parallel()
+	for _, specific := range []bool{false, true} {
+		t.Run(fmt.Sprintf("specific=%t", specific), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			slug := "bounded-catalog-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+			upstream := newCatalogUpstream(t, toolfilter.MaxTools-1)
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Source", "source", 1, upstream.url)
+			var selected []string
+			if specific {
+				for i := range toolfilter.MaxTools - 2 {
+					selected = append(selected, fmt.Sprintf("source--tool_%03d", i))
+				}
+			}
+			connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, selected)
+			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, "source--tool_000", map[string]any{}), "executed live")
+			before := upstream.calls.Load()
+			if specific {
+				unselected := fmt.Sprintf("source--tool_%03d", toolfilter.MaxTools-2)
+				require.Contains(t, callGatewayTool(t, ti, slug, connection.token, unselected, map[string]any{}), `"isError":true`)
+			}
+			upstream.future.Store(true)
+			newTool := fmt.Sprintf("source--tool_%03d", toolfilter.MaxTools-1)
+			require.Contains(t, callGatewayTool(t, ti, slug, connection.token, newTool, map[string]any{}), `"isError":true`)
+			require.Equal(t, before, upstream.calls.Load(), "unapproved tools never reach the upstream")
+		})
+	}
+}

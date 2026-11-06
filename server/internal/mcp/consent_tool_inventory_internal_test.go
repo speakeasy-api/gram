@@ -409,6 +409,10 @@ func TestMergeConsentInventoryPage_SharedInventoryCap(t *testing.T) {
 
 	_, err = mergeConsentInventoryPage(emptyDraft(), "", tools(toolfilter.MaxTools+1), "")
 	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
+
+	// Even malformed pages must hit the count guard before inspecting entries.
+	_, err = mergeConsentInventoryPage(emptyDraft(), "", make([]consentInventoryTool, toolfilter.MaxTools+1), "")
+	require.ErrorIs(t, err, errConsentInventoryTooManyTools)
 }
 
 func TestConsentRoleHiddenMeta_CapsNamesKeepsCount(t *testing.T) {

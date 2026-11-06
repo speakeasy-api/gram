@@ -217,6 +217,9 @@ func mergeConsentInventoryPage(
 	if requestCursor != draft.ExpectedCursor {
 		return draft, fmt.Errorf("tools/list cursor is out of order for this attempt")
 	}
+	if len(draft.Tools)+len(pageTools) > toolfilter.MaxTools {
+		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, toolfilter.MaxTools)
+	}
 
 	seen := make(map[string]bool, len(draft.Tools)+len(pageTools))
 	for _, tool := range draft.Tools {
@@ -236,10 +239,6 @@ func mergeConsentInventoryPage(
 		seen[tool.Name] = true
 		tool.Annotations = normalizeKnownAnnotations(tool.Annotations)
 	}
-	if len(draft.Tools)+len(pageTools) > toolfilter.MaxTools {
-		return draft, fmt.Errorf("%w: inventory exceeds %d tools", errConsentInventoryTooManyTools, toolfilter.MaxTools)
-	}
-
 	if len(nextCursor) > consentInventoryMaxCursorBytes {
 		return draft, fmt.Errorf("inventory pagination cursor exceeds %d bytes", consentInventoryMaxCursorBytes)
 	}
