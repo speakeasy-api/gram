@@ -88,6 +88,43 @@ func (s *Service) resolveMetaMemberResource(
 	return resource, member, true, nil
 }
 
+// focusedMetaMemberResource selects only a current admitted member and its persisted
+// resource. A server slug is navigation input, never upstream resource authority.
+func (s *Service) focusedMetaMemberResource(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, client remotesessions.Client, focus string) (string, chosenMetaMember, error) {
+	none := chosenMetaMember{serverID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, projectID: uuid.Nil}
+	members, err := s.consentSubjectMembers(ctx, endpoint, state)
+	if err != nil {
+		return "", none, err
+	}
+	var target *metaMember
+	for i := range members {
+		if members[i].slug == focus {
+			target = &members[i]
+			break
+		}
+	}
+	if target == nil {
+		return "", none, errors.New("server is not an admitted gateway member")
+	}
+	if target.backend != metaMemberBackendProxied {
+		return "", none, nil
+	}
+	memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
+	if err != nil {
+		return "", none, err
+	}
+	rows, _, err := s.claimingMetaMembers(memberCtx, endpoint, client)
+	if err != nil {
+		return "", none, err
+	}
+	for _, row := range rows {
+		if row.McpServerID == target.serverID && row.ProjectID == target.projectID && row.UpstreamUrl != "" {
+			return row.UpstreamUrl, chosenMetaMember{serverID: uuid.NullUUID{UUID: row.McpServerID, Valid: true}, projectID: row.ProjectID}, nil
+		}
+	}
+	return "", none, errors.New("registration has no resource on this gateway member")
+}
+
 // claimingMetaMembers lists the proxied members authenticating against the
 // client's authorization server, filtered to those the subject may reach.
 // Claimed is decided before RBAC: an invisible member still claimed the

@@ -459,7 +459,7 @@ const gatewayAuthClientParam = "auth_client."
 // gatewayConsentAuthChoices is each proxied member's upstream credential
 // choice on a gateway's consent page, with the picks the page's query names.
 // It is nil where typed auth client resolution is not enforced.
-func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
+func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, members []metaMember, cards []remoteSessionCard, qualified ...map[uuid.UUID][]remoteSessionCard) (map[uuid.UUID]*consentServerAuth, error) {
 	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
 	if err != nil || !enforced {
 		return nil, err
@@ -478,7 +478,18 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
+	if len(qualified) == 0 {
+		return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
+	}
+	choices := make(map[uuid.UUID]*consentServerAuth, len(servers))
+	for _, server := range servers {
+		found, err := s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, []consentAuthServer{server}, qualified[0][server.id], picked, false)
+		if err != nil {
+			return nil, err
+		}
+		choices[server.id] = found[server.id]
+	}
+	return choices, nil
 }
 
 // resolveMemberAuthChoice is the resolution a gateway member's credential

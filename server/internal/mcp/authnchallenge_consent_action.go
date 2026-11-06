@@ -130,6 +130,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 	}
 	subject := *challengeState.Subject
 
+	// Registration-wide mutations must never destroy or rewrite another
+	// member's resource grant. Qualified lifecycle APIs are required here.
+	if endpoint.MetaMcpServerID.Valid {
+		switch r.PostForm.Get("action") {
+		case "disconnect", "set_auto_refresh":
+			return oops.E(oops.CodeBadRequest, nil, "This action is not available for a resource-qualified gateway connection.").LogWarn(ctx, logger)
+		}
+	}
 	switch r.PostForm.Get("action") {
 	case "agent_connections", "agent_attach", "agent_detach":
 		return s.serveConsentAgentConnections(w, r, endpoint, challengeState)
@@ -242,14 +250,28 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
+		resource := ""
+		projectID := endpoint.clientProjectID(*client)
+		if endpoint.MetaMcpServerID.Valid && focusServer != "" {
+			var member chosenMetaMember
+			var err error
+			resource, member, err = s.focusedMetaMemberResource(ctx, endpoint, challengeState, *client, focusServer)
+			if err != nil {
+				return oops.E(oops.CodeBadRequest, err, "Connection is not available for this gateway member.").LogWarn(ctx, logger)
+			}
+			if member.serverID.Valid {
+				projectID = member.projectID
+			}
+		}
+		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSessionForResource(
 			ctx,
 			consentRefreshAttribution(r, endpoint, challengeState),
 			subject,
-			endpoint.clientProjectID(*client),
+			projectID,
 			endpoint.OrganizationID,
 			endpoint.UserSessionIssuerID,
 			client.ID,
+			resource,
 		)
 		if refreshErr != nil {
 			switch {
@@ -277,6 +299,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		challengeState.FocusServer = focusServer
 		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
@@ -375,7 +398,12 @@ func (s *Service) buildRemoteConnectURL(
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
+		if focusServer != "" {
+			clientResource, resourceMember, rerr = s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, focusServer)
+			claimedByMember = resourceMember.serverID.Valid || rerr != nil
+		} else {
+			clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
+		}
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway. A

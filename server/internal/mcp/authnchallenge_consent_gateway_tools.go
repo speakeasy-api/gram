@@ -191,7 +191,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
 	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
-	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
+	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards, view.memberCards)
 	if err != nil {
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}

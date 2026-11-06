@@ -129,6 +129,25 @@ func (s *Service) probeRemoteSession(
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
 	}
+	resource := ""
+	qualified := false
+	typed := false
+	if endpoint.MetaMcpServerID.Valid && challengeState.FocusServer != "" {
+		var member chosenMetaMember
+		resource, member, err = s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, challengeState.FocusServer)
+		if err != nil {
+			return oops.E(oops.CodeBadRequest, err, "This connection cannot be verified for this gateway member.").LogWarn(ctx, logger)
+		}
+		if member.serverID.Valid {
+			authorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, member)
+			if err != nil {
+				return oops.E(oops.CodeForbidden, err, "Connection is not authorized for this gateway member.").LogWarn(ctx, logger)
+			}
+			qualified, typed = true, authorization != nil
+			tokenProjectIDs = []uuid.UUID{member.projectID}
+		}
+	}
+
 	var (
 		tokens         map[uuid.UUID]remotesessions.UpstreamToken
 		entry          remotesessions.UpstreamToken
@@ -136,7 +155,16 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		var resolved map[uuid.UUID]remotesessions.UpstreamToken
+		var rerr error
+		switch {
+		case qualified && typed:
+			resolved, rerr = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject, RegistrationID: client.ID, Resource: resource, SkipUnusable: true, Attribution: attribution})
+		case qualified:
+			resolved, rerr = s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, client.ID, true, resource)
+		default:
+			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		}
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
@@ -341,7 +369,17 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		focusedID := uuid.Nil
+		if challengeState.FocusServer != "" {
+			_, member, err := s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, challengeState.FocusServer)
+			if err != nil {
+				return ctx, none, err
+			}
+			if member.serverID.Valid {
+				focusedID = member.serverID.UUID
+			}
+		}
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject, focusedID)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -358,6 +396,7 @@ func (s *Service) metaValidationTarget(
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
 	sessionID string,
 	subject urn.SessionSubject,
+	focusedID uuid.UUID,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
@@ -370,6 +409,9 @@ func (s *Service) metaValidationTarget(
 	entry := tokens[client.RemoteSessionIssuerID]
 	targetID := uuid.Nil
 	for _, row := range rows {
+		if focusedID != uuid.Nil && row.McpServerID != focusedID {
+			continue
+		}
 		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {

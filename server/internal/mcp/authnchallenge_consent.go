@@ -686,6 +686,38 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build remote session cards").LogError(ctx, logger)
 	}
+
+	// A gateway's page approves the gateway and lists its servers; the
+	// services it shows are those of one server, on that server's connect
+	// page. A first-party connect opened for a server lands on its page, and
+	// an explicit server parameter (empty for the gateway's own page) wins,
+	// except code reconnect always pins focus to its bound server.
+	var gateway *gatewayConsentView
+	focusServer := ""
+	if endpoint.MetaMcpServerID.Valid {
+		focus := challengeState.FocusServer
+		if catalogReview {
+			focus = ""
+		}
+		if challengeState.CodeReconnect == nil && r.URL.Query().Has("server") {
+			focus = r.URL.Query().Get("server")
+		}
+		if len(focus) > maxFocusServerLength {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("focus_server_too_long"))
+			return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
+		}
+		view, focused, gerr := s.gatewayConsent(ctx, endpoint, challengeState, cards, focus)
+		if gerr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return oops.E(oops.CodeUnexpected, gerr, "build gateway consent").LogError(ctx, logger)
+		}
+		gateway = view
+		cards = focused
+		if view.Focus != nil {
+			focusServer = view.Focus.Slug
+		}
+	}
+
 	validationDeadlineMS := int64(0)
 	if deadlineMS, parseErr := strconv.ParseInt(r.URL.Query().Get("verifying_until"), 10, 64); parseErr == nil {
 		now := time.Now()
@@ -732,37 +764,6 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			if cards[i].ClientID == failed && cards[i].Connected {
 				cards[i].ValidationNotice = noWorkingSignInMessage
 			}
-		}
-	}
-
-	// A gateway's page approves the gateway and lists its servers; the
-	// services it shows are those of one server, on that server's connect
-	// page. A first-party connect opened for a server lands on its page, and
-	// an explicit server parameter (empty for the gateway's own page) wins,
-	// except code reconnect always pins focus to its bound server.
-	var gateway *gatewayConsentView
-	focusServer := ""
-	if endpoint.MetaMcpServerID.Valid {
-		focus := challengeState.FocusServer
-		if catalogReview {
-			focus = ""
-		}
-		if challengeState.CodeReconnect == nil && r.URL.Query().Has("server") {
-			focus = r.URL.Query().Get("server")
-		}
-		if len(focus) > maxFocusServerLength {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("focus_server_too_long"))
-			return oops.E(oops.CodeBadRequest, nil, "server is too long").LogError(ctx, logger)
-		}
-		view, focused, gerr := s.gatewayConsent(ctx, endpoint, challengeState, cards, focus)
-		if gerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return oops.E(oops.CodeUnexpected, gerr, "build gateway consent").LogError(ctx, logger)
-		}
-		gateway = view
-		cards = focused
-		if view.Focus != nil {
-			focusServer = view.Focus.Slug
 		}
 	}
 
@@ -1883,8 +1884,12 @@ func (c remoteSessionCard) needsAction() bool {
 }
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
-func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (unavailable, tunnel bool) {
-	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutage(ctx, subject, clientID)
+func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, resources ...string) (unavailable, tunnel bool) {
+	resource := ""
+	if len(resources) > 0 {
+		resource = resources[0]
+	}
+	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutageForResource(ctx, subject, clientID, resource)
 	switch {
 	case !known:
 		// Can't tell, and a green card could auto-close the tab a reconnect link opened.
@@ -2180,6 +2185,10 @@ func (s *Service) buildRemoteSessionCards(
 	challengeState AuthnChallengeState,
 	policy autoRefreshPolicy,
 ) ([]remoteSessionCard, error) {
+	return s.buildRemoteSessionCardsForMember(ctx, endpoint, challengeState, policy, nil)
+}
+
+func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, policy autoRefreshPolicy, member *metaMember) ([]remoteSessionCard, error) {
 	clients, typed, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session clients: %w", err)
@@ -2222,6 +2231,35 @@ func (s *Service) buildRemoteSessionCards(
 	statuses, routing, err := s.consentSessionRouting(ctx, endpoint, challengeState, clients, typed)
 	if err != nil {
 		return nil, err
+	}
+	resource := ""
+	if member != nil && member.backend == metaMemberBackendProxied {
+		unqualified := statuses
+		statuses = make(map[uuid.UUID]remotesessions.RemoteSessionState)
+		for _, client := range clients {
+			if !memberUsesClient(*member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+				continue
+			}
+			selected, _, rerr := s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, member.slug)
+			if rerr != nil {
+				return nil, rerr
+			}
+			resource = selected
+			found, serr := s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, *challengeState.Subject, member.projectID, endpoint.OrganizationID, []uuid.UUID{client.ID}, selected)
+			if serr != nil {
+				return nil, fmt.Errorf("member remote session statuses: %w", serr)
+			}
+			if state, ok := found[client.ID]; ok {
+				statuses[client.ID] = state
+			} else if elsewhere, ok := unqualified[client.ID]; ok && elsewhere.Resource != "" {
+				// Display a reconnect remedy, never another member's readiness.
+				statuses[client.ID] = elsewhere
+			}
+		}
+		routing = consentRouting{backend: consentBackendRemote, upstream: resource, members: nil}
+		if member.tunneledServerID.Valid {
+			routing.backend = consentBackendTunneled
+		}
 	}
 	// The member's scopes only feed the reconnect hint, which needs a session.
 	connectedClients := make([]remotesessions.Client, 0, len(clients))
@@ -2303,7 +2341,7 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		unavailable, unavailableTunnel := false, false
 		if connected && state.AccessExpiresAt != nil && !state.AccessExpiresAt.After(renderedAt) {
-			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID)
+			unavailable, unavailableTunnel = s.expiredConnectionOutage(ctx, *challengeState.Subject, c.ID, resource)
 		}
 		identityReconnect := connected && !slices.Contains(state.Scopes, "openid") && slices.Contains(requested, "openid")
 		requested = slices.Clone(requested)
