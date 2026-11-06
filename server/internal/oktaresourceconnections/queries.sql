@@ -40,6 +40,12 @@ FOR UPDATE;
 -- issuers are returned so the list can count them; whether the issuer
 -- advertises ID-JAG is decided in Go so the derivation stays pure.
 -- name: ListEligibleServers :many
+-- Typed auth clients choose upstream authentication only for proxied servers.
+-- Unproxied servers have no typed offers and retain their derived issuer and clients.
+-- Where typed auth clients apply (typed_auth_enforced),
+-- a server's authorization server is the one its personal or identity-provider
+-- auth clients offer: an identity-provider client's if it offers one, else the
+-- first by id. Elsewhere it is the one derived for the server.
 SELECT
     ms.id
   , ms.project_id
@@ -48,6 +54,24 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -61,7 +85,24 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE ms.remote_session_issuer_id END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -106,6 +147,24 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -119,7 +178,24 @@ JOIN projects AS p
  AND p.organization_id = @organization_id
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE ms.remote_session_issuer_id END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
@@ -389,8 +465,8 @@ VALUES (@project_id, @name, @slug, @tunneled_mcp_server_id, @remote_session_issu
 RETURNING id;
 
 -- name: CreateEligibleMCPServerFixture :one
-INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
-VALUES (@project_id, @name, @slug, @remote_mcp_server_id, @remote_session_issuer_id, sqlc.narg(user_session_issuer_id), @visibility)
+INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, unproxied_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
+VALUES (@project_id, @name, @slug, @remote_mcp_server_id, sqlc.narg(unproxied_mcp_server_id), @remote_session_issuer_id, sqlc.narg(user_session_issuer_id), @visibility)
 RETURNING id;
 
 -- name: SetMCPServerVisibilityFixture :execrows

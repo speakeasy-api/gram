@@ -1,13 +1,19 @@
 package oktaresourceconnections_test
 
 import (
+	"bytes"
+	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	unproxiedrepo "github.com/speakeasy-api/gram/server/internal/unproxiedmcp/repo"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
@@ -560,7 +566,7 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 			got, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID})
 			require.NoError(t, err)
 			require.Equal(t, want, got.UserSessionIssuerID)
-			rows, err := si.q.ListEligibleServers(ctx, si.orgID)
+			rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: false})
 			require.NoError(t, err)
 			found := false
 			for _, row := range rows {
@@ -571,5 +577,130 @@ func TestReadinessQueries_ValidateUserSessionIssuerScope(t *testing.T) {
 			}
 			require.True(t, found, "login issuer validity must not hide the upstream server")
 		})
+	}
+}
+
+// Where typed auth clients choose upstream authentication, a server's
+// authorization server is the one it offers, whatever was derived for it, and a
+// server offering nothing has none. Elsewhere the derived one stands.
+func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
+	t.Parallel()
+
+	ctx, si := newTestService(t)
+	projectID := createProject(t, ctx, si, si.orgID, "typed-offers-"+uuid.NewString()[:8])
+	derived := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	offered := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	identityProvider := createResourceIssuer(t, ctx, si, si.orgID, projectID, false)
+	fixtures := authclientbackfill.New(si.conn)
+	offer := func(serverID, issuerID uuid.UUID, clientType string) (uuid.UUID, uuid.UUID) {
+		client, err := remotesessionsrepo.New(si.conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+			ProjectID: conv.ToNullUUID(projectID), OrganizationID: conv.ToPGText(si.orgID), RemoteSessionIssuerID: issuerID,
+			ClientID: "offered-" + uuid.NewString()[:8], ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		})
+		require.NoError(t, err)
+		authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: si.orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: clientType, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client.ID)})
+		require.NoError(t, err)
+		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: si.orgID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+		return client.ID, authClientID
+	}
+
+	personal := createServer(t, ctx, si, projectID, derived, "personal")
+	personalClient, _ := offer(personal, offered, authz.AuthClientTypeRemoteSession)
+	chained := createServer(t, ctx, si, projectID, derived, "chained")
+	offer(chained, offered, authz.AuthClientTypeRemoteSession)
+	offer(chained, identityProvider, authz.AuthClientTypeEMA)
+	nothing := createServer(t, ctx, si, projectID, derived, "nothing")
+
+	// Unproxied servers sharing an issuer never receive typed offers.
+	backend, err := unproxiedrepo.New(si.conn).CreateServer(ctx, unproxiedrepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: projectID, Name: conv.ToPGText("Unproxied"),
+		Slug: conv.ToPGText("unproxied"), Url: "https://unproxied.example/mcp",
+	})
+	require.NoError(t, err)
+	unproxied, err := si.q.CreateEligibleMCPServerFixture(ctx, repo.CreateEligibleMCPServerFixtureParams{
+		ProjectID: projectID, Name: conv.ToPGText("Unproxied"), Slug: conv.ToPGText("unproxied"),
+		UnproxiedMcpServerID: conv.ToNullUUID(backend.ID), RemoteSessionIssuerID: conv.ToNullUUID(derived), Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	issuerOf := func(serverID uuid.UUID, enforced bool) (uuid.UUID, bool) {
+		rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: enforced})
+		require.NoError(t, err)
+		listed := uuid.Nil
+		for _, row := range rows {
+			if row.ID == serverID {
+				listed = row.IssuerID
+			}
+		}
+		one, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: serverID, TypedAuthEnforced: enforced})
+		if errors.Is(err, pgx.ErrNoRows) {
+			require.Equal(t, uuid.Nil, listed, "the list and the single read agree")
+			return uuid.Nil, false
+		}
+		require.NoError(t, err)
+		require.Equal(t, one.IssuerID, listed, "the list and the single read agree")
+		return one.IssuerID, true
+	}
+
+	for _, serverID := range []uuid.UUID{personal, chained, nothing, unproxied} {
+		issuer, eligible := issuerOf(serverID, false)
+		require.True(t, eligible)
+		require.Equal(t, derived, issuer, "the derived authorization server stands without enforcement")
+	}
+	issuer, eligible := issuerOf(unproxied, true)
+	require.True(t, eligible, "unproxied servers stay eligible under enforcement without offers")
+	require.Equal(t, derived, issuer)
+	unproxiedRow, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: unproxied, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.False(t, unproxiedRow.TypedAuthEnforced, "client resolution must also retain derived clients for unproxied servers")
+	require.Empty(t, unproxiedRow.OfferedClientIds)
+	listed, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	for _, row := range listed {
+		if row.ID == unproxied {
+			require.False(t, row.TypedAuthEnforced, "list client resolution must retain derived clients too")
+		}
+	}
+	issuer, eligible = issuerOf(personal, true)
+	require.True(t, eligible)
+	require.Equal(t, offered, issuer)
+	issuer, eligible = issuerOf(chained, true)
+	require.True(t, eligible)
+	require.Equal(t, identityProvider, issuer, "an identity-provider client's authorization server comes first")
+	_, eligible = issuerOf(nothing, true)
+	require.False(t, eligible, "a server that offers nothing has no authorization server under enforcement")
+
+	row, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: personal, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.True(t, row.TypedAuthEnforced)
+	require.Equal(t, []uuid.UUID{personalClient}, row.OfferedClientIds)
+
+	several, err := si.q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: si.orgID, McpServerID: chained, TypedAuthEnforced: true})
+	require.NoError(t, err)
+	require.Len(t, several.OfferedClientIds, 2)
+	require.True(t, slices.IsSortedFunc(several.OfferedClientIds, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) }), "offered clients are in a stable order")
+
+	for _, tc := range []struct {
+		name     string
+		withdraw func(serverID, authClientID uuid.UUID) error
+	}{
+		{name: "disabled", withdraw: func(_, authClientID uuid.UUID) error {
+			return fixtures.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: authClientID})
+		}},
+		{name: "deleted", withdraw: func(_, authClientID uuid.UUID) error {
+			return fixtures.SoftDeleteAuthClientFixture(ctx, authClientID)
+		}},
+		{name: "detached", withdraw: func(serverID, _ uuid.UUID) error {
+			return fixtures.SoftDeleteServerAuthClientLinksFixture(ctx, serverID)
+		}},
+	} {
+		serverID := createServer(t, ctx, si, projectID, derived, "withdrawn-"+tc.name)
+		_, authClientID := offer(serverID, offered, authz.AuthClientTypeRemoteSession)
+		issuer, eligible := issuerOf(serverID, true)
+		require.True(t, eligible, tc.name)
+		require.Equal(t, offered, issuer, tc.name)
+		require.NoError(t, tc.withdraw(serverID, authClientID), tc.name)
+		_, eligible = issuerOf(serverID, true)
+		require.False(t, eligible, "a %s offer gives the server no authorization server", tc.name)
 	}
 }

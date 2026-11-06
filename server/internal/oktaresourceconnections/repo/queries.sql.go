@@ -34,8 +34,8 @@ func (q *Queries) ClearIssuerDiscoveryFixture(ctx context.Context, arg ClearIssu
 }
 
 const createEligibleMCPServerFixture = `-- name: CreateEligibleMCPServerFixture :one
-INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO mcp_servers (project_id, name, slug, remote_mcp_server_id, unproxied_mcp_server_id, remote_session_issuer_id, user_session_issuer_id, visibility)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id
 `
 
@@ -44,6 +44,7 @@ type CreateEligibleMCPServerFixtureParams struct {
 	Name                  pgtype.Text
 	Slug                  pgtype.Text
 	RemoteMcpServerID     uuid.NullUUID
+	UnproxiedMcpServerID  uuid.NullUUID
 	RemoteSessionIssuerID uuid.NullUUID
 	UserSessionIssuerID   uuid.NullUUID
 	Visibility            string
@@ -55,6 +56,7 @@ func (q *Queries) CreateEligibleMCPServerFixture(ctx context.Context, arg Create
 		arg.Name,
 		arg.Slug,
 		arg.RemoteMcpServerID,
+		arg.UnproxiedMcpServerID,
 		arg.RemoteSessionIssuerID,
 		arg.UserSessionIssuerID,
 		arg.Visibility,
@@ -301,6 +303,24 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -311,14 +331,31 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $1
+ AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE ms.remote_session_issuer_id END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $1)
+   OR (i.project_id IS NULL AND i.organization_id = $2)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -326,7 +363,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id = $2)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -342,7 +379,7 @@ LEFT JOIN unproxied_mcp_servers AS u
   ON u.id = ms.unproxied_mcp_server_id
  AND u.project_id = ms.project_id
  AND u.deleted IS FALSE
-WHERE ms.id = $2
+WHERE ms.id = $3
   AND ms.deleted IS FALSE
   AND ms.visibility <> 'disabled'
   AND ms.toolset_id IS NULL
@@ -351,8 +388,9 @@ WHERE ms.id = $2
 `
 
 type GetEligibleServerParams struct {
-	OrganizationID string
-	McpServerID    uuid.UUID
+	TypedAuthEnforced bool
+	OrganizationID    string
+	McpServerID       uuid.UUID
 }
 
 type GetEligibleServerRow struct {
@@ -363,6 +401,8 @@ type GetEligibleServerRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	TypedAuthEnforced                   bool
+	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
@@ -375,7 +415,7 @@ type GetEligibleServerRow struct {
 // One eligible, discovered server by id, re-read inside the write
 // transaction; ids outside the organization do not resolve.
 func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerParams) (GetEligibleServerRow, error) {
-	row := q.db.QueryRow(ctx, getEligibleServer, arg.OrganizationID, arg.McpServerID)
+	row := q.db.QueryRow(ctx, getEligibleServer, arg.TypedAuthEnforced, arg.OrganizationID, arg.McpServerID)
 	var i GetEligibleServerRow
 	err := row.Scan(
 		&i.ID,
@@ -385,6 +425,8 @@ func (q *Queries) GetEligibleServer(ctx context.Context, arg GetEligibleServerPa
 		&i.Name,
 		&i.Slug,
 		&i.IssuerID,
+		&i.TypedAuthEnforced,
+		&i.OfferedClientIds,
 		&i.Issuer,
 		&i.MetadataFetchedAt,
 		&i.GrantTypesSupported,
@@ -683,6 +725,24 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
+  , CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , ARRAY(
+      SELECT oc.id
+      FROM mcp_server_auth_clients AS ol
+      JOIN mcp_auth_clients AS oa
+        ON oa.id = ol.auth_client_id
+       AND oa.organization_id = ol.organization_id
+       AND oa.deleted IS FALSE
+       AND oa.enabled
+       AND oa.client_type IN ('ema', 'remote_session')
+      JOIN remote_session_clients AS oc
+        ON oc.id = oa.remote_session_client_id
+       AND oc.deleted IS FALSE
+      WHERE ol.mcp_server_id = ms.id
+        AND ol.project_id = ms.project_id
+        AND ol.deleted IS FALSE
+      ORDER BY oc.id
+    )::uuid[] AS offered_client_ids
   , i.issuer
   , i.metadata_fetched_at
   , i.grant_types_supported
@@ -693,14 +753,31 @@ SELECT
 FROM mcp_servers AS ms
 JOIN projects AS p
   ON p.id = ms.project_id
- AND p.organization_id = $1
+ AND p.organization_id = $2
  AND p.deleted IS FALSE
 JOIN remote_session_issuers AS i
-  ON i.id = ms.remote_session_issuer_id
+  ON i.id = CASE WHEN $1::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN (
+       SELECT oc.remote_session_issuer_id
+       FROM mcp_server_auth_clients AS ol
+       JOIN mcp_auth_clients AS oa
+         ON oa.id = ol.auth_client_id
+        AND oa.organization_id = ol.organization_id
+        AND oa.deleted IS FALSE
+        AND oa.enabled
+        AND oa.client_type IN ('ema', 'remote_session')
+       JOIN remote_session_clients AS oc
+         ON oc.id = oa.remote_session_client_id
+        AND oc.deleted IS FALSE
+       WHERE ol.mcp_server_id = ms.id
+         AND ol.project_id = ms.project_id
+         AND ol.deleted IS FALSE
+       ORDER BY (oa.client_type = 'ema') DESC, oc.id
+       LIMIT 1
+     ) ELSE ms.remote_session_issuer_id END
  AND i.deleted IS FALSE
  AND (
    i.project_id = ms.project_id
-   OR (i.project_id IS NULL AND i.organization_id = $1)
+   OR (i.project_id IS NULL AND i.organization_id = $2)
    OR (i.project_id IS NULL AND i.organization_id IS NULL)
  )
 LEFT JOIN user_session_issuers AS usi
@@ -708,7 +785,7 @@ LEFT JOIN user_session_issuers AS usi
  AND usi.deleted IS FALSE
  AND (
    usi.project_id = ms.project_id
-   OR (usi.project_id IS NULL AND usi.organization_id = $1)
+   OR (usi.project_id IS NULL AND usi.organization_id = $2)
    OR (usi.project_id IS NULL AND usi.organization_id IS NULL)
  )
 LEFT JOIN tunneled_mcp_servers AS t
@@ -731,6 +808,11 @@ WHERE ms.deleted IS FALSE
 ORDER BY ms.name ASC NULLS LAST, ms.id ASC
 `
 
+type ListEligibleServersParams struct {
+	TypedAuthEnforced bool
+	OrganizationID    string
+}
+
 type ListEligibleServersRow struct {
 	ID                                  uuid.UUID
 	ProjectID                           uuid.UUID
@@ -739,6 +821,8 @@ type ListEligibleServersRow struct {
 	Name                                pgtype.Text
 	Slug                                pgtype.Text
 	IssuerID                            uuid.UUID
+	TypedAuthEnforced                   bool
+	OfferedClientIds                    []uuid.UUID
 	Issuer                              string
 	MetadataFetchedAt                   pgtype.Timestamptz
 	GrantTypesSupported                 []string
@@ -754,8 +838,14 @@ type ListEligibleServersRow struct {
 // matter: readiness is about the upstream authorization server. Undiscovered
 // issuers are returned so the list can count them; whether the issuer
 // advertises ID-JAG is decided in Go so the derivation stays pure.
-func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string) ([]ListEligibleServersRow, error) {
-	rows, err := q.db.Query(ctx, listEligibleServers, organizationID)
+// Typed auth clients choose upstream authentication only for proxied servers.
+// Unproxied servers have no typed offers and retain their derived issuer and clients.
+// Where typed auth clients apply (typed_auth_enforced),
+// a server's authorization server is the one its personal or identity-provider
+// auth clients offer: an identity-provider client's if it offers one, else the
+// first by id. Elsewhere it is the one derived for the server.
+func (q *Queries) ListEligibleServers(ctx context.Context, arg ListEligibleServersParams) ([]ListEligibleServersRow, error) {
+	rows, err := q.db.Query(ctx, listEligibleServers, arg.TypedAuthEnforced, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -771,6 +861,8 @@ func (q *Queries) ListEligibleServers(ctx context.Context, organizationID string
 			&i.Name,
 			&i.Slug,
 			&i.IssuerID,
+			&i.TypedAuthEnforced,
+			&i.OfferedClientIds,
 			&i.Issuer,
 			&i.MetadataFetchedAt,
 			&i.GrantTypesSupported,

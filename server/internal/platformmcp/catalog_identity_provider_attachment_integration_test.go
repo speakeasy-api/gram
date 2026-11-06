@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -17,12 +18,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -557,4 +564,116 @@ func TestExistingAttachmentAssociatesOnlyTheRegisteredServer(t *testing.T) {
 	err = service.associateExistingAttachment(ctx, principal, project, registration, metadata.Issuer, clients[0])
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict)
 	require.Zero(t, associations(), "a retry must not associate the client of the issuer the server left")
+}
+
+// Another provider's client on a shared user session issuer is a conflict
+// only while the issuer's bindings decide what a server signs in through.
+// With upstream auth enforcement on, the server is attached when it offers a
+// registration of the provider itself, and the issuer's other bindings
+// neither attach it nor refuse it.
+func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_attachment_typed")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	service := attachmentTestService(t, conn)
+	// Catalog registrations require the issuer's organization tenancy too,
+	// matching the issuer created by the production registration flow.
+	sharedIssuer, err := usersessionsrepo.New(conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
+		ProjectID: project.ID, OrganizationID: conv.ToPGText(principal.OrganizationID),
+		Slug: "shared-" + uuid.NewString()[:8], AuthnChallengeMode: "interactive",
+		SessionDuration: pgtype.Interval{Microseconds: time.Hour.Microseconds(), Valid: true},
+	})
+	require.NoError(t, err)
+	shared := sharedIssuer.ID
+	serverID := attachmentTestMCPServer(t, conn, project.ID, shared)
+	// A second server keeps the issuer shared, so its binding proves nothing
+	// about this server and no association is captured from it.
+	attachmentTestMCPServer(t, conn, project.ID, shared)
+	other := attachmentTestIssuerMetadata("https://other.example.test")
+	otherResource := attachmentTestResource("https://other.example.test/mcp", "Other", "")
+	require.NoError(t, attachmentTestCommit(t, service, principal, project, shared, other, "client-other", otherResource.Resource, otherResource))
+	var upstream *httptest.Server
+	upstream = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "oauth-protected-resource") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"resource": upstream.URL + "/mcp", "authorization_servers": []string{upstream.URL}})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"issuer": upstream.URL, "authorization_endpoint": upstream.URL + "/authorize", "token_endpoint": upstream.URL + "/token", "registration_endpoint": upstream.URL + "/register", "token_endpoint_auth_methods_supported": []string{"client_secret_basic"}, "response_types_supported": []string{"code"}, "grant_types_supported": []string{"authorization_code"}})
+	}))
+	t.Cleanup(upstream.Close)
+	provider := upstream.URL
+	roots := x509.NewCertPool()
+	roots.AddCert(upstream.Certificate())
+	service.policy, err = guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
+	require.NoError(t, err)
+
+	_, _, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict, "the issuer's binding decides without enforcement")
+
+	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	service.authEnforcement = authenforcement.NewGate(conn)
+
+	_, attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	require.NoError(t, err, "another server's provider on the shared issuer must not refuse the attachment")
+	require.False(t, attached)
+	_, attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, other.Issuer)
+	require.NoError(t, err)
+	require.False(t, attached, "a client the issuer binds is not this server's until the server offers it")
+
+	issuer, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGText(principal.OrganizationID),
+		Slug: "typed-attachment-" + uuid.NewString()[:8], Issuer: provider,
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	registration, err := remotesessionsrepo.New(conn).CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		ProjectID: conv.ToNullUUID(project.ID), OrganizationID: conv.ToPGTextEmpty(principal.OrganizationID), RemoteSessionIssuerID: issuer.ID,
+		ClientID: "typed-attachment-client", ClientIDIssuedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	})
+	require.NoError(t, err)
+	fixtures := authclientbackfill.New(conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{OrganizationID: principal.OrganizationID, ProjectID: conv.ToNullUUID(project.ID), ClientType: authz.AuthClientTypeRemoteSession, Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration.ID)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
+
+	match, attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	require.NoError(t, err)
+	require.True(t, attached, "the server offers a registration of the provider with no issuer binding")
+	require.Equal(t, registration.ID, match.ClientID)
+	require.Equal(t, issuer.ID, match.RemoteSessionIssuerID)
+
+	// Exercise the full already-attached path: neither legacy association nor
+	// a migration-derived duplicate of the administrator's auth client is needed.
+	remote, err := remotemcprepo.New(conn).CreateServer(ctx, remotemcprepo.CreateServerParams{ID: uuid.New(), ProjectID: project.ID, TransportType: "streamable-http", Url: upstream.URL + "/mcp"})
+	require.NoError(t, err)
+	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: project.ID, Name: server.Name, Slug: server.Slug, UserSessionIssuerID: server.UserSessionIssuerID, RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: server.Visibility})
+	require.NoError(t, err)
+	endpoint, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{ProjectID: project.ID, McpServerID: conv.ToNullUUID(serverID), Slug: "typed-attachment-" + uuid.NewString()[:8]})
+	require.NoError(t, err)
+	catalog, err := platformrepo.New(conn).CreatePlatformMCPCatalogRegistration(ctx, platformrepo.CreatePlatformMCPCatalogRegistrationParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID, SourceKind: "remote", CatalogProvider: directRemoteProviderKey, CatalogReference: remote.Url, Status: registrationStatusRegistered, ConnectionID: conv.ToNullUUID(connectionIDFromPrincipal(t, principal)), ConnectionGeneration: conv.ToNullUUID(connectionIDFromPrincipalGeneration(t, principal))})
+	require.NoError(t, err)
+	_, err = platformrepo.New(conn).UpdatePlatformMCPCatalogRegistrationComponents(ctx, platformrepo.UpdatePlatformMCPCatalogRegistrationComponentsParams{ID: catalog.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID, Status: registrationStatusRegistered, RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(shared), McpServerID: conv.ToNullUUID(serverID), McpEndpointID: conv.ToNullUUID(endpoint.ID)})
+	require.NoError(t, err)
+	for range 2 {
+		tx := testenv.BeginTx(t, ctx, conn)
+		result, attachErr := service.attachLocked(ctx, platformrepo.New(tx), principal, project, catalog.ID)
+		require.NoError(t, tx.Rollback(ctx))
+		require.NoError(t, attachErr)
+		require.True(t, result.Attached)
+		require.Equal(t, provider, result.ProviderURL)
+	}
+	legacy, err := upstreamclientsrepo.New(conn).ListMCPServerRemoteSessionClients(ctx, upstreamclientsrepo.ListMCPServerRemoteSessionClientsParams{McpServerID: serverID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Empty(t, legacy)
+	offers, err := upstreamclientsrepo.New(conn).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: principal.OrganizationID, McpServerIds: []uuid.UUID{serverID}})
+	require.NoError(t, err)
+	require.Len(t, offers, 1)
+	require.Equal(t, conv.ToNullUUID(authClientID), offers[0].AuthClientID)
 }
