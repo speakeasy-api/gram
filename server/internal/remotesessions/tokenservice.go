@@ -902,10 +902,10 @@ func RetryAfter(err error) time.Duration {
 	return 0
 }
 
-// OutageKindOf says what kind of outage stopped err's refresh, none when unknown.
+// OutageKindOf is the outage the connect page shows for err's refresh, none when unknown.
 func OutageKindOf(err error) RefreshOutageKind {
 	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
-		return refreshErr.outageKind
+		return refreshErr.visibleOutage
 	}
 	return RefreshOutageNone
 }
@@ -922,7 +922,7 @@ func TokenEndpointCausedOutage(err error) bool {
 // OutageProviderHost is the issuer host behind a provider outage; a tunneled provider's stays off the page.
 func OutageProviderHost(err error) string {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	if !ok || refreshErr.outageKind != RefreshOutageProvider {
+	if !ok || refreshErr.visibleOutage != RefreshOutageProvider {
 		return ""
 	}
 	parsed, perr := url.Parse(refreshErr.IssuerURL)
@@ -932,10 +932,12 @@ func OutageProviderHost(err error) string {
 	return parsed.Hostname()
 }
 
-// RefreshBusy reports a refresh that waited on another request and made no call of its own.
+// RefreshBusy reports a deferred refresh with no outage the connect page can see. It keeps
+// that page's meaning on purpose: a cooldown whose record can't be read, or our own slow
+// setup, also reads as busy here, though ConnectionOutageHappened records them differently.
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.outageKind == RefreshOutageNone
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
 }
 
 // SessionUnavailable reports a subject's connection that an outage stopped refreshing.
