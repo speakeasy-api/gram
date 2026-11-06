@@ -22879,6 +22879,7 @@ func marshalAdminSupportCoverageCellToSupportCoverageCellResponseBody(v *admin.S
 		Surface:    v.Surface,
 		Status:     v.Status,
 		Value:      v.Value,
+		Unit:       v.Unit,
 		Detail:     v.Detail,
 		LastSeen:   v.LastSeen,
 	}
