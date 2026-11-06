@@ -1865,12 +1865,20 @@ function LogsToolsTableContent({
     traces,
     (trace) => new Date(Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)),
   );
+  // Keyed by day, so a refetch that adds a newer day on top does not remount
+  // every group below it. A day that comes back later counts its runs.
+  const dayRuns = new Map<string, number>();
+  const dayGroupKeys = dayGroups.map((group) => {
+    const run = dayRuns.get(group.key) ?? 0;
+    dayRuns.set(group.key, run + 1);
+    return run === 0 ? group.key : `${group.key}-${run}`;
+  });
 
   return (
     <>
       {dayGroups.map((group, index) => (
         <div
-          key={`${group.key}-${index}`}
+          key={dayGroupKeys[index]}
           data-day-ts={group.date.getTime()}
           className="border-border/60 border-t first:border-t-0"
         >

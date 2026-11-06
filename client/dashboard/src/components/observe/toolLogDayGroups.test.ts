@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { groupByLocalDay, pinnedDayAt } from "./toolLogDayGroups";
 
 // Local wall-clock times, so the expectations hold in any test time zone.
@@ -46,6 +46,32 @@ describe("groupByLocalDay", () => {
 
   it("returns no groups for no rows", () => {
     expect(groupByLocalDay([], (row: Date) => row)).toEqual([]);
+  });
+});
+
+describe("groupByLocalDay outside UTC", () => {
+  // Pin a zone behind UTC, so a regression to UTC days fails even when the
+  // test runner itself runs in UTC.
+  const originalTZ = process.env.TZ;
+  beforeAll(() => {
+    process.env.TZ = "America/Los_Angeles";
+  });
+  afterAll(() => {
+    // Assigning undefined would leave the literal string "undefined" behind.
+    if (originalTZ === undefined) {
+      delete process.env.TZ;
+      return;
+    }
+    process.env.TZ = originalTZ;
+  });
+
+  it("splits one UTC day that spans two local days", () => {
+    // Both on 2026-11-05 in UTC: 01:00 and 2026-11-04 23:00 in Los Angeles.
+    const groups = groupByLocalDay(
+      [new Date("2026-11-05T09:00:00Z"), new Date("2026-11-05T07:00:00Z")],
+      (row) => row,
+    );
+    expect(groups.map((g) => g.key)).toEqual(["2026-11-05", "2026-11-04"]);
   });
 });
 
