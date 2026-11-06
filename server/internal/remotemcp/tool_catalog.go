@@ -42,31 +42,56 @@ const (
 // instance is shared by every proxy a manager builds, so limits hold per process.
 type toolCatalogRefreshes struct {
 	flights     singleflight.Group
-	lastStarted [toolCatalogRefreshStripes]atomic.Int64
+	lastStarted [toolCatalogRefreshStripes]atomic.Pointer[toolCatalogRefreshClaim]
 	now         func() time.Time
 }
+
+// toolCatalogRefreshClaim is the refresh that holds a stripe's cooldown.
+type toolCatalogRefreshClaim struct {
+	// key is the refresh key that started it.
+	key string
+
+	// started is when it started, in Unix nanoseconds.
+	started int64
+}
+
+// toolCatalogRefresh is what run did about a refresh.
+type toolCatalogRefresh string
+
+const (
+	// toolCatalogListed means the upstream was listed for this call.
+	toolCatalogListed toolCatalogRefresh = "listed"
+
+	// toolCatalogListedRecently means this key listed the upstream within the
+	// cooldown, so the catalog already holds what that listing returned.
+	toolCatalogListedRecently toolCatalogRefresh = "listed_recently"
+
+	// toolCatalogLookupSkipped means another key holds the stripe's cooldown, so
+	// the upstream was not asked for this key.
+	toolCatalogLookupSkipped toolCatalogRefresh = "lookup_skipped"
+)
 
 func newToolCatalogRefreshes() *toolCatalogRefreshes {
 	return &toolCatalogRefreshes{
 		flights:     singleflight.Group{},
-		lastStarted: [toolCatalogRefreshStripes]atomic.Int64{},
+		lastStarted: [toolCatalogRefreshStripes]atomic.Pointer[toolCatalogRefreshClaim]{},
 		now:         time.Now,
 	}
 }
 
-// run calls refresh unless this key's stripe started one within the cooldown,
-// sharing one call between concurrent callers, and reports whether refresh ran.
-// A skipped refresh is not an error: the caller rereads the catalog either way. A failed refresh doesn't start the
-// cooldown, so a caller who repairs their credential isn't told a tool is missing;
-// sharing still limits a failing upstream to one attempt at a time per key.
-// refresh runs detached from ctx's cancellation because other callers may be
-// waiting on it.
-func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func(context.Context) error) (bool, error) {
+// run calls refresh unless the key's stripe started one within the cooldown,
+// sharing one call between concurrent callers, and reports what it did. A
+// skipped refresh is not an error: the caller rereads the catalog either way.
+// A failed refresh doesn't start the cooldown, so a caller who repairs their
+// credential isn't told a tool is missing; sharing still limits a failing
+// upstream to one attempt at a time per key. refresh runs detached from ctx's
+// cancellation because other callers may be waiting on it.
+func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func(context.Context) error) (toolCatalogRefresh, error) {
 	results := r.flights.DoChan(key, func() (any, error) {
 		stripe := r.stripe(key)
-		claimed, ok := r.claim(stripe)
-		if !ok {
-			return false, nil
+		claimed, outcome := r.claim(stripe, key)
+		if claimed == nil {
+			return outcome, nil
 		}
 
 		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), toolCatalogRefreshTimeout)
@@ -74,48 +99,52 @@ func (r *toolCatalogRefreshes) run(ctx context.Context, key string, refresh func
 
 		err := refresh(refreshCtx)
 		if err != nil {
-			stripe.CompareAndSwap(claimed, 0)
+			stripe.CompareAndSwap(claimed, nil)
 		}
-		return err == nil, err
+		return outcome, err
 	})
 
 	select {
 	case <-ctx.Done():
-		return false, fmt.Errorf("wait for tool catalog refresh: %w", ctx.Err())
+		return "", fmt.Errorf("wait for tool catalog refresh: %w", ctx.Err())
 	case result := <-results:
-		listed, _ := result.Val.(bool)
-		return listed, result.Err
+		outcome, _ := result.Val.(toolCatalogRefresh)
+		return outcome, result.Err
 	}
 }
 
-func (r *toolCatalogRefreshes) stripe(key string) *atomic.Int64 {
+func (r *toolCatalogRefreshes) stripe(key string) *atomic.Pointer[toolCatalogRefreshClaim] {
 	hash := fnv.New32a()
 	_, _ = hash.Write([]byte(key))
 	return &r.lastStarted[hash.Sum32()%toolCatalogRefreshStripes]
 }
 
-// claim reports whether stripe is outside its cooldown, starting a new one and
-// returning its stamp when it is.
-func (r *toolCatalogRefreshes) claim(stripe *atomic.Int64) (int64, bool) {
+// claim starts a cooldown for key when stripe is outside one and returns it;
+// otherwise it returns nil and says whose cooldown holds the stripe.
+func (r *toolCatalogRefreshes) claim(stripe *atomic.Pointer[toolCatalogRefreshClaim], key string) (*toolCatalogRefreshClaim, toolCatalogRefresh) {
 	now := r.now().UnixNano()
 	last := stripe.Load()
-	if last != 0 && now-last < int64(toolCatalogRefreshCooldown) {
-		return 0, false
+	if last != nil && now-last.started < int64(toolCatalogRefreshCooldown) {
+		if last.key == key {
+			return nil, toolCatalogListedRecently
+		}
+		return nil, toolCatalogLookupSkipped
 	}
-	return now, stripe.CompareAndSwap(last, now)
+	claimed := &toolCatalogRefreshClaim{key: key, started: now}
+	if !stripe.CompareAndSwap(last, claimed) {
+		// Calls for one key share a flight, so the winner is another key.
+		return nil, toolCatalogLookupSkipped
+	}
+	return claimed, toolCatalogListed
 }
 
-const toolNotOnUpstreamMessage = "this tool isn't available on this MCP server"
-
-var (
-	// errToolNotOnUpstream refuses a call for a tool that neither the catalog nor
-	// a listing made for this call knows about.
-	errToolNotOnUpstream = &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: toolNotOnUpstreamMessage, Data: nil}
-
-	// errToolNotRelisted refuses a call for a tool the catalog lacks when the
-	// cooldown skipped the listing, so the upstream was not asked.
-	errToolNotRelisted = &proxy.RejectError{Code: proxy.RejectCodeInvalidParams, Message: toolNotOnUpstreamMessage, Data: nil}
-)
+// errToolNotOnUpstream refuses a call for a tool neither the catalog nor the
+// upstream's listing knows about.
+var errToolNotOnUpstream = &proxy.RejectError{
+	Code:    proxy.RejectCodeInvalidParams,
+	Message: "this tool isn't available on this MCP server",
+	Data:    nil,
+}
 
 // toolCatalogSync keeps a server's tool catalog current for enforcement: rules
 // read from the catalog, and tools it is missing are recorded from the upstream
@@ -127,6 +156,9 @@ type toolCatalogSync struct {
 	organizationID string
 	mcpServerID    string
 	projectID      string
+
+	// metrics counts refusals the upstream was not asked about; nil counts nothing.
+	metrics *ProxyMetrics
 
 	// listUpstream returns the upstream's whole unfiltered tool list using the
 	// credentials of the given request.
@@ -158,7 +190,7 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 
 	refreshKey := toolCatalogRefreshKey(ctx, c.mcpServerID)
 
-	listed, err := c.refreshes.run(ctx, refreshKey, func(refreshCtx context.Context) error {
+	outcome, err := c.refreshes.run(ctx, refreshKey, func(refreshCtx context.Context) error {
 		tools, err := c.listUpstream(refreshCtx, userRequest)
 		if err != nil {
 			return fmt.Errorf("list upstream tools: %w", err)
@@ -179,10 +211,10 @@ func (c *toolCatalogSync) callDisposition(ctx context.Context, call *proxy.Tools
 	if disposition, recorded := catalog[name]; recorded {
 		return disposition, nil
 	}
-	if listed {
-		return "", errToolNotOnUpstream
+	if outcome == toolCatalogLookupSkipped {
+		c.metrics.RecordToolLookupSkipped(ctx, c.organizationID)
 	}
-	return "", errToolNotRelisted
+	return "", errToolNotOnUpstream
 }
 
 // toolCatalogRefreshKey scopes shared lookups and cooldowns to one caller on one

@@ -211,16 +211,14 @@ func TestToolsCallCatalog_InventedNamesAreBoundedByCooldown(t *testing.T) {
 	catalog.refreshes.now = func() time.Time { return now }
 	ctx := blockDestructiveContext(t)
 
-	_, err := catalog.callDisposition(ctx, newCatalogCall(t, "a"))
-	require.ErrorIs(t, err, errToolNotOnUpstream)
-	for _, name := range []string{"b", "c"} {
+	for _, name := range []string{"a", "b", "c"} {
 		_, err := catalog.callDisposition(ctx, newCatalogCall(t, name))
-		require.ErrorIs(t, err, errToolNotRelisted, "a name the cooldown kept from the upstream was not checked")
+		require.ErrorIs(t, err, errToolNotOnUpstream)
 	}
 	require.EqualValues(t, 1, listings.Load(), "different names must share one listing within the cooldown")
 
 	now = now.Add(toolCatalogRefreshCooldown)
-	_, err = catalog.callDisposition(ctx, newCatalogCall(t, "d"))
+	_, err := catalog.callDisposition(ctx, newCatalogCall(t, "d"))
 	require.ErrorIs(t, err, errToolNotOnUpstream)
 	require.EqualValues(t, 2, listings.Load())
 }

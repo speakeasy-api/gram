@@ -63,13 +63,12 @@ func newToolsCallConnections(attribution *ConnectionAttribution, recorder *mcpco
 	return connections
 }
 
-func (c *toolsCallConnections) record(ctx context.Context, code mcpconnectionattempts.Code, extra ...mcpconnectionattempts.Option) {
+func (c *toolsCallConnections) record(ctx context.Context, code mcpconnectionattempts.Code) {
 	// A caller that went away says nothing about the server.
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	opts := append([]mcpconnectionattempts.Option{mcpconnectionattempts.Provider(c.provider), mcpconnectionattempts.FromRequest(c.Request)}, c.Details...)
-	opts = append(opts, extra...)
 	c.recorder.Once(ctx, c.Scope, mcpconnectionattempts.StepMCPRequest, code, opts...)
 }
 
@@ -94,8 +93,8 @@ func (c *toolsCallConnections) Name() string {
 
 // InterceptToolsCallRefusal implements [proxy.ToolsCallRefusalInterceptor].
 func (c *toolsCallConnections) InterceptToolsCallRefusal(ctx context.Context, err error) {
-	if code, detail, ok := refusalHappened(err); ok {
-		c.record(ctx, code, mcpconnectionattempts.Detail(detail))
+	if code, ok := refusalHappened(err); ok {
+		c.record(ctx, code)
 	}
 }
 
@@ -180,35 +179,32 @@ func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunn
 	return none, false
 }
 
-// refusalHappened classifies a refusal and its sub-reason; an unknown error is ours and a held call is not an end state.
-func refusalHappened(err error) (mcpconnectionattempts.Code, string, bool) {
-	// A tool a fresh listing doesn't have is the caller's mistake, not a connection outcome.
+// refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
+func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
+	// A tool the server's listing doesn't have is the caller's mistake, not a connection outcome.
 	if _, held := errors.AsType[*proxy.ToolResultError](err); held || errors.Is(err, errToolNotOnUpstream) {
 		var none mcpconnectionattempts.Code
-		return none, "", false
-	}
-	if errors.Is(err, errToolNotRelisted) {
-		return mcpconnectionattempts.CodeInternalError, "tool_lookup_skipped", true
+		return none, false
 	}
 	if _, unavailable := errors.AsType[killswitchCheckError](err); unavailable {
-		return mcpconnectionattempts.CodeKillswitchCheckUnavailable, "", true
+		return mcpconnectionattempts.CodeKillswitchCheckUnavailable, true
 	}
 	if errors.Is(err, ErrToolUsageLimitReached) {
-		return mcpconnectionattempts.CodeUsageLimitReached, "", true
+		return mcpconnectionattempts.CodeUsageLimitReached, true
 	}
 	if mcpaccess.IsToolPermissionDenied(err) {
-		return mcpconnectionattempts.CodeToolPermissionDenied, "", true
+		return mcpconnectionattempts.CodeToolPermissionDenied, true
 	}
 	if reject, ok := errors.AsType[*proxy.RejectError](err); ok {
 		if _, paused := reject.Data.(proxy.KillswitchRejectionData); paused {
-			return mcpconnectionattempts.CodeMCPToolCallsPaused, "", true
+			return mcpconnectionattempts.CodeMCPToolCallsPaused, true
 		}
 		if reject.Message == ToolNotApprovedMessage {
-			return mcpconnectionattempts.CodeToolNotApproved, "", true
+			return mcpconnectionattempts.CodeToolNotApproved, true
 		}
 		if reject.Code == proxy.RejectCodeForbidden {
-			return mcpconnectionattempts.CodePolicyBlocked, "", true
+			return mcpconnectionattempts.CodePolicyBlocked, true
 		}
 	}
-	return mcpconnectionattempts.CodeInternalError, "", true
+	return mcpconnectionattempts.CodeInternalError, true
 }
