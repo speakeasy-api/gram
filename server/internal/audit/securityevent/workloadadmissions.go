@@ -12,10 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-// LogWorkloadAdmissionWithdraw records an administrator's issuer withdrawal
-// cascading to an admission whose admit is already in the security log, so its
-// history stays in one place. Kit runtimes recorded those admits on every start
-// until their own admits and withdrawals stopped being audited.
+// LogWorkloadAdmissionWithdraw records the withdrawal of an admission whose
+// admit is already in the security log, so its history stays in one place:
+// either an administrator's issuer withdrawal cascading to it or the runtime's
+// own teardown. Kit runtimes recorded those admits on every start until their
+// own admits and withdrawals stopped being audited.
 func LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event audit.LogWorkloadAdmissionWithdrawEvent) error {
 	action := audit.ActionWorkloadAdmissionWithdraw
 	before, err := marshalSnapshot(event.AdmissionSnapshotBefore)

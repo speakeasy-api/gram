@@ -14,11 +14,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -316,7 +319,7 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 	if err != nil {
 		return fmt.Errorf("revoke kit workload: %w", err)
 	}
-	owned := false
+	var owned []uuid.UUID
 	for _, a := range admissions {
 		if a.WorkloadIssuerID != b.IssuerID || a.Subject != b.Subject || a.MatchKind != "exact" {
 			continue
@@ -324,13 +327,27 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 		if a.ProjectID != project || a.Name.String != "kit-runtime-"+r.ID.String()+"-"+b.Generation {
 			return ErrKitRuntimeBinding
 		}
-		owned = true
-		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID}); err != nil {
+		owned = append(owned, a.ID)
+	}
+	if len(owned) == 0 {
+		return nil
+	}
+	// Runtimes started before admits stopped being audited have an admit in the
+	// security log. Close those with a withdraw so the log does not show them as
+	// still admitted.
+	logged, err := securityevent.RuntimeAdmittedSubjects(ctx, db, b.Identity.OrganizationID, owned)
+	if err != nil {
+		return fmt.Errorf("revoke kit workload: %w", err)
+	}
+	for _, id := range owned {
+		if logged[id] {
+			if err := logLegacyKitWithdraw(ctx, db, b, issuer, id); err != nil {
+				return fmt.Errorf("revoke kit workload: %w", err)
+			}
+		}
+		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: id}); err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)
 		}
-	}
-	if !owned {
-		return nil
 	}
 	remaining, err := q.CountLiveAdmissionsForSubject(ctx, workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: b.Identity.OrganizationID, WorkloadIssuerID: b.IssuerID, Subject: b.Subject, MatchKind: "exact"})
 	if err != nil {
@@ -342,6 +359,47 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 	_, err = q.SoftDeleteWorkloadAgentAssignmentForSubject(ctx, workloadrepo.SoftDeleteWorkloadAgentAssignmentForSubjectParams{OrganizationID: b.Identity.OrganizationID, WorkloadIssuerID: b.IssuerID, Subject: b.Subject, MatchKind: "exact"})
 	if err != nil {
 		return fmt.Errorf("withdraw kit workload assignment: %w", err)
+	}
+	return nil
+}
+
+func logLegacyKitWithdraw(ctx context.Context, db assistantrepo.DBTX, b *KitWorkloadBinding, issuer workloadrepo.WorkloadIssuer, admissionID uuid.UUID) error {
+	admission, err := workloadrepo.New(db).GetWorkloadAdmission(ctx, workloadrepo.GetWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: issuer.ProjectID, ID: admissionID})
+	if err != nil {
+		return fmt.Errorf("read admission: %w", err)
+	}
+	// Read deleted agents too: a runtime is withdrawn after its agent is deleted.
+	var agentName *string
+	name, err := agentrepo.New(db).GetAgentNameIncludingDeleted(ctx, agentrepo.GetAgentNameIncludingDeletedParams{OrganizationID: b.Identity.OrganizationID, ID: b.Identity.AgentID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("read agent name: %w", err)
+	default:
+		agentName = conv.PtrEmpty(name)
+	}
+	agentID := b.Identity.AgentID.String()
+	err = securityevent.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{
+		OrganizationID:       b.Identity.OrganizationID,
+		ProjectID:            issuer.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
+		ActorDisplayName:     agentName,
+		ActorSlug:            nil,
+		AdmissionURN:         urn.NewWorkloadAdmission(admission.ID),
+		AdmissionDisplayName: admission.Subject,
+		AdmissionSnapshotBefore: &audit.WorkloadAdmissionSnapshot{
+			Issuer:          issuer.Issuer,
+			IssuerName:      issuer.Name,
+			Subject:         admission.Subject,
+			MatchKind:       admission.MatchKind,
+			Name:            admission.Name.String,
+			Tags:            admission.Tags,
+			AssignedAgentID: agentID,
+			Tier:            "project",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("log withdraw: %w", err)
 	}
 	return nil
 }

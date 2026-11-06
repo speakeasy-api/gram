@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -226,6 +227,35 @@ func TestKitWorkloadDBAuditLog(t *testing.T) {
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
 	require.Equal(t, before, counts(), "a runtime's own admit and withdraw are not recorded in either log")
+}
+
+// A runtime started before its admits stopped being audited has an admit in the
+// security log; its teardown still closes it with a withdraw.
+func TestKitWorkloadDBClosesLegacySecurityAdmit(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
+	require.NoError(t, err)
+	runtime, _ := kitWorkloadPartitionAdmissions(admissions, binding.IssuerID)
+	require.Len(t, runtime, 1)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	_, err = securityrepo.New(db).InsertSecurityAuditLog(t.Context(), securityrepo.InsertSecurityAuditLogParams{IsInternal: false, OrganizationID: identity.OrganizationID, ActorID: identity.AgentID.String(), ActorType: string(urn.PrincipalTypeAgent), Action: string(audit.ActionWorkloadAdmissionAdmit), SubjectID: runtime[0].ID.String(), SubjectType: audit.SubjectTypeWorkloadAdmission})
+	require.NoError(t, err)
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+
+	withdrawals, err := audittest.SecurityAuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), withdrawals)
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, runtime[0].ID.String(), withdraw.SubjectID)
+	require.Equal(t, agentPrincipal.ID, withdraw.ActorID)
+	configWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Zero(t, configWithdrawals)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
