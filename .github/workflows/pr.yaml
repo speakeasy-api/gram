@@ -2235,16 +2235,10 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      # Only transformed modules, including _metadata.json; never test results.
       # Restore after installation, which can replace node_modules.
-      # Lockfile/config changes invalidate the prefix; add new transform inputs
-      # to CONFIG_HASH. Bump vitest-modules-blacksmith-v1 to invalidate all entries.
-      # Revision fallback never crosses the dependency/configuration boundary.
       - name: Vitest cache key
         id: vitest-cache-key
-        env:
-          CONFIG_HASH: ${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json', 'tsconfig*.json', 'client/*/package.json', 'client/*/tsconfig*.json', 'client/*/vitest.config.*', 'client/*/vite.config.*', 'client/dashboard/dev-slot-plugin.ts') }}
-        run: echo "prefix=vitest-modules-blacksmith-v1-${RUNNER_OS}-${RUNNER_ARCH}-$(node --version)-${CONFIG_HASH}-" >> "$GITHUB_OUTPUT"
+        uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
 
       - name: Restore Vitest module cache
         id: vitest-cache
@@ -2282,6 +2276,97 @@ jobs:
       - name: Prune aube store
         if: success()
         run: aube store prune
+
+  # Trusted, bounded producer for branch-protected caches. No required check
+  # depends on this job. At most one successful warm-up per UTC day/config.
+  vitest-module-cache:
+    name: Populate main Vitest module cache
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    needs: [changes]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.changes.outputs.client == 'true'
+    timeout-minutes: 15
+    continue-on-error: true
+    concurrency:
+      group: vitest-module-cache-main
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Vitest cache key
+        id: vitest-cache-key
+        uses: ./.github/workflows/composite/vitest-cache-key # zizmor: ignore[self-repository]
+
+      - name: Daily producer key
+        id: daily-key
+        env:
+          PREFIX: ${{ steps.vitest-cache-key.outputs.prefix }}
+        run: echo "key=${PREFIX}main-$(date -u +%F)" >> "$GITHUB_OUTPUT"
+
+      - name: Check for today's main cache
+        id: lookup
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.daily-key.outputs.key }}
+          lookup-only: true
+
+      - name: Prepare GitHub Actions environment
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: mise run github
+
+      - name: Cache aube store
+        if: steps.lookup.outputs.cache-hit != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      - name: Install dependencies
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: aube install --frozen-lockfile
+
+      - name: Restore compatible module transforms
+        if: steps.lookup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.daily-key.outputs.key }}
+          restore-keys: ${{ steps.vitest-cache-key.outputs.prefix }}
+
+      # Use the real test commands/configs, not a second transformation pipeline.
+      # A failed warm-up never publishes and cannot suppress consumer tests.
+      - name: Warm dashboard transforms
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: aube run test
+        working-directory: client/dashboard
+
+      - name: Warm admin transforms
+        if: steps.lookup.outputs.cache-hit != 'true'
+        run: aube run test
+        working-directory: client/admin
+
+      - name: Save main module transforms
+        if: success() && steps.lookup.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: node_modules/.vitest-cache
+          key: ${{ steps.daily-key.outputs.key }}
 
   sdk-gen-check:
     name: Check SDK is up-to-date
