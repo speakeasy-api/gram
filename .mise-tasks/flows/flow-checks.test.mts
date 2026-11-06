@@ -182,7 +182,7 @@ suite("reaching the stack from the sandbox", () => {
     assert.ok(sandboxStep, "missing step");
     assert.match(
       sandboxStep.run!,
-      /^mise run flows:sandbox-host host\.docker\.internal$/m,
+      /^mise run flows:sandbox-host host\.docker\.internal --bind-ip 0\.0\.0\.0$/m,
     );
   });
 

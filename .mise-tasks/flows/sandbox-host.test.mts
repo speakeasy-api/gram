@@ -201,6 +201,75 @@ suite("sandboxSettings", () => {
   });
 });
 
+suite("listeners", () => {
+  test("the server and dev-idp listen on the bind address", () => {
+    assert.equal(saved.get("GRAM_SERVER_ADDRESS"), env["GRAM_SERVER_ADDRESS"]);
+    assert.equal(saved.get("GRAM_DEVIDP_ADDRESS"), env["GRAM_DEVIDP_ADDRESS"]);
+    assert.match(
+      saved.get("GRAM_SERVER_ADDRESS")!,
+      /\{\{env\.GRAM_BIND_IP\}\}/,
+    );
+  });
+
+  test("every other listener stays on loopback", () => {
+    const others = [...saved].filter(
+      ([key]) =>
+        /ADDRESS$/.test(key) &&
+        !["GRAM_SERVER_ADDRESS", "GRAM_DEVIDP_ADDRESS"].includes(key),
+    );
+    assert.ok(others.length >= 2, "expected the admin and mock OIDC listeners");
+    for (const [key, value] of others) {
+      assert.match(value, /^127\.0\.0\.1:/, key);
+      assert.doesNotMatch(value, /GRAM_BIND_IP/, key);
+    }
+  });
+
+  test("the admin API keeps listening on loopback", () => {
+    assert.match(
+      saved.get("GRAM_ADMIN_SERVER_ADDRESS")!,
+      /^127\.0\.0\.1:\{\{env\.GRAM_ADMIN_PORT\}\}$/,
+    );
+    assert.match(saved.get("MOCK_OIDC_ADDRESS")!, /^127\.0\.0\.1:/);
+  });
+
+  test("keeps a literal listener the developer set", () => {
+    const s = new Map(
+      sandboxSettings(env, "host.docker.internal", "0.0.0.0", {
+        GRAM_SERVER_ADDRESS: "10.0.0.5:9000",
+        GRAM_ADMIN_SERVER_ADDRESS: "10.0.0.5:9001",
+      }),
+    );
+    assert.equal(s.get("GRAM_SERVER_ADDRESS"), "10.0.0.5:9000");
+    assert.equal(s.get("GRAM_ADMIN_SERVER_ADDRESS"), "10.0.0.5:9001");
+  });
+
+  test("replaces a saved template listener", () => {
+    const s = new Map(
+      sandboxSettings(env, "host.docker.internal", "0.0.0.0", {
+        GRAM_SERVER_ADDRESS: "{{env.GRAM_BIND_IP}}:1",
+      }),
+    );
+    assert.equal(s.get("GRAM_SERVER_ADDRESS"), env["GRAM_SERVER_ADDRESS"]);
+  });
+
+  test("keeps the developer's certificate names and dashboard hosts", () => {
+    const s = new Map(
+      sandboxSettings(env, "host.docker.internal", "0.0.0.0", {
+        GRAM_SSL_EXTRA_HOSTS: "dev.test",
+        VITE_DEV_HOSTNAMES: "localhost,dev.test",
+      }),
+    );
+    assert.equal(
+      s.get("GRAM_SSL_EXTRA_HOSTS"),
+      "dev.test,host.docker.internal",
+    );
+    assert.equal(
+      s.get("VITE_DEV_HOSTNAMES"),
+      "localhost,dev.test,host.docker.internal",
+    );
+  });
+});
+
 suite("validHost", () => {
   for (const host of [
     "host.docker.internal",
@@ -238,11 +307,14 @@ suite("validHost", () => {
 });
 
 suite("the task", () => {
-  function runTask(vars: Record<string, string>) {
+  function runTask(vars: Record<string, string>, localToml?: string) {
     const dir = mkdtempSync(join(scratch, "run-"));
     const bin = join(dir, "bin");
     mkdirSync(bin);
     writeFileSync(join(dir, "mise.toml"), miseToml);
+    if (localToml !== undefined) {
+      writeFileSync(join(dir, "mise.local.toml"), localToml);
+    }
     writeFileSync(
       join(bin, "mise"),
       `#!/usr/bin/env bash\nprintf '%s\\n' "$@" > "${dir}/mise.args"\n`,
@@ -282,6 +354,7 @@ suite("the task", () => {
   test("a dry run prints and saves nothing", () => {
     const r = runTask({
       usage_host: "host.docker.internal",
+      usage_bind_ip: "0.0.0.0",
       usage_dry_run: "true",
     });
     assert.equal(r.status, 0, r.stderr);
@@ -290,15 +363,40 @@ suite("the task", () => {
   });
 
   test("a bad host fails before anything is saved", () => {
-    const r = runTask({ usage_host: "evil.test\nGRAM_BIND_IP=1.1.1.1" });
+    const r = runTask({
+      usage_host: "evil.test\nGRAM_BIND_IP=1.1.1.1",
+      usage_bind_ip: "0.0.0.0",
+    });
     assert.notEqual(r.status, 0);
     assert.equal(r.args, undefined);
     assert.match(r.stderr, /Not a host name/);
   });
 
   test("a missing host fails", () => {
-    const r = runTask({});
+    const r = runTask({ usage_bind_ip: "0.0.0.0" });
     assert.notEqual(r.status, 0);
     assert.equal(r.args, undefined);
+  });
+
+  test("a missing bind address fails: there is no default", () => {
+    const r = runTask({ usage_host: "host.docker.internal" });
+    assert.notEqual(r.status, 0);
+    assert.equal(r.args, undefined);
+    assert.match(r.stderr, /Not an IP address/);
+  });
+
+  test("the bind flag is required in the task's usage", () => {
+    const source = readFileSync(script, "utf8");
+    assert.match(source, /^\/\/USAGE flag "--bind-ip <ip>" required=#true /m);
+    assert.doesNotMatch(source, /--bind-ip <ip>"[^\n]*default=/);
+  });
+
+  test("keeps literal listeners from mise.local.toml", () => {
+    const r = runTask(
+      { usage_host: "host.docker.internal", usage_bind_ip: "0.0.0.0" },
+      '[env]\nGRAM_SERVER_ADDRESS = "10.0.0.5:9000"\n',
+    );
+    assert.equal(r.status, 0, r.stderr);
+    assert.ok(r.args!.includes("GRAM_SERVER_ADDRESS=10.0.0.5:9000"));
   });
 });

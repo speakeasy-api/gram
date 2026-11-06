@@ -84,10 +84,13 @@ steps:
   # The agent runs in a container, where `localhost` is the container, so the
   # stack serves on the name the container reaches the runner by. The runner
   # resolves that name to itself, so the replay and the services agree.
+  # The server and dev-idp listen on every interface: the sandbox's network
+  # does not exist yet, so its gateway cannot be bound. This runner is
+  # single-use, and the sandbox's firewall admits only the three stack ports.
   - name: Serve the stack to the agent's sandbox
     run: |
       echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
-      mise run flows:sandbox-host host.docker.internal
+      mise run flows:sandbox-host host.docker.internal --bind-ip 0.0.0.0
   # ATLAS_TOKEN exists in this step only.
   - name: Boot the stack
     env:

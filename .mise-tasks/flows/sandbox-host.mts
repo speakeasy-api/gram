@@ -3,7 +3,7 @@
 //MISE description="Serve this worktree's stack on another host name, for an agent sandboxed in a container on the same machine (flow-checks CI)"
 //MISE dir="{{ config_root }}"
 //USAGE arg "<host>" help="The name the sandbox reaches this machine by, e.g. host.docker.internal"
-//USAGE flag "--bind-ip <ip>" default="0.0.0.0" help="Address the server, dev-idp and admin listeners bind to"
+//USAGE flag "--bind-ip <ip>" required=#true help="Address the server and dev-idp listen on, so the sandbox can reach them. No default: on a shared machine, choose deliberately"
 //USAGE flag "--dry-run" help="Print the settings instead of saving them"
 
 // The flow-checks heal agent runs in GitHub Agentic Workflows' AWF sandbox, a
@@ -11,17 +11,29 @@
 // stack has to be served on the name the container reaches the runner by,
 // and listen on an address that accepts traffic from the container network.
 //
+// Only the services the sandbox opens move to the bind address: the server
+// and dev-idp (the dashboard follows GRAM_BIND_IP on its own). The admin API
+// and its mock OIDC provider stay on loopback, as the health and control
+// listeners always do. A developer's own literal listener setting in
+// mise.local.toml is kept, as zero:tailscale keeps it.
+//
 // Run before `./zero`: it writes mise.local.toml, then zero boots the stack
 // with those settings and issues a TLS certificate that covers the host.
 // Uses only Node built-ins, since the workspace's packages are not installed
 // yet at that point.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { isIP } from "node:net";
 import { dependentEnvVars } from "../zero/env-deps.mts";
 
 const ROOTS = ["GRAM_HOST", "GRAM_BIND_IP"];
+// Listeners the sandboxed agent reaches. Every other GRAM_BIND_IP listener
+// stays on loopback.
+const SANDBOX_LISTENERS = new Set([
+  "GRAM_SERVER_ADDRESS",
+  "GRAM_DEVIDP_ADDRESS",
+]);
 
 // The [env] table of mise.toml: string values, and the `default` of an
 // inline `{ default = "..." }` table. Anything else that mentions a root is
@@ -72,16 +84,30 @@ export function sandboxSettings(
   env: Record<string, string>,
   host: string,
   bindIp: string,
+  local: Record<string, string> = {},
 ): [string, string][] {
   if (!validHost(host)) throw new Error(`Not a host name: ${host}`);
   if (isIP(bindIp) === 0) throw new Error(`Not an IP address: ${bindIp}`);
   const bind = isIP(bindIp) === 6 ? `[${bindIp}]` : bindIp;
   const withHost = (key: string) =>
-    [...new Set([...commaList(env[key]), host])].join(",");
+    [...new Set([...commaList(local[key] ?? env[key]), host])].join(",");
+  const readsBindIp = new Set(
+    dependentEnvVars(env, ["GRAM_BIND_IP"]).map(([key]) => key),
+  );
+  const dependents = dependentEnvVars(env, ROOTS).map(
+    ([key, value]): [string, string] => {
+      if (!readsBindIp.has(key)) return [key, value];
+      // A literal listener the developer set is theirs to keep.
+      const saved = local[key];
+      if (saved !== undefined && !saved.includes("{{")) return [key, saved];
+      if (SANDBOX_LISTENERS.has(key)) return [key, value];
+      return [key, value.replaceAll("{{env.GRAM_BIND_IP}}", "127.0.0.1")];
+    },
+  );
   return [
     ["GRAM_HOST", host],
     ["GRAM_BIND_IP", bind],
-    ...dependentEnvVars(env, ROOTS),
+    ...dependents,
     ["GRAM_SSL_EXTRA_HOSTS", withHost("GRAM_SSL_EXTRA_HOSTS")],
     ["VITE_DEV_HOSTNAMES", withHost("VITE_DEV_HOSTNAMES")],
   ];
@@ -90,11 +116,15 @@ export function sandboxSettings(
 if (import.meta.main) {
   try {
     const host = process.env["usage_host"] ?? "";
-    const bindIp = process.env["usage_bind_ip"] ?? "0.0.0.0";
+    const bindIp = process.env["usage_bind_ip"] ?? "";
+    const local = existsSync("mise.local.toml")
+      ? readEnv(readFileSync("mise.local.toml", "utf8"))
+      : {};
     const settings = sandboxSettings(
       readEnv(readFileSync("mise.toml", "utf8")),
       host,
       bindIp,
+      local,
     );
     if (process.env["usage_dry_run"] === "true") {
       for (const [k, v] of settings) console.log(`${k}=${v}`);
