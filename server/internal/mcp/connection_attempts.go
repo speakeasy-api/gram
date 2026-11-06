@@ -280,7 +280,8 @@ func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger,
 	s.forgetMemberStatuses(ctx, logger, attempt, dropped)
 }
 
-// forgetMemberStatuses clears rows the recorder dropped, so the next render records them again.
+// forgetMemberStatuses clears rows the recorder did not accept, so the next render records them again.
+// Rows accepted but lost later in the writer are not retried.
 func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, dropped []memberStatus) {
 	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
 	if !ok || len(dropped) == 0 {
