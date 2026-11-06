@@ -101,7 +101,7 @@ func TestListHookInstalls_LatestValuesPerInstall(t *testing.T) {
 
 	b := installs[1]
 	require.Equal(t, "laptop-b", b.Hostname)
-	require.Equal(t, "", b.BinaryVersion)
+	require.Empty(t, b.BinaryVersion)
 	require.Equal(t, "legacy_keyed", b.EndpointGeneration)
 	require.Equal(t, uint64(1), b.Errors)
 
