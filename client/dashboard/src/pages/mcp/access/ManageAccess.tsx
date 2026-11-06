@@ -48,6 +48,7 @@ import {
   Bot,
   ChevronLeft,
   ChevronRight,
+  Lock,
   Pencil,
   PencilOff,
   Plus,
@@ -186,6 +187,10 @@ export function ManageAccess({
     enabled: isAdmin,
     throwOnError: false,
   });
+  const roleFor = (row: AccessRow) =>
+    row.kind === "role"
+      ? rolesData?.roles.find((role) => role.principalUrn === row.principalUrn)
+      : undefined;
   const projectServers = useProjectServerIds(
     project.id,
     resourceId,
@@ -580,6 +585,7 @@ export function ManageAccess({
                 clearableWildcards={ALL_LINES.filter((line) =>
                   holdsOwnWildcard(row, [line]),
                 )}
+                managedInRoleManager={roleFor(row)?.slug === "admin"}
                 onNarrow={() => openNarrowing(row)}
                 onBlockDestructive={() =>
                   applyWrite(() =>
@@ -738,6 +744,7 @@ function PrincipalRow({
   onRevokeScope,
   onClearScope,
   clearableWildcards,
+  managedInRoleManager,
   onNarrow,
   onBlockDestructive,
   onAllowDestructive,
@@ -762,6 +769,11 @@ function PrincipalRow({
   onClearScope: (scope: ScopeKey) => void;
   /** Lines held by the row's own rule covering every server. */
   clearableWildcards: ScopeKey[];
+  /**
+   * The Admin role: its access covers every server and is changed in Role
+   * Manager only, so the row offers no controls here.
+   */
+  managedInRoleManager: boolean;
   onNarrow: () => void;
   onBlockDestructive: () => void;
   onAllowDestructive: () => void;
@@ -840,38 +852,59 @@ function PrincipalRow({
           {showFaces ? <MemberFacepile members={faces} maxFaces={5} /> : "—"}
         </div>
 
-        <div className="flex items-center justify-end gap-1">
-          <IconAction
-            label={open ? "Done editing" : "Edit access"}
-            onClick={() => setOpen((was) => !was)}
-            expanded={open}
-          >
-            {/* A pencil says the row is editable, and the struck-through
-              pencil says the editing is what stops. */}
-            {open ? (
-              <PencilOff className="h-4 w-4" />
-            ) : (
-              <Pencil className="h-4 w-4" />
-            )}
-          </IconAction>
-          <IconAction
-            // A role reached by an organization-wide rule is not removed
-            // here, it is subtracted — so the label says what it does.
-            label={
-              !isAdmin
-                ? "Only organization admins can change access."
-                : !canManage
-                  ? "Access cannot be changed here."
-                  : reaches
-                    ? `Remove ${row.displayName} from this server`
-                    : `Remove ${row.displayName}`
-            }
-            onClick={onRevoke}
-            disabled={pending || !canRemove}
-          >
-            <Trash2 className="h-4 w-4" />
-          </IconAction>
-        </div>
+        {managedInRoleManager ? (
+          // Admin is the one role that should cover every server, so its
+          // access is not narrowed per server: it is changed where the role
+          // is defined.
+          <div className="flex items-center justify-end">
+            <Button
+              variant="tertiary"
+              size="sm"
+              onClick={onEditRole}
+              className="hover:bg-transparent h-auto px-0 py-0 font-sans normal-case tracking-normal underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              <Button.LeftIcon>
+                <Lock className="h-3.5 w-3.5" />
+              </Button.LeftIcon>
+              <Button.Text className="font-sans normal-case tracking-normal">
+                Managed in Role Manager
+              </Button.Text>
+            </Button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-end gap-1">
+            <IconAction
+              label={open ? "Done editing" : "Edit access"}
+              onClick={() => setOpen((was) => !was)}
+              expanded={open}
+            >
+              {/* A pencil says the row is editable, and the struck-through
+                pencil says the editing is what stops. */}
+              {open ? (
+                <PencilOff className="h-4 w-4" />
+              ) : (
+                <Pencil className="h-4 w-4" />
+              )}
+            </IconAction>
+            <IconAction
+              // A role reached by an organization-wide rule is not removed
+              // here, it is subtracted — so the label says what it does.
+              label={
+                !isAdmin
+                  ? "Only organization admins can change access."
+                  : !canManage
+                    ? "Access cannot be changed here."
+                    : reaches
+                      ? `Remove ${row.displayName} from this server`
+                      : `Remove ${row.displayName}`
+              }
+              onClick={onRevoke}
+              disabled={pending || !canRemove}
+            >
+              <Trash2 className="h-4 w-4" />
+            </IconAction>
+          </div>
+        )}
       </div>
 
       {/* Animated by rows rather than height, so the panel can size itself
@@ -880,10 +913,10 @@ function PrincipalRow({
       <div
         className={cn(
           "col-span-full grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none",
-          open ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
+          open && !managedInRoleManager ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
-        inert={!open}
-        aria-hidden={!open}
+        inert={!open || managedInRoleManager}
+        aria-hidden={!open || managedInRoleManager}
       >
         <div className="overflow-hidden">
           <div className="border-border bg-muted/15 mx-4 mb-3 flex items-end justify-between gap-6 border p-4">

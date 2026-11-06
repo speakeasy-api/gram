@@ -601,6 +601,25 @@ describe("what a row change writes", () => {
       ],
     });
   });
+
+  it("locks the Admin role row and points to Role Manager", () => {
+    roles.list = [
+      { id: "9", principalUrn: "role:global:9", slug: "admin", grants: [] },
+    ];
+    renderList([
+      entry({
+        principalUrn: "role:global:9",
+        kind: "role",
+        displayName: "Admin",
+        appliesTo: "all_resources",
+        level: "manage",
+      }),
+    ]);
+
+    expect(screen.getByText("Managed in Role Manager")).toBeTruthy();
+    expect(screen.queryByLabelText("Remove Admin from this server")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit access" })).toBeNull();
+  });
 });
 
 describe("a blocking role", () => {
