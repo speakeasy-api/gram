@@ -386,6 +386,7 @@ func TestAuthorizationErrorPageAsksToSignInAgain(t *testing.T) {
 	page := pageText(response)
 	require.Contains(t, page, "Your sign-in service needs you to sign in again")
 	require.Contains(t, page, "sign in when your sign-in service asks")
+	require.Contains(t, page, "Speakeasy dashboard")
 	require.NotContains(t, strings.ToLower(page), "your mcp client")
 }
 

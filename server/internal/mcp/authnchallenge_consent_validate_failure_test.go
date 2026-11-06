@@ -198,7 +198,9 @@ func requireOneRefreshRow(t *testing.T, answer http.HandlerFunc) {
 	})
 	require.NoError(t, err)
 
-	_, _ = postValidate(t, fx, fx.clientID)
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
 	var refreshes int
 	for _, row := range rec.Rows() {
 		if row.Step == mcpconnectionattempts.StepProviderRefresh.String() {
