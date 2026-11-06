@@ -40,6 +40,8 @@ export function LogsTimelineStrip({
   onResetRange,
   isZoomed = false,
   loading = false,
+  failed = false,
+  onRetry,
   height = 88,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
@@ -49,6 +51,12 @@ export function LogsTimelineStrip({
   onResetRange?: () => void;
   isZoomed?: boolean;
   loading?: boolean;
+  /**
+   * The series read failed. With nothing drawn yet the strip says so: an
+   * empty axis would read as a window with no calls in it.
+   */
+  failed?: boolean;
+  onRetry?: () => void;
   /** Shorter on a short viewport, where the list needs the pixels more. */
   height?: number;
 }): JSX.Element {
@@ -199,6 +207,25 @@ export function LogsTimelineStrip({
         </div>
         <div style={{ height }}>
           <Skeleton className="size-full" />
+        </div>
+      </div>
+    );
+  }
+
+  if (failed && timeSeries.length === 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div
+          role="alert"
+          className="text-muted-foreground flex items-center justify-center gap-3 text-sm"
+          style={{ height }}
+        >
+          Could not load the calls over time.
+          {onRetry && (
+            <Button variant="tertiary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          )}
         </div>
       </div>
     );
