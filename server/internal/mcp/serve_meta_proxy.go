@@ -190,7 +190,7 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 	// A member whose only credential is configured headers is not the
 	// owner's to fix: the agent's sign-in step does not set them. When the
 	// agent's own token was sent too, the refusal is the token's.
-	if dial.connectURL == "" && !dial.clientCredential && !(dial.configuredHeaders && dial.anonymous) && dial.ownerReconnect != nil {
+	if dial.connectURL == "" && !dial.clientCredential && (!dial.configuredHeaders || !dial.anonymous) && dial.ownerReconnect != nil {
 		if fix := dial.ownerReconnect(); fix.url != "" {
 			return agentMemberAuthFailure(member, dial, fix)
 		}
