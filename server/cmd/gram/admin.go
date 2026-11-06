@@ -337,6 +337,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, platformHostsCLIFlag())
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, catalogSyncFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -546,6 +547,7 @@ func newAdminCommand() *cli.Command {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}
 			var platformAssets *assets.Service
+			var catalogAssets *mcpregistry.CatalogAssetStore
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
 			if err != nil {
 				logger.WarnContext(ctx, "Admin logos unavailable; continuing without asset storage", attr.SlogError(err))
@@ -557,8 +559,12 @@ func newAdminCommand() *cli.Command {
 				defer o11y.LogDefer(ctx, logger, "shut down admin asset storage", func() error { return assetShutdown(ctx) })
 				platformAssets = assets.NewPlatformService(logger, tracerProvider, guardianPolicy, db, assetStorage)
 				adminService.SetAssetService(platformAssets)
+				catalogAssets = &mcpregistry.CatalogAssetStore{Registry: registryService, Images: platformAssets, Blob: assetStorage, Logger: logger, Operator: ""}
 			}
 			admin.Attach(mux, adminService)
+			if err := configureCatalogSync(ctx, c, mux, adminService, registryService, catalogAssets); err != nil {
+				return err
+			}
 			if c.Bool("admin-mcp-enabled") {
 				key := c.String("admin-mcp-signing-key")
 				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {

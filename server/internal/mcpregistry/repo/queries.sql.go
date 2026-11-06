@@ -175,6 +175,33 @@ func (q *Queries) DiscoverVersion(ctx context.Context, arg DiscoverVersionParams
 	return i, err
 }
 
+const exportPublishedCatalog = `-- name: ExportPublishedCatalog :many
+SELECT data FROM mcp_registry_entries WHERE published
+ORDER BY (data #>> '{server,name}') COLLATE "C" LIMIT 10001
+`
+
+// Administrative transfer is global, deliberately not tenant scoped. Fail closed
+// at the caller if the sentinel row exceeds its bundle limit.
+func (q *Queries) ExportPublishedCatalog(ctx context.Context) ([][]byte, error) {
+	rows, err := q.db.Query(ctx, exportPublishedCatalog)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items [][]byte
+	for rows.Next() {
+		var data []byte
+		if err := rows.Scan(&data); err != nil {
+			return nil, err
+		}
+		items = append(items, data)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEntry = `-- name: GetEntry :one
 SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
@@ -434,6 +461,17 @@ func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMapp
 	return items, nil
 }
 
+const lockCatalogTransfer = `-- name: LockCatalogTransfer :exec
+LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE
+`
+
+// Global catalog import preserves all existing identities, including concurrent
+// creates and edits from the admin service. Readers remain available.
+func (q *Queries) LockCatalogTransfer(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockCatalogTransfer)
+	return err
+}
+
 const lockEntry = `-- name: LockEntry :one
 SELECT id, data, published, published_at, created_at, updated_at
 FROM mcp_registry_entries
@@ -465,6 +503,23 @@ SELECT pg_advisory_xact_lock(hashtextextended('mcp_registry_entries:com.speakeas
 func (q *Queries) LockOktaMappings(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, lockOktaMappings)
 	return err
+}
+
+const publishedCatalogSize = `-- name: PublishedCatalogSize :one
+SELECT count(*)::bigint AS entries, coalesce(sum(octet_length(data::text)), 0)::bigint AS bytes
+FROM mcp_registry_entries WHERE published
+`
+
+type PublishedCatalogSizeRow struct {
+	Entries int64
+	Bytes   int64
+}
+
+func (q *Queries) PublishedCatalogSize(ctx context.Context) (PublishedCatalogSizeRow, error) {
+	row := q.db.QueryRow(ctx, publishedCatalogSize)
+	var i PublishedCatalogSizeRow
+	err := row.Scan(&i.Entries, &i.Bytes)
+	return i, err
 }
 
 const registryReady = `-- name: RegistryReady :one
