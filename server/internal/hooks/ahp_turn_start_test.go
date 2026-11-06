@@ -3,12 +3,14 @@ package hooks
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	ahp "github.com/agenthooksprotocol/go-sdk"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
@@ -17,6 +19,7 @@ func ahpTestTurnStart() map[string]any {
 	delete(e, "message")
 	e["type"] = "turn.start"
 	e["trigger"] = "user"
+	e["turn"] = map[string]any{"id": "turn"}
 	e["items"] = []any{ahpTestMessage("user", "incoming prompt")}
 	return e
 }
@@ -25,6 +28,7 @@ func TestAHPTurnStartPromptOwnership(t *testing.T) {
 	t.Parallel()
 	for _, trigger := range []string{"user", "external", "continuation", "hook"} {
 		t.Run(trigger, func(t *testing.T) {
+			t.Parallel()
 			raw := ahpTestTurnStart()
 			raw["trigger"] = trigger
 			user := ahpTestMessage("user", "")
@@ -73,7 +77,7 @@ func TestAHPTurnStartPromptPolicy(t *testing.T) {
 				parts := []any{ahpTestPart("RESTRICTED_TEST_CONTENT")}
 				if attachment {
 					ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("RESTRICTED_TEST_CONTENT"))
-					parts = []any{ahpTestPart("safe prompt"), ahpTestAttachmentPart("notes", "text/plain", ref)}
+					parts = []any{ahpTestPart("safe prompt"), ahpTestAttachmentPart("notes", "application/xml", ref)}
 				}
 				e["items"] = []any{map[string]any{"id": "message", "role": "user", "parts": parts}}
 				if mode == "observe" {
@@ -82,7 +86,7 @@ func TestAHPTurnStartPromptPolicy(t *testing.T) {
 				} else {
 					effects := []string{"deny"}
 					if mode == "no-deny" {
-						effects = nil
+						effects = []string{}
 					}
 					w := ahpRequest(t, h, "hooks/intercept", e, effects, ahpAuthHeaders)
 					require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
@@ -108,26 +112,41 @@ func TestAHPTurnStartPromptPolicy(t *testing.T) {
 	}
 }
 
-func TestAHPTurnStartAttachmentUnavailable(t *testing.T) {
+func TestAHPTurnStartAttachmentCategoryParity(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestHooksService(t)
-	ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
-	h, err := ti.service.ahpHandler()
-	require.NoError(t, err)
-	e := ahpTestTurnStart()
-	e["items"] = []any{map[string]any{"id": "message", "role": "user", "parts": []any{
-		ahpTestPart("safe inline prompt"),
-		ahpTestAttachmentPart("missing", "text/plain", ahpUploadRefPrefix+uuid.NewString()),
-	}}}
-	for _, mode := range []string{"hooks/intercept", "hooks/observe"} {
-		w := ahpRequest(t, h, mode, e, []string{"deny"}, ahpAuthHeaders)
-		require.Contains(t, w.Body.String(), `"error"`, "unavailable receipts must not produce a successful partial scan")
+	for _, category := range []string{"", "document"} {
+		for _, boundary := range []string{"arrival", "admission"} {
+			t.Run(category+"/"+boundary, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.auth = &ahpTestAuthorizer{authCtx: hookAuthContext(t, ctx)}
+				scanner := &ahpContentMatchingScanner{}
+				ti.service.riskScanner = scanner
+				h, err := ti.service.ahpHandler()
+				require.NoError(t, err)
+				ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("RESTRICTED_TEST_CONTENT"))
+				part := ahpTestAttachmentPart("notes", "application/xml", ref)
+				if category != "" {
+					part["category"] = category
+				}
+				items := []any{map[string]any{"id": "message", "role": "user", "parts": []any{part}}}
+				e := ahpTestTurnStart()
+				e["items"] = items
+				if boundary == "arrival" {
+					e = ahpTestInbound()
+					e["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": items}
+				}
+				w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+				require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+				require.True(t, ahpResponseHasEffects(w.Body.Bytes()))
+				require.Len(t, scanner.requests, 1)
+				require.Equal(t, "RESTRICTED_TEST_CONTENT", scanner.requests[0].Text)
+			})
+		}
 	}
 }
 
-// The same admitted prompt can appear at both boundaries. Native turn identity
-// correlates persistence, but each intercept still evaluates its own evidence.
-func TestAHPTurnStartAndInboundCorrelation(t *testing.T) {
+func TestAHPTurnStartAttachmentUnavailable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestHooksService(t)
 	ti.service.productFeatures = alwaysEnabledFeatures{}
@@ -137,19 +156,151 @@ func TestAHPTurnStartAndInboundCorrelation(t *testing.T) {
 	ti.service.riskScanner = scanner
 	h, err := ti.service.ahpHandler()
 	require.NoError(t, err)
+	ref := ahpUploadRef(t, ti.service.ahpUploadHandler(), []byte("attachment evidence"))
+	require.NoError(t, ti.service.cache.Delete(ctx, ahpUploadCacheKey(*auth.ProjectID, strings.TrimPrefix(ref, ahpUploadRefPrefix))))
+	e := ahpTestTurnStart()
 	session := uuid.NewString()
-	for _, turn := range []string{"first", "second"} {
-		for _, e := range []map[string]any{ahpTestInbound(), ahpTestTurnStart()} {
-			e["id"] = uuid.NewString()
-			e["session"] = map[string]any{"id": session}
-			e["turn"] = map[string]any{"id": turn}
-			e["harness"] = map[string]any{"name": "opencode", "version": "0.1.0"}
-			w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
-			require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
-		}
+	e["session"] = map[string]any{"id": session}
+	e["items"] = []any{map[string]any{"id": "message", "role": "user", "parts": []any{
+		ahpTestPart("safe inline prompt"),
+		ahpTestAttachmentPart("missing", "application/xml", ref),
+	}}}
+	b, err := json.Marshal(e)
+	require.NoError(t, err)
+	var typed ahp.TurnStartEvent
+	require.NoError(t, json.Unmarshal(b, &typed))
+	_, err = ti.service.ahpPromptAttachments(ctx, ahpTurnStartPrompt(&typed))
+	require.ErrorIs(t, err, errAHPAttachmentUnavailable)
+	w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+	var envelope struct {
+		Error struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+		Result json.RawMessage `json:"result"`
 	}
-	require.Equal(t, 4, scanner.scans)
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.Equal(t, -32004, envelope.Error.Code)
+	require.Equal(t, "Backend internal error", envelope.Error.Message)
+	require.Empty(t, envelope.Result)
+	w = ahpRequest(t, h, "hooks/observe", e, nil, ahpAuthHeaders)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	require.Empty(t, w.Body.String(), "notifications do not receive RPC errors")
+	require.Zero(t, scanner.scans)
 	rows, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
 	require.NoError(t, err)
-	require.Len(t, rows, 2, "same text in distinct turns remains distinct")
+	require.Empty(t, rows, "neither boundary may persist a partial inline prompt")
+}
+
+// The same admitted prompt can appear at both boundaries. Message identity
+// correlates persistence, but each intercept still evaluates its own evidence.
+func TestAHPTurnStartAndInboundCorrelation(t *testing.T) {
+	t.Parallel()
+	for _, harness := range []string{"opencode", "kit", "example-harness"} {
+		for _, order := range []string{"arrival-first", "admission-first"} {
+			t.Run(harness+"/"+order, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.productFeatures = alwaysEnabledFeatures{}
+				auth := hookAuthContext(t, ctx)
+				ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+				scanner := &recordingRiskScanner{}
+				ti.service.riskScanner = scanner
+				h, err := ti.service.ahpHandler()
+				require.NoError(t, err)
+				session := uuid.NewString()
+				for _, turn := range []string{"first", "second"} {
+					arrival := ahpTestInbound()
+					arrivalMessage := ahpTestMessage("user", "incoming prompt")
+					arrivalMessage["id"] = turn + "-message"
+					arrival["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{arrivalMessage}}
+					admission := ahpTestTurnStart()
+					admission["items"] = []any{arrivalMessage}
+					admission["turn"] = map[string]any{"id": turn + "-message"}
+					events := []map[string]any{arrival, admission}
+					if order == "admission-first" {
+						events[0], events[1] = events[1], events[0]
+					}
+					midturn := ahpTestInbound()
+					midturn["turn"] = map[string]any{"id": turn + "-message"}
+					midturnMessage := ahpTestMessage("user", "incoming prompt")
+					midturnMessage["id"] = turn + "-midturn-message"
+					midturn["message"] = map[string]any{"sender": "user", "channel": "cli", "messages": []any{midturnMessage}}
+					events = append(events, midturn)
+					for _, e := range events {
+						e["id"] = uuid.NewString()
+						e["session"] = map[string]any{"id": session}
+						e["harness"] = map[string]any{"name": harness, "version": "1.0.0"}
+						w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+						require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+					}
+				}
+				require.Equal(t, 6, scanner.scans)
+				rows, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				require.Len(t, rows, 4, "distinct messages in one turn and repeated text in distinct turns remain distinct")
+			})
+		}
+	}
+}
+
+// OpenCode's canonical message ID is its native prompt/turn identity. Prove
+// compatibility with the provider-turn key used by LiteLLM, including the
+// correlated writer's promotion of an existing proxy row to the native source.
+func TestAHPOpenCodePromptProxyCorrelation(t *testing.T) {
+	t.Parallel()
+	for _, proxyOrder := range []string{"proxy-first", "native-first"} {
+		for _, arrivalOrder := range []string{"arrival-first", "admission-first"} {
+			t.Run(proxyOrder+"/"+arrivalOrder, func(t *testing.T) {
+				t.Parallel()
+				ctx, ti := newTestHooksService(t)
+				ti.service.productFeatures = alwaysEnabledFeatures{}
+				auth := hookAuthContext(t, ctx)
+				ti.service.auth = &ahpTestAuthorizer{authCtx: auth}
+				scanner := &recordingRiskScanner{}
+				ti.service.riskScanner = scanner
+				h, err := ti.service.ahpHandler()
+				require.NoError(t, err)
+				session := uuid.NewString()
+				messageID := "msg_" + uuid.NewString()
+				proxy := canonicalIngestPayload("litellm", "prompt.submitted", session)
+				proxy.IdempotencyKey = new(uuid.NewString())
+				proxy.Session.TurnID = new(agentTurnPrefix + "opencode:" + messageID)
+				proxy.Data = &gen.HookIngestData{Prompt: &gen.HookPromptData{Text: new("incoming prompt")}}
+				options := defaultAuthenticatedIngestOptions()
+				options.ObserveOnly = true
+				if proxyOrder == "proxy-first" {
+					_, err = ti.service.IngestAuthenticatedWithOptions(ctx, auth, proxy, options)
+					require.NoError(t, err)
+				}
+				item := ahpTestMessage("user", "incoming prompt")
+				item["id"] = messageID
+				arrival := ahpTestInbound()
+				arrival["message"] = map[string]any{"sender": "user", "channel": "prompt", "messages": []any{item}}
+				admission := ahpTestTurnStart()
+				admission["turn"] = map[string]any{"id": messageID}
+				admission["items"] = []any{item}
+				events := []map[string]any{arrival, admission}
+				if arrivalOrder == "admission-first" {
+					events[0], events[1] = events[1], events[0]
+				}
+				for _, e := range events {
+					e["session"] = map[string]any{"id": session}
+					e["harness"] = map[string]any{"name": "opencode", "version": "0.1.0"}
+					w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
+					require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
+				}
+				if proxyOrder == "native-first" {
+					_, err = ti.service.IngestAuthenticatedWithOptions(ctx, auth, proxy, options)
+					require.NoError(t, err)
+				}
+				require.Equal(t, 2, scanner.scans)
+				rows, err := chatrepo.New(ti.conn).ListChatMessages(ctx, chatrepo.ListChatMessagesParams{ChatID: sessionIDToUUID(session), ProjectID: *auth.ProjectID})
+				require.NoError(t, err)
+				require.Len(t, rows, 1)
+				require.Equal(t, "opencode", rows[0].Source.String)
+				require.Equal(t, "incoming prompt", rows[0].Content)
+			})
+		}
+	}
 }

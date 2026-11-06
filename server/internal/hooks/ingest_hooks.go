@@ -50,6 +50,9 @@ type AuthenticatedIngestOptions struct {
 	boundaryScans   []ahpBoundaryScan
 	// promptPolicyText overrides prompt evidence without changing transcript capture.
 	promptPolicyText *string
+	// promptCorrelationID is a trusted adapter-provided logical message identity.
+	// It affects transcript persistence only, never event/policy deduplication.
+	promptCorrelationID string
 	// ObserveOnly records the event without evaluating enforcement, for
 	// events the sender cannot block.
 	ObserveOnly                  bool
@@ -78,6 +81,7 @@ func defaultAuthenticatedIngestOptions() AuthenticatedIngestOptions {
 		contentBoundary:              false,
 		boundaryScans:                nil,
 		promptPolicyText:             nil,
+		promptCorrelationID:          "",
 		ObserveOnly:                  false,
 		AllowWarnAcknowledgement:     true,
 		AllowSessionIdentityFallback: true,
@@ -1631,7 +1635,11 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 			return false, nil
 		}
 		msg = baseMsg("user", content)
-		if correlationID := agentPromptCorrelationID(payload); correlationID != "" {
+		correlationID := authenticatedIngestOptions(ctx).promptCorrelationID
+		if correlationID == "" {
+			correlationID = agentPromptCorrelationID(payload)
+		}
+		if correlationID != "" {
 			msg.MessageID = conv.ToPGText(correlationID)
 		} else {
 			uncorrelatedPrompt = proxiedTranscriptSource(hookSource) || usesNativeTranscriptFallback(payload.Source.Adapter)

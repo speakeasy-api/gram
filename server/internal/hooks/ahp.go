@@ -68,7 +68,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				if payload == nil {
 					return reply, nil
 				}
-				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny, ahpPromptCorrelationID(c.Event))
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -190,7 +190,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				if payload == nil {
 					return reply, nil
 				}
-				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny)
+				reason, err := s.ingestAHPInbound(ctx, payload, !canDeny, ahpPromptCorrelationID(prompt))
 				if err != nil || reason == "" {
 					return reply, err
 				}
@@ -247,7 +247,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				if payload == nil {
 					return nil
 				}
-				_, err = s.ingestAHP(ctx, payload, true)
+				_, err = s.ingestAHPInbound(ctx, payload, true, ahpPromptCorrelationID(prompt))
 				return err
 			},
 			UserMessageInbound: func(ctx context.Context, c ahpserver.ObserveContext[ahp.UserMessageInboundEvent]) error {
@@ -259,7 +259,7 @@ func (s *Service) ahpHandler() (http.Handler, error) {
 				if payload == nil {
 					return nil
 				}
-				_, err = s.ingestAHP(ctx, payload, true)
+				_, err = s.ingestAHPInbound(ctx, payload, true, ahpPromptCorrelationID(c.Event))
 				return err
 			},
 			ModelResponseAfter: func(ctx context.Context, c ahpserver.ObserveContext[ahp.ModelResponseAfterEvent]) error {
@@ -338,9 +338,12 @@ func (s *Service) ingestAHP(ctx context.Context, payload *gen.IngestPayload, obs
 
 // ingestAHPInbound includes resolved attachments in prompt policy evidence,
 // without adding their contents to the persisted prompt text.
-func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPayload, observeOnly bool) (string, error) {
+func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPayload, observeOnly bool, correlationID string) (string, error) {
+	options := defaultAuthenticatedIngestOptions()
+	options.ObserveOnly = observeOnly
+	options.promptCorrelationID = correlationID
 	if len(payload.Data.PromptAttachments) == 0 {
-		return s.ingestAHP(ctx, payload, observeOnly)
+		return s.ingestAHPWithOptions(ctx, payload, options)
 	}
 	var texts []string
 	if prompt := canonicalPromptText(payload); prompt != "" {
@@ -366,8 +369,6 @@ func (s *Service) ingestAHPInbound(ctx context.Context, payload *gen.IngestPaylo
 		evidenceBytes += size
 	}
 	policyText := strings.Join(texts, "\n")
-	options := defaultAuthenticatedIngestOptions()
-	options.ObserveOnly = observeOnly
 	options.promptPolicyText = &policyText
 	return s.ingestAHPWithOptions(ctx, payload, options)
 }
@@ -530,8 +531,8 @@ func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
 	prompt := &ahp.UserMessageInboundEvent{ //nolint:exhaustruct // internal prompt view, not a wire event
 		Source: e.Source, Harness: e.Harness, ID: e.ID, Time: e.Time,
 		Type: ahp.UserMessageInboundEventType(e.Type), Session: e.Session,
-		Turn:    ahp.Some(ahp.UserMessageInboundEventTurn{ID: e.Turn.ID}),
-		Message: ahp.UserMessageInboundEventMessage{},
+		Turn:    ahp.Some(ahp.UserMessageInboundEventTurn{ID: e.Turn.ID, Synthesized: e.Turn.Synthesized, AdditionalProperties: nil}),
+		Message: ahp.UserMessageInboundEventMessage{Channel: "", Sender: "", Messages: nil, AdditionalProperties: nil},
 	}
 	for _, item := range e.Items {
 		if item == nil || item.Role != ahp.ModelVisibleItemRoleUser {
@@ -548,12 +549,6 @@ func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
 					continue
 				}
 			}
-			if part.AttachmentBodyPart.Present && part.AttachmentBodyPart.Value != nil {
-				body := part.AttachmentBodyPart.Value
-				if body.Category.Present && body.Category.Value != "text" {
-					continue
-				}
-			}
 			parts = append(parts, part)
 		}
 		prompt.Message.Messages = append(prompt.Message.Messages, ahp.UserMessageInboundEventMessageMessagesItem{ //nolint:exhaustruct // only prompt identity and content are consumed
@@ -561,6 +556,38 @@ func ahpTurnStartPrompt(e *ahp.TurnStartEvent) *ahp.UserMessageInboundEvent {
 		})
 	}
 	return prompt
+}
+
+// ahpPromptCorrelationID correlates the same user messages at arrival and
+// admission, even when arrival precedes turn creation. Turn identity alone
+// would discard distinct midturn messages; a content hash would discard
+// repeated prompts. Keep event identities separate
+// so both boundaries still evaluate policy independently.
+func ahpPromptCorrelationID(e *ahp.UserMessageInboundEvent) string {
+	if e == nil || !e.Session.Present || e.Session.Value == nil {
+		return ""
+	}
+	var ids []string
+	for _, item := range e.Message.Messages {
+		if item.Role == "user" && item.ID != "" {
+			ids = append(ids, item.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return ""
+	}
+	slices.Sort(ids)
+	// OpenCode uses the native user message ID as the initiating turn ID in
+	// both adapter versions. Its proxy forwards that same ID, so a single
+	// message can use the existing native/proxy key even before a turn exists.
+	// Do not infer this relationship for other harnesses or grouped messages.
+	if e.Harness != nil && strings.EqualFold(strings.TrimSpace(e.Harness.Name), "opencode") && len(ids) == 1 {
+		sum := sha256.Sum256([]byte("opencode:" + ids[0]))
+		return agentPromptCorrelationPrefix + hex.EncodeToString(sum[:])
+	}
+	identity, _ := json.Marshal([]any{e.Source, e.Session.Value.ID, ids})
+	// Use the existing correlated-writer namespace, not ordinary event writes.
+	return fmt.Sprintf("%sahp:%x", agentPromptCorrelationPrefix, sha256.Sum256(identity))
 }
 
 // Resolved attachments use the same persistence path as transcript-derived hook attachments.
