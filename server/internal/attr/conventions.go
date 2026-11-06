@@ -871,7 +871,11 @@ const (
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
 	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
-	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
+	ToolCallIDKey = attribute.Key("gram.tool_call.id")
+	// ToolCallInterruptReasonKey is why the server stopped waiting for a tool
+	// call it was running, such as "server_shutdown" when a deploy interrupted
+	// it, so the failure is not attributed to the tool.
+	ToolCallInterruptReasonKey     = attribute.Key("gram.tool_call.interrupt_reason")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
@@ -3700,6 +3704,13 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 
 func ToolCallID(v string) attribute.KeyValue { return ToolCallIDKey.String(v) }
 func SlogToolCallID(v string) slog.Attr      { return slog.String(string(ToolCallIDKey), v) }
+
+func ToolCallInterruptReason(v string) attribute.KeyValue {
+	return ToolCallInterruptReasonKey.String(v)
+}
+func SlogToolCallInterruptReason(v string) slog.Attr {
+	return slog.String(string(ToolCallInterruptReasonKey), v)
+}
 
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)

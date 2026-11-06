@@ -100,6 +100,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -311,7 +312,12 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
-	tunnelManager      *tunnelManager
+	// shutdownDrain interrupts tools/call and resources/read work the gateway
+	// runs itself (functions, HTTP tools, external MCP tools) when the server
+	// shuts down. It is the remote proxy manager's drain when there is one,
+	// so one StartDrain reaches relayed and executed requests alike.
+	shutdownDrain *shutdowndrain.Drain
+	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
 
@@ -598,6 +604,10 @@ func NewService(
 	)
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
+	shutdownDrain := remoteProxyManager.ShutdownDrain()
+	if shutdownDrain == nil {
+		shutdownDrain = shutdowndrain.New()
+	}
 	service := &Service{
 		assistantWorkloadTokens:   nil,
 		builtinBackends:           map[string]BuiltinBackend{},
@@ -656,6 +666,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
+			shutdownDrain,
 		),
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
@@ -729,6 +740,7 @@ func NewService(
 		autoVerifications:      newAutoVerifications(),
 		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
+		shutdownDrain:          shutdownDrain,
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
@@ -1858,6 +1870,8 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 				Supported:            nil,
 				Requested:            "",
 				RequiredCapabilities: nil,
+				Reason:               "",
+				Retryable:            nil,
 			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
@@ -2217,7 +2231,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		if uri, ok := skillResourceURI(req.Params); ok && s.skillsOverMCPEnabled(ctx, payload) {
 			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, s.telemLogger, s.sessionClientInfo, payload, req, uri, time.Now())
 		}
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
+		return handleResourcesRead(ctx, s.logger, s.metrics, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	case mcpversions.MethodSkillsList:
 		return handleSkillsList(ctx, s.logger, s.db, s.skillResolver, payload, req)
 	case mcpversions.MethodSkillsGet:
