@@ -416,13 +416,13 @@ func TestStaleChoiceCallRecordsTheMessageRemedy(t *testing.T) {
 			gate: func(s *Service) *metaGateContext {
 				return staleChoiceRemedyGate(s, map[uuid.UUID]bool{adminOnly: false})
 			},
-			member: adminOnly, text: "needs your administrator to finish setup", reason: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, who: mcpconnectionattempts.WhoAdmin,
+			member: adminOnly, text: "needs your administrator to finish setup", reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, who: mcpconnectionattempts.WhoAdmin,
 		},
 		"ask whoever set this up": {
 			gate: func(*Service) *metaGateContext {
 				return &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New(), authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
 			},
-			member: uuid.New(), text: "Ask whoever set this up", reason: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, who: mcpconnectionattempts.WhoAdmin,
+			member: uuid.New(), text: "Ask whoever set this up", reason: mcpconnectionattempts.CodeApprovalNeedsAdmin, who: mcpconnectionattempts.WhoAdmin,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

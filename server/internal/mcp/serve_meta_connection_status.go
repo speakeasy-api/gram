@@ -113,6 +113,13 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 				return s.staleMemberStatus(ctx, logger, gate, member)
 			}
+			if consent, ok := errors.AsType[catalogConsentError](err); ok {
+				message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
+				if remedy == staleChoiceAskAdmin {
+					return metamcp.SignInActionRequired, message, nil
+				}
+				return metamcp.SignInNeedsConsent, message, nil
+			}
 			return metamcp.SignInNeedsConsent, memberErrorMessage(err), nil
 		}
 		for _, outcome := range gate.catalog.MemberOutcomes {

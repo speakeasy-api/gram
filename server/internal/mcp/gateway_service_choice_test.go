@@ -152,3 +152,20 @@ func TestGatewayConsentOneConnectedServiceShowsNoPicker(t *testing.T) {
 	require.NotContains(t, page, `name="auth_client.source"`)
 	require.Equal(t, uuid.NullUUID{UUID: fx.services[0], Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
 }
+
+// A pick naming a service the person has not connected for this server is ignored, and the default is approved instead.
+func TestGatewayConsentIgnoresAPickOutsideTheConnectedServices(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedServiceChoiceGateway(t, 2)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	unconnected := createConsentRemoteClient(t, ctx, fx.ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unconnected-"+uuid.NewString()[:8], "", []uuid.UUID{fx.issuerID})
+	stateID, csrf := seedGatewayConsentChallenge(t, ctx, fx.ti, fx.issuerID, fx.client, fx.gateway, fx.slug)
+	fallback := selectedService(t, consentPageWithPicks(t, ctx, fx, stateID, nil))
+	for _, forged := range []uuid.UUID{uuid.New(), unconnected} {
+		page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {forged.String()}})
+		require.NotContains(t, page, `value="`+forged.String()+`"`)
+		require.Equal(t, fallback, selectedService(t, page))
+	}
+	page := consentPageWithPicks(t, ctx, fx, stateID, url.Values{"auth_client.source": {unconnected.String()}})
+	require.Equal(t, uuid.NullUUID{UUID: fallback, Valid: true}, approveServiceChoice(t, ctx, fx, stateID, csrf, page))
+}

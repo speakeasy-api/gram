@@ -1147,6 +1147,10 @@ func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, g
 
 // memberFailureMessage is what a describe of a failed member reads.
 func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		message, _ := s.catalogConsentRefusal(ctx, logger, gate, member, consent, true)
+		return message
+	}
 	stale, ok := errors.AsType[memberStaleChoiceError](err)
 	if !ok {
 		return memberErrorMessage(err)

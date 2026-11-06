@@ -531,7 +531,7 @@ func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recordi
 	}
 	require.Len(t, rows, 1)
 	require.Equal(t, "setup_changed", rows[0].SubReason)
-	want, who := mcpconnectionattempts.CodeUpstreamSignInNotSetUp, mcpconnectionattempts.WhoAdmin
+	want, who := mcpconnectionattempts.CodeApprovalNeedsAdmin, mcpconnectionattempts.WhoAdmin
 	if fixable {
 		want, who = mcpconnectionattempts.CodeNeedsSignIn, mcpconnectionattempts.WhoPerson
 	}

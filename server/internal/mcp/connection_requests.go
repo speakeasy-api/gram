@@ -153,10 +153,15 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	s.recordRequestOutcome(ctx, gate.connectionScope(ctx), what, gate.request, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), s.gatewayReportedClient(ctx, gate)}, opts...)...)
 }
 
-// consentRefusalHappened records whoever the consent refusal's message tells to act first.
+// consentRefusalHappened is the code for whoever a consent refusal's message tells to act first.
+// An unchecked remedy is our failed lookup.
 func consentRefusalHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
-	if remedy == staleChoiceAskAdmin {
-		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+	switch remedy {
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeApprovalNeedsAdmin
+	case staleChoiceUnchecked:
+		return mcpconnectionattempts.CodeInternalError
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
 	}
 	return mcpconnectionattempts.CodeConsentNotApproved
 }

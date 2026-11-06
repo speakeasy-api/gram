@@ -287,6 +287,7 @@ var (
 	CodeNeedsSignIn        = defineResult("needs_sign_in", resultNeedsSignIn, OutcomeBlocked, WhoPerson, "You need to sign in to this service.", "Connect to the service.")
 	CodeConsentNotApproved = defineResult("consent_not_approved", resultNeedsConsent, OutcomeBlocked, WhoPerson, "This server needs your approval for this connection.", "Connect again and approve the server.")
 	CodeCatalogTooLarge    = define("catalog_too_large", OutcomeFailed, WhoAdmin, "The tools for this connection are too large to approve.", "Choose fewer tools if you can, or ask for some to be removed.")
+	CodeApprovalNeedsAdmin = define("approval_needs_admin", OutcomeFailed, WhoAdmin, "This server changed, and the person can't approve it again.", "Check their access and the server's sign-in setup.")
 
 	// Refresh refusals.
 	CodeRefreshTokenClientMismatch = define("refresh_token_client_mismatch", OutcomeFailed, WhoApp, "The app sent a sign-in that belongs to a different app.", "Update the app, or report the problem to its makers.")
