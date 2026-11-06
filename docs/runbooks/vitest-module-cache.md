@@ -1,46 +1,54 @@
 # Vitest transformed-module cache
 
-## Producer and consumers
+## PR → merge queue → main
 
-`client-test` keeps its existing PR/merge-queue gates and runs the complete dashboard,
-admin and registry-editor commands regardless of a cache hit. Only
+`client-test` keeps its existing gates and runs the complete dashboard, admin and
+registry-editor commands regardless of a cache hit. Only
 `node_modules/.vitest-cache`, including `_metadata.json`, is persisted. This is
 transformed code, not test results; assertions and isolation are unchanged.
 
-Blacksmith transparently serves `actions/cache`. With branch-protected caches,
-a queue ref's saved entry is not a shared cache for later queue refs. The
-`vitest-module-cache` job publishes a trusted `refs/heads/main` entry after a
-client-affecting main push. It checks out the push's exact SHA; it never downloads
-PR artifacts or checks out PR code. The workflow does not change backend branch
-protection; verify that setting before relying on cross-ref restores.
+1. **PR runs** restore their own compatible cache, falling back to main, and save
+   updated transforms after successful tests. Vitest re-transforms edited source
+   modules while reusing compatible unchanged modules.
+2. **Merge-queue runs** do the same, then upload the transforms as a seven-day
+   artifact named `<prefix><sha>-attempt-<run_attempt>`. Ordinary PR runs do not
+   upload this artifact. Upload failures do not fail the required test job.
+3. **Main pushes** run the independent `vitest-module-cache` job. Like the existing
+   image retagging flow, it reuses the queue's output for the exact commit rather
+   than repeating work. It installs only Node to calculate the same compatibility
+   prefix, selects a verified artifact, downloads it, checks metadata exists and
+   saves `<prefix><sha>` in main's cache scope. **No dependency install, test rerun,
+   daily key or scheduled warming.**
 
-The producer uses the same runner class, Node installation, dependency install,
-working directories and dashboard/admin test commands as consumers. It shares the
-compatibility-key composite action with them. It is independent of CI Gate and
-all required tests, has a 15-minute timeout and is best-effort. A failed warm-up
-never reaches the save step. Cache lookup failure stops only the optional producer;
-consumer restore/save failures remain non-blocking.
+GitHub documents that runs can restore caches from their current/default branch,
+but main cannot restore a PR's cache. An explicit artifact handoff bridges that
+scope boundary; merging does not promote cache entries automatically. Blacksmith
+transparently serves `actions/cache` with its own branch-protection setting. This
+workflow does not change that setting. See [GitHub cache restrictions](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#restrictions-for-accessing-a-cache).
 
-## Bounded publishing and races
+## Trust and failure handling
 
-The producer first does a lookup-only check for `<prefix>main-YYYY-MM-DD` (UTC).
-An exact hit skips dependency installation and both suites. Otherwise it starts with no restored module transforms, runs both suites and saves
-the daily entry. The producer never promotes consumer-generated transformed code,
-even if backend scope protection is misconfigured. Thus there
-is at most one successful warm-up per UTC day **per compatibility prefix**, not
-one full-suite run on every main push. Failed attempts can retry on later pushes.
-Checkout, Mise setup and lookup still cost time on cache-hit pushes.
+`.github/scripts/vitest-cache-source.mjs` accepts only:
 
-A fixed main-only concurrency group serializes producers without cancelling a
-running warm-up. GitHub may replace pending jobs with newer pushes; that is fine
-for this best-effort cache. Immutable cache keys make simultaneous reservations
-safe as well. An older main snapshot is valid: source content is part of every
-Vitest module's transform key. New/edited modules are transformed by consumers.
-No new entry is guaranteed until a qualifying main push completes successfully.
+- A completed, successful `merge_group` run of `.github/workflows/pr.yaml` for the
+  **exact main push SHA**, same repository/head repository, targeting main's queue.
+- A successful `client-test` job in that run's exact attempt, with all three normal
+  test steps successful.
+- One unexpired artifact whose name exactly matches the expected compatibility
+  prefix, SHA and attempt, and whose API provenance matches the run/repository.
 
-Consumers retain SHA-suffixed keys and fallback only to the shared compatibility
-prefix. Main entries provide a cross-ref seed; PR/queue entries remain scoped by
-the existing backend policy. There is no global or dependency-agnostic fallback.
+The download action verifies the artifact digest. No downloaded code is executed
+by the publishing job. A PR artifact, older attempt, nearby revision, incompatible
+configuration or ambiguous artifact is not accepted. Lookup/API/download/metadata
+failures cannot publish a cache or suppress required tests. If the queue workflow
+has not finished yet, or no eligible artifact exists, publishing skips; rerunning
+that main job after completion can retry. There is no fallback test execution.
+
+The optional job has a five-minute timeout and is not a CI Gate dependency.
+Immutable SHA keys make concurrent publishers safe: different commits do not
+overwrite one another, and retries cannot replace an existing entry. An older
+compatible fallback is safe because Vitest hashes source content per module.
+Consumer restore/save failures remain non-blocking.
 
 ## Invalidation
 
@@ -83,13 +91,10 @@ its old transform; an unchanged dependency was reused. The temporary edit and
 `DEBUG=vitest:cache:fs` instrumentation were removed. This proves local source
 invalidation, **not** cross-ref CI reuse or CI speedup.
 
-Historical cold dashboard/admin durations imply roughly 4.4–5.3 test minutes
-(17.5–21.1 allocated vCPU-minutes on four vCPUs) per successful full warm-up,
-before setup/cache overhead. This is not measured CPU utilization. Daily entries
-amortize that work across consumers, but dependency/config changes create new
-prefixes and can require more than one warm-up per day. Net benefit is unproven;
-include every producer invocation, including hit-only setup and failed attempts,
-in the cost calculation. The old same-ref benchmark is not cross-ref evidence.
+The main handoff adds Node setup, API lookup, artifact download and cache-save
+work, not another test run. Queue runs add artifact upload/storage (seven-day
+retention). Measure those costs alongside consumer restore/save overhead; net
+benefit remains unproven. The old same-ref benchmark is not cross-ref evidence.
 
 ## Post-merge verification and troubleshooting
 
@@ -99,8 +104,9 @@ in the cost calculation. The old same-ref benchmark is not cross-ref evidence.
    the following command (not executed during this investigation):
    `blacksmith cache list --repo speakeasy-api/gram --search vitest-modules-blacksmith-v1 --per-page 100 --page 1 --format json`.
    Increment `--page` until all matching entries have been inspected.
-2. Record the successful main producer's run/job URL, exact revision, compatibility
-   prefix, `refs/heads/main` scope and cache version. Check that metadata is saved.
+2. Record the successful queue source run/job and artifact ID, then the main
+   publisher run/job URL, exact revision, compatibility prefix, `refs/heads/main`
+   scope and cache version. Check that metadata is saved.
 3. Observe **two distinct normal merge-queue refs** with that compatible prefix
    after publication. Record restore/save step durations and dashboard/admin times.
    Same-ref retries do not satisfy this check.
@@ -115,7 +121,7 @@ in the cost calculation. The old same-ref benchmark is not cross-ref evidence.
    succeeds but reads do not, inspect Vitest's metadata/lockfile messages and
    environment/configuration hashes (including absolute checkout paths).
 7. Record consumer savings minus restore/save overhead and all producer compute.
-   If bounded publishing does not pay for itself, remove persistence rather than
+   If publishing does not pay for itself, remove persistence rather than
    expanding into a new cache platform or weakening test coverage.
 
 Cross-ref production validation and net benefit remain pending until the producer
