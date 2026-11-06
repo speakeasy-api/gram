@@ -2182,7 +2182,8 @@ type ReapInactiveAssistantRuntimesParams struct {
 // soft-deleted assistant or project, whose owning assistant has had no recorded
 // activity within InactivityThreshold, and tears down the backend resources
 // their Stop/Reap left behind. A live row under a live assistant and project is
-// never a candidate: inactivity alone does not discard its workspace.
+// never an orphan candidate: inactivity alone does not discard its workspace.
+// The sweep also collects stopped rows on superseded backends and retired Kit rows.
 func (s *ServiceCore) ReapInactiveAssistantRuntimes(ctx context.Context, params ReapInactiveAssistantRuntimesParams) (ReapAssistantRuntimesResult, error) {
 	if params.InactivityThreshold <= 0 {
 		return ReapAssistantRuntimesResult{}, fmt.Errorf("inactivity threshold must be positive")
