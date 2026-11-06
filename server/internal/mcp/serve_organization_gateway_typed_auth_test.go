@@ -30,6 +30,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 		name, clientType, header, source, value string
 		required                                bool
 		pending, bound, detached                bool
+		noLegacyAssociation                     bool
 	}{
 		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
 		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession},
@@ -39,6 +40,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession},
 		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount},
 		{name: "static_offer", clientType: authz.AuthClientTypeStaticCredential},
+		{name: "static_without_legacy_association", clientType: authz.AuthClientTypeStaticCredential, noLegacyAssociation: true},
 		{name: "admin_header_override", clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
 		{name: "authorization_from_token", clientType: authz.AuthClientTypeRemoteSession, header: "Authorization", source: "Authorization", required: true},
 		{name: "required_caller_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", source: "X-API-Key", required: true},
@@ -61,7 +63,9 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 				bindings = []uuid.UUID{fx.issuerID}
 			}
 			registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-registration", "", bindings)
-			require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration}))
+			if !tc.noLegacyAssociation {
+				require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, RemoteSessionClientID: registration}))
+			}
 			if !tc.pending {
 				clients := authclientsrepo.New(ti.conn)
 				clientParams := authclientsrepo.CreateAuthClientParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), Name: "Typed pending client", ClientType: tc.clientType, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + projectID.String())}
@@ -71,6 +75,9 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 				}
 				client, err := clients.CreateAuthClient(ctx, clientParams)
 				require.NoError(t, err)
+				if tc.noLegacyAssociation {
+					require.NoError(t, clients.CreateAuthClientHeader(ctx, authclientsrepo.CreateAuthClientHeaderParams{AuthClientID: client.ID, OrganizationID: ac.ActiveOrganizationID, Name: "X-API-Key", IsRequired: true, Value: conv.ToPGText("configured-client-key")}))
+				}
 				if tc.name == "required_caller_header" || tc.name == "admin_header_override" || tc.name == "detached_required_caller_header" {
 					header := authclientsrepo.CreateAuthClientHeaderParams{AuthClientID: client.ID, OrganizationID: ac.ActiveOrganizationID, Name: "X-API-Key", IsRequired: true}
 					if tc.name == "admin_header_override" {
@@ -128,6 +135,19 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					} else {
 						require.NotContains(t, w.Body.String(), `"slug":"`+fx.granted+`"`)
 					}
+					require.NotContains(t, w.Body.String(), `"slug":"`+fx.denied+`"`)
+					// Project and organization gateways share typed admission; neither
+					// may require a legacy issuer link or widen the caller's access.
+					projectToken := mintProjectGatewayBearer(t, ti, fx, fx.projectSlug)
+					projectPage, err := serveProjectGatewayHTTP(t, ti, fx, fx.projectSlug, projectToken, listServersBody(t))
+					require.NoError(t, err)
+					require.Equal(t, http.StatusOK, projectPage.Code, projectPage.Body.String())
+					if visible {
+						require.Contains(t, projectPage.Body.String(), `"slug":"`+fx.granted+`"`)
+					} else {
+						require.NotContains(t, projectPage.Body.String(), `"slug":"`+fx.granted+`"`)
+					}
+					require.NotContains(t, projectPage.Body.String(), `"slug":"`+fx.denied+`"`)
 					request := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+stateID+"&server="+url.QueryEscape(fx.granted), nil)
 					page := httptest.NewRecorder()
 					require.NoError(t, ti.service.ServeConsent(page, request, endpoint))
