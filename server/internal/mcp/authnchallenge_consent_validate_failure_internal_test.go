@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -16,7 +17,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -41,7 +45,9 @@ func TestClassifyCheckFailure(t *testing.T) {
 		{name: "token resolution invariant", err: invariant, code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonCheckFailed},
 		{name: "binding check bug", err: oops.E(oops.CodeUnexpected, errors.New("bad query"), "check remote session client binding for validation"), code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonCheckFailed},
 		{name: "store outage", err: oops.E(oops.CodeUnexpected, redis.ErrClosed, "resolve upstream token projects for validation"), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonCheckUnavailable},
-		{name: "no access to the server", err: oops.E(oops.CodeForbidden, errors.New("server permission denied"), "You don't have permission to use this server."), code: mcpconnectionattempts.CodeNoServerAccess, page: oauthui.ReasonCheckNotAllowed},
+		{name: "no access to the server", err: fmt.Errorf("authorize validation access: %w", fmt.Errorf("authorize MCP server access: %w", mcpaccess.ServerPermissionDenied(oops.C(oops.CodeForbidden), "https://app.example.com/request-access"))), code: mcpconnectionattempts.CodeNoServerAccess, page: oauthui.ReasonCheckNotAllowed},
+		{name: "no access to the server's connection", err: fmt.Errorf("dial meta MCP member: %w", oops.E(oops.CodeForbidden, errAuthClientNoAccess, "you don't have access to the connection this MCP server uses.")), code: mcpconnectionattempts.CodeNoServerAccess, page: oauthui.ReasonCheckNotAllowed},
+		{name: "credential admission refused", err: fmt.Errorf("authorize validation access: %w", fmt.Errorf("principal credential admission: %w", oops.C(oops.CodeUnauthorized))), code: mcpconnectionattempts.CodeSubjectNotAdmitted, page: oauthui.ReasonCheckNotAllowed},
 		{name: "card status unreadable stops the check", err: fmt.Errorf("%w: read remote session status: %w", errValidationUnfinished, redis.ErrClosed), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonCheckUnavailable},
 		{name: "unroutable", err: oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here."), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin},
 		{name: "client misconfigured", err: fmt.Errorf("resolve: %w", remotesessions.ErrRemoteSessionMisconfigured), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonCheckNeedsAdmin},
@@ -49,7 +55,6 @@ func TestClassifyCheckFailure(t *testing.T) {
 		{name: "card grant lapsed", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: remotesessions.ErrNoValidToken}, "x"), code: mcpconnectionattempts.CodeInvalidRemoteSession, page: oauthui.ReasonDefault},
 		{name: "card status unreadable", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: redis.ErrClosed}, "x"), code: mcpconnectionattempts.CodeAuthCheckUnavailable, page: oauthui.ReasonDefault},
 		{name: "card client misconfigured", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: remotesessions.ErrRemoteSessionMisconfigured}, "x"), code: mcpconnectionattempts.CodeCredentialMisconfigured, page: oauthui.ReasonDefault},
-		{name: "card token unobtainable", err: oops.E(oops.CodeBadRequest, noUsableCredentialError{cause: errors.New("grant is stored but its token could not be obtained")}, "x"), code: mcpconnectionattempts.CodeInternalError, page: oauthui.ReasonDefault},
 		{name: "provider outage", err: memberConnectionError{errors.New("down"), mcpconnectionattempts.CodeProviderUnavailable}, code: mcpconnectionattempts.CodeProviderUnavailable, page: oauthui.ReasonDefault},
 	}
 	for _, tc := range cases {
@@ -196,7 +201,6 @@ func TestNoUsableCredentialNotice(t *testing.T) {
 	}{
 		"missing, expired or lapsed": {nil, verifyNoticeReconnect, "connect it again"},
 		"refused grant":              {remotesessions.ErrNoValidToken, verifyNoticeReconnect, "connect it again"},
-		"token unobtainable":         {errors.New(grantUnobtainableReason), verifyNoticeOurs, "share this with Speakeasy support"},
 		"client misconfigured":       {remotesessions.ErrRemoteSessionMisconfigured, verifyNoticeSignIn, "ask your administrator"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -207,4 +211,45 @@ func TestNoUsableCredentialNotice(t *testing.T) {
 		})
 	}
 	require.Equal(t, noWorkingSignInMessage, verifyNoticeMessage("made-up"), "the URL picks only among fixed texts")
+}
+
+// statusReadFailure refuses a card with no token while its state can't be read from pool.
+func statusReadFailure(t *testing.T, pool *pgxpool.Pool) error {
+	t.Helper()
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	service := &Service{remoteChallengeMgr: remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})}
+	endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "org_1", UserSessionIssuerID: uuid.New()}
+	client := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
+	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID})
+}
+
+// A store outage reading the card stops the check like any outage: retry notice, auth_check_unavailable row.
+func TestNoUsableCredentialRefusal_StoreOutageStopsTheCheck(t *testing.T) {
+	t.Parallel()
+
+	// Nothing listens on port 1, so every query is a refused connection.
+	pool, err := pgxpool.New(t.Context(), "postgres://127.0.0.1:1/unused?connect_timeout=1")
+	require.NoError(t, err)
+	t.Cleanup(pool.Close)
+	refusal := statusReadFailure(t, pool)
+	require.ErrorIs(t, refusal, errValidationUnfinished)
+	failure, ok := classifyCheckFailure(t.Context(), refusal)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeAuthCheckUnavailable, failure.code)
+}
+
+// Any other failure reading the card is ours: the our-side page and an internal_error row.
+func TestNoUsableCredentialRefusal_ReadFaultIsOurs(t *testing.T) {
+	t.Parallel()
+
+	pool, err := pgxpool.New(t.Context(), "postgres://localhost/unused")
+	require.NoError(t, err)
+	pool.Close()
+	refusal := statusReadFailure(t, pool)
+	require.NotErrorIs(t, refusal, errValidationUnfinished)
+	failure, ok := classifyCheckFailure(t.Context(), refusal)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+	require.Equal(t, oauthui.ReasonCheckFailed, failure.page)
 }
