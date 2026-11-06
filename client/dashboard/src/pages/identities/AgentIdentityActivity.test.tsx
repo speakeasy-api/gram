@@ -193,26 +193,81 @@ it("queries agent actions without using its owner's identity", () => {
     { throwOnError: false },
   );
 });
-it("queries authorization checks using the agent principal, without hook ingestion, and preserves it in the handoff", () => {
+it("reads failed and allowed checks apart, without hook ingestion, and keeps the agent in the handoff", () => {
   render(
     <MemoryRouter>
       <AgentIdentityChallenges agent={agent} />
     </MemoryRouter>,
   );
-  expect(mocks.challenges).toHaveBeenCalledWith(
-    {
-      principalUrn: "agent:agent_example",
-      excludeScopes: ["org:hooks_ingest"],
-      from,
-      to,
-      limit: 25,
-    },
-    undefined,
-    { throwOnError: false },
-  );
+  for (const outcome of ["deny", "allow"]) {
+    expect(mocks.challenges).toHaveBeenCalledWith(
+      expect.objectContaining({
+        principalUrn: "agent:agent_example",
+        outcome,
+        excludeScopes: ["org:hooks_ingest"],
+        from,
+        to,
+      }),
+      undefined,
+      { throwOnError: false },
+    );
+  }
   expect(screen.getByRole("link").getAttribute("href")).toContain(
     "identity=agent%3Aagent_example",
   );
+});
+it("lists failed checks first, grouped by scope and resource, with when they last happened", () => {
+  const at = (minute: number) =>
+    new Date(`2026-01-07T10:${String(minute).padStart(2, "0")}:00Z`);
+  const row = (outcome: string, resourceId: string, minute: number) => ({
+    id: `${outcome}-${resourceId}-${minute}`,
+    scope: "mcp:connect",
+    resourceKind: "mcp",
+    resourceId,
+    outcome,
+    timestamp: at(minute),
+  });
+  mocks.challenges.mockImplementation(({ outcome }: { outcome: string }) =>
+    outcome === "deny"
+      ? {
+          data: {
+            challenges: [
+              row("deny", "server_linear", 9),
+              row("deny", "server_linear", 4),
+            ],
+            total: 2,
+          },
+        }
+      : {
+          data: {
+            challenges: [row("allow", "server_support", 8)],
+            total: 1,
+          },
+        },
+  );
+  render(
+    <MemoryRouter>
+      <AgentIdentityChallenges agent={agent} />
+    </MemoryRouter>,
+  );
+  const text = document.body.textContent ?? "";
+  expect(text.indexOf("Failed")).toBeLessThan(text.indexOf("Allowed"));
+  expect(screen.getByText(/Denied 2 times/)).toBeTruthy();
+  expect(screen.getByText(/Allowed once/)).toBeTruthy();
+  expect(screen.getByText(/mcp server_linear/)).toBeTruthy();
+  expect(
+    screen.getByText(/2 failed and 1 allowed checks in this period/),
+  ).toBeTruthy();
+});
+it("says when the agent had no failed checks in the period", () => {
+  render(
+    <MemoryRouter>
+      <AgentIdentityChallenges agent={agent} />
+    </MemoryRouter>,
+  );
+  expect(
+    screen.getByText("No failed checks for this agent in this period."),
+  ).toBeTruthy();
 });
 it("shows failed authorization reads as an error rather than no checks", () => {
   mocks.challenges.mockReturnValue({ isError: true, refetch: vi.fn() });
