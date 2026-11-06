@@ -40,8 +40,10 @@ function readUtmParams(search: string): UtmParams {
  * `/sign-up` without the query string, so the sign-up page can't rely on its
  * own URL. Call once at boot, before any redirect.
  */
-export function rememberLandingUtm(search = window.location.search): void {
-  const params = readUtmParams(search);
+export function rememberLandingUtm(search?: string): void {
+  // Runs at module load; tests and tooling may import without a browser.
+  if (typeof window === "undefined") return;
+  const params = readUtmParams(search ?? window.location.search);
   if (Object.keys(params).length === 0) return;
   try {
     // Last touch: a new campaign replaces the previous set entirely.
