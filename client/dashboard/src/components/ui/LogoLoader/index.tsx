@@ -72,7 +72,7 @@ export function SplashScreen({
   return (
     <div
       className={cn(
-        "animate-in fade-in fill-mode-both flex items-center justify-center delay-200 duration-300",
+        "animate-in fade-in fill-mode-both flex items-center justify-center delay-200 duration-300 motion-reduce:animate-none",
         fullScreen
           ? "bg-background fixed inset-0 z-50"
           : "min-h-[50vh] w-full flex-1",
