@@ -39,11 +39,11 @@ export const SCOPE_ROWS: { key: ScopeKey; label: string; hint: string }[] = [
 
 /** "view", "view and manage", "connect, view and manage". */
 export function lineLabels(lines: ScopeKey[]): string {
-  const labels = SCOPE_ROWS.filter((line) => lines.includes(line.key)).map(
-    (line) => line.label.toLowerCase(),
+  return listLabels(
+    SCOPE_ROWS.filter((line) => lines.includes(line.key)).map((line) =>
+      line.label.toLowerCase(),
+    ),
   );
-  if (labels.length <= 1) return labels.join("");
-  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
 /**
@@ -497,7 +497,8 @@ export function scopeState(
       via: cancellingSelf || blocked ? undefined : cancelling?.displayName,
       viaPrincipalUrn:
         cancellingSelf || blocked ? undefined : cancelling?.principalUrn,
-      note: cancellingSelf && !blocked ? sourceNote(cancelling) : undefined,
+      note:
+        cancellingSelf && !blocked ? sourceNote(cancelling, scope) : undefined,
       // Any block this row can neither lift nor outrank caps it, whether it
       // closed the line outright or trimmed the last tool away.
       capped: cappingBlocks(row, cell).length > 0,
@@ -525,19 +526,23 @@ export function scopeState(
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
     viaPrincipalUrn:
       cell.own || grantingSelf ? undefined : granting?.principalUrn,
-    note: cell.own || !grantingSelf ? undefined : sourceNote(granting),
+    note: cell.own || !grantingSelf ? undefined : sourceNote(granting, scope),
     capped: cappingBlocks(row, cell).length > 0,
   };
 }
 
 /**
  * How to say where a rule of this row's own principal comes from, when it is
- * not the rule this page owns for this line. A rule covering every server
- * gets no note: this page answers for one server, and where else the rule
- * reaches is not what an administrator is reading here.
+ * not the rule this page owns for this line. Only a stronger line is named: a
+ * line granted by this row's own wider rule at the same level needs no note,
+ * while one granted through Manage would otherwise read as set on its own,
+ * and stay "Allowed" after it is cleared with nothing saying why.
  */
-function sourceNote(entry: ResourceAudienceEntry): string | undefined {
-  if (entry.appliesTo === "all_resources") return undefined;
+function sourceNote(
+  entry: ResourceAudienceEntry,
+  scope: ScopeKey,
+): string | undefined {
+  if (entry.level === scope) return undefined;
   const label = SCOPE_ROWS.find((row) => row.key === entry.level)?.label;
   return label ? `included in ${label}` : undefined;
 }

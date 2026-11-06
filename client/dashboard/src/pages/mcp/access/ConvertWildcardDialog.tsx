@@ -52,7 +52,11 @@ export function ConvertWildcardDialog({
           ? `Remove ${role} from ${serverName}?`
           : `Clear ${role}'s ${lineLabels(change.lines)} setting on ${serverName}?`
       }
-      description={`${role} is set for every server. To leave ${serverName} out, ${role} will be changed to name ${servers} individually instead.`}
+      description={
+        otherServers === 0
+          ? `${role} is set for every server. ${serverName} is the only server in ${projectName}, so to leave it out, ${role} will no longer reach any server in ${projectName}.`
+          : `${role} is set for every server. To leave ${serverName} out, ${role} will be changed to name ${servers} individually instead.`
+      }
       confirmLabel="Change to specific servers"
       pendingLabel="Changing…"
       confirmVariant="primary"

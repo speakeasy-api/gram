@@ -36,7 +36,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { useOrganization, useProject } from "@/contexts/Auth";
-import { convertWildcardGrants } from "./wildcardConversion";
+import { convertWildcardGrants, holdsWildcard } from "./wildcardConversion";
 import { useProjectServerIds } from "./useProjectServerIds";
 import {
   type RoleDirectorySource,
@@ -467,13 +467,22 @@ export function ManageAccess({
         },
       },
       {
-        onSuccess: () => {
+        onSuccess: (saved) => {
+          setConverting(null);
+          // The rewrite is worked out from the role as last read. If a rule
+          // covering every server here survived it, the role still reaches
+          // this server, and saying it was cleared would be wrong.
+          if (holdsWildcard(saved.grants, lines, project.id)) {
+            toast.error(
+              `${row.displayName} still has a rule covering every server, so ${server} is unchanged. Change it in Role Manager.`,
+            );
+            return;
+          }
           toast.success(
             action === "remove"
               ? `${row.displayName} no longer has access to ${server}. It now names its servers individually.`
               : `Cleared ${row.displayName}'s ${lineLabels(lines)} setting on ${server}. It now names its servers individually.`,
           );
-          setConverting(null);
         },
       },
     );
@@ -599,7 +608,12 @@ export function ManageAccess({
                 }
                 onRevoke={() => removeRow(row)}
                 onEditRole={() => editRole(row)}
-                canManage={canManage}
+                // Which role is Admin is only known once roles load, so a
+                // role row stays read-only until then rather than briefly
+                // offering controls the Admin row should not have.
+                canManage={
+                  canManage && (row.kind !== "role" || rolesData !== undefined)
+                }
                 isAdmin={isAdmin}
                 pending={setAudience.isPending}
               />

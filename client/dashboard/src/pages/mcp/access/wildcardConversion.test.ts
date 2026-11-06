@@ -145,7 +145,9 @@ describe("convertWildcardGrants", () => {
     expect(result.addGrants).toEqual([]);
   });
 
-  it("puts back rules confined to other projects when an unrestricted rule is removed", () => {
+  it("leaves rules confined to other projects alone when an unrestricted rule is removed", () => {
+    // The unrestricted removal deletes only rules naming no project, so a
+    // rule confined to another project is not touched and not written again.
     const result = convertWildcardGrants({
       ...base,
       otherProjectIds: [],
@@ -167,7 +169,6 @@ describe("convertWildcardGrants", () => {
         selectors: [
           { resourceKind: "mcp", resourceId: "srv-a" },
           { resourceKind: "mcp", resourceId: "srv-b" },
-          { resourceKind: "mcp", resourceId: "*", projectId: "proj-3" },
         ],
       },
     ]);

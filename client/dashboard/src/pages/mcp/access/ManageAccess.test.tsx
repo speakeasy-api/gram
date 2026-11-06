@@ -20,12 +20,16 @@ const {
   directory,
   roleUpdate,
   roles,
+  toastError,
+  toastSuccess,
 } = vi.hoisted(() => ({
+  toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   mutate: vi.fn(),
   // Rewrites of a role's rule covering every server go through the role.
   roleUpdate: vi.fn(),
   // The organization's roles, with the grants Role Manager stores.
-  roles: { list: [] as unknown[] },
+  roles: { list: [] as unknown[], loaded: true },
   mutationOptions: vi.fn(),
   invalidate: vi.fn(),
   permission: { admin: true },
@@ -34,6 +38,10 @@ const {
     data: undefined as unknown,
     enabled: vi.fn(),
   },
+}));
+
+vi.mock("sonner", () => ({
+  toast: { error: toastError, success: toastSuccess },
 }));
 
 vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
@@ -65,7 +73,9 @@ vi.mock("@gram/client/react-query/explainResourceAccess.js", () => ({
 
 vi.mock("@gram/client/react-query/roles.js", () => ({
   invalidateAllRoles: invalidate,
-  useRoles: () => ({ data: { roles: roles.list } }),
+  useRoles: () => ({
+    data: roles.loaded ? { roles: roles.list } : undefined,
+  }),
 }));
 
 vi.mock("@gram/client/react-query/updateRole.js", () => ({
@@ -179,6 +189,7 @@ beforeEach(() => {
   permission.admin = true;
   directory.data = undefined;
   roles.list = [];
+  roles.loaded = true;
 });
 
 function entry(
@@ -600,6 +611,67 @@ describe("what a row change writes", () => {
         },
       ],
     });
+  });
+
+  it("keeps role rows read-only until the roles have loaded", () => {
+    // Until then the Admin row cannot be told apart from the others.
+    roles.loaded = false;
+    renderList([
+      entry({
+        principalUrn: "role:global:9",
+        kind: "role",
+        displayName: "Admin",
+        appliesTo: "all_resources",
+        level: "manage",
+      }),
+    ]);
+
+    expect(
+      screen
+        .getByLabelText("Access cannot be changed here.")
+        .hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
+  it("reports a rewrite that left a rule covering every server", () => {
+    roles.list = [
+      {
+        id: "1",
+        principalUrn: "role:global:1",
+        slug: "engineering",
+        grants: [
+          {
+            scope: "mcp:connect",
+            selectors: [{ resourceKind: "mcp", resourceId: "*" }],
+          },
+        ],
+      },
+    ];
+    // The saved role comes back with the rule covering every server intact.
+    roleUpdate.mockImplementationOnce(
+      (_vars, options: { onSuccess: (saved: unknown) => void }) =>
+        options.onSuccess(roles.list[0]),
+    );
+    renderList([
+      entry({
+        principalUrn: "role:global:1",
+        kind: "role",
+        displayName: "Engineering",
+        appliesTo: "all_resources",
+      }),
+    ]);
+
+    fireEvent.click(
+      screen.getByLabelText("Remove Engineering from this server"),
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Change to specific servers" }),
+    );
+
+    expect(toastError).toHaveBeenCalledWith(
+      "Engineering still has a rule covering every server, so Acme Ops is unchanged. Change it in Role Manager.",
+    );
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 
   it("locks the Admin role row and points to Role Manager", () => {

@@ -89,9 +89,9 @@ export function convertWildcardGrants(
     if (!scopes.has(grant.scope)) continue;
     const selectors = grant.selectors ?? [];
     if (selectors.length === 0) {
-      // Stored without selectors, the rule is unrestricted. Removing it that
-      // way removes every rule of the scope covering every server, so any
-      // other such rule is put back alongside the replacements.
+      // Stored without selectors, the rule is unrestricted, and it is removed
+      // the same way. That removal deletes only rules naming no project, so
+      // the role's rules confined to other projects stay as they are.
       removeGrants.push({ scope: grant.scope });
       add(grant.scope, expand({ resourceKind: "mcp", resourceId: "*" }));
       convertsWildcard = true;
@@ -109,24 +109,6 @@ export function convertWildcardGrants(
         removeGrants.push({ scope: grant.scope, selectors: [selector] });
       }
     }
-  }
-
-  // An unrestricted removal also takes rules confined to other projects, so
-  // those are written back.
-  const unrestricted = new Set(
-    removeGrants.filter((grant) => !grant.selectors).map((g) => g.scope),
-  );
-  for (const grant of input.grants) {
-    if (!unrestricted.has(grant.scope)) continue;
-    add(
-      grant.scope,
-      (grant.selectors ?? []).filter(
-        (selector) =>
-          isWildcard(selector) &&
-          selector.projectId !== undefined &&
-          selector.projectId !== input.projectId,
-      ),
-    );
   }
 
   return {

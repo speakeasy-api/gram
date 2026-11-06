@@ -48,9 +48,10 @@ export function useProjectServerIds(
     }
     for (const server of mcpServers.data?.mcpServers ?? []) {
       if (server.projectId !== projectId) continue;
-      serverIds.add(server.id);
+      // Serving checks a toolset-backed server by its toolset id alone, so
+      // the row id is only a grant id for a server without one.
+      serverIds.add(server.toolsetId ?? server.id);
       servers.add(server.toolsetId ?? server.id);
-      if (server.toolsetId) serverIds.add(server.toolsetId);
       // The server being cleared may be named by either of its ids.
       if (server.id === resourceId || server.toolsetId === resourceId) {
         resourceIds.add(server.id);
