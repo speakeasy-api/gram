@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/stretchr/testify/require"
@@ -517,6 +518,47 @@ func TestRemoteSessionResolveFailureRecordsOutcome(t *testing.T) {
 			_, err = s.resolveIssuerGateAccessTokens(ctx, httptest.NewRecorder(), authentication)
 			require.Error(t, err)
 			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// A member credential we could not load carries its cause, so the call writes a row; a caller that left writes none.
+func TestMemberCredentialLoadFailureCarriesCause(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		err      error
+		want     mcpconnectionattempts.Code
+		outage   bool
+		recorded bool
+	}{
+		{name: "store outage", err: &pgconn.PgError{Code: "08006"}, want: mcpconnectionattempts.CodeInternalError, outage: true, recorded: true},
+		{name: "broken query", err: errors.New("scan remote session"), want: mcpconnectionattempts.CodeInternalError, recorded: true},
+		{name: "caller left", err: context.Canceled, outage: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			member := metaMember{serverID: uuid.New(), slug: "member", chosenClientID: validUUID(uuid.New())}
+			choices := &memberChoices{byServer: map[uuid.UUID]*memberTokens{}, resolve: func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+				return nil, tc.err
+			}}
+			_, err := choices.tokens(t.Context(), member)
+			require.ErrorContains(t, err, `server "member" could not load its connection credentials`)
+			_, outage := errors.AsType[memberUnavailableError](err)
+			require.Equal(t, tc.outage, outage)
+
+			failure, ok := errors.AsType[memberConnectionError](err)
+			require.True(t, ok)
+			rec := mcpconnectionattemptstest.New(t)
+			s := &Service{connections: rec.Recorder}
+			gate := &metaGateContext{organizationID: "org", projectID: uuid.New(), metaServerID: uuid.New()}
+			s.recordMemberFailure(t.Context(), gate, member, failure.code)
+			if !tc.recorded {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, member.serverID.String(), row.MemberID)
 		})
 	}
 }
