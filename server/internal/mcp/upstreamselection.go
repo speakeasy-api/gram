@@ -270,6 +270,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	if selector == nil {
 		choice, handled, err := s.directPrincipalChoice(ctx, w, authentication, mode)
 		if githubRequired && !handled && err == nil {
+			s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: GitHub App requires typed upstream selection", issuerGateReasonUpstreamSelectionUnavailable)
 			return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 		}
 		return choice, handled, err
@@ -280,6 +281,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 			return choice, true, err
 		}
 		if githubRequired {
+			s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: GitHub App requires typed upstream selection", issuerGateReasonUpstreamSelectionUnavailable)
 			return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 		}
 	}
