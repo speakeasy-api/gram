@@ -180,7 +180,7 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 		"|other_metadata_url||inbound_token|connected||":                      1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":                      5,
 		"|other||discovery_member|blocked|needs_sign_in|":                     1,
-	}, f.stored(mainTable, day))
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 	require.Empty(t, f.stored(stagingTable, day), "staging is cleared after the swap")
 }
 
@@ -237,7 +237,7 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":              2,
-	}, f.stored(mainTable, day))
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
 func TestBuildDayRerunGivesTheSameResult(t *testing.T) {
@@ -252,16 +252,16 @@ func TestBuildDayRerunGivesTheSameResult(t *testing.T) {
 	)
 
 	f.build(day)
-	first := f.stored(mainTable, day)
+	first := f.stored(mcpconnectionattempts.OutcomesDailyTable, day)
 	require.Len(t, first, 2)
 	f.build(day)
-	require.Equal(t, first, f.stored(mainTable, day), "a rerun replaces the day with the same rows")
+	require.Equal(t, first, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "a rerun replaces the day with the same rows")
 
 	// A run that died after staging leaves the stored day alone, and the next run cleans up.
 	f.insertStored(stagingTable, day, "|junk||inbound_token|connected||", 99)
-	require.Equal(t, first, f.stored(mainTable, day))
+	require.Equal(t, first, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 	f.build(day)
-	require.Equal(t, first, f.stored(mainTable, day))
+	require.Equal(t, first, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 	require.Empty(t, f.stored(stagingTable, day))
 
 	// A run that died after the swap but before clearing staging leaves a complete day.
@@ -271,7 +271,7 @@ func TestBuildDayRerunGivesTheSameResult(t *testing.T) {
 		f.insertStored(stagingTable, day, strings.Join([]string{row.Provider, row.App, row.ClientFamily, row.Step, row.Outcome, row.Reason, row.FixedBy}, "|"), row.Attempts)
 	}
 	f.build(day)
-	require.Equal(t, first, f.stored(mainTable, day))
+	require.Equal(t, first, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 	require.Empty(t, f.stored(stagingTable, day))
 }
 
@@ -280,18 +280,18 @@ func TestBuildDayLeavesADayWithNoAttemptsAsStored(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoEmpty)
 	earlier := map[string]uint64{"|dcr||inbound_token|connected||": 3}
-	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 3)
 
 	result := f.build(day)
 	require.False(t, result.Swapped)
-	require.Equal(t, earlier, f.stored(mainTable, day), "raw rows that expired must not wipe the day")
+	require.Equal(t, earlier, f.stored(mcpconnectionattempts.OutcomesDailyTable, day), "raw rows that expired must not wipe the day")
 }
 
 func TestPublishAbortsWithoutSwappingOnACountMismatch(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	day := f.day(daysAgoMismatch)
-	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 3)
 	rows := []DayRow{{Provider: "", App: "dcr", ClientFamily: "", Step: "inbound_token", Outcome: "connected", Reason: "", FixedBy: "", Attempts: 7}}
 
 	want := totalsOf(rows)
@@ -299,7 +299,7 @@ func TestPublishAbortsWithoutSwappingOnACountMismatch(t *testing.T) {
 	result, err := f.b.publish(t.Context(), day, rows, want)
 	require.ErrorIs(t, err, ErrStagedMismatch)
 	require.False(t, result.Swapped)
-	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
+	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
 func TestBuildDayRefusesADayThatIsStillOpen(t *testing.T) {
@@ -359,7 +359,7 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 	require.Equal(t, map[string]uint64{
 		"accounts.google.com|claude.ai||inbound_token|connected||": uint64(minOrgsPerLabel),
 		"other|other||inbound_token|connected||":                   1,
-	}, f.stored(mainTable, day))
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
 func TestBuildDayPairsOnlyWithinTheOrganization(t *testing.T) {
@@ -392,17 +392,17 @@ func TestBuildDayPairsOnlyWithinTheOrganization(t *testing.T) {
 		"|dcr||inbound_token|connected||":                     2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":      1,
 		"|dcr||mcp_request|failed|invalid_bearer_token|retry": 1,
-	}, f.stored(mainTable, day))
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }
 
 func TestBuildDayRefusesADayWhoseRawEventsMayBeExpiring(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	day := f.day(daysAgoExpiring)
-	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
+	f.insertStored(mcpconnectionattempts.OutcomesDailyTable, day, "|dcr||inbound_token|connected||", 3)
 	f.b.clock = func() time.Time { return day.AddDate(0, 0, rawSafeDays+1) }
 
 	_, err := f.b.BuildDay(t.Context(), day, f.now)
 	require.ErrorIs(t, err, ErrDayExpiring)
-	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
+	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

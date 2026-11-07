@@ -46,7 +46,6 @@ const (
 	// readMemoryBytes caps one read. Up to four days build at once.
 	readMemoryBytes = 2 << 30 // 2 GiB
 
-	mainTable    = "mcp_connection_outcomes_daily"
 	stagingTable = "mcp_connection_outcomes_daily_staging"
 )
 
@@ -173,7 +172,7 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 		return nil, fmt.Errorf("list days with raw events: %w", err)
 	}
 	builtDays, err := b.distinctDays(ctx,
-		`SELECT DISTINCT day AS d FROM `+mainTable+` WHERE day >= toDate(?) AND day <= toDate(?)`,
+		`SELECT DISTINCT day AS d FROM `+mcpconnectionattempts.OutcomesDailyTable+` WHERE day >= toDate(?) AND day <= toDate(?)`,
 		scanFrom.Format(time.DateOnly), last.Format(time.DateOnly))
 	if err != nil {
 		return nil, fmt.Errorf("list built days: %w", err)
@@ -379,12 +378,12 @@ func (b *Builder) publish(ctx context.Context, day time.Time, rows []DayRow, wan
 			ErrStagedMismatch, staged.rows, staged.attempts, want.rows, want.attempts)
 	}
 
-	if err := b.ch.Exec(ctx, `ALTER TABLE `+mainTable+` REPLACE PARTITION ID '`+partition+`' FROM `+stagingTable); err != nil {
+	if err := b.ch.Exec(ctx, `ALTER TABLE `+mcpconnectionattempts.OutcomesDailyTable+` REPLACE PARTITION ID '`+partition+`' FROM `+stagingTable); err != nil {
 		return result, fmt.Errorf("replace day partition: %w", err)
 	}
 	result.Swapped = true
 
-	stored, err := b.totals(ctx, mainTable, day)
+	stored, err := b.totals(ctx, mcpconnectionattempts.OutcomesDailyTable, day)
 	if err != nil {
 		return result, err
 	}

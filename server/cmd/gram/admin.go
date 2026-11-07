@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -529,6 +530,7 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			adminService.SetProviderHealth(mcpconnectionattempts.NewProviderHealth(chDB))
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
