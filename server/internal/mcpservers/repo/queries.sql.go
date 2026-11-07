@@ -2147,12 +2147,37 @@ WITH resolved AS (
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
     GROUP BY input.user_session_issuer_id
+), derived AS (
+    SELECT server.id,
+           CASE WHEN association.providers > 0
+                THEN association.sole_provider
+                ELSE resolved.remote_session_issuer_id
+           END AS remote_session_issuer_id
+    FROM resolved
+    JOIN mcp_servers AS server
+      ON server.user_session_issuer_id = resolved.user_session_issuer_id
+     AND server.project_id = $1::uuid
+    CROSS JOIN LATERAL (
+        SELECT count(DISTINCT c.remote_session_issuer_id) AS providers,
+               CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                    THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1]
+               END AS sole_provider
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+        WHERE a.mcp_server_id = server.id
+          AND a.deleted IS FALSE
+    ) AS association
 )
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+FROM derived
+WHERE s.id = derived.id
   AND s.project_id = $1::uuid
   -- Belt and suspenders on the caller's org/project pair agreeing.
   AND EXISTS (SELECT 1
@@ -2160,7 +2185,7 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
               WHERE p.id = s.project_id
                 AND p.organization_id = $2::text)
   AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+  AND s.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
 type ResyncMCPServerRemoteSessionIssuersParams struct {
@@ -2169,9 +2194,12 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Recomputes mcp_servers.remote_session_issuer_id for the servers on each named
+// user session issuer. A server with a live client association takes its one
+// provider, or NULL with several. A server with none falls back to the live
+// client bindings on its issuer: exactly one distinct remote issuer stamps it,
+// none or several leave it NULL and readers fail closed. The fallback only
+// feeds readers of this column and goes away with it.
 //
 // Best effort: runs post-commit outside the mutating transaction, so it takes
 // no advisory lock and a raced run merely leaves a stale value, which the
