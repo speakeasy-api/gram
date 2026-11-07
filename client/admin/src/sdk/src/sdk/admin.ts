@@ -88,6 +88,7 @@ import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
 import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
+import { adminSetMcpServerScopePin } from "../funcs/adminSetMcpServerScopePin.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
@@ -122,6 +123,7 @@ import { AdminListProjectMcpServersResult } from "../models/components/adminlist
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
+import { AdminMcpServerResourceScopes } from "../models/components/adminmcpserverresourcescopes.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
@@ -199,6 +201,7 @@ import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runup
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
 import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
+import { SetMcpServerScopePinRequestBody } from "../models/components/setmcpserverscopepinrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
@@ -1261,6 +1264,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminProjectRedeployPreview> {
     return unwrapAsync(adminGetProjectRedeployPreview(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setMcpServerScopePin admin
+   *
+   * @remarks
+   * Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.
+   */
+  async setMcpServerScopePin(
+    request: SetMcpServerScopePinRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMcpServerResourceScopes> {
+    return unwrapAsync(adminSetMcpServerScopePin(
       this,
       request,
       options,
