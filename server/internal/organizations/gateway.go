@@ -26,16 +26,17 @@ func (s *Service) GetGateway(ctx context.Context, _ *gen.GetGatewayPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read organization").LogError(ctx, s.logger)
 	}
-	_, unavailable, err := orggateway.Availability(ctx, s.db, org)
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, org)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve organization gateway").LogError(ctx, s.logger)
 	}
 	if unavailable != orggateway.UnavailabilityNone {
-		return &gen.OrganizationGateway{Available: false, URL: nil, UnavailableReason: new(string(unavailable))}, nil
+		return &gen.OrganizationGateway{Available: false, URL: nil, UserSessionIssuerID: nil, UnavailableReason: new(string(unavailable))}, nil
 	}
 	return &gen.OrganizationGateway{
-		Available:         true,
-		URL:               new(orggateway.URL(s.orgHosts.ServerURL(org.DefaultHost), org.Slug)),
-		UnavailableReason: nil,
+		Available:           true,
+		URL:                 new(orggateway.URL(s.orgHosts.ServerURL(org.DefaultHost), org.Slug)),
+		UserSessionIssuerID: new(issuerID.String()),
+		UnavailableReason:   nil,
 	}, nil
 }

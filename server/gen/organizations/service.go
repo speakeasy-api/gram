@@ -273,6 +273,10 @@ type OrganizationGateway struct {
 	Available bool
 	// The gateway's MCP URL. Set only when available.
 	URL *string
+	// The organization-level user session issuer the gateway signs people in
+	// through. A server that signs in upstream is offered on the gateway only when
+	// its sign-in client is attached to this issuer. Set only when available.
+	UserSessionIssuerID *string
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string
 }

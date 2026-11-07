@@ -113,6 +113,10 @@ type GetGatewayResponseBody struct {
 	Available bool `form:"available" json:"available" xml:"available"`
 	// The gateway's MCP URL. Set only when available.
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// The organization-level user session issuer the gateway signs people in
+	// through. A server that signs in upstream is offered on the gateway only when
+	// its sign-in client is attached to this issuer. Set only when available.
+	UserSessionIssuerID *string `form:"user_session_issuer_id,omitempty" json:"user_session_issuer_id,omitempty" xml:"user_session_issuer_id,omitempty"`
 	// Why the gateway is not served. Set only when not available.
 	UnavailableReason *string `form:"unavailable_reason,omitempty" json:"unavailable_reason,omitempty" xml:"unavailable_reason,omitempty"`
 }
@@ -4011,9 +4015,10 @@ func NewGetResponseBody(res *organizations.Organization) *GetResponseBody {
 // the "getGateway" endpoint of the "organizations" service.
 func NewGetGatewayResponseBody(res *organizations.OrganizationGateway) *GetGatewayResponseBody {
 	body := &GetGatewayResponseBody{
-		Available:         res.Available,
-		URL:               res.URL,
-		UnavailableReason: res.UnavailableReason,
+		Available:           res.Available,
+		URL:                 res.URL,
+		UserSessionIssuerID: res.UserSessionIssuerID,
+		UnavailableReason:   res.UnavailableReason,
 	}
 	return body
 }
