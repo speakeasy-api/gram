@@ -901,6 +901,8 @@ func TestServeConsentAction_MemberLifecycleAcrossResourceIndexShapes(t *testing.
 			ctx, fx, metaID := seedMetaConsentEndpoint(t, "member-lifecycle")
 			if expanded {
 				require.NoError(t, testrepo.New(fx.ti.conn).ExpandRemoteSessionResourceIndexesFixture(ctx))
+			} else {
+				require.NoError(t, testrepo.New(fx.ti.conn).CreateLegacyRemoteSessionSubjectClientIndexFixture(ctx))
 			}
 			require.NoError(t, fx.ti.productFeatures.SetFeatureEnabled(ctx, fx.orgID, productfeatures.FeatureRemoteSessionAutoRefresh, true))
 			clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "member-lifecycle-client", "", []uuid.UUID{fx.shared})
