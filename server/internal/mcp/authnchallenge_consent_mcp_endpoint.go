@@ -115,11 +115,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	// 404 matches how the island's absence hides the surface entirely.
-	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
-	}
-	if !eligible {
+	if !consentToolPickerEligible(endpoint) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
