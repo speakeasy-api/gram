@@ -158,10 +158,11 @@ const HIDDEN_AGENT_CHECK_SCOPES = ["org:hooks_ingest"];
 
 /** Denied checks fetched to group; the period's own total is counted apart. */
 const FAILED_CHECKS_LIMIT = 200;
-/** Allowed checks fetched to group below the failed ones. */
+/** Allowed checks of each slice fetched to group below the failed ones. */
 const ALLOWED_CHECKS_LIMIT = 100;
+const MCP_CONNECT = "mcp:connect";
 
-/** A label over one outcome's rows inside the checks panel. */
+/** A label over one slice of rows inside the checks panel. */
 function ChecksHeading({ children }: { children: ReactNode }): JSX.Element {
   return (
     <div
@@ -178,9 +179,12 @@ function ChecksHeading({ children }: { children: ReactNode }): JSX.Element {
 function CheckGroupRow({
   group,
   outcome,
+  resourceName,
 }: {
   group: CheckGroup;
   outcome: "allow" | "deny";
+  /** The resource's own name, when it is one the dashboard can look up. */
+  resourceName?: string;
 }): JSX.Element {
   return (
     <IdentityPanelRow
@@ -189,7 +193,11 @@ function CheckGroupRow({
           <code className="text-xs">{group.scope}</code>
           <span className="text-muted-foreground">
             {" · "}
-            {checkResourceLabel(group)}
+            {resourceName ? (
+              <span className="text-foreground">{resourceName}</span>
+            ) : (
+              checkResourceLabel(group)
+            )}
           </span>
         </>
       }
@@ -216,12 +224,15 @@ function CheckSection({
   loadFailed,
   emptyText,
   failedText,
+  resourceName,
 }: {
   groups: CheckGroup[];
   outcome: "allow" | "deny";
   loadFailed: boolean;
   emptyText: string;
   failedText: string;
+  /** Names a group's resource, when the dashboard can look it up. */
+  resourceName?: (group: CheckGroup) => string | undefined;
 }): JSX.Element {
   if (loadFailed) return <IdentityPanelEmpty>{failedText}</IdentityPanelEmpty>;
   if (groups.length === 0)
@@ -229,7 +240,12 @@ function CheckSection({
   return (
     <>
       {groups.map((group) => (
-        <CheckGroupRow key={group.key} group={group} outcome={outcome} />
+        <CheckGroupRow
+          key={group.key}
+          group={group}
+          outcome={outcome}
+          resourceName={resourceName?.(group)}
+        />
       ))}
     </>
   );
@@ -243,59 +259,81 @@ export function AgentIdentityChallenges({
   const { from, to } = useIdentityWindow();
   const routes = useOrgRoutes();
   const principalUrn = `agent:${agent.id}`;
-  // Failed checks are read as their own slice so they are never pushed off
-  // the page by allowed ones: an agent's gateway checks every server on every
-  // call, so allowed checks arrive many times faster than denials.
+  const slice = (
+    filter: { outcome: "allow" | "deny"; scope?: string },
+    excludeScopes: string[],
+    limit: number,
+  ) => ({ principalUrn, ...filter, excludeScopes, from, to, limit });
+  // Each slice is read on its own so none is pushed off the page by another:
+  // an agent's gateway checks every server on every call, so allowed checks
+  // arrive many times faster than denials.
   const failedQuery = useChallenges(
-    {
-      principalUrn,
-      outcome: "deny",
-      excludeScopes: HIDDEN_AGENT_CHECK_SCOPES,
-      from,
-      to,
-      limit: FAILED_CHECKS_LIMIT,
-    },
+    slice({ outcome: "deny" }, HIDDEN_AGENT_CHECK_SCOPES, FAILED_CHECKS_LIMIT),
     undefined,
     { throwOnError: false },
   );
-  const allowedQuery = useChallenges(
-    {
-      principalUrn,
-      outcome: "allow",
-      excludeScopes: HIDDEN_AGENT_CHECK_SCOPES,
-      from,
-      to,
-      limit: ALLOWED_CHECKS_LIMIT,
-    },
+  // The servers the agent reached, below the failures: what it may connect to
+  // matters less than what it was refused, but more than any other check.
+  const connectQuery = useChallenges(
+    slice(
+      { outcome: "allow", scope: MCP_CONNECT },
+      HIDDEN_AGENT_CHECK_SCOPES,
+      ALLOWED_CHECKS_LIMIT,
+    ),
     undefined,
     { throwOnError: false },
   );
+  const otherQuery = useChallenges(
+    slice(
+      { outcome: "allow" },
+      [...HIDDEN_AGENT_CHECK_SCOPES, MCP_CONNECT],
+      ALLOWED_CHECKS_LIMIT,
+    ),
+    undefined,
+    { throwOnError: false },
+  );
+  const queries = [failedQuery, connectQuery, otherQuery];
   const failedRows = failedQuery.data?.challenges ?? [];
-  const allowedRows = allowedQuery.data?.challenges ?? [];
+  const connectRows = connectQuery.data?.challenges ?? [];
+  const otherRows = otherQuery.data?.challenges ?? [];
   const failed = groupChecks(failedRows);
-  const allowed = groupChecks(allowedRows);
+  const connected = groupChecks(connectRows);
+  const other = groupChecks(otherRows);
   const failedTotal = failedQuery.data?.total ?? 0;
-  const allowedTotal = allowedQuery.data?.total ?? 0;
-  const loaded = !!failedQuery.data || !!allowedQuery.data;
-  const anyFailed = failedQuery.isError || allowedQuery.isError;
+  const allowedTotal =
+    (connectQuery.data?.total ?? 0) + (otherQuery.data?.total ?? 0);
+  const loaded = queries.some((query) => !!query.data);
+  const anyFailed = queries.some((query) => query.isError);
+  // Server names come from the org's server lists, read only when a check
+  // names a server.
+  const maps = useResourceLinkMaps(
+    [...failed, ...connected].some((group) => group.resourceKind === "mcp"),
+  );
+  const serverName = (group: CheckGroup) =>
+    group.resourceKind === "mcp"
+      ? (maps.toolsetMap.get(group.resourceId)?.name ??
+        maps.mcpServerMap.get(group.resourceId)?.name ??
+        maps.mcpServerMap.get(group.resourceId)?.slug)
+      : undefined;
   const handoffParams = new URLSearchParams({
     identity: principalUrn,
     from: from.toISOString(),
     to: to.toISOString(),
   });
   const truncated =
-    failedTotal > failedRows.length || allowedTotal > allowedRows.length;
+    failedTotal > failedRows.length ||
+    (connectQuery.data?.total ?? 0) > connectRows.length ||
+    (otherQuery.data?.total ?? 0) > otherRows.length;
   return (
     <IdentityPanel
       title="Authorization checks"
       handoffLabel="Roles & Permissions"
       handoffHref={`${routes.access.href()}/challenges?${handoffParams}`}
-      loading={failedQuery.isLoading || allowedQuery.isLoading}
+      loading={queries.some((query) => query.isLoading)}
       error={anyFailed && !loaded}
       refreshFailed={anyFailed && loaded}
       onRetry={() => {
-        void failedQuery.refetch();
-        void allowedQuery.refetch();
+        for (const query of queries) void query.refetch();
       }}
       footer={
         failedTotal + allowedTotal > 0
@@ -310,15 +348,29 @@ export function AgentIdentityChallenges({
         loadFailed={failedQuery.isError && !failedQuery.data}
         emptyText="No failed checks for this agent in this period."
         failedText="Failed checks could not be loaded."
+        resourceName={serverName}
       />
-      <ChecksHeading>Allowed</ChecksHeading>
+      <ChecksHeading>MCP servers</ChecksHeading>
       <CheckSection
-        groups={allowed}
+        groups={connected}
         outcome="allow"
-        loadFailed={allowedQuery.isError && !allowedQuery.data}
-        emptyText="No allowed checks for this agent in this period."
-        failedText="Allowed checks could not be loaded."
+        loadFailed={connectQuery.isError && !connectQuery.data}
+        emptyText="No MCP server connections for this agent in this period."
+        failedText="MCP server checks could not be loaded."
+        resourceName={serverName}
       />
+      {(other.length > 0 || (otherQuery.isError && !otherQuery.data)) && (
+        <>
+          <ChecksHeading>Other allowed checks</ChecksHeading>
+          <CheckSection
+            groups={other}
+            outcome="allow"
+            loadFailed={otherQuery.isError && !otherQuery.data}
+            emptyText=""
+            failedText="Other allowed checks could not be loaded."
+          />
+        </>
+      )}
     </IdentityPanel>
   );
 }
