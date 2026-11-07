@@ -100,9 +100,25 @@ func TestConsentSessionRouting_DirectPersistedTargetReadiness(t *testing.T) {
 		f.service.identityChainer = nil
 	}
 	assertElsewhere()
+	require.NoError(t, testrepo.New(pool).ExpireRemoteSessionAccessTokenFixture(ctx, a))
+	expired, err := f.service.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.orgID, []uuid.UUID{f.registration}, resourceA)
+	require.NoError(t, err)
+	require.Equal(t, remotesessions.RemoteSessionExpired, expired[f.registration].Status)
+	assertElsewhere() // An expired sibling still requires reconnect guidance.
+	// Fixture setup: this synthetic subject has no live membership for lifecycle admission.
+	deleted, err := q.RevokeRemoteSession(ctx, remotesessionsrepo.RevokeRemoteSessionParams{ID: a, ProjectID: f.projectID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.Equal(t, a, deleted.ID)
+	require.True(t, deleted.Deleted)
+	require.Empty(t, read(endpoint, subject), "a deleted sibling is not a connection elsewhere")
+	a = put(resourceA, "Account A", "read:a")
 	c := put("https://target-c.example.test/mcp", "Account C", "admin:c")
 	require.NotEqual(t, a, c)
 	assertElsewhere() // Multiple siblings must not select a representative row.
+	require.NoError(t, testrepo.New(pool).ExpireRemoteSessionAccessTokenFixture(ctx, a))
+	require.NoError(t, testrepo.New(pool).ExpireRemoteSessionAccessTokenFixture(ctx, c))
+	assertElsewhere() // Multiple expired siblings still provide only existence.
+	a = put(resourceA, "Account A", "read:a")
 	b := put(resourceB, "Account B", "write:b")
 	require.NotEqual(t, a, b, "both resource grants must coexist")
 	for _, target := range []struct {

@@ -50,7 +50,7 @@ func (m *ChallengeManager) RemoteSessionConnectionsElsewhere(ctx context.Context
 func connectionsElsewhere(rows []remotesessionsrepo.ListRemoteSessionStatusesForSubjectRow, resource string) map[uuid.UUID]bool {
 	found := make(map[uuid.UUID]bool)
 	for _, row := range rows {
-		if row.Status == string(RemoteSessionActive) && row.Resource.Valid && strings.TrimRight(row.Resource.String, "/") != strings.TrimRight(resource, "/") {
+		if row.Resource.Valid && row.Resource.String != "" && strings.TrimRight(row.Resource.String, "/") != strings.TrimRight(resource, "/") {
 			found[row.RemoteSessionClientID] = true
 		}
 	}

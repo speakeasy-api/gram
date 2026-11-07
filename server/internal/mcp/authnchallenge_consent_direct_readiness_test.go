@@ -58,12 +58,13 @@ func TestServeConsent_DirectSharedRegistrationRetainsTargetReadiness(t *testing.
 				for _, target := range []struct{ resource, identity string }{
 					{consentUpstreamA, "Account A"}, {"https://target-c.example.test/mcp", "Account C"}, {consentUpstreamB, "Account B"},
 				} {
-					row, err := q.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
+					params := remotesessionsrepo.UpsertRemoteSessionParams{
 						SubjectUrn: fx.subject, UserSessionIssuerID: fx.shared, RemoteSessionClientID: registration,
 						AccessTokenEncrypted: token, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
 						Resource: conv.ToPGText(target.resource), Scopes: []string{},
 						UpstreamDisplayName: conv.ToPGText(target.identity), IdentitySource: conv.ToPGText("id_token"),
-					})
+					}
+					row, err := q.UpsertRemoteSession(ctx, params)
 					require.NoError(t, err)
 					ids = append(ids, row.ID)
 					if target.resource != consentUpstreamB {
@@ -78,6 +79,17 @@ func TestServeConsent_DirectSharedRegistrationRetainsTargetReadiness(t *testing.
 						require.NotContains(t, html, "Account A")
 						require.NotContains(t, html, "Account C")
 						require.NotContains(t, html, consentManagedCopy)
+						require.NoError(t, testrepo.New(fx.ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, row.ID))
+						code, html, _ = render(t, fx)
+						require.Equal(t, http.StatusOK, code)
+						require.Contains(t, html, "0 of 1 connected")
+						require.Contains(t, html, consentReconnectCopy, "an expired sibling is not a never-connected registration")
+						require.NotContains(t, html, "Account A")
+						require.NotContains(t, html, "Account C")
+						require.NotContains(t, html, consentManagedCopy)
+						restored, err := q.UpsertRemoteSession(ctx, params)
+						require.NoError(t, err)
+						require.Equal(t, row.ID, restored.ID)
 					}
 				}
 				require.NotEqual(t, ids[0], ids[1], "the expanded session key must retain sibling targets")
