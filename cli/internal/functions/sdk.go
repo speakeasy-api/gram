@@ -106,7 +106,7 @@ var (
 
 	// ErrSDKOutdated means the installed SDK predates the build entry. The
 	// error Build returns wraps it and names the outdated package.
-	ErrSDKOutdated = errors.New("functions SDK is too old for the speakeasy CLI")
+	ErrSDKOutdated = errors.New("functions SDK is too old for the speakeasy-ai CLI")
 )
 
 // ProjectOptions selects a project and overrides parts of its config.

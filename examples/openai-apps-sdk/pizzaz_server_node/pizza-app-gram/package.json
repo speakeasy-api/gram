@@ -21,10 +21,10 @@
   "scripts": {
     "dev": "mcp-inspector node ./src/server.ts",
     "inline:app": "cd .. && tsx scripts/build-inlined.ts",
-    "push": "speakeasy functions push",
+    "push": "speakeasy-ai functions push",
     "prebuild": "tsc -p tsconfig.json",
     "prepublishOnly": "npm run build",
-    "build": "speakeasy functions build"
+    "build": "speakeasy-ai functions build"
   },
   "dependencies": {
     "@speakeasy-api/functions": "^0.20.0",

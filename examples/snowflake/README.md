@@ -25,6 +25,10 @@ hosted databases.
 
 ## Quick start
 
+Install the Speakeasy AI Control Plane CLI, which the `build` and `push` scripts run as
+`speakeasy-ai`: `brew install speakeasy-api/tap/cli`, `npm i -g @speakeasy-api/cli` or
+`curl -fsSL https://ai.speakeasy.com/cli.sh | bash`.
+
 To get started, install dependencies and run the development server:
 
 ```bash

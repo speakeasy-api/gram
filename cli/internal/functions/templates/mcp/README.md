@@ -13,7 +13,8 @@ interacting with hosted databases.
 
 - [Node.js](https://nodejs.org) version 22.18.0 or later
 - The Speakeasy AI Control Plane CLI: `brew install speakeasy-api/tap/cli` or
-  `npm i -g @speakeasy-api/cli`
+  `npm i -g @speakeasy-api/cli`. Check it with `speakeasy-ai --control-plane-cli`,
+  which prints `speakeasy-ai-control-plane-cli`.
 
 ## Quick start
 
@@ -26,13 +27,13 @@ npm install
 To build a zip file that can be deployed to the Speakeasy AI Control Plane, run:
 
 ```bash
-speakeasy functions build
+speakeasy-ai functions build
 ```
 
 Then deploy your function with:
 
 ```bash
-speakeasy functions push
+speakeasy-ai functions push
 ```
 
 The `build` and `push` package scripts run the same commands.
@@ -43,7 +44,7 @@ If you want to poke at the tools you've built during local development, you can
 start a local MCP server over stdio transport with:
 
 ```bash
-speakeasy functions dev
+speakeasy-ai functions dev
 ```
 
 Specifically, this command will spin up [MCP inspector][mcp-inspector] to let

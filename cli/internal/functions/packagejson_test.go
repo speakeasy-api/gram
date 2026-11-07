@@ -19,8 +19,8 @@ func TestRewritePackageJSON(t *testing.T) {
   "version": "1.2.3",
   "scripts": {
     "dev": "a && b",
-    "_:build": "speakeasy functions build",
-    "push": "speakeasy functions push"
+    "_:build": "speakeasy-ai functions build",
+    "push": "speakeasy-ai functions push"
   },
   "dependencies": {
     "@gram-ai/functions": "workspace:",
@@ -53,8 +53,8 @@ func TestRewritePackageJSON(t *testing.T) {
   "version": "0.0.0",
   "scripts": {
     "dev": "a && b",
-    "build": "speakeasy functions build",
-    "push": "speakeasy functions push"
+    "build": "speakeasy-ai functions build",
+    "push": "speakeasy-ai functions push"
   },
   "dependencies": {
     "@gram-ai/functions": "^0.19.0",

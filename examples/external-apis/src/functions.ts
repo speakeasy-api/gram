@@ -5,7 +5,7 @@ import { z } from "zod";
  * This example shows how to use the Speakeasy Functions framework to create a tool that calls an external API.
  * It uses the OpenWeatherMap API to get the current weather conditions for a specific city.
  *
- * After running `speakeasy functions init`, replace the contents of `src/functions.ts` with this example.
+ * After running `speakeasy-ai functions init`, replace the contents of `src/functions.ts` with this example.
  */
 
 const functions = new Functions({
