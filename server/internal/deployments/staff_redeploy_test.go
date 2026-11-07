@@ -44,6 +44,10 @@ func TestStaffRedeployer_ProjectWithOnlyExternalMCPsDropsThemAndBecomesActive(t 
 	require.NoError(t, tx.Commit(ctx))
 	require.Empty(t, clone.ExternalMcps)
 
+	activeBeforeProcessing, err := repo.New(ti.conn).GetActiveDeploymentID(ctx, projectID)
+	require.NoError(t, err)
+	require.Equal(t, source, activeBeforeProcessing, "the source stays active until the clone succeeds")
+
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDeploymentsRedeploy)
 	require.NoError(t, err)
 	require.Equal(t, staff.ID, record.ActorID)

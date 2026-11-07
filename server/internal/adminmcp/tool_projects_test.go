@@ -18,12 +18,13 @@ const testProjectID = "f744be5c-02ed-4da3-924b-6867c785a116"
 
 type recordingProjectReader struct {
 	*recordingOrganizationReader
-	listInput *gen.ListOrganizationProjectsPayload
-	getInput  *gen.GetProjectPayload
-	list      *gen.AdminListOrganizationProjectsResult
-	project   *gen.AdminProjectDetail
-	preview   *gen.AdminProjectRedeployPreview
-	err       error
+	listInput    *gen.ListOrganizationProjectsPayload
+	getInput     *gen.GetProjectPayload
+	list         *gen.AdminListOrganizationProjectsResult
+	project      *gen.AdminProjectDetail
+	preview      *gen.AdminProjectRedeployPreview
+	previewInput *gen.GetProjectRedeployPreviewPayload
+	err          error
 }
 
 func (r *recordingProjectReader) ListOrganizationProjects(_ context.Context, input *gen.ListOrganizationProjectsPayload) (*gen.AdminListOrganizationProjectsResult, error) {
@@ -36,7 +37,8 @@ func (r *recordingProjectReader) GetProject(_ context.Context, input *gen.GetPro
 	return r.project, r.err
 }
 
-func (r *recordingProjectReader) GetProjectRedeployPreview(_ context.Context, _ *gen.GetProjectRedeployPreviewPayload) (*gen.AdminProjectRedeployPreview, error) {
+func (r *recordingProjectReader) GetProjectRedeployPreview(_ context.Context, input *gen.GetProjectRedeployPreviewPayload) (*gen.AdminProjectRedeployPreview, error) {
+	r.previewInput = input
 	return r.preview, r.err
 }
 
@@ -87,6 +89,8 @@ func TestProjectRedeployPreviewRequiresExactProjectAndMatchingOrganization(t *te
 	require.Equal(t, http.StatusOK, status)
 	var preview ProjectRedeployPreview
 	require.NoError(t, json.Unmarshal(data, &preview))
+	require.Equal(t, "org-a", reads.previewInput.OrganizationID)
+	require.Equal(t, testProjectID, reads.previewInput.ProjectID)
 	require.Equal(t, ProjectRedeployPreview{OrganizationID: "org-a", ProjectID: testProjectID, ProjectName: "Example", ActiveDeploymentID: "active", OpenAPIAssets: 1, FunctionAssets: 3, Packages: 4, ExternalMCPs: 2}, preview)
 
 	_, body, _ := callStaffReadTool(t, reads, "get_project_redeploy_preview", `{"organization_id":"org-a","project_id":"example"}`)

@@ -96,6 +96,7 @@ func TestProjectRedeployApplies(t *testing.T) {
 	staff, ok := contextvalues.GetAdminAuthContext(ctx)
 	require.True(t, ok)
 	require.Equal(t, staff.OIDCSubject, redeployer.prepared[0].Actor.ID)
+	require.Equal(t, active, redeployer.prepared[0].SourceDeploymentID)
 	require.Equal(t, string(audit.SurfaceAdminMCP), redeployer.surface)
 	require.Equal(t, [][3]uuid.UUID{{projectID, uuid.MustParse(receipt.DeploymentID), active}}, redeployer.dispatched)
 	require.Equal(t, 1, countWriteEvents(t, f.db, OperationRedeployProject, f.orgA, "executed"))
@@ -182,14 +183,17 @@ func TestProjectRedeployConcurrentCallsCloneOnce(t *testing.T) {
 	active := seedRedeployDeployment(t, f, f.orgA, projectID, "completed")
 	input := RedeployProjectInput{OrganizationID: f.orgA, ProjectID: projectID.String(), ExpectedActiveDeploymentID: active.String()}
 
+	start := make(chan struct{})
 	results := make(chan error, 2)
 	var group sync.WaitGroup
 	for range 2 {
 		group.Go(func() {
+			<-start
 			_, err := writer.apply(ctx, input)
 			results <- err
 		})
 	}
+	close(start)
 	group.Wait()
 	close(results)
 	succeeded := 0
