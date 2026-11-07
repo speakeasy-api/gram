@@ -8,6 +8,7 @@ import {
   filterToHttpRemotes,
   isFigmaCatalogServer,
   normalizeRemoteUrl,
+  getRemoteDisplayInfo,
 } from "./remotes";
 import type { CatalogServer } from "./hooks";
 
@@ -239,5 +240,26 @@ describe("catalogHeadersForRemoteUrl", () => {
         "https://other.example/mcp",
       ),
     ).toEqual([]);
+  });
+});
+
+describe("Salesforce endpoint environment labels", () => {
+  it.each([
+    ["platform/sobject-reads", "SObject Reads · Production"],
+    ["sandbox/platform/sobject-reads", "SObject Reads · Sandbox"],
+    ["data/data360", "Data360 · Production"],
+    ["data/sandbox/data360", "Data360 · Sandbox"],
+    ["platform/headless-360", "Headless 360 · Production"],
+    ["sandbox/analytics/tableau-next", "Tableau Next · Sandbox"],
+  ])("identifies the environment for %s", (path, name) => {
+    expect(
+      getRemoteDisplayInfo(`https://api.salesforce.com/platform/mcp/v1/${path}`)
+        .name,
+    ).toBe(name);
+  });
+  it("preserves unrelated remote labels", () => {
+    expect(
+      getRemoteDisplayInfo("https://example.test/platform/sobject-reads").name,
+    ).toBe("SObject Reads");
   });
 });

@@ -1,3 +1,4 @@
+import { SalesforceTask } from "./SalesforceTask";
 import { useSetup } from "./setup-context";
 import { names, orgValid } from "./state";
 import type { ReactNode } from "react";
@@ -69,9 +70,17 @@ function Plan() {
   );
 }
 function credentialInstructions(
-  provider: "slack" | "github",
+  provider: "slack" | "github" | "salesforce",
   existing: boolean,
 ): ReactNode[] {
+  if (provider === "salesforce")
+    return [
+      <>
+        Open your app’s{" "}
+        <strong>Settings → OAuth Settings → Consumer Key and Secret</strong>,
+        complete any verification prompt, and copy the Consumer Key below.
+      </>,
+    ];
   const copyCredentials = (
     <>
       Copy <strong>Client ID</strong> and <strong>Client Secret</strong> into
@@ -107,6 +116,15 @@ function credentialInstructions(
 function Credentials() {
   const { s, dispatch, live } = useSetup();
   const saved = s.saved;
+  const maskedSecret =
+    s.provider !== "salesforce" ||
+    live.savedTokenEndpointAuthMethod === "client_secret_post";
+  let secretPlaceholder = "Paste Client Secret";
+  if (saved && s.provider === "salesforce" && !maskedSecret)
+    secretPlaceholder =
+      live.savedTokenEndpointAuthMethod === "none"
+        ? "No secret required"
+        : "Secret status unavailable";
   return (
     <>
       <InProvider
@@ -117,18 +135,26 @@ function Credentials() {
       />
       <SetupField
         field="clientId"
-        label="Client ID"
+        label={s.provider === "salesforce" ? "Consumer Key" : "Client ID"}
         disabled={saved}
         value={saved ? (live.savedClientId ?? "") : undefined}
-        placeholder="Paste Client ID"
+        placeholder={
+          s.provider === "salesforce" ? "Paste Consumer Key" : "Paste Client ID"
+        }
       />
-      <SetupField
-        field="clientSecret"
-        label="Client Secret"
-        disabled={saved}
-        value={saved ? "••••••••" : undefined}
-        placeholder="Paste Client Secret"
-      />
+      {(s.provider !== "salesforce" || s.values.integration === "hosted") && (
+        <SetupField
+          field="clientSecret"
+          label={
+            s.provider === "salesforce"
+              ? "Client Secret (optional)"
+              : "Client Secret"
+          }
+          disabled={saved}
+          value={saved ? (maskedSecret ? "••••••••" : "") : undefined}
+          placeholder={secretPlaceholder}
+        />
+      )}
       {saved && (
         <div className="mt-5 flex justify-end">
           <Button
@@ -434,6 +460,8 @@ export function ProviderTask({
   serverName: string;
 }): JSX.Element {
   const { s } = useSetup();
+  if (s.provider === "salesforce" && s.step !== "credentials")
+    return <SalesforceTask />;
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
   if (s.provider === "github") return <GitHubTask />;

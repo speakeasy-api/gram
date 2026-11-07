@@ -85,6 +85,23 @@ const server = {
   ],
 };
 
+const salesforceServer = {
+  ...server,
+  registrySpecifier: "com.salesforce/hosted-mcp",
+  title: "Salesforce",
+  supportsDcr: false,
+  remotes: [
+    {
+      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+      transportType: "streamable-http" as const,
+    },
+    {
+      url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+      transportType: "streamable-http" as const,
+    },
+  ],
+};
+
 function render(ui: React.ReactElement) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -149,6 +166,130 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("Salesforce catalog Add entry", () => {
+  function openSalesforce(
+    options: Partial<React.ComponentProps<typeof AddServerDialog>> = {},
+  ) {
+    mockConfigureWorkflow(salesforceServer);
+    const element = () => (
+      <TooltipProvider>
+        <AddServerDialog
+          servers={[salesforceServer]}
+          open
+          openProviderSetup
+          onOpenChange={(open) => {
+            mocks.onOpenChange(open);
+          }}
+          {...options}
+        />
+      </TooltipProvider>
+    );
+    const view = render(element());
+    return { ...view, refresh: () => view.rerender(element()) };
+  }
+  it("enters the existing Identity configuration with one source instead of the endpoint picker", async () => {
+    openSalesforce();
+    await screen.findByRole("radio", { name: /User Identity/ });
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    expect(options.initialConfiguration).toEqual({ identityMode: "user" });
+    expect(options.servers[0].remotes).toEqual([salesforceServer.remotes[0]]);
+    expect(screen.queryByText("Select endpoints to include")).toBeNull();
+    expect(screen.queryByLabelText("Salesforce instance URL")).toBeNull();
+  });
+  it("returns to guided entry when Manual changes back to User Identity", async () => {
+    mocks.hasScope.mockReturnValue(true);
+    const view = openSalesforce();
+    await screen.findByRole("radio", { name: /User Identity/ });
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    const configure = mocks.workflow.mock.results.at(-1)!.value;
+    configure.serverConfigs[0].identityMode = "none";
+    view.refresh();
+    fireEvent.click(screen.getByRole("radio", { name: /User Identity/ }));
+    const options = mocks.workflow.mock.calls.at(-1)![0];
+    expect(options.servers[0].remotes).toEqual([salesforceServer.remotes[0]]);
+    expect(options.initialConfiguration).toEqual({
+      identityMode: "user",
+      name: "Test Server",
+    });
+  });
+  it("defers hosted instance configuration to Setup and restores it for Manual", async () => {
+    const hosted = {
+      ...salesforceServer,
+      registrySpecifier: "com.pulsemcp.mirror/gram-salesforce",
+      remotes: [
+        {
+          url: "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+          transportType: "streamable-http" as const,
+          headers: [
+            { name: "MCP-Instance-URL", isRequired: true, isSecret: false },
+          ],
+        },
+      ],
+    };
+    openSalesforce({ servers: [hosted] });
+    await screen.findByRole("radio", { name: /User Identity/ });
+    expect(
+      mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes[0].headers,
+    ).toEqual([]);
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    expect(mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes).toEqual(
+      hosted.remotes,
+    );
+  });
+  it.each(["none", "agent"] as const)(
+    "retains the original endpoint flow when Identity changes to %s",
+    async (identityMode) => {
+      openSalesforce();
+      await screen.findByRole("radio", { name: /User Identity/ });
+      fireEvent.click(
+        screen.getByRole("radio", {
+          name: identityMode === "none" ? /Manual/ : /Shared credential/,
+        }),
+      );
+      const options = mocks.workflow.mock.calls.at(-1)![0];
+      expect(options.servers[0].remotes).toEqual(salesforceServer.remotes);
+      expect(options.initialConfiguration).toEqual({
+        identityMode,
+        name: "Test Server",
+      });
+    },
+  );
+  it.each(["disabled", "loading"] as const)(
+    "does not enable guided source selection while rollout is %s",
+    async (status) => {
+      mocks.providerSetup = status;
+      openSalesforce();
+      await waitFor(() =>
+        expect(mocks.workflow.mock.calls.at(-1)?.[0].servers).toHaveLength(1),
+      );
+      const options = mocks.workflow.mock.calls.at(-1)![0];
+      expect(options.servers[0].remotes).toEqual(salesforceServer.remotes);
+      expect(options.initialConfiguration).toBeUndefined();
+      if (status === "loading")
+        expect(
+          screen.queryByRole("radio", { name: /User Identity/ }),
+        ).toBeNull();
+    },
+  );
+  it.each([
+    { openProviderSetup: false },
+    { bulk: true },
+    { headless: true },
+    { autoStartInstall: true },
+  ])("leaves non-guided callers unchanged: %j", async (options) => {
+    openSalesforce(options);
+    await waitFor(() =>
+      expect(mocks.workflow.mock.calls.at(-1)?.[0].servers).toHaveLength(1),
+    );
+    expect(mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes).toEqual(
+      salesforceServer.remotes,
+    );
+    expect(
+      mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+    ).toBeUndefined();
+  });
 });
 
 describe("AddServerDialog identity permissions", () => {

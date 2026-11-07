@@ -1,3 +1,6 @@
+import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
+import { salesforceSelectionForUrl } from "@/pages/catalog/provider-setup/salesforce";
+import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer, useRef, type ReactNode } from "react";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate } from "react-router";
@@ -36,6 +39,7 @@ import {
   setupProviderForUrl,
   loadProviderProgress,
   saveProviderProgress,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
 
 export function ProviderSetupPage({
@@ -78,6 +82,14 @@ export function ProviderSetupPage({
     );
   const provider = setupProviderForUrl(remote.data?.url);
   if (!provider) return <Navigate to={overview} replace />;
+  if (provider === "salesforce")
+    return (
+      <SalesforceSetupEntry
+        serverUrl={remote.data?.url ?? ""}
+        mcpServer={mcpServer}
+        overviewHref={overview}
+      />
+    );
   return (
     <ProviderSetupFlow
       provider={provider}
@@ -87,12 +99,71 @@ export function ProviderSetupPage({
     />
   );
 }
+function SalesforceSetupEntry({
+  serverUrl,
+  mcpServer,
+  overviewHref,
+}: {
+  serverUrl: string;
+  mcpServer: McpServer;
+  overviewHref: string;
+}): JSX.Element {
+  const headers = useRemoteMcpServerHeaders(
+    { remoteMcpServerId: mcpServer.remoteMcpServerId! },
+    undefined,
+    { throwOnError: false },
+  );
+  if (headers.isPending)
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Skeleton className="h-64 w-full" />
+        </Page.Body>
+      </Page>
+    );
+  if (headers.isError)
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Alert variant="error">
+            Couldn’t load Salesforce connection configuration.{" "}
+            <Button variant="secondary" onClick={() => void headers.refetch()}>
+              <Button.Text>Retry</Button.Text>
+            </Button>
+          </Alert>
+        </Page.Body>
+      </Page>
+    );
+  const instanceUrl =
+    headers.data.headers.find(
+      (header) =>
+        header.name.toLowerCase() === "mcp-instance-url" &&
+        !header.isSecret &&
+        !header.valueFromRequestHeader,
+    )?.value ?? "";
+  return (
+    <ProviderSetupFlow
+      provider="salesforce"
+      serverUrl={serverUrl}
+      mcpServer={mcpServer}
+      overviewHref={overviewHref}
+      initialValues={{ ...salesforceSelectionForUrl(serverUrl), instanceUrl }}
+      sourceInstance={instanceUrl}
+    />
+  );
+}
 function ProviderSetupFlow({
   provider,
   serverUrl,
   mcpServer,
   overviewHref,
+  initialValues,
+  sourceInstance,
 }: {
+  initialValues?: Partial<State["values"]>;
+  sourceInstance?: string;
   provider: SetupProvider;
   serverUrl: string;
   mcpServer: McpServer;
@@ -114,6 +185,8 @@ function ProviderSetupFlow({
       serverUrl={serverUrl}
       serverName={mcpServer.name ?? mcpServer.slug ?? names[provider]}
       key={storageKey}
+      initialValues={initialValues}
+      sourceInstance={sourceInstance}
       storageKey={storageKey}
       overviewHref={overviewHref}
       mcpServer={mcpServer}
@@ -127,7 +200,11 @@ function RetainedProviderSetup({
   storageKey,
   overviewHref,
   mcpServer,
+  initialValues,
+  sourceInstance,
 }: {
+  initialValues?: Partial<State["values"]>;
+  sourceInstance?: string;
   mcpServer: McpServer;
   provider: SetupProvider;
   serverUrl: string;
@@ -137,7 +214,17 @@ function RetainedProviderSetup({
 }): JSX.Element {
   const navigate = useNavigate();
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    return loadProviderProgress(provider, key);
+    return loadProviderProgress(
+      provider,
+      key,
+      initialValues,
+      provider === "salesforce"
+        ? salesforceSourceFingerprint(mcpServer.remoteMcpServerId, {
+            url: serverUrl,
+            instanceUrl: sourceInstance,
+          })
+        : undefined,
+    );
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
@@ -153,24 +240,30 @@ function RetainedProviderSetup({
       dispatch={dispatch}
       mcpServer={mcpServer}
       serverUrl={serverUrl}
+      sourceInstance={sourceInstance}
       serverName={serverName}
     />
   );
 }
 function LiveSetupConnection({
+  sourceInstance,
   s,
   dispatch,
   mcpServer,
   serverUrl,
   serverName,
 }: {
+  sourceInstance?: string;
   s: Parameters<typeof useProviderConnection>[0];
   dispatch: Parameters<typeof useProviderConnection>[1];
   mcpServer: McpServer;
   serverUrl: string;
   serverName: string;
 }): JSX.Element {
-  const live = useProviderConnection(s, dispatch, mcpServer);
+  const live = useProviderConnection(s, dispatch, mcpServer, {
+    url: serverUrl,
+    instanceUrl: sourceInstance,
+  });
   const routes = useRoutes();
   const settingsHref =
     routes.mcp.details.settings.href(mcpServerRouteParam(mcpServer)) +
@@ -365,7 +458,13 @@ function SetupBody({
                   ) : (
                     <Button
                       variant="primary"
-                      disabled={!!live.pending || live.loading}
+                      disabled={
+                        !!live.pending ||
+                        live.loading ||
+                        (s.provider === "salesforce" &&
+                          s.values.path === "support" &&
+                          ["install", "support"].includes(s.step))
+                      }
                       onClick={live.next}
                     >
                       <Button.Text>

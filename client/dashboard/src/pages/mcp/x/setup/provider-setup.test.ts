@@ -6,7 +6,102 @@ import {
   saveProviderProgress,
   loadProviderProgress,
   providerProgressKey,
+  salesforceSourceFingerprint,
 } from "./provider-setup";
+
+describe("Salesforce source-bound progress", () => {
+  const source = {
+    url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+    instanceUrl: "",
+  };
+  const baseline = salesforceSourceFingerprint("upstream", source);
+  it("retains an intentional pending draft against the same source", () => {
+    const state = initialState("salesforce");
+    state.configChanged = true;
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    state.step = "credentials";
+    saveProviderProgress("sf-draft", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-draft",
+      initialState("salesforce").values,
+      baseline,
+    );
+    expect(restored.values.salesforceServer).toBe("sobject-all");
+    expect(restored.configChanged).toBe(true);
+    expect(restored.step).toBe("credentials");
+  });
+  it.each([false, true])(
+    "uses the current source when its baseline changes (pending=%s)",
+    (pending) => {
+      const state = initialState("salesforce");
+      state.configChanged = pending;
+      state.sourceFingerprint = baseline;
+      state.values.salesforceServer = "sobject-all";
+      state.done = ["choices", "app"];
+      state.step = "credentials";
+      saveProviderProgress("sf-stale", state);
+      const defaults = {
+        ...state.values,
+        salesforceServer: "sobject-mutations",
+      };
+      const restored = loadProviderProgress(
+        "salesforce",
+        "sf-stale",
+        defaults,
+        salesforceSourceFingerprint("replacement", source),
+      );
+      expect(restored.values.salesforceServer).toBe("sobject-mutations");
+      expect(restored.step).toBe("choices");
+      expect(restored.done).toEqual([]);
+      expect(restored.configChanged).toBe(pending);
+      expect(restored.saved).toBe(false);
+    },
+  );
+  it("uses server values for a completed draft, even against the same baseline", () => {
+    const state = initialState("salesforce");
+    state.sourceFingerprint = baseline;
+    state.values.salesforceServer = "sobject-all";
+    saveProviderProgress("sf-completed", state);
+    expect(
+      loadProviderProgress(
+        "salesforce",
+        "sf-completed",
+        initialState("salesforce").values,
+        baseline,
+      ).values.salesforceServer,
+    ).toBe("sobject-reads");
+  });
+  it("keeps the intended connection after a partial source write and failed credential replacement", () => {
+    const state = initialState("salesforce");
+    const partial = {
+      ...source,
+      instanceUrl: "https://example.my.salesforce.com",
+    };
+    const partialBaseline = salesforceSourceFingerprint("upstream", partial);
+    Object.assign(state.values, {
+      integration: "hosted",
+      instanceUrl: partial.instanceUrl,
+    });
+    state.configChanged = true;
+    state.sourceFingerprint = partialBaseline;
+    saveProviderProgress("sf-partial", state);
+    const restored = loadProviderProgress(
+      "salesforce",
+      "sf-partial",
+      {
+        ...initialState("salesforce").values,
+        instanceUrl: partial.instanceUrl,
+      },
+      partialBaseline,
+    );
+    expect(restored.values.integration).toBe("hosted");
+    expect(restored.values.instanceUrl).toBe(partial.instanceUrl);
+    expect(restored.configChanged).toBe(true);
+    expect(restored.saved).toBe(false);
+  });
+});
 
 describe("Provider setup routing", () => {
   it("recognizes only the official Slack endpoint", () => {
@@ -22,7 +117,6 @@ describe("Provider setup routing", () => {
       expect(setupProviderForUrl(url)).toBeNull();
   });
   it.each([
-    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     "https://example.snowflakecomputing.com/api/v2/databases/A/schemas/B/mcp-servers/C",
     "https://example.okta.com/mcp",
   ])("leaves other providers on their existing path: %s", (url) => {
@@ -311,3 +405,27 @@ it.each(["all", "read"])(
     sessionStorage.removeItem(key);
   },
 );
+
+it.each([
+  "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+])("hands off only User Identity Salesforce installs: %s", (url) => {
+  const servers = [{ remotes: [{ url }] }];
+  const status = {
+    status: "completed" as const,
+    key: "sf",
+    name: "Salesforce",
+    remoteUrl: url,
+    mcpServerId: "id",
+    mcpServerParam: "installed",
+  };
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "user" }]),
+  ).toBe("installed");
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "agent" }]),
+  ).toBeNull();
+  expect(
+    providerSetupInstallTarget(servers, [{ ...status, identityMode: "none" }]),
+  ).toBeNull();
+});

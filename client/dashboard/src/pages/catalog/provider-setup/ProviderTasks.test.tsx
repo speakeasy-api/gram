@@ -192,3 +192,137 @@ it.each(["all", "read"])(
     );
   },
 );
+
+function SalesforceFixture({
+  step,
+  integration = "native",
+  path = "own",
+  salesforceServer = "sobject-reads",
+  saved = false,
+  savedTokenEndpointAuthMethod,
+}: {
+  step: string;
+  integration?: string;
+  path?: string;
+  salesforceServer?: string;
+  saved?: boolean;
+  savedTokenEndpointAuthMethod?: string;
+}) {
+  const [s, dispatch] = useReducer(reduce, {
+    ...initialState("salesforce"),
+    step,
+    saved,
+    values: {
+      ...initialState("salesforce").values,
+      integration,
+      path,
+      salesforceServer,
+    },
+  });
+  return (
+    <SetupContext
+      value={{
+        s,
+        dispatch,
+        live: connectionFixture(dispatch, { savedTokenEndpointAuthMethod }),
+      }}
+    >
+      <ProviderTask serverName="Salesforce" />
+    </SetupContext>
+  );
+}
+it("shows both Salesforce connection choices and the hosted instance field", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  expect(
+    screen.getByRole("radio", { name: "Salesforce native MCP" }),
+  ).toBeDefined();
+  expect(screen.getByLabelText("Salesforce server")).toBeDefined();
+  await user.click(screen.getByText("Speakeasy-hosted Salesforce CRM"));
+  expect(screen.getByLabelText("Salesforce instance URL")).toBeDefined();
+  expect(screen.queryByLabelText("Salesforce server")).toBeNull();
+});
+it.each([
+  ["none", "", "No secret required"],
+  ["client_secret_post", "••••••••", "Paste Client Secret"],
+  [undefined, "", "Secret status unavailable"],
+])(
+  "presents the saved hosted secret according to auth method %s",
+  (method, value, placeholder) => {
+    render(
+      <SalesforceFixture
+        step="credentials"
+        integration="hosted"
+        saved
+        savedTokenEndpointAuthMethod={method}
+      />,
+    );
+    const secret = screen.getByLabelText("Client Secret (optional)");
+    expect(secret).toHaveProperty("disabled", true);
+    expect(secret).toHaveProperty("value", value);
+    expect(secret.getAttribute("placeholder")).toBe(placeholder);
+  },
+);
+it.each([
+  ["data360", "Data 360", /Data 360 license/, /View Data 360/],
+  [
+    "headless-360",
+    "Headless 360 (Beta)",
+    /67.0 or later/,
+    /Salesforce beta service/,
+  ],
+  [
+    "tableau-next",
+    "Tableau Next",
+    /Tableau Next guided or manual setup/,
+    /access to the Tableau Next models/,
+  ],
+])(
+  "enables %s and explains its prerequisites",
+  async (id, title, requirement, permissions) => {
+    const user = userEvent.setup();
+    render(<SalesforceFixture step="choices" />);
+    const option = screen.getByRole("option", { name: title });
+    expect(option).toHaveProperty("disabled", false);
+    await user.selectOptions(screen.getByLabelText("Salesforce server"), id);
+    expect(screen.getByText(requirement)).toBeDefined();
+    expect(screen.getByText(permissions)).toBeDefined();
+  },
+);
+it.each([
+  ["data360", "Data 360", /Data 360 license/],
+  ["headless-360", "Headless 360 (Beta)", /67.0 or later/],
+  ["tableau-next", "Tableau Next", /Tableau Next guided or manual setup/],
+])("uses %s activation instructions", (id, title, requirement) => {
+  render(<SalesforceFixture step="activation" salesforceServer={id} />);
+  expect(screen.getByText(title)).toBeDefined();
+  expect(screen.getByText(id)).toBeDefined();
+  expect(screen.getByText(requirement)).toBeDefined();
+  expect(
+    screen.getByText(/only a successful connection test confirms access/),
+  ).toBeDefined();
+});
+it("uses the real Salesforce callback and native scopes", () => {
+  render(<SalesforceFixture step="oauth" />);
+  expect(screen.getByLabelText("Callback URL")).toHaveProperty(
+    "value",
+    "https://current.example/callback",
+  );
+  expect(screen.getByText("mcp_api")).toBeDefined();
+  expect(screen.getByText("refresh_token")).toBeDefined();
+});
+it("shows Consumer Key-only native credentials and the optional hosted secret", () => {
+  const native = render(<SalesforceFixture step="credentials" />);
+  expect(screen.getByLabelText("Consumer Key")).toBeDefined();
+  expect(screen.queryByLabelText("Client Secret (optional)")).toBeNull();
+  native.unmount();
+  render(<SalesforceFixture step="credentials" integration="hosted" />);
+  expect(screen.getByLabelText("Client Secret (optional)")).toBeDefined();
+});
+it("retains the unresolved support branch with a real correction action and no simulated success", () => {
+  render(<SalesforceFixture step="support" path="support" />);
+  expect(
+    screen.getByRole("button", { name: "Choose another setup method" }),
+  ).toBeDefined();
+  expect(screen.queryByText(/Simulate/)).toBeNull();
+});
