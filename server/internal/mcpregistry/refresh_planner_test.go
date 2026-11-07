@@ -17,23 +17,28 @@ func TestRefreshDecision(t *testing.T) {
 		name                  string
 		base, local, upstream json.RawMessage
 		published             bool
-		want                  string
+		want, reason          string
 	}{
-		{"create", nil, nil, a, false, "create"},
-		{"adopt", nil, a, a, true, "adopt"},
-		{"unowned", nil, a, b, true, "conflict"},
-		{"update", a, a, b, true, "update"},
-		{"local edit", a, c, b, true, "conflict"},
-		{"converged", a, b, b, true, "adopt"},
-		{"remove", a, a, nil, true, "unpublish"},
-		{"remove edited", a, c, nil, true, "conflict"},
-		{"local publication", a, a, b, false, "conflict"},
-		{"missing local", a, nil, b, false, "conflict"},
+		{"create", nil, nil, a, false, "create", ""},
+		{"adopt", nil, a, a, true, "adopt", ""},
+		{"unowned", nil, a, b, true, "conflict", "missing_baseline"},
+		{"update", a, a, b, true, "update", ""},
+		{"local edit", a, c, b, true, "conflict", "locally_modified"},
+		{"converged", a, b, b, true, "adopt", ""},
+		{"remove", a, a, nil, true, "unpublish", "upstream_removed"},
+		{"remove edited", a, c, nil, true, "conflict", "locally_modified"},
+		{"local publication", a, a, b, false, "conflict", "publication_changed"},
+		{"missing local", a, nil, b, false, "conflict", "destination_removed"},
+		{"unchanged upstream", a, c, a, true, "preserved", "upstream_unchanged"},
+		{"destination only", nil, c, nil, true, "preserved", "destination_only"},
+		{"already unpublished", a, a, nil, false, "preserved", "publication_changed"},
+		{"immutable structure", a, a, json.RawMessage(`{"server":{"name":"example.test/demo","remotes":[{"type":"sse","url":"https://example.test/mcp"}]}}`), true, "conflict", "immutable_structure"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			action, _ := refreshDecision(tc.base, tc.local, tc.upstream, tc.published)
+			action, reason := refreshDecision(tc.base, tc.local, tc.upstream, tc.published)
 			require.Equal(t, tc.want, action)
+			require.Equal(t, tc.reason, reason)
 		})
 	}
 }
@@ -65,4 +70,35 @@ func TestRefreshSemanticTimestampsAndAssets(t *testing.T) {
 	c, err := refreshSemantic(t.Context(), active, read)
 	require.NoError(t, err)
 	require.NotEqual(t, a, c)
+}
+
+func TestRefreshSemanticPreservesOpaqueOfficialMetadata(t *testing.T) {
+	t.Parallel()
+	v, err := LoadValidator()
+	require.NoError(t, err)
+	for _, value := range []string{`"legacy"`, `false`, `42`, `[]`, `null`} {
+		t.Run(value, func(t *testing.T) {
+			t.Parallel()
+			raw := json.RawMessage(strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"io.modelcontextprotocol.registry/official":` + value + `}}`)
+			require.NotEmpty(t, v.Validate(raw), "new source records must reject malformed official metadata")
+			got, err := refreshSemantic(t.Context(), raw, nil)
+			require.NoError(t, err)
+			require.JSONEq(t, string(raw), string(got))
+		})
+	}
+	invalid := json.RawMessage(`{"server":{"name":"example.test/demo"}}`)
+	require.NotEmpty(t, v.Validate(invalid), "required server fields remain enforced")
+}
+
+func TestRefreshSemanticPreservesUnknownMetadata(t *testing.T) {
+	t.Parallel()
+	v, err := LoadValidator()
+	require.NoError(t, err)
+	for _, value := range []string{`"opaque"`, `false`, `42`, `[]`, `null`} {
+		raw := json.RawMessage(strings.TrimSuffix(basicRecord, "}") + `,"_meta":{"example.test/extension":` + value + `}}`)
+		require.Empty(t, v.Validate(raw))
+		got, err := refreshSemantic(t.Context(), raw, nil)
+		require.NoError(t, err)
+		require.JSONEq(t, string(raw), string(got))
+	}
 }

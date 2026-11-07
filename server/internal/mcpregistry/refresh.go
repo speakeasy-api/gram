@@ -258,9 +258,13 @@ func (r *CatalogRefresher) preview(ctx context.Context, owner string, additive b
 		}
 		prepared[recordName(data)] = data
 	}
-	// Preview checks record mutations without uploading blobs. Icon content was
-	// validated in the full source snapshot; destination IDs are assigned only
-	// during Apply preflight, outside all write locks.
+	// Preview checks non-icon record mutations without uploading blobs. The full
+	// source record (including its byte limit, icon type/metadata, and SVG bytes)
+	// has already been validated. Only the trial omits icon references: they
+	// cannot pass destination asset ownership checks until Apply uploads them.
+	// Prepared retains the original payload. Apply uses that stored payload,
+	// rewrites only asset URLs, then runs the full mutation checks again, including
+	// record size and destination asset ownership. Failure commits no subset.
 	trialPrepared := map[string]json.RawMessage{}
 	for name, raw := range prepared {
 		data, err := WithCatalogIcons(raw, CatalogIcons{Default: nil, Dark: nil})
@@ -294,8 +298,9 @@ func (r *CatalogRefresher) preview(ctx context.Context, owner string, additive b
 		}
 		plan.Public.Changes = append(plan.Public.Changes, CatalogRefreshChange{Name: name, Action: action, Reason: reason})
 	}
-	// Validate the exact safe subset with the same mutation path, rolling back all
-	// trial writes. The final plan is then persisted in a clean transaction.
+	// Trial the planned writes through the mutation path, excluding the icon
+	// references described above, and roll back all trial writes. The exact plan
+	// is persisted separately; Apply never silently drops a failed planned write.
 	tx, err := r.registry.beginCatalogRefresh(ctx)
 	if err != nil {
 		return CatalogRefreshPlan{}, refreshError(err)

@@ -16,12 +16,22 @@ import (
 
 const refreshStorageJSONLimit = 64 << 20
 
-func refreshCheckStoredJSON(data json.RawMessage) error {
+func refreshCheckStoredJSON(ctx context.Context, tx pgx.Tx, data json.RawMessage) error {
+	// Bound transport work first, then measure the exact representation used by
+	// the database CHECKs. Separator whitespace and numeric expansion mean the
+	// compact JSON byte count is not a substitute for canonical storage size.
 	if len(data) > refreshStorageJSONLimit {
 		return fmt.Errorf("catalog refresh JSON exceeds %d bytes", refreshStorageJSONLimit)
 	}
 	if !json.Valid(data) {
 		return errors.New("catalog refresh JSON is invalid")
+	}
+	size, err := repo.New(tx).RefreshCanonicalJSONSize(ctx, data)
+	if err != nil {
+		return fmt.Errorf("measure catalog refresh JSON: %w", err)
+	}
+	if size > refreshStorageJSONLimit {
+		return fmt.Errorf("catalog refresh canonical JSON exceeds %d bytes", refreshStorageJSONLimit)
 	}
 	return nil
 }
@@ -35,7 +45,7 @@ func refreshLoadState(ctx context.Context, tx pgx.Tx, source string) (json.RawMe
 }
 
 func refreshSaveState(ctx context.Context, tx pgx.Tx, source string, data json.RawMessage) error {
-	if err := refreshCheckStoredJSON(data); err != nil {
+	if err := refreshCheckStoredJSON(ctx, tx, data); err != nil {
 		return refreshError(err)
 	}
 	return refreshError(repo.New(tx).RefreshSaveState(ctx, repo.RefreshSaveStateParams{SourceIdentity: source, State: data}))
@@ -44,7 +54,7 @@ func refreshSaveState(ctx context.Context, tx pgx.Tx, source string, data json.R
 // refreshSavePlan serializes admission across all catalog sources. The caller
 // must commit or roll back tx; the advisory lock lasts until that boundary.
 func refreshSavePlan(ctx context.Context, tx pgx.Tx, id uuid.UUID, source, owner string, expires time.Time, data json.RawMessage) error {
-	if err := refreshCheckStoredJSON(data); err != nil {
+	if err := refreshCheckStoredJSON(ctx, tx, data); err != nil {
 		return refreshError(err)
 	}
 	q := repo.New(tx)
@@ -79,7 +89,7 @@ func refreshLoadPlan(ctx context.Context, tx pgx.Tx, id uuid.UUID, source, owner
 }
 
 func refreshSaveReceipt(ctx context.Context, tx pgx.Tx, id uuid.UUID, receipt json.RawMessage) error {
-	if err := refreshCheckStoredJSON(receipt); err != nil {
+	if err := refreshCheckStoredJSON(ctx, tx, receipt); err != nil {
 		return refreshError(err)
 	}
 	q := repo.New(tx)

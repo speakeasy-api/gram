@@ -33,10 +33,10 @@ func refreshSemantic(ctx context.Context, data json.RawMessage, read func(contex
 		}
 	}
 	const officialNamespace = "io.modelcontextprotocol.registry/official"
-	if raw := meta[officialNamespace]; len(raw) > 0 {
-		if err = json.Unmarshal(raw, &official); err != nil {
-			return nil, refreshError(err)
-		}
+	// Historical destination records can have opaque optional metadata. Preserve
+	// it rather than aborting the whole preview; source validation still rejects
+	// malformed official metadata before normalization.
+	if raw := meta[officialNamespace]; json.Unmarshal(raw, &official) == nil && official != nil {
 		delete(official, "publishedAt")
 		delete(official, "updatedAt")
 		delete(official, "statusChangedAt")

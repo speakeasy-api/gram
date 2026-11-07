@@ -16,7 +16,14 @@ import (
 type refreshAssetProbe struct {
 	CatalogRefreshAssets
 	writes      int
+	reads       int
 	beforeWrite func(context.Context) error
+}
+
+func (p *refreshAssetProbe) ReadCatalogAsset(ctx context.Context, url string) ([]byte, error) {
+	p.reads++
+	data, err := p.CatalogRefreshAssets.ReadCatalogAsset(ctx, url)
+	return data, refreshError(err)
 }
 
 func (p *refreshAssetProbe) StoreCatalogAsset(ctx context.Context, data []byte) (string, error) {
@@ -49,6 +56,7 @@ func TestCatalogRefreshAssetPreflightAndTokens(t *testing.T) {
 	plan, err := r.Preview(ctx, "owner")
 	require.NoError(t, err)
 	require.Zero(t, probe.writes, "preview must not upload assets")
+	require.Zero(t, probe.reads, "source bytes are already in the bundle; empty destination needs no asset reads")
 	_, err = s.GetByName(ctx, "example.test/demo")
 	require.ErrorIs(t, err, ErrNotFound, "preview must not commit catalog writes")
 	// A relocated source URL with identical bytes is the same semantic snapshot.
@@ -89,4 +97,34 @@ func TestCatalogRefreshAssetPreflightAndTokens(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "failed", status.LastAttemptState)
 	require.Equal(t, "stale_plan", status.Failure)
+}
+
+func TestCatalogRefreshRejectsInvalidIconsBeforeSideEffects(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, image, mime string
+		sizes             []string
+	}{
+		{"invalid SVG", "not an SVG", "image/svg+xml", []string{"any"}},
+		{"wrong MIME", `<svg xmlns="http://www.w3.org/2000/svg"/>`, "image/png", []string{"any"}},
+		{"wrong sizes", `<svg xmlns="http://www.w3.org/2000/svg"/>`, "image/svg+xml", []string{"32x32"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, s, _ := newTestService(t)
+			const url = "https://source.example.test/icon.svg"
+			raw, err := WithCatalogIcons(json.RawMessage(basicRecord), CatalogIcons{Default: &CatalogIcon{Src: url, MimeType: tc.mime, Sizes: tc.sizes}})
+			require.NoError(t, err)
+			probe := &refreshAssetProbe{}
+			r := NewCatalogRefresher(s, "local", "production", refreshSourceFunc(func(context.Context) (CatalogBundle, error) {
+				return CatalogBundle{Version: 1, Entries: []json.RawMessage{raw}, Assets: map[string][]byte{url: []byte(tc.image)}}, nil
+			}), probe)
+			_, err = r.Preview(ctx, "owner")
+			require.ErrorContains(t, err, "catalog source snapshot is invalid")
+			require.Zero(t, probe.writes)
+			require.Zero(t, probe.reads)
+			_, err = s.GetByName(ctx, "example.test/demo")
+			require.ErrorIs(t, err, ErrNotFound)
+		})
+	}
 }

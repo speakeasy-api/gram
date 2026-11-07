@@ -249,6 +249,10 @@ LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT;
 -- name: RefreshLockPlans :exec
 SELECT pg_advisory_xact_lock(724169283419205::bigint);
 
+-- name: RefreshCanonicalJSONSize :one
+-- Match the jsonb::text representation measured by refresh storage constraints.
+SELECT octet_length(sqlc.arg(data)::jsonb::text) AS canonical_bytes;
+
 -- name: RefreshLoadState :one
 SELECT state FROM mcp_catalog_refresh_state WHERE source_identity = @source_identity;
 

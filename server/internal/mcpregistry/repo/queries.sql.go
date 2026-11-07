@@ -533,6 +533,18 @@ func (q *Queries) PublishedCatalogSize(ctx context.Context) (PublishedCatalogSiz
 	return i, err
 }
 
+const refreshCanonicalJSONSize = `-- name: RefreshCanonicalJSONSize :one
+SELECT octet_length($1::jsonb::text) AS canonical_bytes
+`
+
+// Match the jsonb::text representation measured by refresh storage constraints.
+func (q *Queries) RefreshCanonicalJSONSize(ctx context.Context, data []byte) (int32, error) {
+	row := q.db.QueryRow(ctx, refreshCanonicalJSONSize, data)
+	var canonical_bytes int32
+	err := row.Scan(&canonical_bytes)
+	return canonical_bytes, err
+}
+
 const refreshCatalogSize = `-- name: RefreshCatalogSize :one
 SELECT count(*)::bigint AS entry_count,
     COALESCE(sum(octet_length(data::text)), 0)::bigint AS data_bytes
