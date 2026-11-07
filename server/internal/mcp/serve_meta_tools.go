@@ -67,7 +67,7 @@ func (s *Service) handleMetaDescribeServerCall(
 		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
 	}
 
-	member, ok := findMetaMember(members, args.Server)
+	member, ok := s.findNamedMember(ctx, gate, members, args.Server)
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
@@ -148,7 +148,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
-		member, ok := findMetaMember(members, serverSlug)
+		member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 		if !ok {
 			notFound = append(notFound, qualified)
 			continue
@@ -261,11 +261,13 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
 			// tool: misspelled, removed, or unknown member tools are absent too.
+			// The call still named its server, so that server's check is recorded.
+			s.findNamedMember(ctx, gate, members, serverSlug)
 			attempt.fail(http.StatusForbidden, remotemcp.ToolNotApprovedMessage)
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
-	member, ok := findMetaMember(members, serverSlug)
+	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
@@ -642,7 +644,7 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public, true)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -655,8 +657,12 @@ func (s *Service) loadMemberToolset(
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
+// prepared when the member snapshot was resolved. With record false it records
+// no authorization check, for admission, which runs it for every member.
+// Loading a member for a call records it: a listing runs under
+// authz.WithoutChallenges, and a call that named a private member already
+// recorded the same check, so the request keeps one.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool, record bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
 	if public {
 		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
@@ -666,7 +672,11 @@ func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *manda
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	err := s.authz.Require(ctx, connect)
+	checkCtx := ctx
+	if !record {
+		checkCtx = authz.WithoutChallenges(ctx)
+	}
+	err := s.authz.Require(checkCtx, connect)
 	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
 	if err != nil {
 		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {

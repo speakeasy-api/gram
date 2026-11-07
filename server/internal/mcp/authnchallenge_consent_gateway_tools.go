@@ -164,6 +164,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
