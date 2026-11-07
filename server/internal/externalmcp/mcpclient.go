@@ -352,7 +352,7 @@ func (c *Client) ListTools(ctx context.Context) ([]Tool, error) {
 }
 
 type authRoundTripper struct {
-	base          http.RoundTripper
+	base            http.RoundTripper
 	authRejected    bool
 	statusCode      int
 	wwwAuthenticate string
