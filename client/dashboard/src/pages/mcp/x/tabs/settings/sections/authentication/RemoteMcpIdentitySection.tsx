@@ -25,10 +25,6 @@ import {
 } from "@gram/client/react-query/serverClientAssociations.js";
 import { useDetachServerClientAssociationMutation } from "@gram/client/react-query/detachServerClientAssociation.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
-import {
-  invalidateAllGetRemoteMcpServerScopes,
-  useGetRemoteMcpServerScopes,
-} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
@@ -56,9 +52,6 @@ import { useCatalogHeaderSuggestions } from "../useCatalogHeaderSuggestions";
 import { useHeaderDrafts } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
-import { RequestedScopesSummary } from "./RequestedScopesSummary";
-import { ResourceScopePinField } from "./ResourceScopePinField";
-import { useResourceScopePin } from "./resourceScopePin";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -315,35 +308,6 @@ export function RemoteMcpIdentitySectionBody({
     selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
   const oauthSelected = oauthFormat !== null;
 
-  // The pin belongs to the server's protected resource; the panel shows it to
-  // writers with a bound client, and scopes.canPin says if they may change it.
-  const scopePin = useResourceScopePin({
-    mcpServerId: target.permissionResourceId,
-    enabled: canWrite && identityResolved && actualMode === "user",
-  });
-  const scopePinSlot =
-    canWrite && selectedMode === "user" && userDraft.connected;
-  // Pinning is off for the org, so the picker can do nothing.
-  const scopePinUnusable = !!scopePin.data && !scopePin.data.discoveryEnabled;
-  const showScopePin = scopePinSlot && !!scopePin.data && !scopePinUnusable;
-  const scopePinDirty = showScopePin && scopePin.dirty;
-  // Writers get the same answer in the pin's status line when the pin shows.
-  const showScopesSummary =
-    canRead &&
-    (!scopePinSlot || scopePinUnusable) &&
-    identityResolved &&
-    actualMode === "user" &&
-    selectedMode === "user" &&
-    userDraft.connectedClientId !== null;
-  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
-    { mcpServerId: target.permissionResourceId },
-    undefined,
-    {
-      enabled: showScopesSummary && target.permissionResourceId !== "",
-      throwOnError: false,
-    },
-  );
-
   const detachIssuer = useDetachUserSessionIssuerMutation();
   const detachAssociation = useDetachServerClientAssociationMutation();
 
@@ -474,7 +438,6 @@ export function RemoteMcpIdentitySectionBody({
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllServerClientAssociations(queryClient),
-      invalidateAllGetRemoteMcpServerScopes(queryClient),
       invalidateSharedIssuerImpact(queryClient),
     ]);
     return true;
@@ -606,7 +569,7 @@ export function RemoteMcpIdentitySectionBody({
           selectedMode === "user" &&
           (actualMode !== "user" || userDraft.canSave)
         ) {
-          // A pin or header edit alone must not recommit the connected client.
+          // A header edit alone must not recommit the connected client.
           await userDraft.save(replaceClientServerIds);
         }
       }
@@ -621,20 +584,12 @@ export function RemoteMcpIdentitySectionBody({
     }
     // Headers after identity: it may have just written or removed the
     // Authorization row, and these rows are diffed against what the server
-    // holds once that has landed. The pin is independent of both.
-    const [pinResult, headersResult] = await Promise.allSettled([
-      scopePinDirty ? scopePin.save() : Promise.resolve(false),
-      headerDrafts.save(),
-    ]);
-    if (pinResult.status === "rejected") {
-      toast.error(
-        errorMessage(pinResult.reason, "Failed to save pinned scopes"),
-      );
-    } else if (pinResult.value) {
-      toast.success("Pinned scopes updated");
-    }
-    if (headersResult.status === "rejected") {
-      toast.error(errorMessage(headersResult.reason, "Failed to save headers"));
+    // holds once that has landed.
+    let headersSaved: boolean;
+    try {
+      headersSaved = await headerDrafts.save();
+    } catch (error) {
+      toast.error(errorMessage(error, "Failed to save headers"));
       return;
     }
     // Reported only once the headers have landed: when the draft already
@@ -643,7 +598,7 @@ export function RemoteMcpIdentitySectionBody({
     if (selectedMode === "none" && destructive) {
       toast.success("Identity removed");
     }
-    if (headersResult.value) {
+    if (headersSaved) {
       toast.success("Upstream headers updated");
     }
   };
@@ -679,9 +634,6 @@ export function RemoteMcpIdentitySectionBody({
     // No Identity commits only the removal it implies.
     identityCanSave = destructive;
   }
-  // A locked identity still lets a pin-only edit through.
-  const pinOnlyChange =
-    scopePinDirty && !identityCanSave && !headerDrafts.isDirty;
   // Rows that cannot be written stop the whole commit rather than letting the
   // identity half through and dropping the rest on the floor.
   const headersBlocked =
@@ -693,10 +645,9 @@ export function RemoteMcpIdentitySectionBody({
     !userEditIncomplete &&
     !staticSwitchBlocked &&
     !oauthSwitchBlocked &&
-    (identityCanSave || headerDrafts.isDirty || scopePinDirty);
+    (identityCanSave || headerDrafts.isDirty);
   const savePending =
     detachIssuer.isPending ||
-    scopePin.saving ||
     saving ||
     headerDrafts.saving ||
     (selectedMode === "user"
@@ -883,46 +834,6 @@ export function RemoteMcpIdentitySectionBody({
                   . Changing or rotating it changes their sign-in too.
                 </Text>
               ) : null}
-              {showScopePin && scopePin.data ? (
-                // Commits with the footer's Save, like the rest of the panel.
-                <div className="mt-4 pl-[52px]">
-                  <ResourceScopePinField
-                    pin={scopePin}
-                    scopes={scopePin.data}
-                    connectedClientId={userDraft.connectedClient?.id ?? null}
-                    issuerScopes={userDraft.scopeOptions}
-                    serverName={
-                      linkedServers
-                        .find(
-                          (server) => server.id === target.permissionResourceId,
-                        )
-                        ?.name?.trim() ?? ""
-                    }
-                    // Changing it needs write access to every server sharing the resource.
-                    disabled={!canWrite || !scopePin.data.canPin || savePending}
-                  />
-                </div>
-              ) : scopePinSlot && scopePin.isError ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Couldn't load pinned scopes.
-                </Text>
-              ) : scopePinSlot && !scopePin.data ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Loading pinned scopes…
-                </Text>
-              ) : null}
-              {showScopesSummary && scopesSummaryQuery.data ? (
-                <div className="mt-4 pl-[52px] empty:hidden">
-                  <RequestedScopesSummary
-                    scopes={scopesSummaryQuery.data}
-                    connectedClientId={userDraft.connectedClientId}
-                  />
-                </div>
-              ) : showScopesSummary && scopesSummaryQuery.isError ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Couldn't load requested scopes.
-                </Text>
-              ) : null}
             </div>
           ) : null}
 
@@ -1036,7 +947,7 @@ export function RemoteMcpIdentitySectionBody({
                     !canSave ||
                     savePending ||
                     clientsRefreshing ||
-                    (identityReadOnly && !pinOnlyChange) ||
+                    identityReadOnly ||
                     repointLookupPending
                   }
                   onClick={() => {
