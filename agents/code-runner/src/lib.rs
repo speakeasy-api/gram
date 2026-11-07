@@ -5,7 +5,10 @@ pub mod wire;
 use std::{
     collections::HashMap,
     convert::Infallible,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -48,6 +51,7 @@ pub struct State {
     streams: usize,
     start_reads: Semaphore,
     seen: Mutex<HashMap<String, Instant>>,
+    ended: AtomicUsize,
 }
 
 impl State {
@@ -63,6 +67,7 @@ impl State {
             streams: capacity,
             start_reads: Semaphore::new(MAX_START_READS),
             seen: Mutex::new(HashMap::new()),
+            ended: AtomicUsize::new(0),
         }))
     }
 
@@ -71,6 +76,14 @@ impl State {
     #[doc(hidden)]
     pub fn idle_start_reads(&self) -> usize {
         self.start_reads.available_permits()
+    }
+
+    /// Executions whose program has ended and whose callback handling is
+    /// decided, before their terminal frame drains, so tests can tell when a
+    /// run has ended behind a peer that is not reading.
+    #[doc(hidden)]
+    pub fn ended_executions(&self) -> usize {
+        self.ended.load(Ordering::SeqCst)
     }
 
     fn admit(&self, id: &str) -> Result<()> {
@@ -343,13 +356,13 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     write_frame(&mut stream, &ServerFrame::Started { execution_id }).await?;
     let (mut reader, mut writer) = tokio::io::split(stream);
     let (frames, mut outbound) = mpsc::channel(1);
-    let terminal = CancellationToken::new();
-    let writer_terminal = terminal.clone();
+    let interrupted = CancellationToken::new();
+    let writer_interrupted = interrupted.clone();
     // This task owns framing through cancellation: a terminal frame can only
     // follow whole callback frames, never a cancelled prefix or partial payload.
     let writer_task = AbortOnDropHandle::new(tokio::spawn(async move {
         while let Some(frame) = outbound.recv().await {
-            if writer_terminal.is_cancelled() && matches!(frame, ServerFrame::Callback { .. }) {
+            if writer_interrupted.is_cancelled() && matches!(frame, ServerFrame::Callback { .. }) {
                 continue;
             }
             write_frame(&mut writer, &frame).await?;
@@ -377,16 +390,16 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     // Held outside the execution so a failure or the deadline still reports
     // what the program printed.
     let output = runtime::Output::default();
-    let mut result = tokio::select! {
+    let (mut result, mut interrupt) = tokio::select! {
         biased;
-        _ = cancelled.cancelled() => cancelled_error(),
+        _ = cancelled.cancelled() => (cancelled_error(), true),
         result = tokio::time::timeout(Duration::from_millis(wall_ms), runtime::execute(&state.pool, code, &output, &mut replies, &frames)) => {
             match result {
-                Ok(Ok(result)) => result,
-                Ok(Err(error)) => runtime::public_error(&error, &output),
+                Ok(Ok(result)) => (result, false),
+                Ok(Err(error)) => (runtime::public_error(&error, &output), false),
                 Err(_) => {
                     let (output, output_truncated) = output.take();
-                    ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into(), output, output_truncated }
+                    (ServerFrame::Error { code: "deadline_exceeded".into(), message: "execution deadline exceeded; dispatched tool outcomes may be unknown".into(), output, output_truncated }, true)
                 }
             }
         }
@@ -395,8 +408,16 @@ pub async fn serve_stream<S: AsyncRead + AsyncWrite + Unpin + Send + 'static>(
     // during one poll. Cancellation also wins after polling the runtime.
     if cancelled.is_cancelled() {
         result = cancelled_error();
+        interrupt = true;
     }
-    terminal.cancel();
+    // Cancellation and the deadline discard queued callbacks: the host has
+    // stopped dispatching. A run that failed on its own, such as at the
+    // concurrency limit, still delivers every callback it issued ahead of its
+    // terminal frame, so the host can record each call.
+    if interrupt {
+        interrupted.cancel();
+    }
+    state.ended.fetch_add(1, Ordering::SeqCst);
     drop(reader_task);
     // A disconnected peer must not hold an execution slot while refusing reads.
     tokio::time::timeout(Duration::from_secs(1), async {
