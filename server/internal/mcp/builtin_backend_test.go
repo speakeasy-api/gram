@@ -3,10 +3,13 @@ package mcp_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -21,6 +24,7 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // builtinCalls records the identity each request reached the backend with.
@@ -196,4 +200,41 @@ func TestServeConsentMCP_BuiltinBackendListsItsTools(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"name":"builtin_tool"`)
 	require.Contains(t, w.Body.String(), `"readOnlyHint":true`)
 	require.Empty(t, calls.seen(), "listing tools for consent must not call the backend")
+}
+
+func TestOrganizationGatewayBuiltinBackendIsNotAProxiedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedHiddenGateway(t, ctx, ti)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, builtin, calls := createBuiltinServer(t, ctx, ti, *auth.ProjectID, fx.issuerID)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.organizationID, fx.subject.ID, builtin.ID.String())
+	// A real connected-client choice makes the consent page construct member cards.
+	createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, fx.organizationID, "gateway-card-client", "", []uuid.UUID{fx.issuerID})
+	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     fx.issuerID,
+		ClientID:                "org-gateway-mcp-client",
+		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
+		ClientName:              "Gateway test client",
+		RedirectUris:            []string{"http://example.com/cb"},
+		ClientSecretExpiresAt:   pgtype.Timestamptz{},
+		TokenEndpointAuthMethod: "none",
+		ClientJwks:              nil,
+		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	endpoint, stateID := storeHiddenGatewayChallenge(t, ti, fx)
+	request := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+url.QueryEscape(stateID), nil)
+	response := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(response, request, endpoint), "a builtin has no remote resource and must not enter proxied card construction")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), fx.granted)
+	require.Contains(t, response.Body.String(), fx.open)
+	require.NotContains(t, response.Body.String(), builtin.Slug.String)
+	slugs := listedServerSlugs(organizationGatewayListServers(t, ti, fx.organizationGatewayFixture))
+	require.Contains(t, slugs, fx.granted)
+	require.Contains(t, slugs, fx.open)
+	require.NotContains(t, slugs, builtin.Slug.String, "gateways have no builtin dispatch path")
+	require.Empty(t, calls.seen())
 }
