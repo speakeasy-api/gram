@@ -6,7 +6,7 @@ import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ScopeKey } from "./accessRows";
 
 /** The stored scopes behind one line: the grant and the block that undoes it. */
-export const LINE_SCOPES: Record<ScopeKey, { allow: Scope; block: Scope }> = {
+const LINE_SCOPES: Record<ScopeKey, { allow: Scope; block: Scope }> = {
   use: { allow: "mcp:connect", block: "mcp:blocked_connect" },
   view: { allow: "mcp:read", block: "mcp:blocked_read" },
   manage: { allow: "mcp:write", block: "mcp:blocked_write" },
