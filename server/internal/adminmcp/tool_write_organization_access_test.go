@@ -13,7 +13,7 @@ import (
 )
 
 func newOrganizationAccessWriter(f writeFixture, operation WriteOperation) *organizationAccessWriter {
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{operation: true}} //nolint:exhaustive // Only the tested access operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	return &organizationAccessWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes, operation: operation}
 }
 

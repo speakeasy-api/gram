@@ -22,7 +22,7 @@ func newRegistryEntryWriter(t *testing.T, f writeFixture) (*registryEntryWriter,
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
 	registry := mcpregistry.New(f.db, validator)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCreateRegistryEntry: true}} //nolint:exhaustive // Only the reviewed global operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	return &registryEntryWriter{runner: f.runner, registry: registry, writes: writes}, registry
 }
 

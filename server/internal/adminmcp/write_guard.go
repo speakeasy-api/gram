@@ -3,7 +3,6 @@ package adminmcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -15,8 +14,8 @@ const (
 	ScopeWrite = "admin:write"
 )
 
-// WriteOperation names one allowlisted staff mutation. The runtime never
-// dispatches a mutation that is not declared here.
+// WriteOperation names one staff mutation. The runtime never dispatches a
+// mutation that is not declared here.
 type WriteOperation string
 
 const (
@@ -31,15 +30,14 @@ const (
 	OperationExtendOrganizationTrial              WriteOperation = "extend_organization_trial"
 	OperationEnableOrganization                   WriteOperation = "enable_organization"
 	OperationDisableOrganization                  WriteOperation = "disable_organization"
-	OperationCreateGlobalIssuer                   WriteOperation = "create_global_issuer"
-	OperationUpdateGlobalIssuer                   WriteOperation = "update_global_issuer"
 	OperationUpdateSupportMatrix                  WriteOperation = "update_support_matrix"
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
 	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
+	OperationRedeployProject                      WriteOperation = "redeploy_project"
 )
 
-// AllWriteOperations is the complete allowlist, in a stable order.
+// AllWriteOperations lists every write operation, in a stable order.
 var AllWriteOperations = []WriteOperation{
 	OperationCurateRegistryPromotionCandidate,
 	OperationRetryRegistryPromotionDocs,
@@ -51,12 +49,11 @@ var AllWriteOperations = []WriteOperation{
 	OperationExtendOrganizationTrial,
 	OperationEnableOrganization,
 	OperationDisableOrganization,
-	OperationCreateGlobalIssuer,
-	OperationUpdateGlobalIssuer,
 	OperationUpdateSupportMatrix,
 	OperationCreateRegistryEntry,
 	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
+	OperationRedeployProject,
 }
 
 func (op WriteOperation) known() bool {
@@ -64,76 +61,13 @@ func (op WriteOperation) known() bool {
 }
 
 // WriteConfig is the server-side write switch. The zero value disables every
-// write: Enabled is the global switch and each operation needs its own switch.
-// Both are checked at consent and on every write.
+// write. It is checked at consent and on every write.
 type WriteConfig struct {
-	Enabled    bool
-	Operations map[WriteOperation]bool
-}
-
-// ParseWriteOperations reads a comma-separated operation list. Unknown names
-// are an error so a typo cannot silently leave an operation disabled or enabled.
-func ParseWriteOperations(raw string) (map[WriteOperation]bool, error) {
-	operations := make(map[WriteOperation]bool)
-	for name := range strings.SplitSeq(raw, ",") {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		op := WriteOperation(name)
-		if !op.known() {
-			return nil, fmt.Errorf("%w: %s", errUnknownWriteOp, name)
-		}
-		operations[op] = true
-	}
-	return operations, nil
-}
-
-// implemented reports whether a reviewed writer is shipped. AttachWrites tests
-// keep this consent allowlist aligned with the operation registry.
-func (op WriteOperation) implemented() bool {
-	switch op {
-	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
-		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
-		return true
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
-		return false
-	default:
-		return false
-	}
-}
-
-// WritesAvailable reports whether consent may offer admin:write at all.
-func (c WriteConfig) WritesAvailable() bool {
-	if !c.Enabled {
-		return false
-	}
-	for _, op := range AllWriteOperations {
-		if c.Operations[op] && op.implemented() {
-			return true
-		}
-	}
-	return false
-}
-
-func (c WriteConfig) OperationEnabled(op WriteOperation) bool {
-	return c.Enabled && op.known() && c.Operations[op]
-}
-
-// EnabledOperations lists enabled operations in allowlist order.
-func (c WriteConfig) EnabledOperations() []WriteOperation {
-	enabled := []WriteOperation{}
-	for _, op := range AllWriteOperations {
-		if c.OperationEnabled(op) {
-			enabled = append(enabled, op)
-		}
-	}
-	return enabled
+	Enabled bool
 }
 
 var (
-	ErrWriteDisabled  = errors.New("this admin write operation is disabled")
+	ErrWriteDisabled  = errors.New("admin writes are disabled on this server")
 	ErrWriteScope     = errors.New("this connection was not granted admin:write; reconnect and approve write access")
 	ErrWriteIdentity  = errors.New("verified staff context is unavailable")
 	errUnknownWriteOp = errors.New("unknown admin write operation")
@@ -147,13 +81,13 @@ type writeAuthority struct {
 	Operation WriteOperation
 }
 
-// requireWriteAuthority is the single gate every write tool calls. It checks the operation allowlist, both switches, admin:write and the
+// requireWriteAuthority is the single gate every write tool calls. It checks the operation is known, the write switch, admin:write and the
 // live staff context the authenticator established for this request.
 func requireWriteAuthority(ctx context.Context, config WriteConfig, op WriteOperation) (writeAuthority, error) {
 	if !op.known() {
 		return writeAuthority{}, errUnknownWriteOp
 	}
-	if !config.OperationEnabled(op) {
+	if !config.Enabled {
 		return writeAuthority{}, ErrWriteDisabled
 	}
 	authority, err := requireWriteIdentity(ctx)
@@ -182,7 +116,7 @@ func requireWriteIdentity(ctx context.Context) (writeAuthority, error) {
 
 // normalizeRequestedScopes turns an OAuth scope parameter into the stored
 // grant. Empty means read-only. admin:write implies admin:read, and is only
-// grantable when the server has at least one write operation switched on.
+// grantable when writes are switched on.
 func normalizeRequestedScopes(raw string, writesAvailable bool) ([]string, bool) {
 	wantWrite := false
 	for scope := range strings.FieldsSeq(raw) {

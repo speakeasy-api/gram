@@ -81,8 +81,8 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
 		}
 		operations := []WriteOperation{}
-		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
-			for _, op := range runtime.writes.writes.EnabledOperations() {
+		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil && runtime.writes.writes.Enabled {
+			for _, op := range AllWriteOperations {
 				if runtime.writes.implements(op) {
 					operations = append(operations, op)
 				}
@@ -99,7 +99,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 	})
 }
 
-// writeWorkflows describes the enabled writes.
+// writeWorkflows describes the available writes.
 func writeWorkflows(operations []WriteOperation) []string {
 	workflows := []string{}
 	if slices.ContainsFunc(operations, func(op WriteOperation) bool { return op != OperationUploadPlatformImage }) {

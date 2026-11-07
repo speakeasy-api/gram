@@ -5140,6 +5140,175 @@ paths:
                                 $ref: '#/components/schemas/Error'
             security:
                 - admin_auth_header_Authorization: []
+    /admin/project.redeploy:
+        post:
+            description: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.
+            operationId: adminRedeployProject
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RedeployProjectRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminProjectRedeployResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: redeployProject admin
+            tags:
+                - admin
+            x-speakeasy-name-override: redeployProject
+            x-speakeasy-react-hook:
+                name: AdminRedeployProject
+    /admin/project.redeployPreview:
+        get:
+            description: Returns what redeploying a project would act on, for review before redeployProject.
+            operationId: adminGetProjectRedeployPreview
+            parameters:
+                - allowEmptyValue: true
+                  description: Exact organization ID.
+                  in: query
+                  name: organization_id
+                  required: true
+                  schema:
+                    description: Exact organization ID.
+                    type: string
+                - allowEmptyValue: true
+                  description: Exact project ID.
+                  in: query
+                  name: project_id
+                  required: true
+                  schema:
+                    description: Exact project ID.
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminProjectRedeployPreview'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getProjectRedeployPreview admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getProjectRedeployPreview
+            x-speakeasy-react-hook:
+                name: AdminGetProjectRedeployPreview
     /admin/registry.create:
         post:
             description: Staff-only registry administration.
@@ -97914,6 +98083,9 @@ components:
         AdminProjectDetail:
             type: object
             properties:
+                active_deployment_id:
+                    type: string
+                    description: The deployment the project currently serves. Absent when no deployment has completed.
                 api_key_count:
                     type: integer
                     description: Number of active API keys in the project.
@@ -97976,6 +98148,64 @@ components:
                 - assistant_count
                 - created_at
                 - updated_at
+        AdminProjectRedeployPreview:
+            type: object
+            properties:
+                active_deployment_id:
+                    type: string
+                    description: Deployment a redeploy would clone. Send it back as expected_active_deployment_id.
+                external_mcps:
+                    type: integer
+                    description: External MCP sources the new deployment would drop.
+                    format: int64
+                function_assets:
+                    type: integer
+                    description: Function sources whose runners would be deployed again.
+                    format: int64
+                openapi_assets:
+                    type: integer
+                    description: OpenAPI sources that would be processed again.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization that owns the project.
+                packages:
+                    type: integer
+                    description: Packages carried into the new deployment.
+                    format: int64
+                project_id:
+                    type: string
+                    description: Project ID.
+                project_name:
+                    type: string
+                    description: Project name.
+            description: What redeploying a project would act on.
+            required:
+                - organization_id
+                - project_id
+                - project_name
+                - active_deployment_id
+                - openapi_assets
+                - function_assets
+                - packages
+                - external_mcps
+        AdminProjectRedeployResult:
+            type: object
+            properties:
+                deployment_id:
+                    type: string
+                    description: New deployment. It becomes active only if processing succeeds.
+                project_id:
+                    type: string
+                    description: Project ID.
+                source_deployment_id:
+                    type: string
+                    description: Deployment that was cloned.
+            description: The deployment a redeploy created. Processing continues after this returns.
+            required:
+                - project_id
+                - source_deployment_id
+                - deployment_id
         AdminRegistryEntry:
             type: object
             properties:
@@ -121816,6 +122046,22 @@ components:
                 - access_token
                 - user_email
                 - project_slug
+        RedeployProjectRequestBody:
+            type: object
+            properties:
+                expected_active_deployment_id:
+                    type: string
+                    description: active_deployment_id from getProjectRedeployPreview.
+                organization_id:
+                    type: string
+                    description: Exact organization ID.
+                project_id:
+                    type: string
+                    description: Exact project ID.
+            required:
+                - organization_id
+                - project_id
+                - expected_active_deployment_id
         RedeployRequestBody:
             type: object
             properties:

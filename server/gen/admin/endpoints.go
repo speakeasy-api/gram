@@ -120,6 +120,8 @@ type Endpoints struct {
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
+	GetProjectRedeployPreview               goa.Endpoint
+	RedeployProject                         goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -248,6 +250,8 @@ func NewEndpoints(s Service) *Endpoints {
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
+		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -356,6 +360,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
+	e.RedeployProject = m(e.RedeployProject)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2692,5 +2698,51 @@ func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.BackfillMcpConnectGrants(ctx, p)
+	}
+}
+
+// NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
+// the method "getProjectRedeployPreview" of service "admin".
+func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectRedeployPreviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectRedeployPreview(ctx, p)
+	}
+}
+
+// NewRedeployProjectEndpoint returns an endpoint function that calls the
+// method "redeployProject" of service "admin".
+func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeployProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RedeployProject(ctx, p)
 	}
 }

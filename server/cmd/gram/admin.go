@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/deployments"
 	"github.com/speakeasy-api/gram/server/internal/deviceagentversions"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -123,13 +124,8 @@ func newAdminCommand() *cli.Command {
 		},
 		&cli.BoolFlag{
 			Name:    "admin-mcp-writes-enabled",
-			Usage:   "Global switch for staff Admin MCP writes. Off by default; each operation also needs admin-mcp-write-operations",
+			Usage:   "Switch for staff Admin MCP writes. Off by default",
 			EnvVars: []string{"GRAM_ADMIN_MCP_WRITES_ENABLED"},
-		},
-		&cli.StringFlag{
-			Name:    "admin-mcp-write-operations",
-			Usage:   "Comma-separated staff Admin MCP write operations to enable. Empty enables none",
-			EnvVars: []string{"GRAM_ADMIN_MCP_WRITE_OPERATIONS"},
 		},
 		&cli.StringFlag{
 			Name:     "environment",
@@ -529,6 +525,11 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
+			var projectRedeployer admin.ProjectRedeployer
+			if temporalEnv != nil {
+				projectRedeployer = deployments.NewStaffRedeployer(logger, tracerProvider, db, temporalEnv, audit.NewLogger())
+				adminService.SetProjectRedeployer(projectRedeployer)
+			}
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
@@ -564,11 +565,7 @@ func newAdminCommand() *cli.Command {
 				if err := validateAdminMCPSigningKey(key, c.String("admin-encryption-key"), c.String("encryption-key")); err != nil {
 					return err
 				}
-				writeOperations, err := adminmcp.ParseWriteOperations(c.String("admin-mcp-write-operations"))
-				if err != nil {
-					return fmt.Errorf("configure staff Admin MCP writes: %w", err)
-				}
-				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled"), Operations: writeOperations}
+				writes := adminmcp.WriteConfig{Enabled: c.Bool("admin-mcp-writes-enabled")}
 				signer := sessiontokens.NewSigner(key)
 				staffCache := cache.NewRedisCacheAdapter(redisClient)
 				staffOAuth, err := adminmcp.NewStaffOAuth(adminServerURL, db, staffCache, adminService.Verifier(), adminEncryption, signer, writes, logger)
@@ -577,7 +574,7 @@ func newAdminCommand() *cli.Command {
 				}
 				staffOAuth.Attach(mux)
 				staffAuth := adminmcp.NewStaffAuthenticator(signer, db, adminEncryption, adminService.Verifier(), staffOAuth.Issuer(), staffOAuth.Resource())
-				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil}
+				writeDeps := adminmcp.WriteDependencies{Features: productFeatures, Registry: registryService, ImageUploads: nil, ProjectRedeployer: projectRedeployer}
 				if platformAssets != nil {
 					imageUploads, err := assets.NewPlatformImageUploads(platformAssets, staffCache, adminServerURL, siteURL, logger)
 					if err != nil {

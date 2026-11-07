@@ -39,7 +39,7 @@ func (f *curationFake) CurateTx(_ context.Context, _ pgx.Tx, request catalogprom
 }
 func newCurationWriter(f writeFixture) (*catalogCurationWriter, *curationFake, CatalogCurationInput) {
 	mutator := &curationFake{candidate: catalogpromotion.Candidate{ID: uuid.NewString(), OrganizationID: f.orgA, CurationRevision: uuid.NewString(), Status: "candidate", ProjectID: uuid.NewString()}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCurateRegistryPromotionCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	w := &catalogCurationWriter{runner: f.runner, writes: writes, mutator: mutator}
 	return w, mutator, CatalogCurationInput{OrganizationID: f.orgA, PromotionID: mutator.candidate.ID, CurationRevision: mutator.candidate.CurationRevision, Action: "reject"}
 }
@@ -87,7 +87,7 @@ func TestCatalogCurationHidesMutatorFailure(t *testing.T) {
 
 func TestCatalogCurationRequiresWriteScope(t *testing.T) {
 	t.Parallel()
-	w := &catalogCurationWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationCurateRegistryPromotionCandidate: true}}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogCurationWriter{writes: WriteConfig{Enabled: true}}
 	_, err := w.apply(writePrincipalContext(t, []string{ScopeRead}), CatalogCurationInput{})
 	require.ErrorIs(t, err, ErrWriteScope)
 }

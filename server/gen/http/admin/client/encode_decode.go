@@ -24708,6 +24708,475 @@ func DecodeBackfillMcpConnectGrantsResponse(decoder func(*http.Response) goahttp
 	}
 }
 
+// BuildGetProjectRedeployPreviewRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getProjectRedeployPreview" endpoint
+func (c *Client) BuildGetProjectRedeployPreviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetProjectRedeployPreviewAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getProjectRedeployPreview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetProjectRedeployPreviewRequest returns an encoder for requests sent
+// to the admin getProjectRedeployPreview server.
+func EncodeGetProjectRedeployPreviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetProjectRedeployPreviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getProjectRedeployPreview", "*admin.GetProjectRedeployPreviewPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		values.Add("project_id", p.ProjectID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetProjectRedeployPreviewResponse returns a decoder for responses
+// returned by the admin getProjectRedeployPreview endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetProjectRedeployPreviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetProjectRedeployPreviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetProjectRedeployPreviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			res := NewGetProjectRedeployPreviewAdminProjectRedeployPreviewOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetProjectRedeployPreviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetProjectRedeployPreviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetProjectRedeployPreviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetProjectRedeployPreviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetProjectRedeployPreviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetProjectRedeployPreviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetProjectRedeployPreviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetProjectRedeployPreviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+				}
+				err = ValidateGetProjectRedeployPreviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+				}
+				return nil, NewGetProjectRedeployPreviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetProjectRedeployPreviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+				}
+				err = ValidateGetProjectRedeployPreviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+				}
+				return nil, NewGetProjectRedeployPreviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getProjectRedeployPreview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetProjectRedeployPreviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getProjectRedeployPreview", err)
+			}
+			err = ValidateGetProjectRedeployPreviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getProjectRedeployPreview", err)
+			}
+			return nil, NewGetProjectRedeployPreviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getProjectRedeployPreview", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRedeployProjectRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "redeployProject" endpoint
+func (c *Client) BuildRedeployProjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RedeployProjectAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "redeployProject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRedeployProjectRequest returns an encoder for requests sent to the
+// admin redeployProject server.
+func EncodeRedeployProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.RedeployProjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "redeployProject", "*admin.RedeployProjectPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewRedeployProjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "redeployProject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRedeployProjectResponse returns a decoder for responses returned by
+// the admin redeployProject endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRedeployProjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRedeployProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RedeployProjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			res := NewRedeployProjectAdminProjectRedeployResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RedeployProjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RedeployProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RedeployProjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RedeployProjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RedeployProjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RedeployProjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RedeployProjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RedeployProjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+				}
+				err = ValidateRedeployProjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+				}
+				return nil, NewRedeployProjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RedeployProjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+				}
+				err = ValidateRedeployProjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+				}
+				return nil, NewRedeployProjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "redeployProject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RedeployProjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "redeployProject", err)
+			}
+			err = ValidateRedeployProjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "redeployProject", err)
+			}
+			return nil, NewRedeployProjectGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "redeployProject", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.

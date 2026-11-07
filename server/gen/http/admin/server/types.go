@@ -644,6 +644,17 @@ type BackfillMcpConnectGrantsRequestBody struct {
 	CreatedBefore *string `form:"created_before,omitempty" json:"created_before,omitempty" xml:"created_before,omitempty"`
 }
 
+// RedeployProjectRequestBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP request body.
+type RedeployProjectRequestBody struct {
+	// Exact organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// Exact project ID.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// active_deployment_id from getProjectRedeployPreview.
+	ExpectedActiveDeploymentID *string `form:"expected_active_deployment_id,omitempty" json:"expected_active_deployment_id,omitempty" xml:"expected_active_deployment_id,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -905,6 +916,9 @@ type GetProjectResponseBody struct {
 	ToolsetCount int `form:"toolset_count" json:"toolset_count" xml:"toolset_count"`
 	// Total number of deployments in the project.
 	DeploymentCount int `form:"deployment_count" json:"deployment_count" xml:"deployment_count"`
+	// The deployment the project currently serves. Absent when no deployment has
+	// completed.
+	ActiveDeploymentID *string `form:"active_deployment_id,omitempty" json:"active_deployment_id,omitempty" xml:"active_deployment_id,omitempty"`
 	// Number of active HTTP tool definitions in the project.
 	HTTPToolCount int `form:"http_tool_count" json:"http_tool_count" xml:"http_tool_count"`
 	// Number of active environments in the project.
@@ -2969,6 +2983,39 @@ type BackfillMcpConnectGrantsResponseBody struct {
 	// How many mcp:connect grants provisioned by the default auth permission
 	// backfill became explicit grants.
 	TakenOver int64 `form:"taken_over" json:"taken_over" xml:"taken_over"`
+}
+
+// GetProjectRedeployPreviewResponseBody is the type of the "admin" service
+// "getProjectRedeployPreview" endpoint HTTP response body.
+type GetProjectRedeployPreviewResponseBody struct {
+	// Organization that owns the project.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Project name.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
+	// Deployment a redeploy would clone. Send it back as
+	// expected_active_deployment_id.
+	ActiveDeploymentID string `form:"active_deployment_id" json:"active_deployment_id" xml:"active_deployment_id"`
+	// OpenAPI sources that would be processed again.
+	OpenapiAssets int `form:"openapi_assets" json:"openapi_assets" xml:"openapi_assets"`
+	// Function sources whose runners would be deployed again.
+	FunctionAssets int `form:"function_assets" json:"function_assets" xml:"function_assets"`
+	// Packages carried into the new deployment.
+	Packages int `form:"packages" json:"packages" xml:"packages"`
+	// External MCP sources the new deployment would drop.
+	ExternalMcps int `form:"external_mcps" json:"external_mcps" xml:"external_mcps"`
+}
+
+// RedeployProjectResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body.
+type RedeployProjectResponseBody struct {
+	// Project ID.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// Deployment that was cloned.
+	SourceDeploymentID string `form:"source_deployment_id" json:"source_deployment_id" xml:"source_deployment_id"`
+	// New deployment. It becomes active only if processing succeeds.
+	DeploymentID string `form:"deployment_id" json:"deployment_id" xml:"deployment_id"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -22652,6 +22699,378 @@ type BackfillMcpConnectGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetProjectRedeployPreviewUnauthorizedResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetProjectRedeployPreviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewForbiddenResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "forbidden" error.
+type GetProjectRedeployPreviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewBadRequestResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "bad_request" error.
+type GetProjectRedeployPreviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewNotFoundResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "not_found" error.
+type GetProjectRedeployPreviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewConflictResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "conflict" error.
+type GetProjectRedeployPreviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewUnsupportedMediaResponseBody is the type of the
+// "admin" service "getProjectRedeployPreview" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetProjectRedeployPreviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewInvalidResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "invalid" error.
+type GetProjectRedeployPreviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewInvariantViolationResponseBody is the type of the
+// "admin" service "getProjectRedeployPreview" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetProjectRedeployPreviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewUnexpectedResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "unexpected" error.
+type GetProjectRedeployPreviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetProjectRedeployPreviewGatewayErrorResponseBody is the type of the "admin"
+// service "getProjectRedeployPreview" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetProjectRedeployPreviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectUnauthorizedResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "unauthorized" error.
+type RedeployProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectForbiddenResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "forbidden" error.
+type RedeployProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectBadRequestResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "bad_request" error.
+type RedeployProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectNotFoundResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "not_found" error.
+type RedeployProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectConflictResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "conflict" error.
+type RedeployProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectUnsupportedMediaResponseBody is the type of the "admin"
+// service "redeployProject" endpoint HTTP response body for the
+// "unsupported_media" error.
+type RedeployProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectInvalidResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "invalid" error.
+type RedeployProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectInvariantViolationResponseBody is the type of the "admin"
+// service "redeployProject" endpoint HTTP response body for the
+// "invariant_violation" error.
+type RedeployProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectUnexpectedResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "unexpected" error.
+type RedeployProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// RedeployProjectGatewayErrorResponseBody is the type of the "admin" service
+// "redeployProject" endpoint HTTP response body for the "gateway_error" error.
+type RedeployProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -24266,6 +24685,7 @@ func NewGetProjectResponseBody(res *admin.AdminProjectDetail) *GetProjectRespons
 		FunctionsRunnerVersion: res.FunctionsRunnerVersion,
 		ToolsetCount:           res.ToolsetCount,
 		DeploymentCount:        res.DeploymentCount,
+		ActiveDeploymentID:     res.ActiveDeploymentID,
 		HTTPToolCount:          res.HTTPToolCount,
 		EnvironmentCount:       res.EnvironmentCount,
 		APIKeyCount:            res.APIKeyCount,
@@ -26747,6 +27167,34 @@ func NewBackfillMcpConnectGrantsResponseBody(res *admin.AdminBackfillMCPConnectG
 		Inserted:  res.Inserted,
 		Extended:  res.Extended,
 		TakenOver: res.TakenOver,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewResponseBody builds the HTTP response body from
+// the result of the "getProjectRedeployPreview" endpoint of the "admin"
+// service.
+func NewGetProjectRedeployPreviewResponseBody(res *admin.AdminProjectRedeployPreview) *GetProjectRedeployPreviewResponseBody {
+	body := &GetProjectRedeployPreviewResponseBody{
+		OrganizationID:     res.OrganizationID,
+		ProjectID:          res.ProjectID,
+		ProjectName:        res.ProjectName,
+		ActiveDeploymentID: res.ActiveDeploymentID,
+		OpenapiAssets:      res.OpenapiAssets,
+		FunctionAssets:     res.FunctionAssets,
+		Packages:           res.Packages,
+		ExternalMcps:       res.ExternalMcps,
+	}
+	return body
+}
+
+// NewRedeployProjectResponseBody builds the HTTP response body from the result
+// of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectResponseBody(res *admin.AdminProjectRedeployResult) *RedeployProjectResponseBody {
+	body := &RedeployProjectResponseBody{
+		ProjectID:          res.ProjectID,
+		SourceDeploymentID: res.SourceDeploymentID,
+		DeploymentID:       res.DeploymentID,
 	}
 	return body
 }
@@ -42187,6 +42635,297 @@ func NewBackfillMcpConnectGrantsGatewayErrorResponseBody(res *goa.ServiceError) 
 	return body
 }
 
+// NewGetProjectRedeployPreviewUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getProjectRedeployPreview" endpoint of
+// the "admin" service.
+func NewGetProjectRedeployPreviewUnauthorizedResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewUnauthorizedResponseBody {
+	body := &GetProjectRedeployPreviewUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewForbiddenResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewForbiddenResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewForbiddenResponseBody {
+	body := &GetProjectRedeployPreviewForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewBadRequestResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewBadRequestResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewBadRequestResponseBody {
+	body := &GetProjectRedeployPreviewBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewNotFoundResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewNotFoundResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewNotFoundResponseBody {
+	body := &GetProjectRedeployPreviewNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewConflictResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewConflictResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewConflictResponseBody {
+	body := &GetProjectRedeployPreviewConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getProjectRedeployPreview" endpoint of
+// the "admin" service.
+func NewGetProjectRedeployPreviewUnsupportedMediaResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewUnsupportedMediaResponseBody {
+	body := &GetProjectRedeployPreviewUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewInvalidResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewInvalidResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewInvalidResponseBody {
+	body := &GetProjectRedeployPreviewInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getProjectRedeployPreview" endpoint of
+// the "admin" service.
+func NewGetProjectRedeployPreviewInvariantViolationResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewInvariantViolationResponseBody {
+	body := &GetProjectRedeployPreviewInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getProjectRedeployPreview" endpoint of the
+// "admin" service.
+func NewGetProjectRedeployPreviewUnexpectedResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewUnexpectedResponseBody {
+	body := &GetProjectRedeployPreviewUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetProjectRedeployPreviewGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getProjectRedeployPreview" endpoint of
+// the "admin" service.
+func NewGetProjectRedeployPreviewGatewayErrorResponseBody(res *goa.ServiceError) *GetProjectRedeployPreviewGatewayErrorResponseBody {
+	body := &GetProjectRedeployPreviewGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectUnauthorizedResponseBody(res *goa.ServiceError) *RedeployProjectUnauthorizedResponseBody {
+	body := &RedeployProjectUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectForbiddenResponseBody builds the HTTP response body from
+// the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectForbiddenResponseBody(res *goa.ServiceError) *RedeployProjectForbiddenResponseBody {
+	body := &RedeployProjectForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectBadRequestResponseBody builds the HTTP response body from
+// the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectBadRequestResponseBody(res *goa.ServiceError) *RedeployProjectBadRequestResponseBody {
+	body := &RedeployProjectBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectNotFoundResponseBody builds the HTTP response body from
+// the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectNotFoundResponseBody(res *goa.ServiceError) *RedeployProjectNotFoundResponseBody {
+	body := &RedeployProjectNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectConflictResponseBody builds the HTTP response body from
+// the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectConflictResponseBody(res *goa.ServiceError) *RedeployProjectConflictResponseBody {
+	body := &RedeployProjectConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectUnsupportedMediaResponseBody(res *goa.ServiceError) *RedeployProjectUnsupportedMediaResponseBody {
+	body := &RedeployProjectUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectInvalidResponseBody builds the HTTP response body from the
+// result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectInvalidResponseBody(res *goa.ServiceError) *RedeployProjectInvalidResponseBody {
+	body := &RedeployProjectInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "redeployProject" endpoint of the "admin"
+// service.
+func NewRedeployProjectInvariantViolationResponseBody(res *goa.ServiceError) *RedeployProjectInvariantViolationResponseBody {
+	body := &RedeployProjectInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectUnexpectedResponseBody builds the HTTP response body from
+// the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectUnexpectedResponseBody(res *goa.ServiceError) *RedeployProjectUnexpectedResponseBody {
+	body := &RedeployProjectUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewRedeployProjectGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "redeployProject" endpoint of the "admin" service.
+func NewRedeployProjectGatewayErrorResponseBody(res *goa.ServiceError) *RedeployProjectGatewayErrorResponseBody {
+	body := &RedeployProjectGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -43562,6 +44301,30 @@ func NewBackfillMcpConnectGrantsPayload(body *BackfillMcpConnectGrantsRequestBod
 	return v
 }
 
+// NewGetProjectRedeployPreviewPayload builds a admin service
+// getProjectRedeployPreview endpoint payload.
+func NewGetProjectRedeployPreviewPayload(organizationID string, projectID string, adminSessionToken *string) *admin.GetProjectRedeployPreviewPayload {
+	v := &admin.GetProjectRedeployPreviewPayload{}
+	v.OrganizationID = organizationID
+	v.ProjectID = projectID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewRedeployProjectPayload builds a admin service redeployProject endpoint
+// payload.
+func NewRedeployProjectPayload(body *RedeployProjectRequestBody, adminSessionToken *string) *admin.RedeployProjectPayload {
+	v := &admin.RedeployProjectPayload{
+		OrganizationID:             *body.OrganizationID,
+		ProjectID:                  *body.ProjectID,
+		ExpectedActiveDeploymentID: *body.ExpectedActiveDeploymentID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationProviderSetupRequestBody runs the validations defined
 // on SetOrganizationProviderSetupRequestBody
 func ValidateSetOrganizationProviderSetupRequestBody(body *SetOrganizationProviderSetupRequestBody) (err error) {
@@ -44530,6 +45293,21 @@ func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuth
 func ValidateBackfillMcpConnectGrantsRequestBody(body *BackfillMcpConnectGrantsRequestBody) (err error) {
 	if body.CreatedBefore != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_before", *body.CreatedBefore, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateRedeployProjectRequestBody runs the validations defined on
+// RedeployProjectRequestBody
+func ValidateRedeployProjectRequestBody(body *RedeployProjectRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.ProjectID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("project_id", "body"))
+	}
+	if body.ExpectedActiveDeploymentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("expected_active_deployment_id", "body"))
 	}
 	return
 }

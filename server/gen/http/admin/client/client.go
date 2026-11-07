@@ -428,6 +428,14 @@ type Client struct {
 	// the backfillMcpConnectGrants endpoint.
 	BackfillMcpConnectGrantsDoer goahttp.Doer
 
+	// GetProjectRedeployPreview Doer is the HTTP client used to make requests to
+	// the getProjectRedeployPreview endpoint.
+	GetProjectRedeployPreviewDoer goahttp.Doer
+
+	// RedeployProject Doer is the HTTP client used to make requests to the
+	// redeployProject endpoint.
+	RedeployProjectDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -551,6 +559,8 @@ func NewClient(
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
 		BackfillMcpConnectGrantsDoer:                doer,
+		GetProjectRedeployPreviewDoer:               doer,
+		RedeployProjectDoer:                         doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -3031,6 +3041,54 @@ func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
 		resp, err := c.BackfillMcpConnectGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "backfillMcpConnectGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectRedeployPreview returns an endpoint that makes HTTP requests to
+// the admin service getProjectRedeployPreview server.
+func (c *Client) GetProjectRedeployPreview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectRedeployPreviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectRedeployPreviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectRedeployPreviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectRedeployPreviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getProjectRedeployPreview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RedeployProject returns an endpoint that makes HTTP requests to the admin
+// service redeployProject server.
+func (c *Client) RedeployProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRedeployProjectRequest(c.encoder)
+		decodeResponse = DecodeRedeployProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRedeployProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RedeployProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "redeployProject", err)
 		}
 		return decodeResponse(resp)
 	}
