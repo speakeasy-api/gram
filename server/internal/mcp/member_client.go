@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -155,6 +157,9 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt.recordFailure(record, err)
 		return nil, err
 	}
+	if hints, ok := ctx.Value(memberListHintsKey{}).(*memberListHints); ok && rpc.Method == mcpversions.MethodToolsList {
+		p.RemoteMessageInterceptors = append(p.RemoteMessageInterceptors, hints)
+	}
 	if capture, ok := ctx.Value(memberToolResultKey{}).(*memberToolResult); ok {
 		p.ToolsCallResponseInterceptors = append(p.ToolsCallResponseInterceptors, capture)
 	}
@@ -168,6 +173,17 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		return nil, fmt.Errorf("build member request: %w", err)
 	}
 	out.Header = req.Header.Clone()
+	if headers, ok := ctx.Value(memberParameterHeadersKey{}).(http.Header); ok && rpc.Method == mcpversions.MethodToolsCall {
+		// Replace the SDK's set: it may be stale, and it omits empty values.
+		for name := range out.Header {
+			if httpheaders.IsParamHeader(name) {
+				delete(out.Header, name)
+			}
+		}
+		for name, values := range headers {
+			out.Header[name] = slices.Clone(values)
+		}
+	}
 	rec := newMemberResponseRecorder()
 	// Capture the session before the body is buffered: a member can mint one
 	// and then fail or hang the body, and the SDK never sees such an answer.
@@ -486,6 +502,71 @@ func (t *memberClientTransport) Connect(ctx context.Context) (mcp.Connection, er
 	}
 	t.connection = connection
 	return connection, nil
+}
+
+// memberParameterHeadersKey carries one call's Mcp-Param headers, derived
+// from the member's current tool definition, to its tools/call exchange.
+type memberParameterHeadersKey struct{}
+
+// memberListHintsKey attaches a listing's capture of the member's own cache
+// hints to its tools/list exchanges.
+type memberListHintsKey struct{}
+
+// memberListHints records the cache hints the member put on its latest
+// tools/list reply. It runs as a remote message interceptor, before the proxy
+// relabels the hints for its own client, so the gateway's schema record
+// follows what the member declared rather than the proxy's caller-varying stance.
+type memberListHints struct {
+	mu sync.Mutex
+
+	// seen marks a reply captured since the last take.
+	seen bool
+
+	// ttl is the reply's ttlMs; absent or negative reads as zero.
+	ttl time.Duration
+
+	// private marks a reply the member scoped "private".
+	private bool
+}
+
+func (*memberListHints) Name() string { return "meta_member_list_hints" }
+
+func (h *memberListHints) InterceptRemoteMessage(_ context.Context, msg *proxy.RemoteMessage) error {
+	response, ok := msg.Message.(*jsonrpc.Response)
+	if !ok || response.Error != nil || len(response.Result) == 0 {
+		return nil
+	}
+	var hints struct {
+		TTLMs      int    `json:"ttlMs"`
+		CacheScope string `json:"cacheScope"`
+	}
+	if json.Unmarshal(response.Result, &hints) != nil {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.seen = true
+	h.ttl, h.private = memberListCacheHints(hints.TTLMs, hints.CacheScope)
+	return nil
+}
+
+// memberListCacheHints reads a listing's cache hints. ttlMs is clamped before
+// it becomes a duration, so a huge value cannot overflow; absent or negative
+// reads as zero. The spec names no default for an absent cacheScope, so only
+// an explicit "public" is shared across callers.
+func memberListCacheHints(ttlMs int, cacheScope string) (time.Duration, bool) {
+	ttl := time.Duration(min(max(ttlMs, 0), int(maxMemberToolSchemasTTL/time.Millisecond))) * time.Millisecond
+	return ttl, cacheScope != "public"
+}
+
+// take returns and clears the latest capture; ok is false when none arrived,
+// as when the SDK answered a page from its own cache.
+func (h *memberListHints) take() (ttl time.Duration, private bool, ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ttl, private, ok = h.ttl, h.private, h.seen
+	h.seen = false
+	return ttl, private, ok
 }
 
 // memberToolResultKey attaches a single call's capture to its HTTP exchanges.

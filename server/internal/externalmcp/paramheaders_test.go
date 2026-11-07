@@ -67,7 +67,7 @@ func TestParameterHeadersSDKValues(t *testing.T) {
 			schema := json.RawMessage(`{"properties":{"value":{"type":"` + tt.typ + `","x-mcp-header":"Value"}}}`)
 			args := json.RawMessage(`{"value":` + tt.raw + `,"unrelated":900719925474099312345}`)
 			original := bytes.Clone(args)
-			headers, err := parameterHeaders(schema, args)
+			headers, err := ParameterHeaders(schema, args)
 			require.NoError(t, err)
 			require.Equal(t, original, []byte(args), "argument bytes must not change")
 			if tt.omit {
@@ -89,7 +89,7 @@ func TestParameterHeadersNested(t *testing.T) {
 			"nested":{"properties":{"flag":{"type":"boolean","x-mcp-header":"Flag"}}}
 		}}
 	}}`)
-	headers, err := parameterHeaders(schema, json.RawMessage(`{"region":"us-west1","query":"SELECT 1","options":{"priority":42.0,"nested":{"flag":false}}}`))
+	headers, err := ParameterHeaders(schema, json.RawMessage(`{"region":"us-west1","query":"SELECT 1","options":{"priority":42.0,"nested":{"flag":false}}}`))
 	require.NoError(t, err)
 	require.Equal(t, http.Header{
 		"Mcp-Param-Region":   []string{"us-west1"},
@@ -97,7 +97,7 @@ func TestParameterHeadersNested(t *testing.T) {
 		"Mcp-Param-Flag":     []string{"false"},
 	}, headers)
 	for _, args := range []string{`{}`, `null`, ``, `{"options":null}`, `{"options":[]}`, `{"options":42}`, `{"options":{"nested":"text"}}`, `{"options.priority":42}`} {
-		headers, err := parameterHeaders(schema, json.RawMessage(args))
+		headers, err := ParameterHeaders(schema, json.RawMessage(args))
 		require.NoError(t, err)
 		require.Empty(t, headers)
 	}
@@ -111,7 +111,7 @@ func TestParameterHeadersAnnotationFreeSchemas(t *testing.T) {
 		`{"$ref":"#/$defs/value","$defs":{"value":{"anyOf":[{"type":"string"},{"type":"number"}]}}}`,
 		`{"properties":{"list":{"type":"array","items":{"type":"string"}},"value":{"enum":[1,"a",null]}}}`,
 	} {
-		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"private-value"}`))
+		headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"private-value"}`))
 		require.NoError(t, err, schema)
 		require.Empty(t, headers)
 	}
@@ -137,7 +137,7 @@ func TestParameterHeadersUnrelatedTypes(t *testing.T) {
 				}}`)
 				args := json.RawMessage(`{"parent":{"value":"ok"}}`)
 				original := bytes.Clone(schema)
-				headers, err := parameterHeaders(schema, args)
+				headers, err := ParameterHeaders(schema, args)
 				require.NoError(t, err)
 				require.Equal(t, original, []byte(schema), "schema bytes must not change")
 				if annotated {
@@ -147,7 +147,7 @@ func TestParameterHeadersUnrelatedTypes(t *testing.T) {
 				}
 			}
 			// The same types remain invalid on an annotated property.
-			headers, err := parameterHeaders(json.RawMessage(`{"properties":{"value":{"type":`+typ+`,"x-mcp-header":"Value"}}}`), nil)
+			headers, err := ParameterHeaders(json.RawMessage(`{"properties":{"value":{"type":`+typ+`,"x-mcp-header":"Value"}}}`), nil)
 			require.ErrorContains(t, err, "x-mcp-header requires an integer, string, or boolean type")
 			require.Nil(t, headers)
 		})
@@ -167,7 +167,7 @@ func TestParameterHeadersSafeDiagnostics(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			headers, err := parameterHeaders(json.RawMessage(tc.schema), json.RawMessage(tc.args))
+			headers, err := ParameterHeaders(json.RawMessage(tc.schema), json.RawMessage(tc.args))
 			require.Error(t, err)
 			require.Nil(t, headers)
 			require.Contains(t, err.Error(), "category="+tc.category)
@@ -195,7 +195,7 @@ func TestParameterHeadersInvalidSchemas(t *testing.T) {
 		`{"properties":{"value":{"type":["string","null"],"x-mcp-header":"Value"}}}`,
 		`{"properties":{"value":{"type":["string"],"x-mcp-header":"Value"}}}`,
 	} {
-		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"private-value"}`))
+		headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"private-value"}`))
 		require.Error(t, err, schema)
 		require.NotContains(t, err.Error(), "private-value")
 		require.Nil(t, headers)
@@ -208,14 +208,14 @@ func TestParameterHeadersNames(t *testing.T) {
 		raw, err := json.Marshal(name)
 		require.NoError(t, err)
 		schema := json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":` + string(raw) + `}}}`)
-		headers, err := parameterHeaders(schema, nil)
+		headers, err := ParameterHeaders(schema, nil)
 		require.Error(t, err, string(raw))
 		require.Nil(t, headers)
 	}
 	name := "AZaz09!#$%&'*+-.^_`|~"
 	raw, err := json.Marshal(name)
 	require.NoError(t, err)
-	headers, err := parameterHeaders(json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":`+string(raw)+`}}}`), json.RawMessage(`{"value":"ok"}`))
+	headers, err := ParameterHeaders(json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":`+string(raw)+`}}}`), json.RawMessage(`{"value":"ok"}`))
 	require.NoError(t, err)
 	require.Equal(t, "ok", headers.Get("Mcp-Param-"+name))
 
@@ -225,7 +225,7 @@ func TestParameterHeadersNames(t *testing.T) {
 			other = `"outer":{"properties":{` + other + `}}`
 		}
 		schema := json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":"Value"},` + other + `}}`)
-		headers, err := parameterHeaders(schema, nil)
+		headers, err := ParameterHeaders(schema, nil)
 		require.EqualError(t, err, "duplicate x-mcp-header name (case-insensitive)")
 		require.Nil(t, headers)
 	}
@@ -235,7 +235,7 @@ func TestParameterHeadersInvalidArguments(t *testing.T) {
 	t.Parallel()
 	schema := json.RawMessage(`{"properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`)
 	for _, args := range []string{`{"value":"private-value"`, `"private-value"`, `["private-value"]`, `42`, `{} {}`} {
-		headers, err := parameterHeaders(schema, json.RawMessage(args))
+		headers, err := ParameterHeaders(schema, json.RawMessage(args))
 		require.ErrorContains(t, err, "invalid MCP tool arguments (category=")
 		require.NotContains(t, err.Error(), "private-value")
 		require.Nil(t, headers)
@@ -250,10 +250,10 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 		suffix := `","properties":{"value":{"type":"string","x-mcp-header":"Value"}}}`
 		schema := `{"description":"` + strings.Repeat("x", maxParameterHeaderSchemaBytes-len(`{"description":"`)-len(suffix)) + suffix
 		require.Len(t, schema, maxParameterHeaderSchemaBytes)
-		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"ok"}`))
+		headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{"value":"ok"}`))
 		require.NoError(t, err)
 		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
-		headers, err = parameterHeaders(json.RawMessage(schema+" "), json.RawMessage(`{"value":"ok"}`))
+		headers, err = ParameterHeaders(json.RawMessage(schema+" "), json.RawMessage(`{"value":"ok"}`))
 		require.EqualError(t, err, "MCP tool input schema exceeds byte limit")
 		require.Nil(t, headers)
 	})
@@ -265,12 +265,12 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 			schema = `{"properties":{"nested":` + schema + `}}`
 			args = `{"nested":` + args + `}`
 		}
-		headers, err := parameterHeaders(json.RawMessage(schema), json.RawMessage(args))
+		headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(args))
 		require.NoError(t, err)
 		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
 		schema = `{"properties":{"nested":` + schema + `}}`
 		args = `{"nested":` + args + `}`
-		headers, err = parameterHeaders(json.RawMessage(schema), json.RawMessage(args))
+		headers, err = ParameterHeaders(json.RawMessage(schema), json.RawMessage(args))
 		require.EqualError(t, err, "MCP tool input schema exceeds depth limit")
 		require.Nil(t, headers)
 	})
@@ -284,13 +284,13 @@ func TestParameterHeadersSchemaBudgets(t *testing.T) {
 		}
 		schema, err := json.Marshal(map[string]any{"properties": properties})
 		require.NoError(t, err)
-		headers, err := parameterHeaders(schema, json.RawMessage(`{"value":"ok"}`))
+		headers, err := ParameterHeaders(schema, json.RawMessage(`{"value":"ok"}`))
 		require.NoError(t, err)
 		require.Equal(t, "ok", headers.Get("Mcp-Param-Value"))
 		properties["overflow"] = json.RawMessage(`{}`)
 		schema, err = json.Marshal(map[string]any{"properties": properties})
 		require.NoError(t, err)
-		headers, err = parameterHeaders(schema, json.RawMessage(`{"value":"private-value"}`))
+		headers, err = ParameterHeaders(schema, json.RawMessage(`{"value":"private-value"}`))
 		require.EqualError(t, err, "MCP tool input schema exceeds node limit")
 		require.Nil(t, headers, "never return partial headers")
 	})
@@ -319,9 +319,75 @@ func TestParameterHeadersAnnotationFreeBudgets(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			headers, err := parameterHeaders(json.RawMessage(tc.schema), nil)
+			headers, err := ParameterHeaders(json.RawMessage(tc.schema), nil)
 			require.EqualError(t, err, "MCP tool input schema exceeds "+tc.name+" limit")
 			require.Nil(t, headers)
 		})
 	}
+}
+
+func TestParameterHeadersRejectsUnreachableAnnotations(t *testing.T) {
+	t.Parallel()
+
+	for name, schema := range map[string]string{
+		"root":    `{"type":"object","x-mcp-header":"Root","properties":{}}`,
+		"items":   `{"properties":{"list":{"type":"array","items":{"type":"string","x-mcp-header":"Item"}}}}`,
+		"oneOf":   `{"properties":{"v":{"oneOf":[{"type":"string","x-mcp-header":"V"}]}}}`,
+		"$defs":   `{"properties":{},"$defs":{"d":{"type":"string","x-mcp-header":"D"}}}`,
+		"sibling": `{"properties":{"ok":{"type":"string","x-mcp-header":"Ok"}},"anyOf":[{"properties":{"bad":{"type":"string","x-mcp-header":"Bad"}}}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			_, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{}`))
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestParameterHeadersIgnoresAnnotationNamesInData(t *testing.T) {
+	t.Parallel()
+
+	schema := json.RawMessage(`{"properties":{"x-mcp-header":{"type":"string","default":{"x-mcp-header":"Data"}},"owner":{"type":"string","x-mcp-header":"Owner"}}}`)
+	headers, err := ParameterHeaders(schema, json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
+}
+
+func TestParameterHeadersRejectsEscapedAnnotationOutsideProperties(t *testing.T) {
+	t.Parallel()
+
+	_, err := ParameterHeaders(json.RawMessage(`{"properties":{"list":{"type":"array","items":{"type":"string","x\u002dmcp-header":"Item"}}}}`), json.RawMessage(`{}`))
+	require.Error(t, err)
+}
+
+func TestParameterHeadersAcceptsHugeNumbersInMetadata(t *testing.T) {
+	t.Parallel()
+
+	schema := json.RawMessage(`{"properties":{"owner":{"type":"string","x-mcp-header":"Owner","maxLength":1e400}}}`)
+	headers, err := ParameterHeaders(schema, json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
+}
+
+func TestParameterHeadersPlacementWalkBudgets(t *testing.T) {
+	t.Parallel()
+
+	deep := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"$defs":` + strings.Repeat(`{"a":`, maxParameterHeaderJSONDepth) + `{}` + strings.Repeat(`}`, maxParameterHeaderJSONDepth) + `}`
+	_, err := ParameterHeaders(json.RawMessage(deep), nil)
+	require.ErrorContains(t, err, "depth limit")
+
+	wide := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner"}},"$defs":[` + strings.TrimSuffix(strings.Repeat(`{},`, maxParameterHeaderNodes), ",") + `]}`
+	_, err = ParameterHeaders(json.RawMessage(wide), nil)
+	require.ErrorContains(t, err, "node limit")
+}
+
+func TestParameterHeadersDataSubtreesSkipPlacementBudgets(t *testing.T) {
+	t.Parallel()
+
+	wide := `[` + strings.TrimSuffix(strings.Repeat(`{"a":1},`, 2*maxParameterHeaderNodes), ",") + `]`
+	deep := strings.Repeat(`{"a":`, 2*maxParameterHeaderJSONDepth) + `1` + strings.Repeat(`}`, 2*maxParameterHeaderJSONDepth)
+	schema := `{"properties":{"owner":{"type":"string","x-mcp-header":"Owner","enum":` + wide + `,"examples":[` + deep + `],"default":` + deep + `}}}`
+	headers, err := ParameterHeaders(json.RawMessage(schema), json.RawMessage(`{"owner":"octo"}`))
+	require.NoError(t, err)
+	require.Equal(t, http.Header{"Mcp-Param-Owner": {"octo"}}, headers)
 }

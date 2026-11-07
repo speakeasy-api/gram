@@ -31,7 +31,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcp/httpheaders"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -63,6 +63,9 @@ type recordedRequest struct {
 	// authorization is the Authorization header as it arrived, empty when absent.
 	authorization string
 
+	// paramHeaders names the Mcp-Param-* headers the request carried.
+	paramHeaders []string
+
 	// apiKey and setCookie are configured headers a header policy test looks
 	// for, empty when absent.
 	apiKey    string
@@ -75,6 +78,16 @@ type recordedRequest struct {
 // lifecycle and the proxy's unauthenticated protected resource probe.
 type recordingUpstream struct {
 	url string
+
+	// inputSchema is the upstream tool's input schema.
+	inputSchema map[string]any
+
+	// stateless serves without sessions, so the gateway negotiates MCP 2026-07-28.
+	stateless bool
+
+	// listTTL and listCacheScope are the caching hints its tools/list carries.
+	listTTL        time.Duration
+	listCacheScope string
 
 	// holdMetadataProbe makes the recorder hold protected resource metadata
 	// requests until a tools/call response has completed, forcing the probe
@@ -104,27 +117,39 @@ func withMetadataProbeHeldUntilToolCall() recordingUpstreamOption {
 	return func(u *recordingUpstream) { u.holdMetadataProbe = true }
 }
 
+// withInputSchema replaces the upstream tool's empty input schema.
+func withInputSchema(schema map[string]any) recordingUpstreamOption {
+	return func(u *recordingUpstream) { u.inputSchema = schema }
+}
+
+// withStatelessUpstream serves the upstream without sessions, so the gateway
+// negotiates MCP 2026-07-28 with it. Its tools/list is public for an hour.
+func withStatelessUpstream() recordingUpstreamOption {
+	return func(u *recordingUpstream) {
+		u.stateless = true
+		u.listTTL = time.Hour
+	}
+}
+
+// withListCaching sets the caching hints the upstream's tools/list carries.
+func withListCaching(ttl time.Duration, scope string) recordingUpstreamOption {
+	return func(u *recordingUpstream) {
+		u.listTTL = ttl
+		u.listCacheScope = scope
+	}
+}
+
 // newRecordingUpstream stands up a real MCP SDK server behind a reverse
 // proxy that records every request it forwards.
 func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstreamOption) *recordingUpstream {
 	t.Helper()
 
-	mock := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
-		Name:        toolName,
-		Description: "returns pong",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		Response: testmcp.ToolResponse{
-			Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
-		},
-	}})
-	t.Cleanup(mock.Close)
-
-	target, err := url.Parse(mock.URL)
-	require.NoError(t, err)
-	proxy := httputil.NewSingleHostReverseProxy(target)
-
 	u := &recordingUpstream{
 		url:                     "",
+		inputSchema:             map[string]any{"type": "object", "properties": map[string]any{}},
+		stateless:               false,
+		listTTL:                 0,
+		listCacheScope:          "",
 		holdMetadataProbe:       false,
 		toolCallServed:          make(chan struct{}),
 		toolCallServedOnce:      sync.Once{},
@@ -136,6 +161,25 @@ func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstre
 	for _, opt := range opts {
 		opt(u)
 	}
+
+	mock := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{
+		Tools: []testmcp.Tool{{
+			Name:        toolName,
+			Description: "returns pong",
+			InputSchema: u.inputSchema,
+			Response: testmcp.ToolResponse{
+				Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
+			},
+		}},
+		Stateless:      u.stateless,
+		ListTTL:        u.listTTL,
+		ListCacheScope: u.listCacheScope,
+	})
+	t.Cleanup(mock.Close)
+
+	target, err := url.Parse(mock.URL)
+	require.NoError(t, err)
+	proxy := httputil.NewSingleHostReverseProxy(target)
 
 	recorder := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		isMetadataProbe := r.Method == http.MethodGet && r.URL.Path == wellknown.OAuthProtectedResourcePath
@@ -196,6 +240,7 @@ func (u *recordingUpstream) record(r *http.Request) (string, error) {
 		path:          r.URL.Path,
 		rpcMethod:     rpcMethod,
 		authorization: r.Header.Get("Authorization"),
+		paramHeaders:  paramHeaderNames(r.Header),
 		apiKey:        r.Header.Get("X-Api-Key"),
 		setCookie:     r.Header.Get("Set-Cookie"),
 	})
@@ -784,4 +829,14 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnreachedProxiedMemberLogsFailedRo
 	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
 	requireTelemetryRowCount(t, failedRows, 2, projectID.String(), meta.ID.String())
+}
+
+func paramHeaderNames(header http.Header) []string {
+	var names []string
+	for name := range header {
+		if httpheaders.IsParamHeader(name) {
+			names = append(names, name)
+		}
+	}
+	return names
 }

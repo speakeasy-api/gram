@@ -5,9 +5,11 @@
 package testmcp
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
@@ -41,6 +43,17 @@ type Server struct {
 	// Appending to Tools after a transport server has been constructed has
 	// no effect — registration happens once, at server start.
 	Tools []Tool
+
+	// Stateless serves Streamable HTTP without sessions, which the SDK
+	// requires to negotiate protocol 2026-07-28 and its request headers.
+	Stateless bool
+
+	// ListTTL is the ttlMs every tools/list result carries. The SDK always
+	// writes ttlMs, so zero sends ttlMs 0: immediately stale.
+	ListTTL time.Duration
+
+	// ListCacheScope is the cacheScope every tools/list result carries when set.
+	ListCacheScope string
 }
 
 // mcpServer constructs an [mcp.Server] populated with s.Tools. It is shared
@@ -56,6 +69,21 @@ func (s *Server) mcpServer() (*mcp.Server, error) {
 		Version:     "1.0.0",
 		WebsiteURL:  "",
 	}, nil)
+
+	if s.ListTTL > 0 || s.ListCacheScope != "" {
+		mcpServer.AddReceivingMiddleware(func(next mcp.MethodHandler) mcp.MethodHandler {
+			return func(ctx context.Context, method string, req mcp.Request) (mcp.Result, error) {
+				result, err := next(ctx, method, req)
+				if listed, ok := result.(*mcp.ListToolsResult); ok && err == nil {
+					listed.TTLMs = int(s.ListTTL.Milliseconds())
+					if s.ListCacheScope != "" {
+						listed.CacheScope = s.ListCacheScope
+					}
+				}
+				return result, err
+			}
+		})
+	}
 
 	for _, tool := range s.Tools {
 		mcpTool, err := tool.mcpTool()
@@ -96,7 +124,17 @@ func (s *Server) streamableHTTPServer() (*httptest.Server, error) {
 
 	handler := mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
 		return mcpServer
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{
+		Stateless:                    s.Stateless,
+		JSONResponse:                 false,
+		Logger:                       nil,
+		EventStore:                   nil,
+		SessionTimeout:               0,
+		DisableLocalhostProtection:   false,
+		CrossOriginProtection:        nil,
+		MaxRequestBodyBytes:          0,
+		PropagateRequestCancellation: false,
+	})
 
 	return httptest.NewServer(handler), nil
 }

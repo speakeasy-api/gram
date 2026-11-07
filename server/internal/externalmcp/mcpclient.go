@@ -404,7 +404,7 @@ func (c *Client) listTools(ctx context.Context, target string) ([]Tool, error) {
 				c.logger.WarnContext(ctx, "skipping oversized external mcp tool schema")
 				continue
 			}
-			if _, err := parameterHeaders(schema, nil); err != nil {
+			if _, err := ParameterHeaders(schema, nil); err != nil {
 				// Reject only this tool: never call it with incomplete parameter headers.
 				c.logger.WarnContext(ctx, "skipping unsafe external mcp tool schema", attr.SlogError(err))
 				continue
@@ -585,7 +585,7 @@ func (c *Client) callTool(ctx context.Context, name string, arguments json.RawMe
 	var headers http.Header
 	if len(schema) > 0 {
 		var err error
-		headers, err = parameterHeaders(schema, arguments)
+		headers, err = ParameterHeaders(schema, arguments)
 		if err != nil {
 			return nil, err
 		}

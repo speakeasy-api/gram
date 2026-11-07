@@ -17,16 +17,21 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -589,10 +594,15 @@ func (s *Service) executeProxiedMemberTool(
 	// protocol metadata for the negotiated revision.
 	ctx, cancel := context.WithTimeout(ctx, s.metaRuntime.MemberCallTimeout)
 	defer cancel()
-	upstreamResult, unsent, err := s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
-	if unsent {
+	upstreamResult, retry, err := s.callOnMemberSession(ctx, logger, gate, dial, redial, member, toolName, arguments, false)
+	if retry == memberCallRetryUnsent {
 		// The shared session failed before this call was sent, so one retry cannot replay it.
-		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
+		upstreamResult, retry, err = s.callOnMemberSession(ctx, logger, gate, dial, redial, member, toolName, arguments, false)
+	}
+	if retry == memberCallRetryParameterHeaders {
+		// The member refused the call before running it, so one retry with
+		// headers from its current definition cannot replay it.
+		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, gate, dial, redial, member, toolName, arguments, true)
 	}
 	if err != nil {
 		if failure, ok := errors.AsType[memberConnectionError](err); ok {
@@ -617,14 +627,80 @@ func (s *Service) executeProxiedMemberTool(
 	return bs, nil
 }
 
-// callOnMemberSession runs one tools/call on the member's session. unsent
-// reports a failure on a shared session before the call left the gateway.
-func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage) (json.RawMessage, bool, error) {
+// memberCallRetry says whether a failed member tool call may be sent again.
+type memberCallRetry string
+
+const (
+	// memberCallRetryNone means the failure is final.
+	memberCallRetryNone memberCallRetry = ""
+
+	// memberCallRetryUnsent means a shared session failed before the call left the gateway.
+	memberCallRetryUnsent memberCallRetry = "unsent"
+
+	// memberCallRetryParameterHeaders means the member refused the call for
+	// missing or stale Mcp-Param headers, which it checks before running the tool.
+	memberCallRetryParameterHeaders memberCallRetry = "parameter_headers"
+)
+
+// memberHeaderListingShare is the fraction of the member call timeout a
+// listing for parameter headers may spend, so the call keeps most of it.
+const memberHeaderListingShare = 4
+
+// listMemberToolSchema lists the member's tools on the call's session to read
+// one tool's schema, recording what it saw. Its exchanges are classified on
+// their own attempt, so a failed listing never colours the call's failure;
+// on failure the call goes out without headers.
+func (s *Service) listMemberToolSchema(ctx context.Context, logger *slog.Logger, ms *memberSession, member metaMember, toolName string) json.RawMessage {
+	attempt := newMemberAttempt(ms.dial.build)
+	listCtx, cancel := context.WithTimeout(context.WithValue(ctx, memberAttemptKey{}, attempt), s.metaRuntime.MemberCallTimeout/memberHeaderListingShare)
+	defer cancel()
+	catalog, err := listMemberSessionTools(listCtx, logger, ms.session, attempt, ms.dial, member)
+	if err != nil {
+		logger.WarnContext(ctx, "list member tools for parameter headers", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
+		return nil
+	}
+	s.rememberMemberToolSchemas(ctx, logger, member, ms.dial.sessionKey, catalog, time.Now())
+	if tool, ok := catalog.byName[toolName]; ok {
+		return tool.InputSchema
+	}
+	return nil
+}
+
+// callOnMemberSession runs one tools/call on the member's session. On a
+// session that negotiated MCP 2026-07-28 it sends the Mcp-Param headers the
+// tool's x-mcp-header annotations require, from the schema the gateway already
+// holds, or from a listing when it holds none or relist is set.
+func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, gate *metaGateContext, dial memberDial, redial memberRedial, member metaMember, toolName string, arguments json.RawMessage, relist bool) (json.RawMessage, memberCallRetry, error) {
 	ctx, ms, err := s.openMemberSession(ctx, logger, dial, redial, member)
 	if err != nil {
-		return nil, false, err
+		return nil, memberCallRetryNone, err
 	}
 	defer ms.release(ctx, logger)
+	negotiated := ms.session.InitializeResult()
+	mirrorsHeaders := negotiated != nil && mcpversions.AtLeast(negotiated.ProtocolVersion, mcpversions.Version20260728)
+	if mirrorsHeaders {
+		var schema json.RawMessage
+		known := false
+		if !relist {
+			schema, known = s.knownMemberToolSchema(ctx, gate, member, ms.dial.sessionKey, toolName, time.Now())
+		}
+		if !known {
+			schema = s.listMemberToolSchema(ctx, logger, ms, member, toolName)
+		}
+		// An empty set still replaces any Mcp-Param headers the SDK derived.
+		headers := http.Header{}
+		if externalmcp.MayDeclareParameterHeaders(schema) {
+			computed, err := externalmcp.ParameterHeaders(schema, arguments)
+			switch {
+			case err != nil:
+				// The tool definition is invalid; the member decides on a headerless call.
+				logger.WarnContext(ctx, "skip parameter headers for invalid member tool schema", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
+			case computed != nil:
+				headers = computed
+			}
+		}
+		ctx = context.WithValue(ctx, memberParameterHeadersKey{}, headers)
+	}
 	// The remotemcp interceptor writes this call's log row and never sees the
 	// gate, so carry down which auth client signs the member in. A recheck
 	// while waiting for a pooled session may have routed the member to another
@@ -638,17 +714,22 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		ms.fail(ctx)
 		unsent := ms.unsent()
 		if unsent && ctx.Err() == nil {
-			return nil, true, err
+			return nil, memberCallRetryUnsent, err
 		}
 		// A call that left the gateway is logged by the upstream interceptor.
 		if !unsent {
 			markMetaToolCallProxied(ctx)
 		}
-		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
+		retry := memberCallRetryNone
+		// Only a 400 refusal precedes dispatch; a relayed -32020 may follow a run.
+		if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok && rpcErr.Code == mcp.CodeHeaderMismatch && mirrorsHeaders && !relist && ms.outcome.status() == http.StatusBadRequest && ctx.Err() == nil {
+			retry = memberCallRetryParameterHeaders
+		}
+		return nil, retry, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
 	// The upstream interceptor wrote this call's row.
 	markMetaToolCallProxied(ctx)
-	return upstreamResult, false, nil
+	return upstreamResult, memberCallRetryNone, nil
 }
 
 // maxProxiedListPages bounds cursor-following on a member's tools/list.
@@ -702,6 +783,7 @@ func (s *Service) describeProxiedMember(ctx context.Context, logger *slog.Logger
 		ms.fail(ctx)
 		return nil, err
 	}
+	s.rememberMemberToolSchemas(ctx, logger, member, ms.dial.sessionKey, catalog, time.Now())
 	return catalog, nil
 }
 
@@ -715,6 +797,10 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	dropped := map[string]struct{}{}
 	cursor := ""
 	seenCursors := map[string]bool{}
+	cacheTTL := time.Duration(-1)
+	cachePrivate := false
+	hints := &memberListHints{mu: sync.Mutex{}, seen: false, ttl: 0, private: false}
+	ctx = context.WithValue(ctx, memberListHintsKey{}, hints)
 	for page := 0; ; page++ {
 		if page >= maxProxiedListPages {
 			logger.WarnContext(ctx, "meta MCP member tool listing truncated at the page cap", attr.SlogMcpServerID(member.serverID.String()))
@@ -725,6 +811,17 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 		if cerr != nil {
 			return nil, memberClientFailure(ctx, logger, rt, dial, member, cerr)
 		}
+		// The listing is as fresh as its stalest page; an absent or negative
+		// ttlMs is stale at once. The member's own hints count, not the ones
+		// the proxy relabelled for this session.
+		pageTTL, pagePrivate, captured := hints.take()
+		if !captured {
+			pageTTL, pagePrivate = memberListCacheHints(pageResult.TTLMs, pageResult.CacheScope)
+		}
+		if cacheTTL < 0 || pageTTL < cacheTTL {
+			cacheTTL = pageTTL
+		}
+		cachePrivate = cachePrivate || pagePrivate
 		upstreamResult, merr := json.Marshal(pageResult)
 		if merr != nil {
 			return nil, fmt.Errorf("marshal member tool listing: %w", merr)
@@ -766,7 +863,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 	}
 
 	// Rebuild entries from the kept set, matching the hosted path's output.
-	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete}
+	catalog := &memberCatalog{entries: make([]*toolListEntry, 0, len(byName)), byName: byName, incomplete: incomplete, cacheTTL: max(cacheTTL, 0), cachePrivate: cachePrivate}
 	for _, entry := range entries {
 		if kept, ok := byName[entry.Name]; ok && kept == entry {
 			catalog.entries = append(catalog.entries, entry)
