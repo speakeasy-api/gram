@@ -2961,6 +2961,10 @@ type ListChatsParams struct {
 	CursorStartTimeUnixNano int64
 
 	Limit int
+
+	// OwnScope, when set, keeps only chats with at least one row of the
+	// caller's own; the other filters narrow further. See OwnScope.
+	OwnScope *OwnScope
 }
 
 // ListChats retrieves aggregated chat summaries grouped by gram_chat_id.
@@ -3006,13 +3010,19 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 		sb = sb.Where("position(telemetry_logs.gram_urn, ?) > 0", arg.GramURN)
 	}
 	if arg.UserID != "" {
-		sb = sb.Where(squirrel.Eq{"user_id": arg.UserID})
+		// Qualified: the select aliases user_id to an aggregate, and ClickHouse
+		// resolves a bare user_id in WHERE to that alias and rejects the query.
+		sb = sb.Where(squirrel.Eq{"telemetry_logs.user_id": arg.UserID})
 	}
 	if arg.ExternalUserID != "" {
 		sb = sb.Where(squirrel.Eq{"external_user_id": arg.ExternalUserID})
 	}
 
 	sb = sb.GroupBy("gram_chat_id")
+
+	if arg.OwnScope != nil {
+		sb = sb.Having(arg.OwnScope.chatHasOwnRow())
+	}
 
 	// HAVING clause for cursor pagination with tuple comparison for tie-breaking
 	if arg.CursorStartTimeUnixNano != 0 {
@@ -3025,6 +3035,10 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatSum
 	sb = withOrdering(sb, arg.SortOrder, "start_time_unix_nano", "gram_chat_id")
 
 	sb = sb.Limit(uint64(arg.Limit)) //nolint:gosec // Limit is always positive
+
+	if arg.OwnScope != nil {
+		sb = arg.OwnScope.withFoldSettings(sb)
+	}
 
 	query, args, err := sb.ToSql()
 	if err != nil {

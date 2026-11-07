@@ -21,19 +21,19 @@ type OwnScope struct {
 	IdentityOrg string
 }
 
-// telemetryLogsPredicate scopes raw telemetry_logs rows. Legs are a flat OR:
-// hosted MCP rows keep the external id in user.id, the member's email in
-// user.email, and the internal id only in gram.auth.user_id.
+// telemetryLogsPredicate scopes raw telemetry_logs rows. Legs are a flat OR: hosted MCP rows
+// keep the external id in user.id, the member's email in user.email, and the internal id only in
+// gram.auth.user_id. Columns are table-qualified so a per-chat aggregate aliasing user_id reads the column.
 func (s *OwnScope) telemetryLogsPredicate() squirrel.Sqlizer {
 	var preds squirrel.Or
 	if s.UserID != "" {
 		preds = append(preds,
-			squirrel.Eq{"user_id": s.UserID},
+			squirrel.Eq{"telemetry_logs.user_id": s.UserID},
 			squirrel.Eq{chAttr("gram.auth.user_id"): s.UserID},
 		)
 	}
 	if s.UserEmail != "" {
-		preds = append(preds, s.emailPredicate("user_email"))
+		preds = append(preds, s.emailPredicate("telemetry_logs.user_email"))
 	}
 	if len(s.AgentIDs) > 0 {
 		// Same expression trace_summaries_mv derives agent_id from.
@@ -57,6 +57,13 @@ func (s *OwnScope) traceSummariesPredicate() squirrel.Sqlizer {
 		preds = append(preds, squirrel.Eq{"agent_id": s.AgentIDs})
 	}
 	return failClosed(preds)
+}
+
+// chatHasOwnRow admits a per-chat aggregate when any of the chat's rows is
+// the member's own. Rows are not filtered individually: a session's tool-call
+// rows often carry no identity, and dropping them would deflate its counts.
+func (s *OwnScope) chatHasOwnRow() squirrel.Sqlizer {
+	return squirrel.Expr("countIf(?) > 0", s.telemetryLogsPredicate())
 }
 
 // withFoldSettings adds the identity-fold query settings when needed.

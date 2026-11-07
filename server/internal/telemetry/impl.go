@@ -330,14 +330,16 @@ func (s *Service) SearchToolCalls(ctx context.Context, payload *telem_gen.Search
 	}, nil
 }
 
-// SearchChats retrieves chat session summaries with pagination.
+// SearchChats retrieves chat session summaries with pagination. A summary
+// names the session's user, so chat:read reads the whole project and a member
+// without it reads their own sessions and their agents' only.
 func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChatsPayload) (res *telem_gen.SearchChatsResult, err error) {
 	var from, to *string
 	if payload.Filter != nil {
 		from, to = payload.Filter.From, payload.Filter.To
 	}
 
-	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeProjectRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
+	params, err := s.prepareTelemetrySearch(ctx, authz.ScopeChatRead, payload.Limit, payload.Sort, payload.Cursor, from, to)
 	if err != nil {
 		return nil, err
 	}
@@ -363,6 +365,7 @@ func (s *Service) SearchChats(ctx context.Context, payload *telem_gen.SearchChat
 		Cursor:                  cursorChatID,
 		CursorStartTimeUnixNano: cursorStart,
 		Limit:                   params.limit + 1,
+		OwnScope:                params.ownScope,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing chats")
@@ -1848,8 +1851,9 @@ type searchParams struct {
 // prepareTelemetrySearch authorizes the caller for requiredScope on the active
 // project, then validates and prepares common search parameters. Endpoints that
 // return individual tool calls or raw log records pass authz.ScopeLogRead, since
-// those rows carry every member's tool arguments, results, and prompts;
-// aggregate and per-person summary endpoints pass authz.ScopeProjectRead.
+// those rows carry every member's tool arguments, results, and prompts; chat
+// session summaries pass authz.ScopeChatRead; aggregate and per-person summary
+// endpoints pass authz.ScopeProjectRead.
 func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope authz.Scope, limit int, sort string, cursor *string, from, to *string) (*searchParams, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -1903,22 +1907,23 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 	}, nil
 }
 
-// resolveSearchScope returns nil when the caller may read the whole project.
-// A member without log:read gets an OwnScope instead of a refusal: their own
-// sessions plus agents they currently own. Non-human callers keep plain Require.
+// resolveSearchScope returns nil when the caller may read the whole project. A member
+// without log:read or chat:read gets an OwnScope instead of a refusal: their own sessions
+// plus agents they currently own. Non-human callers keep plain Require.
 func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
 	check := authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}
 	// Only a member reading as themselves falls back. API keys, assistant
 	// runtime and embedded chat-session callers keep the plain check.
 	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	if requiredScope != authz.ScopeLogRead || authCtx.UserID == "" || authCtx.ExternalUserID != "" || authCtx.APIKeyID != "" || isAssistantCall {
+	fallsBack := requiredScope == authz.ScopeLogRead || requiredScope == authz.ScopeChatRead
+	if !fallsBack || authCtx.UserID == "" || authCtx.ExternalUserID != "" || authCtx.APIKeyID != "" || isAssistantCall {
 		return nil, s.authz.Require(ctx, check)
 	}
 	// Evaluate, not Require: a member without the grant is expected, not a
 	// denial to record. It also keeps project-wide reads where RBAC is off.
 	allowed, err := s.authz.Evaluate(ctx, check)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "evaluate log read access")
+		return nil, oops.E(oops.CodeUnexpected, err, "evaluate telemetry read access")
 	}
 	if allowed {
 		return nil, nil
