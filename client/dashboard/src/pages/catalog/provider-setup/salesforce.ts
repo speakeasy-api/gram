@@ -83,9 +83,10 @@ export function salesforceSetupInstallServer(
   server: CatalogServer,
 ): CatalogServer | null {
   const remotes = server.remotes ?? [];
+  const reads = salesforceServers.find((item) => item.id === "sobject-reads");
   const remote =
     remotes.find(
-      (item) => item.url === nativeUrl(salesforceServers[0], "production"),
+      (item) => reads && item.url === nativeUrl(reads, "production"),
     ) ?? remotes.find((item) => salesforceSelectionForUrl(item.url));
   if (!remote) return null;
   return {
