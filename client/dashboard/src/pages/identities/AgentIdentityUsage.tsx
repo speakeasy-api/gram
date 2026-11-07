@@ -13,7 +13,8 @@ import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import { useUser } from "@/contexts/Auth";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
-import { agentToolUsagePayload } from "./identityLocalTools";
+import { useScopedToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -41,32 +42,23 @@ export function AgentIdentityUsage({
   const { from, to } = useIdentityWindow();
   const { slug: gramProject } = useIdentityProject();
 
-  const payload = useMemo(
-    () =>
-      agentToolUsagePayload({
-        agentId: agent.id,
-        from,
-        to,
-        includeLocalTools,
-      }),
-    [from, to, agent.id, includeLocalTools],
+  // The agent's bare id, not its `agent:` urn: the telemetry filter takes the
+  // principal's id and builds the urn itself.
+  const userFilters = useMemo<ToolUsageUserFilter[]>(
+    () => [{ kind: "agent_id", key: agent.id }],
+    [agent.id],
   );
-  // Keyed by hand. These endpoints take their subject and window in the body,
-  // and the generated key covers only the project and auth headers — so every
-  // agent and every range would share one cache entry and the first answer
-  // would be kept for all of them. The local tools choice changes the body
-  // too, so it is in the key.
-  const key = [
-    "agent-usage",
-    gramProject,
-    agent.id,
-    from.toISOString(),
-    to.toISOString(),
-    includeLocalTools ? "with-local-tools" : "without-local-tools",
-  ];
+  // Built and keyed exactly as the Tool logs further down this page build
+  // theirs, so the totals and the series are one request each for both. Keyed
+  // by hand before, the page sent each of them twice. The key carries the
+  // body (subject, window, local tools choice), which the generated key
+  // leaves out.
+  const { summaryPayload: payload, sharedQueryKey } = useScopedToolUsagePayload(
+    { userFilters, includeLocalTools, from, to },
+  );
 
   const totals = useQuery({
-    queryKey: ["totals", ...key],
+    queryKey: ["tool-usage-totals", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTotals(client, {
@@ -77,7 +69,7 @@ export function AgentIdentityUsage({
     throwOnError: false,
   });
   const targets = useQuery({
-    queryKey: ["targets", ...key],
+    queryKey: ["tool-usage-targets", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTargets(client, {
@@ -88,7 +80,7 @@ export function AgentIdentityUsage({
     throwOnError: false,
   });
   const series = useQuery({
-    queryKey: ["series", ...key],
+    queryKey: ["tool-usage-target-time-series", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTargetTimeSeries(client, {
