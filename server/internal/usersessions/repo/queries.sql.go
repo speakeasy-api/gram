@@ -5144,6 +5144,13 @@ mapped AS (
                AND other.client_type IN ('remote_session', 'service_account', 'ema')
            ))
     GROUP BY d.mcp_server_id
+),
+locked_servers AS (
+    SELECT s.id
+    FROM mcp_servers AS s
+    WHERE s.id IN (SELECT mcp_server_id FROM decided)
+    ORDER BY s.id
+    FOR KEY SHARE OF s
 )
 INSERT INTO upstream_client_selections (
     project_id,
@@ -5170,6 +5177,8 @@ SELECT d.project_id,
        COALESCE(auth_client.attachment_scope, named.attachment_scope),
        $3::text
 FROM decided AS d
+JOIN locked_servers AS locked
+  ON locked.id = d.mcp_server_id
 CROSS JOIN session_issuer AS si
 JOIN projects AS server_project
   ON server_project.id = d.project_id
@@ -5285,6 +5294,11 @@ type RecordUpstreamClientSelectionsParams struct {
 // has reconciled the clients. A choice is mapped only when exactly one such
 // client exists; otherwise it is recorded unmapped, as before, and coverage
 // reports it.
+// The insert's foreign-key checks lock each server it records, in whatever
+// order the plan yields them, interleaved with locks on the clients each row
+// names. EMA writers (authclientbackfill.LockEMAWriterScope) lock every server
+// in a project FOR UPDATE in UUID order before its clients, so the servers
+// are locked here first, in that order, or the two deadlock.
 func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg RecordUpstreamClientSelectionsParams) (int64, error) {
 	result, err := q.db.Exec(ctx, recordUpstreamClientSelections,
 		arg.CredentialKind,
