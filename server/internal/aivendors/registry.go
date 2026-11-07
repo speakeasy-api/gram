@@ -713,6 +713,28 @@ var registry = []Product{
 		Documents:       nil,
 	},
 
+	// Mistral Vibe (mistralai/mistral-vibe): the binary is `vibe` (uv tool
+	// install mistral-vibe), global configuration under ~/.vibe (config.toml,
+	// hooks.toml, plugins/, skills/), overridable via VIBE_HOME. ~/.vibe is
+	// matched rather than a deeper subdir so a fresh install counts before
+	// anything has populated it. No CIMD document published, so a decision
+	// about it is recorded but not enforceable.
+	{
+		ID:          "vibe",
+		VendorKey:   "mistral",
+		DisplayName: "Mistral Vibe",
+		Category:    CategoryHarness,
+		Signatures: Signatures{
+			BundleIDs:    nil,
+			Binaries:     []string{"vibe"},
+			ConfigDirs:   []string{"~/.vibe"},
+			ProcessNames: []string{"vibe"},
+		},
+		VersionPlistKey: "",
+		ClientInfoNames: []string{"vibe", "mistral-vibe", "Mistral Vibe"},
+		Documents:       nil,
+	},
+
 	// Signatures verified 2026-09-11 against charmbracelet/crush: the binary
 	// is `crush`, config at ~/.config/crush and state at
 	// ~/.local/share/crush. XDG-aware, so both can move; the binary carries

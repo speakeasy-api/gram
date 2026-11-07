@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "post_tool",
+  "session_id": "vibe-session-1",
+  "parent_session_id": null,
+  "transcript_path": "/tmp/vibe-sessions/vibe-session-1.jsonl",
+  "cwd": "/tmp/vibe-project",
+  "tool_name": "file_system.read_file",
+  "tool_call_id": "call_44",
+  "tool_input": { "path": "/tmp/vibe-project/missing.txt" },
+  "tool_status": "failure",
+  "tool_output": null,
+  "tool_output_text": "",
+  "tool_error": "File not found: /tmp/vibe-project/missing.txt",
+  "duration_ms": 3
+}

@@ -1101,6 +1101,25 @@ func TestPluginsService_DownloadPluginPackage(t *testing.T) {
 	require.NoError(t, body.Close())
 }
 
+func TestPluginsService_DownloadObservabilityPluginVibe(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestPluginsService(t)
+
+	result, body, err := ti.service.DownloadObservabilityPlugin(ctx, &gen.DownloadObservabilityPluginPayload{Platform: "vibe"})
+	require.NoError(t, err)
+	require.Equal(t, "application/zip", result.ContentType)
+	require.Contains(t, result.ContentDisposition, `filename="observability-vibe.zip"`)
+
+	files := readZipFiles(t, body)
+	hooksTOML, ok := files["ai.mistral.vibe/hooks.toml"]
+	require.True(t, ok, "vibe download must ship ai.mistral.vibe/hooks.toml at the ZIP root")
+	require.Contains(t, string(hooksTOML), "--provider=vibe")
+	for _, name := range []string{"plugin.json", "speakeasy.json", "hooks/bootstrap.sh", "hooks/bootstrap.ps1"} {
+		require.Contains(t, files, name, "vibe download must ship %s", name)
+	}
+}
+
 func TestPluginsService_DownloadCodexInstallScriptConfiguresOTELSignals(t *testing.T) {
 	t.Parallel()
 

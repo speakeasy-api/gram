@@ -1,5 +1,6 @@
 import { useFetcher } from "@/contexts/Fetcher";
 import { filenameFromContentDisposition } from "@/lib/download";
+import type { Platform } from "@gram/client/models/operations/downloadobservabilityplugin.js";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -8,7 +9,7 @@ import { toast } from "sonner";
  * differ only in the `platform` query value and the fallback filename.
  */
 export function useObservabilityPluginDownload(
-  platform: string,
+  platform: Platform,
   fallbackName: string,
 ): { isDownloading: boolean; download: () => Promise<void> } {
   const { fetch: authFetch } = useFetcher();
