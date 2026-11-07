@@ -56,7 +56,7 @@ func TestServeConsent_DirectSharedRegistrationRetainsTargetReadiness(t *testing.
 				q := remotesessionsrepo.New(fx.ti.conn)
 				var ids []uuid.UUID
 				for _, target := range []struct{ resource, identity string }{
-					{consentUpstreamA, "Account A"}, {consentUpstreamB, "Account B"},
+					{consentUpstreamA, "Account A"}, {"https://target-c.example.test/mcp", "Account C"}, {consentUpstreamB, "Account B"},
 				} {
 					row, err := q.UpsertRemoteSession(ctx, remotesessionsrepo.UpsertRemoteSessionParams{
 						SubjectUrn: fx.subject, UserSessionIssuerID: fx.shared, RemoteSessionClientID: registration,
@@ -66,8 +66,22 @@ func TestServeConsent_DirectSharedRegistrationRetainsTargetReadiness(t *testing.
 					})
 					require.NoError(t, err)
 					ids = append(ids, row.ID)
+					if target.resource != consentUpstreamB {
+						fx.endpoint.UpstreamResource = consentUpstreamB
+						code, html, _ := render(t, fx)
+						if code == http.StatusSeeOther {
+							code, html, _ = render(t, fx)
+						}
+						require.Equal(t, http.StatusOK, code)
+						require.Contains(t, html, "0 of 1 connected")
+						require.Contains(t, html, consentReconnectCopy)
+						require.NotContains(t, html, "Account A")
+						require.NotContains(t, html, "Account C")
+						require.NotContains(t, html, consentManagedCopy)
+					}
 				}
-				require.NotEqual(t, ids[0], ids[1], "the expanded session key must retain both targets")
+				require.NotEqual(t, ids[0], ids[1], "the expanded session key must retain sibling targets")
+				require.NotEqual(t, ids[0], ids[2], "the expanded session key must retain both direct targets")
 				for _, target := range []struct{ resource, own, sibling string }{
 					{consentUpstreamA, "Account A", "Account B"}, {consentUpstreamB, "Account B", "Account A"},
 				} {
@@ -77,6 +91,7 @@ func TestServeConsent_DirectSharedRegistrationRetainsTargetReadiness(t *testing.
 					require.Contains(t, html, "1 of 1 connected")
 					require.Contains(t, html, target.own)
 					require.NotContains(t, html, target.sibling)
+					require.NotContains(t, html, "Account C")
 					require.NotContains(t, html, consentReconnectCopy)
 				}
 			})

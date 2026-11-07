@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -40,7 +41,7 @@ func TestConsentSessionRouting_DirectPersistedTargetReadiness(t *testing.T) {
 	subject := urn.NewUserSubject("user_target_readiness")
 	endpoint := ResolvedMcpEndpoint{OrganizationID: f.orgID, ProjectID: f.projectID, UserSessionIssuerID: signIn, McpServerID: validUUID(f.serverID)}
 	typed := map[uuid.UUID]uuid.UUID{f.registration: f.projectID}
-	clients := []remotesessions.Client{{ID: f.registration}}
+	clients := []remotesessions.Client{{ID: f.registration, RemoteSessionIssuerID: f.issuerID}}
 	const resourceA = "https://target-a.example.test/mcp"
 	const resourceB = "https://target-b.example.test/mcp"
 	q := remotesessionsrepo.New(pool)
@@ -67,7 +68,41 @@ func TestConsentSessionRouting_DirectPersistedTargetReadiness(t *testing.T) {
 	a := put(resourceA, "Account A", "read:a")
 	require.Equal(t, a, read(endpoint, subject)[f.registration].ID)
 	endpoint.UpstreamResource = resourceB
-	require.Empty(t, read(endpoint, subject), "A alone cannot ready B")
+	assertElsewhere := func() {
+		t.Helper()
+		statuses, routing, err := f.service.consentSessionRouting(ctx, &endpoint, AuthnChallengeState{Subject: &subject}, clients, typed)
+		require.NoError(t, err)
+		marker, ok := statuses[f.registration]
+		require.True(t, ok, "retain only the reconnect indication")
+		require.True(t, routing.unroutable(clients[0], marker.Resource), "A cannot ready B")
+		// Equality checks every field: no row ID/CAS, timestamps, scope, identity,
+		// validation result, token, or lifecycle authority may survive stripping.
+		require.Equal(t, remotesessions.RemoteSessionState{Status: remotesessions.RemoteSessionActive, Resource: resourceB + "#connected-elsewhere", AutoRefresh: true}, marker)
+		strict, err := f.service.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.orgID, []uuid.UUID{f.registration}, resourceB)
+		require.NoError(t, err)
+		require.Empty(t, strict, "a display marker cannot enter strict state reads")
+		tokens, err := f.service.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: signIn, Subject: subject, RegistrationID: f.registration, Resource: resourceB})
+		require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+		require.Empty(t, tokens, "a display marker cannot supply B's bearer")
+		changed, err := f.service.remoteChallengeMgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.orgID, f.registration, resourceB, false)
+		require.NoError(t, err)
+		require.Zero(t, changed, "B's marker cannot change a sibling's refresh preference")
+		changed, err = f.service.remoteChallengeMgr.DisconnectAuthClientRemoteSessionForResource(ctx, subject, f.projectID, f.orgID, f.registration, resourceB)
+		require.NoError(t, err)
+		require.Zero(t, changed, "B's marker cannot disconnect a sibling")
+		aStates, err := f.service.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.orgID, []uuid.UUID{f.registration}, resourceA)
+		require.NoError(t, err)
+		require.Equal(t, a, aStates[f.registration].ID, "the actual A grant remains intact")
+		governor := &funcGovernor{configured: true, serves: func(identitychaining.Request) (uuid.UUID, bool) { return f.issuerID, true }}
+		f.service.identityChainer = governor
+		require.Empty(t, f.service.consentChainingRequests(ctx, &endpoint, AuthnChallengeState{Subject: &subject}, clients, routing), "known unroutable connections cannot become identity-chained")
+		require.Empty(t, governor.requests, "no provider request is considered")
+		f.service.identityChainer = nil
+	}
+	assertElsewhere()
+	c := put("https://target-c.example.test/mcp", "Account C", "admin:c")
+	require.NotEqual(t, a, c)
+	assertElsewhere() // Multiple siblings must not select a representative row.
 	b := put(resourceB, "Account B", "write:b")
 	require.NotEqual(t, a, b, "both resource grants must coexist")
 	for _, target := range []struct {

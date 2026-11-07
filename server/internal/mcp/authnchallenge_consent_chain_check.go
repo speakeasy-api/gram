@@ -70,10 +70,22 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, routing, err
 	}
+	statuses, err = s.withDirectConnectionsElsewhere(ctx, endpoint, *challengeState.Subject, clients, typed, statuses)
+	if err != nil {
+		return nil, routing, err
+	}
 	if len(statuses) > 0 {
 		routing, err = s.resolveConsentRouting(ctx, endpoint, challengeState, clients, statuses)
 		if err != nil {
 			return nil, routing, err
+		}
+	}
+	if endpoint.directConsentResource() != "" {
+		routing.unroutableClients = make(map[uuid.UUID]bool)
+		for _, client := range clients {
+			if state, ok := statuses[client.ID]; ok && state.Status == remotesessions.RemoteSessionActive && routing.unroutable(client, state.Resource) {
+				routing.unroutableClients[client.ID] = true
+			}
 		}
 	}
 	return statuses, routing, nil

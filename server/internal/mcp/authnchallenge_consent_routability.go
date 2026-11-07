@@ -35,6 +35,8 @@ const (
 type consentRouting struct {
 	backend  consentBackend
 	upstream string // the single proxied server's upstream
+	// Missing-target reconnect markers must not become identity-chaining requests.
+	unroutableClients map[uuid.UUID]bool
 	// members claiming each client's grant, keyed by remote session client,
 	// meta only.
 	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
