@@ -15,6 +15,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
@@ -408,7 +409,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
-		metric.WithDescription("Stored MCP connection attempt steps by outcome, step, reason, who fixes it and known provider."),
+		metric.WithDescription("MCP connection attempt steps stored in ClickHouse, by outcome, step, reason, who fixes it and known provider. Rows not stored, including those of organizations with logs off, are not counted."),
 		metric.WithUnit("{step}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSteps), attr.SlogError(err))
@@ -854,19 +855,23 @@ func (r *Recorder) insert(rows []Row) bool {
 	return false
 }
 
-// countSteps counts stored rows only, so dropped rows never reach the metric.
+// countSteps counts stored rows only, so dropped rows, including every row of an
+// organization with logs off, never reach the metric.
 func (r *Recorder) countSteps(rows []Row) {
 	if r.steps == nil {
 		return
 	}
 	for _, row := range rows {
-		r.steps.Add(context.Background(), 1, metric.WithAttributes(
+		tags := []attribute.KeyValue{
 			attr.ConnectionOutcome(row.Outcome),
 			attr.ConnectionStep(row.Step),
 			attr.ConnectionReason(row.Reason),
 			attr.ConnectionWhoFixes(row.WhoFixes),
-			attr.ConnectionProvider(ProviderLabel(row.ProviderHost)),
-		))
+		}
+		if provider := ProviderLabel(row.ProviderHost); provider != "" {
+			tags = append(tags, attr.ConnectionProvider(provider))
+		}
+		r.steps.Add(context.Background(), 1, metric.WithAttributes(tags...))
 	}
 }
 

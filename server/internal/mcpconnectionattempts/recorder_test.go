@@ -592,6 +592,12 @@ func TestRecord_MetricKeepsAKnownProvider(t *testing.T) {
 		providers[tags[string(attr.ConnectionProviderKey)]] = true
 	}
 	require.Equal(t, map[string]bool{"accounts.google.com": true, "": true}, providers)
+	for _, tags := range stepTags(t, recorder) {
+		if tags[string(attr.ConnectionStepKey)] == StepInboundToken.String() {
+			_, tagged := tags[string(attr.ConnectionProviderKey)]
+			require.False(t, tagged, "a row that reached no provider has no provider tag")
+		}
+	}
 }
 
 // stepTags returns each step metric point's tags.
