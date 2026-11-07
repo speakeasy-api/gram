@@ -86,8 +86,19 @@ func NewStaffReviews(logger *slog.Logger, tracerProvider trace.TracerProvider, d
 	}
 }
 
+// Available reports whether the home organization's rollout gates admit a new
+// review, so staff surfaces can say so before anyone tries to start one.
+func (r *StaffReviews) Available(ctx context.Context) bool {
+	if r.service.research == nil {
+		return false
+	}
+	return r.service.requireFeature(ctx, r.organizationID) == nil && r.service.requireResearchEnabled(ctx, r.organizationID) == nil
+}
+
 // Find returns the existing review for a server URL, or nil when none exists.
-// It is a plain read: no evidence is gathered and nothing is recorded.
+// It is a plain read: no evidence is gathered and nothing is recorded. It skips
+// the rollout gates on purpose, because they stop new spend and must not hide
+// findings staff already paid for, including while the kill switch is on.
 func (r *StaffReviews) Find(ctx context.Context, serverURL string) (*StaffReview, error) {
 	key, _, err := admittableServerURL(serverURL)
 	if err != nil {
@@ -108,6 +119,9 @@ func (r *StaffReviews) Find(ctx context.Context, serverURL string) (*StaffReview
 func (r *StaffReviews) Start(ctx context.Context, serverURL, actor string, actorEmail *string) (*StaffReview, error) {
 	if strings.TrimSpace(actor) == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if _, _, err := admittableSecureServerURL(serverURL); err != nil {
+		return nil, fmt.Errorf("check staff review target: %w", err)
 	}
 	if err := r.service.requireFeature(ctx, r.organizationID); err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrStaffReviewDisabled, err)

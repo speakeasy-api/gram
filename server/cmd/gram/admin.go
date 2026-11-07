@@ -4,10 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"log/slog"
 	"net"
 	"net/http"
@@ -139,15 +138,13 @@ func newAdminCommand() *cli.Command {
 		},
 		&cli.StringFlag{
 			Name:    "catalog-review-organization-id",
-			Usage:   "Speakeasy-owned organization that runs catalogue promotion reviews and receives their audit entries",
+			Usage:   "Speakeasy-owned organization that runs catalogue promotion reviews and receives their audit entries. Defaults to Speakeasy's own organization in prod; reviews stay off elsewhere until set",
 			EnvVars: []string{"GRAM_CATALOG_REVIEW_ORGANIZATION_ID"},
-			Value:   constants.SpeakeasyTeamOrganizationID,
 		},
 		&cli.StringFlag{
 			Name:    "catalog-review-project-id",
 			Usage:   "Project inside the catalogue review organization",
 			EnvVars: []string{"GRAM_CATALOG_REVIEW_PROJECT_ID"},
-			Value:   constants.SpeakeasyTeamDefaultProjectID,
 		},
 		&cli.StringFlag{
 			Name:    "github-evidence-token",
@@ -552,18 +549,19 @@ func newAdminCommand() *cli.Command {
 				adminService.SetProjectRedeployer(projectRedeployer)
 			}
 			catalogPromotions := catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy)
-			reviewProjectID, err := uuid.Parse(c.String("catalog-review-project-id"))
+			reviewHome, reviewsEnabled, err := resolveCatalogReviewHome(c.String("environment"), c.String("catalog-review-organization-id"), c.String("catalog-review-project-id"))
 			if err != nil {
-				return fmt.Errorf("invalid catalog review project id: %w", err)
+				return fmt.Errorf("configure catalog promotion reviews: %w", err)
 			}
-			reviewOrganizationID := c.String("catalog-review-organization-id")
-			catalogPromotions.SetHome(catalogpromotion.Home{OrganizationID: reviewOrganizationID, ProjectID: reviewProjectID})
-			if temporalEnv != nil {
-				reviewFlags := newFeatureFlags(ctx, c, logger, posthogClient)
-				reviewCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(registryService))
-				catalogPromotions.SetReviewer(mcpapproval.NewStaffReviews(logger, tracerProvider, db, reviewFlags, audit.NewLogger(),
-					newMCPApprovalAssembler(logger, db, guardianPolicy, billingTelemetry, reviewCatalog, c.String("github-evidence-token")),
-					mcpApprovalResearchStarter(temporalEnv), reviewOrganizationID, reviewProjectID))
+			if reviewsEnabled {
+				catalogPromotions.SetHome(reviewHome)
+				if temporalEnv != nil {
+					reviewFlags := newFeatureFlags(ctx, c, logger, posthogClient)
+					reviewCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(registryService))
+					catalogPromotions.SetReviewer(mcpapproval.NewStaffReviews(logger, tracerProvider, db, reviewFlags, audit.NewLogger(),
+						mcpapprovalevidence.NewProductionAssembler(logger, db, guardianPolicy, billingTelemetry, reviewCatalog, c.String("github-evidence-token")),
+						mcpApprovalResearchStarter(temporalEnv), reviewHome.OrganizationID, reviewHome.ProjectID))
+				}
 			}
 			adminService.SetCatalogPromotionService(catalogPromotions)
 			adminService.SetMCPServerURL(mcpServerURL)

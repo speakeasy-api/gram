@@ -98790,9 +98790,13 @@ components:
                     type: string
                 review:
                     $ref: '#/components/schemas/AdminRegistryPromotionReview'
-                review_allowed:
-                    type: boolean
-                    description: Whether this endpoint can be reviewed. URLs that may carry tenant data cannot.
+                review_availability:
+                    type: string
+                    description: Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.
+                    enum:
+                        - available
+                        - endpoint_not_allowed
+                        - disabled
                 setup_guides:
                     type: array
                     items:
@@ -98820,7 +98824,6 @@ components:
                 - source_revision
                 - eligible
                 - can_override_eligibility
-                - review_allowed
                 - reason
                 - status
                 - observed_successes

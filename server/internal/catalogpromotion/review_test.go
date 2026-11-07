@@ -15,11 +15,14 @@ import (
 
 type fakeReviewer struct {
 	found    *mcpapproval.StaffReview
+	off      bool
 	findErr  error
 	startErr error
 	started  []string
 	actors   []string
 }
+
+func (f *fakeReviewer) Available(context.Context) bool { return !f.off }
 
 func (f *fakeReviewer) Find(context.Context, string) (*mcpapproval.StaffReview, error) {
 	return f.found, f.findErr
@@ -90,7 +93,7 @@ func TestInspectCandidateAddsAccountUsageAndReview(t *testing.T) {
 	candidate, err := f.service.InspectCandidate(t.Context(), f.target)
 
 	require.NoError(t, err)
-	require.True(t, candidate.ReviewAllowed)
+	require.Equal(t, ReviewAvailable, candidate.ReviewAvailability)
 	require.Equal(t, "existing-review", candidate.Review.RequestID)
 	require.NotNil(t, candidate.AccountUsage)
 	require.Equal(t, int64(3), candidate.AccountUsage.DistinctUsers)
@@ -134,4 +137,18 @@ func TestPromotionAuditLandsInHomeOrganization(t *testing.T) {
 	require.Equal(t, syntheticHome.OrganizationID, event.OrganizationID)
 	require.Equal(t, syntheticHome.ProjectID, event.ProjectID.UUID)
 	require.NotEqual(t, f.target.OrganizationID, event.OrganizationID)
+}
+
+func TestInspectCandidateReportsDisabledReviews(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+
+	candidate, err := f.service.InspectCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	require.Equal(t, ReviewDisabled, candidate.ReviewAvailability)
+
+	f.service.SetReviewer(&fakeReviewer{off: true})
+	candidate, err = f.service.InspectCandidate(t.Context(), f.target)
+	require.NoError(t, err)
+	require.Equal(t, ReviewDisabled, candidate.ReviewAvailability)
 }

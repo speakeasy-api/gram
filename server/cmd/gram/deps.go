@@ -8,15 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
-	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
-	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1862,25 +1856,32 @@ func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) back
 	return provisioner
 }
 
-// newMCPApprovalAssembler builds the one evidence assembler every MCP review
-// uses. One probe serves both the authority and tool-declarations slots: they
-// are two views of the same remote prober.
-func newMCPApprovalAssembler(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, traffic exposure.Reader, catalog mcpapprovalcatalog.Catalog, githubToken string) *mcpapprovalevidence.Assembler {
-	remoteProber := remoteprobe.New(logger, guardianPolicy)
-	return mcpapprovalevidence.NewAssembler(
-		packagemeta.NewClient(guardianPolicy.PooledClient()),
-		repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubToken)),
-		mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
-		domainmeta.NewClient(guardianPolicy.PooledClient()),
-		traffic,
-		remoteProber,
-		remoteProber,
-		mcpapprovalcatalog.New(logger, db, catalog),
-	)
+// resolveCatalogReviewHome reads the Speakeasy-owned project that holds catalogue
+// promotion reviews. Production defaults to Speakeasy's own organization. Other
+// environments have their own organizations, so reviews stay off there until
+// both values are set.
+func resolveCatalogReviewHome(environment, organizationID, projectID string) (catalogpromotion.Home, bool, error) {
+	if organizationID == "" && projectID == "" {
+		if environment != "prod" {
+			return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, nil
+		}
+		organizationID, projectID = constants.SpeakeasyTeamOrganizationID, constants.SpeakeasyTeamDefaultProjectID
+	}
+	if strings.TrimSpace(organizationID) == "" {
+		return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, errors.New("catalog review organization id is required with a project id")
+	}
+	project, err := uuid.Parse(projectID)
+	if err != nil {
+		return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, fmt.Errorf("invalid catalog review project id: %w", err)
+	}
+	return catalogpromotion.Home{OrganizationID: organizationID, ProjectID: project}, true, nil
 }
 
 // mcpApprovalResearchStarter enqueues research runs on the shared workflow.
 func mcpApprovalResearchStarter(temporalEnv *temporal.Environment) mcpapproval.ResearchStarter {
+	if temporalEnv == nil {
+		return nil
+	}
 	return func(ctx context.Context, run mcpapproval.ResearchRun) error {
 		_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
 			ReportID:  run.ReportID,

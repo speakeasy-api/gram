@@ -14,9 +14,9 @@ const ActionCatalogPromotionRetryDocs Action = "catalog-promotion:retry-docs"
 
 // LogCatalogPromotionRetryDocsEvent scopes a retry without source connection data.
 type LogCatalogPromotionRetryDocsEvent struct {
-	// OrganizationID identifies the original source tenant.
+	// OrganizationID is the Speakeasy-owned organization that holds promotion audit entries, never the source tenant.
 	OrganizationID string
-	// ProjectID is absent when the source project was deleted.
+	// ProjectID is the project inside that organization.
 	ProjectID uuid.NullUUID
 	// Actor is the verified staff principal.
 	Actor urn.Principal
@@ -40,9 +40,9 @@ const ActionCatalogPromotionReject Action = "catalog-promotion:reject"
 
 // LogCatalogPromotionRejectEvent scopes rejection without source connection data.
 type LogCatalogPromotionRejectEvent struct {
-	// OrganizationID identifies the original source tenant.
+	// OrganizationID is the Speakeasy-owned organization that holds promotion audit entries, never the source tenant.
 	OrganizationID string
-	// ProjectID is absent when the source project was deleted.
+	// ProjectID is the project inside that organization.
 	ProjectID uuid.NullUUID
 	// Actor is the verified staff principal.
 	Actor urn.Principal
@@ -66,9 +66,9 @@ const ActionCatalogPromotionArchive Action = "catalog-promotion:archive"
 
 // LogCatalogPromotionArchiveEvent scopes archive without source connection data.
 type LogCatalogPromotionArchiveEvent struct {
-	// OrganizationID identifies the original source tenant.
+	// OrganizationID is the Speakeasy-owned organization that holds promotion audit entries, never the source tenant.
 	OrganizationID string
-	// ProjectID is absent when the source project was deleted.
+	// ProjectID is the project inside that organization.
 	ProjectID uuid.NullUUID
 	// Actor is the verified staff principal.
 	Actor urn.Principal
@@ -92,9 +92,9 @@ const ActionCatalogPromotionRestore Action = "catalog-promotion:restore"
 
 // LogCatalogPromotionRestoreEvent scopes restoration without source connection data.
 type LogCatalogPromotionRestoreEvent struct {
-	// OrganizationID identifies the original source tenant.
+	// OrganizationID is the Speakeasy-owned organization that holds promotion audit entries, never the source tenant.
 	OrganizationID string
-	// ProjectID is absent when the source project was deleted.
+	// ProjectID is the project inside that organization.
 	ProjectID uuid.NullUUID
 	// Actor is the verified staff principal.
 	Actor urn.Principal

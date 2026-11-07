@@ -24405,7 +24405,7 @@ func marshalAdminAdminRegistryPromotionCandidateToAdminRegistryPromotionCandidat
 		CurationRevision:       v.CurationRevision,
 		SetupGuidesVersion:     v.SetupGuidesVersion,
 		EndpointGuideSlug:      v.EndpointGuideSlug,
-		ReviewAllowed:          v.ReviewAllowed,
+		ReviewAvailability:     v.ReviewAvailability,
 		SourceRevision:         v.SourceRevision,
 		Eligible:               v.Eligible,
 		CanOverrideEligibility: v.CanOverrideEligibility,

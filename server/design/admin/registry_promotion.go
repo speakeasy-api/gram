@@ -90,7 +90,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("auth_discovery", AdminRegistryPromotionAuthDiscovery)
 	Attribute("account_usage", AdminRegistryPromotionAccountUsage)
 	Attribute("review", AdminRegistryPromotionReview)
-	Attribute("review_allowed", Boolean, "Whether this endpoint can be reviewed. URLs that may carry tenant data cannot.")
+	Attribute("review_availability", String, "Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.", func() { Enum("available", "endpoint_not_allowed", "disabled") })
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
 	Attribute("can_override_eligibility", Boolean, "Whether staff may explicitly accept this candidate's health evidence.")
@@ -112,7 +112,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("promoted_at", String, func() { Format(FormatDateTime) })
 	Attribute("public_title", String)
 	Attribute("delivery_error", String)
-	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "can_override_eligibility", "review_allowed", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
+	Required("created_at", "curation_revision", "id", "organization_id", "project_id", "mcp_server_id", "remote_mcp_server_id", "source_revision", "eligible", "can_override_eligibility", "reason", "status", "observed_successes", "observed_failures", "observed_days", "docs_revision", "docs_retry_allowed", "docs_attempts")
 })
 
 var AdminRegistryPromotionCandidates = Type("AdminRegistryPromotionCandidates", func() {

@@ -44,7 +44,7 @@ func promotionCandidateView(c catalogpromotion.Candidate) *gen.AdminRegistryProm
 		}
 		usage = &gen.AdminRegistryPromotionAccountUsage{WindowDays: v.WindowDays, DistinctUsers: v.DistinctUsers, Clients: v.Clients, Tools: tools, Transport: v.Transport, ResourceName: conv.PtrEmpty(v.ResourceName), DocumentationURL: conv.PtrEmpty(v.DocumentationURL)}
 	}
-	return &gen.AdminRegistryPromotionCandidate{AccountUsage: usage, Review: promotionReviewView(c.Review), ReviewAllowed: c.ReviewAllowed, AuthDiscovery: discovery, CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions,
+	return &gen.AdminRegistryPromotionCandidate{AccountUsage: usage, Review: promotionReviewView(c.Review), ReviewAvailability: conv.PtrEmpty(c.ReviewAvailability), AuthDiscovery: discovery, CreatedAt: c.CreatedAt, CurationRevision: c.CurationRevision, SuggestedMetadata: suggestions,
 		SetupGuides: setupGuides, SetupGuidesVersion: conv.PtrEmpty(c.SetupGuidesVersion), EndpointGuideSlug: conv.PtrEmpty(c.EndpointGuideSlug), ID: c.ID, OrganizationID: c.OrganizationID, ProjectID: c.ProjectID, McpServerID: c.MCPServerID, RemoteMcpServerID: c.RemoteMCPServerID,
 		SourceName: conv.PtrEmpty(c.SourceName), SourceRevision: c.SourceRevision, Eligible: c.Eligible, CanOverrideEligibility: c.CanOverrideEligibility(), Reason: c.Reason, Status: c.Status, ObservedSuccesses: c.ObservedSuccesses, ObservedFailures: c.ObservedFailures, ObservedDays: c.ObservedDays,
 		CheckedAt: conv.PtrEmpty(c.CheckedAt), RegistryEntryID: conv.PtrEmpty(c.RegistryEntryID), DocsStatus: conv.PtrEmpty(c.DocsStatus), DocsURL: conv.PtrEmpty(c.DocsURL), DeliveryError: conv.PtrEmpty(c.DeliveryError), DocsRevision: c.DocsRevision, DocsRetryAllowed: c.DocsRetryAllowed, DocsAttempts: c.DocsAttempts,
@@ -104,6 +104,10 @@ func promotionError(err error) error {
 	case errors.Is(err, catalogpromotion.ErrIneligible):
 		return oops.E(oops.CodeBadRequest, nil, "remote server does not meet the configuration and recent usage requirements for promotion")
 	default:
+		// Coded errors from the shared review path keep their status and message.
+		if _, coded := errors.AsType[*oops.ShareableError](err); coded {
+			return err
+		}
 		return oops.E(oops.CodeUnexpected, err, "catalogue promotion is unavailable")
 	}
 }

@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
@@ -83,4 +84,10 @@ func TestPromotionErrorExplainsRefusedReviews(t *testing.T) {
 	t.Parallel()
 	require.ErrorContains(t, promotionError(catalogpromotion.ErrReviewNotAllowed), "may identify a customer")
 	require.ErrorContains(t, promotionError(catalogpromotion.ErrReviewDisabled), "not enabled")
+}
+
+func TestPromotionErrorKeepsCodedReviewErrors(t *testing.T) {
+	t.Parallel()
+	coded := oops.E(oops.CodeUnavailable, nil, "the research runner is not available")
+	require.ErrorIs(t, promotionError(fmt.Errorf("start promotion review: %w", coded)), coded)
 }

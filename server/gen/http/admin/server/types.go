@@ -2363,11 +2363,11 @@ type GetRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool   `form:"review_allowed" json:"review_allowed" xml:"review_allowed"`
-	SourceRevision string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible       bool   `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible           bool    `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2427,11 +2427,11 @@ type PromoteRegistryCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool   `form:"review_allowed" json:"review_allowed" xml:"review_allowed"`
-	SourceRevision string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible       bool   `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible           bool    `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2477,11 +2477,11 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool   `form:"review_allowed" json:"review_allowed" xml:"review_allowed"`
-	SourceRevision string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible       bool   `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible           bool    `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2527,11 +2527,11 @@ type RetryRegistryPromotionDocsResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool   `form:"review_allowed" json:"review_allowed" xml:"review_allowed"`
-	SourceRevision string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible       bool   `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible           bool    `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -24672,11 +24672,11 @@ type AdminRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool   `form:"review_allowed" json:"review_allowed" xml:"review_allowed"`
-	SourceRevision string `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible       bool   `form:"eligible" json:"eligible" xml:"eligible"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     string  `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible           bool    `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -26958,7 +26958,7 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 		CurationRevision:       res.CurationRevision,
 		SetupGuidesVersion:     res.SetupGuidesVersion,
 		EndpointGuideSlug:      res.EndpointGuideSlug,
-		ReviewAllowed:          res.ReviewAllowed,
+		ReviewAvailability:     res.ReviewAvailability,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -27042,7 +27042,7 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 		CurationRevision:       res.CurationRevision,
 		SetupGuidesVersion:     res.SetupGuidesVersion,
 		EndpointGuideSlug:      res.EndpointGuideSlug,
-		ReviewAllowed:          res.ReviewAllowed,
+		ReviewAvailability:     res.ReviewAvailability,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -27105,7 +27105,7 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 		CurationRevision:       res.CurationRevision,
 		SetupGuidesVersion:     res.SetupGuidesVersion,
 		EndpointGuideSlug:      res.EndpointGuideSlug,
-		ReviewAllowed:          res.ReviewAllowed,
+		ReviewAvailability:     res.ReviewAvailability,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,
@@ -27168,7 +27168,7 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 		CurationRevision:       res.CurationRevision,
 		SetupGuidesVersion:     res.SetupGuidesVersion,
 		EndpointGuideSlug:      res.EndpointGuideSlug,
-		ReviewAllowed:          res.ReviewAllowed,
+		ReviewAvailability:     res.ReviewAvailability,
 		SourceRevision:         res.SourceRevision,
 		Eligible:               res.Eligible,
 		CanOverrideEligibility: res.CanOverrideEligibility,

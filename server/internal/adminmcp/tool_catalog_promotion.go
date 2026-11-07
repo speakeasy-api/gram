@@ -124,8 +124,8 @@ type CatalogPromotionCandidate struct {
 	AccountUsage *catalogpromotion.AccountUsage `json:"account_usage,omitempty"`
 	// Review is the endpoint's MCP review in Speakeasy's own organization.
 	Review *CatalogPromotionReview `json:"review,omitempty"`
-	// ReviewAllowed reports whether start_registry_promotion_review can run.
-	ReviewAllowed bool `json:"review_allowed"`
+	// ReviewAvailability is available, endpoint_not_allowed or disabled when one candidate is inspected.
+	ReviewAvailability string `json:"review_availability,omitempty"`
 	// ID identifies the stored observation.
 	ID string `json:"id"`
 	// OrganizationID identifies the canonical source tenant.
@@ -261,7 +261,7 @@ func projectCatalogPromotion(candidate catalogpromotion.Candidate) (CatalogPromo
 		return empty, false
 	}
 	return CatalogPromotionCandidate{
-		AuthDiscovery: candidate.AuthDiscovery, AccountUsage: candidate.AccountUsage, Review: projectPromotionReview(candidate.Review), ReviewAllowed: candidate.ReviewAllowed,
+		AuthDiscovery: candidate.AuthDiscovery, AccountUsage: candidate.AccountUsage, Review: projectPromotionReview(candidate.Review), ReviewAvailability: candidate.ReviewAvailability,
 		ID: candidate.ID, OrganizationID: candidate.OrganizationID, ProjectID: candidate.ProjectID, MCPServerID: candidate.MCPServerID, RemoteMCPServerID: candidate.RemoteMCPServerID,
 		CreatedAt: candidate.CreatedAt, CurationRevision: candidate.CurationRevision, SourceRevision: candidate.SourceRevision, Eligible: candidate.Eligible, CanOverrideEligibility: candidate.CanOverrideEligibility(), Reason: candidate.Reason, Status: candidate.Status,
 		ObservedSuccesses: candidate.ObservedSuccesses, ObservedFailures: candidate.ObservedFailures, ObservedDays: candidate.ObservedDays, CheckedAt: candidate.CheckedAt,
@@ -356,14 +356,22 @@ func (w *catalogReviewWriter) apply(ctx context.Context, input CatalogPromotionT
 	}
 	source := catalogpromotion.Target{OrganizationID: input.OrganizationID, ProjectID: uuid.MustParse(input.ProjectID), MCPServerID: uuid.MustParse(input.MCPServerID)}
 	target := writeTarget{OrganizationID: input.OrganizationID, ResourceKind: "registry_promotion_review", ResourceID: input.MCPServerID}
-	return runWrite(ctx, w.runner, authority, target, func(ctx context.Context, _ pgx.Tx) (catalogReviewReceipt, error) {
-		review, err := w.starter.StartReview(ctx, source, authority.Staff.OIDCSubject, &authority.Staff.Email)
-		switch {
-		case errors.Is(err, catalogpromotion.ErrReviewNotAllowed), errors.Is(err, catalogpromotion.ErrReviewDisabled):
-			return catalogReviewReceipt{}, fmt.Errorf("start promotion review: %w", err)
-		case err != nil:
-			return catalogReviewReceipt{}, errRegistryUnavailable
+	// Evidence gathering and enqueueing run outside the write transaction, so no
+	// connection lock is held across network calls. The review system guards the
+	// spend itself: if recording the event then fails, a retry returns the run in
+	// flight rather than paying again.
+	review, err := w.starter.StartReview(ctx, source, authority.Staff.OIDCSubject, &authority.Staff.Email)
+	if err != nil {
+		clientRowID, _, _, identityErr := connectionIdentity(authority)
+		if identityErr == nil {
+			w.runner.recordFailure(ctx, authority, clientRowID, target, err)
 		}
+		if errors.Is(err, catalogpromotion.ErrReviewNotAllowed) || errors.Is(err, catalogpromotion.ErrReviewDisabled) {
+			return catalogReviewReceipt{}, fmt.Errorf("start promotion review: %w", err)
+		}
+		return catalogReviewReceipt{}, errRegistryUnavailable
+	}
+	return runWrite(ctx, w.runner, authority, target, func(context.Context, pgx.Tx) (catalogReviewReceipt, error) {
 		return catalogReviewReceipt{Review: projectPromotionReview(review), SideEffects: catalogReviewSideEffects}, nil
 	})
 }

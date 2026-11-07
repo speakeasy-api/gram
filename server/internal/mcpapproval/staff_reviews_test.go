@@ -85,3 +85,27 @@ func TestStaffReviewsStartRespectsRolloutGates(t *testing.T) {
 	require.ErrorIs(t, err, mcpapproval.ErrStaffReviewDisabled)
 	require.Empty(t, ti.research.started())
 }
+
+func TestStaffReviewsStartRespectsApprovalRollout(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	reviews := newStaffReviews(t, ti)
+	require.True(t, reviews.Available(staffContext(ctx)))
+	disableMCPApproval(ti)
+
+	_, err := reviews.Start(staffContext(ctx), "https://mcp.example.com/mcp", "synthetic-staff", nil)
+
+	require.ErrorIs(t, err, mcpapproval.ErrStaffReviewDisabled)
+	require.False(t, reviews.Available(staffContext(ctx)))
+	require.Empty(t, ti.research.started())
+}
+
+func TestStaffReviewsStartRefusesPlaintextEndpoints(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	_, err := newStaffReviews(t, ti).Start(staffContext(ctx), "http://mcp.example.com/mcp", "synthetic-staff", nil)
+
+	require.Error(t, err)
+	require.Empty(t, ti.research.started())
+}
