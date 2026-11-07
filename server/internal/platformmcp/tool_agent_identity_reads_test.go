@@ -79,6 +79,14 @@ func TestOffersPersonalSignIn(t *testing.T) {
 	}
 }
 
+func TestPassesCallerCredentialThrough(t *testing.T) {
+	t.Parallel()
+
+	require.False(t, passesCallerCredentialThrough(nil))
+	require.False(t, passesCallerCredentialThrough(&types.McpServerAuthentication{Clients: []*types.AuthClient{{Enabled: false, ClientType: "pass_through"}}}))
+	require.True(t, passesCallerCredentialThrough(&types.McpServerAuthentication{Clients: []*types.AuthClient{{Enabled: true, ClientType: "pass_through"}}}))
+}
+
 func TestRemoteSessionEnded(t *testing.T) {
 	t.Parallel()
 

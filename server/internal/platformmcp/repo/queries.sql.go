@@ -5283,7 +5283,9 @@ WHERE projects.organization_id = $1
   AND toolset.mcp_enabled IS TRUE
   AND NOT EXISTS (
     SELECT 1 FROM mcp_servers AS served
-    WHERE served.toolset_id = toolset.id AND served.deleted IS FALSE
+    WHERE served.toolset_id = toolset.id
+      AND served.project_id = toolset.project_id
+      AND served.deleted IS FALSE
   )
 ORDER BY projects.name, toolset.name, toolset.id
 LIMIT $2

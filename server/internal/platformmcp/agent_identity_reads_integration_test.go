@@ -129,16 +129,22 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 	personal := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent personal server")
 	other, err := projectsrepo.New(f.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{Name: "Other project", Slug: "other-" + uuid.NewString()[:8], OrganizationID: f.principal.OrganizationID})
 	require.NoError(t, err)
-	seedAgentAccessServer(t, f.conn, other.ID, "Agent unreached server")
+	unreached := seedAgentAccessServer(t, f.conn, other.ID, "Agent unreached server")
+	readable := seedAgentAccessServer(t, f.conn, other.ID, "Agent read-grant server")
+	passThrough := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent pass-through server")
 
 	fixtures := testrepo.New(f.conn)
 	client, err := fixtures.CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true}, ClientType: authz.AuthClientTypeRemoteSession, Name: "Each person's account"})
 	require.NoError(t, err)
 	require.NoError(t, fixtures.AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: f.project.ID, OrganizationID: f.principal.OrganizationID, McpServerID: personal, AuthClientID: client}))
+	forwarded, err := fixtures.CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{OrganizationID: f.principal.OrganizationID, ProjectID: uuid.NullUUID{UUID: f.project.ID, Valid: true}, ClientType: authz.AuthClientTypePassThrough, Name: "The caller's own token"})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.AssociateAuthClientFixture(ctx, testrepo.AssociateAuthClientFixtureParams{ProjectID: f.project.ID, OrganizationID: f.principal.OrganizationID, McpServerID: passThrough, AuthClientID: forwarded}))
 
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(shared.String(), f.project.ID.String()))
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(uuid.NewString(), ""))
+	f.grant(t, authz.ScopeMCPRead, mcpConnectSelector(readable.String(), other.ID.String()))
 	f.grant(t, authz.ScopeMCPAuth, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindMCPAuthClient, authz.SelectorKeyResourceID: authz.WildcardResource})
 
 	callerCtx, principal := f.callerContext(t, f.principal.UserID)
@@ -155,9 +161,13 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 
 	byID := make(map[string]AgentMCPServerAccess, len(output.Servers))
 	for _, server := range output.Servers {
-		require.Equal(t, f.project.ID.String(), server.ProjectID, "a project-wide grant reaches only its own project")
 		byID[server.ResourceID] = server
 	}
+	require.NotContains(t, byID, unreached.String(), "a project-wide grant reaches only its own project")
+	require.Contains(t, byID, readable.String(), "mcp:read reaches the one server it names, in another project")
+	require.Equal(t, agentGrantServer, byID[readable.String()].Grant, "mcp:read includes connecting")
+	require.Equal(t, other.ID.String(), byID[readable.String()].ProjectID)
+	require.Equal(t, agentCredentialCallerProvided, byID[passThrough.String()].CredentialMode, "a pass-through server uses what the agent's client sends")
 	require.Contains(t, byID, shared.String())
 	require.Contains(t, byID, personal.String())
 	require.Equal(t, agentGrantServer, byID[shared.String()].Grant, "the narrowest grant is reported")
@@ -227,7 +237,7 @@ func TestAgentAuthorizationChecksListsDenialsFirst(t *testing.T) {
 	}))
 	service.now = func() time.Time { return now }
 
-	ctx, principal := f.callerContext(t, f.principal.UserID)
+	ctx, principal := f.callerContext(t, f.principal.UserID, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
 	output, err := service.AuthorizationChecks(ctx, principal, AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil})
 	require.NoError(t, err)
 
@@ -267,7 +277,7 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 		calls++
 		return nil, oops.C(oops.CodeForbidden)
 	}))
-	ctx, principal := f.callerContext(t, f.principal.UserID)
+	ctx, principal := f.callerContext(t, f.principal.UserID, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
 
 	_, err := forbidden.AuthorizationChecks(ctx, principal, AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil})
 	require.ErrorIs(t, err, ErrAgentChecksForbidden, "listing checks without org:read is refused as the dashboard refuses it")
@@ -293,4 +303,17 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 		require.Error(t, err, name)
 	}
 	require.Equal(t, 1, calls, "refused requests never list checks")
+
+	// The owner without org:read is refused for that, whatever the window, so
+	// a window error never answers a caller who may not list checks.
+	ownerCtx, owner := f.callerContext(t, f.principal.UserID)
+	for name, input := range map[string]AgentAuthorizationChecksInput{
+		"default":   {AgentID: f.agentID.String(), From: nil, To: nil},
+		"malformed": {AgentID: f.agentID.String(), From: new("yesterday"), To: nil},
+		"reversed":  {AgentID: f.agentID.String(), From: new("2026-11-07T00:00:00Z"), To: new("2026-11-06T00:00:00Z")},
+	} {
+		_, err := forbidden.AuthorizationChecks(ownerCtx, owner, input)
+		require.ErrorIs(t, err, ErrAgentChecksForbidden, name)
+	}
+	require.Equal(t, 1, calls, "a caller without org:read never lists checks")
 }

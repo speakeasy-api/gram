@@ -45,6 +45,10 @@ const (
 	maxAgentChecksWindow = 90 * 24 * time.Hour
 )
 
+// agentConnectScopes are the agent policy scopes that let it connect to an MCP
+// server: mcp:connect, and mcp:read and mcp:write, which include it.
+var agentConnectScopes = []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}
+
 // hiddenAgentCheckScopes are left out of an agent's checks, from the groups
 // and from the totals. An agent records one org:hooks_ingest check for every
 // hook event it sends, which buries the checks that say what it may reach.
@@ -76,6 +80,10 @@ const (
 	// agentCredentialNotAssigned: the server asks each person to sign in, and
 	// no one's working connection is assigned to the agent there.
 	agentCredentialNotAssigned = "not_assigned"
+
+	// agentCredentialCallerProvided: the server passes through the credential
+	// the agent's own MCP client sends, so Speakeasy holds none for it.
+	agentCredentialCallerProvided = "caller_provided"
 )
 
 // How an mcp:connect grant reaches a server, narrowest first.
@@ -274,14 +282,16 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 	}
 	grants := make([]authz.Grant, 0, len(rows))
 	for _, row := range rows {
-		if row.Scope != string(authz.ScopeMCPConnect) {
+		// mcp:read and mcp:write include connecting, so they reach servers too;
+		// the engine's scope expansion decides when each grant is matched.
+		if !slices.Contains(agentConnectScopes, authz.Scope(row.Scope)) {
 			continue
 		}
 		selector, err := authz.SelectorFromRow(row.Selectors)
 		if err != nil {
-			return zero, fmt.Errorf("parse agent mcp:connect selector: %w", err)
+			return zero, fmt.Errorf("parse agent %s selector: %w", row.Scope, err)
 		}
-		grants = append(grants, authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector))
+		grants = append(grants, authz.NewGrantWithSelector(authz.Scope(row.Scope), selector))
 	}
 
 	output := AgentMCPAccessOutput{Agent: agentIdentity(agent), Servers: []AgentMCPServerAccess{}, MissingServerGrants: 0, Truncated: false}
@@ -341,10 +351,6 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 	if !s.valid() {
 		return zero, ErrUnavailable
 	}
-	from, to, err := agentChecksWindow(input.From, input.To, s.now())
-	if err != nil {
-		return zero, err
-	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
 	}
@@ -352,9 +358,18 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 	if err != nil {
 		return zero, err
 	}
+	// Live organization access is settled before the input is judged, so a
+	// caller without org:read learns nothing from a window error.
+	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+		return zero, ErrAgentChecksForbidden
+	}
+	from, to, err := agentChecksWindow(input.From, input.To, s.now())
+	if err != nil {
+		return zero, err
+	}
 
-	fromText := from.Format(time.RFC3339)
-	toText := to.Format(time.RFC3339)
+	fromText := from.Format(time.RFC3339Nano)
+	toText := to.Format(time.RFC3339Nano)
 	read := func(outcome string) (*accessgen.ListChallengesResult, error) {
 		result, err := s.checks.ListChallenges(ctx, &accessgen.ListChallengesPayload{
 			Outcome:       &outcome,
@@ -464,7 +479,9 @@ func (s *AgentIdentityReadService) connectTargets(ctx context.Context, organizat
 	slices.SortFunc(targets, func(a, b agentConnectTarget) int {
 		return cmp.Or(cmp.Compare(a.projectName, b.projectName), cmp.Compare(a.name, b.name), cmp.Compare(a.resourceID.String(), b.resourceID.String()))
 	})
-	truncated := len(targets) > maxAgentAccessTargets
+	// Either list reaching its bound means rows were left out, even when
+	// collapsing servers of one toolset brought the targets back under it.
+	truncated := len(servers) > maxAgentAccessTargets || len(toolsets) > maxAgentAccessTargets || len(targets) > maxAgentAccessTargets
 	return targets[:min(len(targets), maxAgentAccessTargets)], truncated, nil
 }
 
@@ -553,14 +570,17 @@ func newAgentCredentialReader(db *pgxpool.Pool, organizationID string, agentID u
 // credential, and otherwise the agent acts for the people whose connections
 // are assigned to it.
 func (r *agentCredentialReader) describe(ctx context.Context, target agentConnectTarget, access *AgentMCPServerAccess) error {
-	if !target.serverID.Valid || !target.issuerID.Valid {
+	if !target.serverID.Valid {
 		return nil
 	}
 	auth, err := authclients.ReadServerAuthentication(ctx, r.db, r.organizationID, target.serverID.UUID)
 	if err != nil {
 		return fmt.Errorf("read mcp server authentication: %w", err)
 	}
-	if !offersPersonalSignIn(auth) {
+	if !target.issuerID.Valid || !offersPersonalSignIn(auth) {
+		if passesCallerCredentialThrough(auth) {
+			access.CredentialMode = agentCredentialCallerProvided
+		}
 		return nil
 	}
 	assigned, err := r.read(ctx, target.projectID, target.issuerID.UUID)
@@ -628,7 +648,18 @@ func offersPersonalSignIn(auth *types.McpServerAuthentication) bool {
 		return true
 	}
 	return slices.ContainsFunc(auth.Clients, func(client *types.AuthClient) bool {
-		return client != nil && client.Enabled && client.ClientType == "remote_session"
+		return client != nil && client.Enabled && client.ClientType == authz.AuthClientTypeRemoteSession
+	})
+}
+
+// passesCallerCredentialThrough reports whether a server takes the credential
+// the caller's MCP client sends rather than one Speakeasy holds.
+func passesCallerCredentialThrough(auth *types.McpServerAuthentication) bool {
+	if auth == nil {
+		return false
+	}
+	return slices.ContainsFunc(auth.Clients, func(client *types.AuthClient) bool {
+		return client != nil && client.Enabled && client.ClientType == authz.AuthClientTypePassThrough
 	})
 }
 
