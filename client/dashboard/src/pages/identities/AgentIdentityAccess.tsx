@@ -26,6 +26,7 @@ import { useRoutes } from "@/routes";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
+import { useAgentPolicyGrants } from "./useAgentPolicyGrants";
 import {
   authGrantParts,
   authGrantRank,
@@ -389,21 +390,12 @@ export function AgentIdentityPermissions({
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
-  const organization = useOrganization();
-  const sdk = useSdkClient();
   const routes = useRoutes();
   const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
-  const grants = useQuery({
-    // Shared with the editor: saving there invalidates this view immediately.
-    queryKey: ["agent-policy-grants", organization.id, agent.id],
-    queryFn: ({ signal }) =>
-      sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, { signal }),
-    enabled: canRead,
-    retry: false,
-    throwOnError: false,
-  });
+  // Shared with the editor: saving there invalidates this view immediately.
+  const grants = useAgentPolicyGrants(agent);
   const { isError: catalogueError } = useAgentPolicyScopes();
   // Credential restrictions are listed and edited in their own panel.
   const visible = canRead
