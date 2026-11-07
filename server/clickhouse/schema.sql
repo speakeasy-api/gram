@@ -274,6 +274,14 @@ COMMENT 'Pre-aggregated trace summaries for fast trace-level queries without nee
 -- table). Readers opt in via a WHERE start_time_unix_nano pre-filter.
 CREATE INDEX IF NOT EXISTS idx_trace_summaries_start_time ON trace_summaries (start_time_unix_nano) TYPE minmax GRANULARITY 1;
 
+-- Identity-filtered reads (one agent's tool calls on an agent identity page,
+-- say) cannot prune by the primary key either. Unlike the time index above,
+-- this prunes at granule granularity: rows sort by (project, trace_id) and
+-- agent ids are random relative to trace ids, so a granule holds a spread of
+-- agents and any one agent's id is absent from most granules. Readers opt in
+-- via a WHERE agent_id pre-filter (see toolUsageNormalizedEventsCTE).
+CREATE INDEX IF NOT EXISTS idx_trace_summaries_agent_id ON trace_summaries (agent_id) TYPE bloom_filter(0.01) GRANULARITY 1;
+
 CREATE MATERIALIZED VIEW IF NOT EXISTS trace_summaries_mv TO trace_summaries AS
 SELECT
     trace_id,
