@@ -400,6 +400,66 @@ describe("useRemoteMcpInstallWorkflow", () => {
     expect(result.current.phase).toBe("selectRemotes");
   });
 
+  it("honors the caller's User Identity default for a single manual-auth source", () => {
+    const servers = [
+      makeServer({
+        supportsDcr: false,
+        remotes: [
+          remote(
+            "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+          ),
+        ],
+      }),
+    ];
+    const initialConfiguration = { identityMode: "user" as const };
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+    );
+    expect(result.current.phase).toBe("configure");
+    if (result.current.phase !== "configure")
+      throw new Error("unexpected phase");
+    expect(result.current.serverConfigs[0]!.identityMode).toBe("user");
+    expect(result.current.serverConfigs[0]!.remotes).toHaveLength(1);
+  });
+
+  it.each(["none", "agent"] as const)(
+    "preserves %s and the name through the original endpoint selection",
+    (identityMode) => {
+      const servers = [
+        makeServer({
+          supportsDcr: false,
+          remotes: [
+            remote("https://a.example/mcp"),
+            remote("https://b.example/mcp"),
+          ],
+        }),
+      ];
+      const initialConfiguration = { identityMode, name: "Chosen name" };
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({ servers, initialConfiguration }),
+      );
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.updateCurrentConfig({
+          selectedRemoteUrls: new Set([servers[0]!.remotes![1]!.url]),
+        });
+      });
+      act(() => {
+        if (result.current.phase !== "selectRemotes")
+          throw new Error("unexpected phase");
+        result.current.nextServer();
+      });
+      if (result.current.phase !== "configure")
+        throw new Error("unexpected phase");
+      expect(result.current.serverConfigs[0]).toMatchObject({
+        identityMode,
+        name: "Chosen name",
+        remotes: [servers[0]!.remotes![1]],
+      });
+    },
+  );
+
   it("skips selectRemotes and installs every endpoint with autoSelectRemotes", () => {
     const servers = [
       makeServer({
