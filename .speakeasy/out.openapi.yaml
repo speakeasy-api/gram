@@ -51762,6 +51762,7 @@ paths:
               - copilot
               - openclaw
               - pi
+              - vibe
             type: string
         - allowEmptyValue: true
           description: Session header

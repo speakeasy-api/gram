@@ -50,6 +50,12 @@ type agentPluginManifest struct {
 	Description string            `json:"description,omitempty"`
 	Author      agentPluginAuthor `json:"author"`
 	Homepage    string            `json:"homepage,omitempty"`
+	// Extensions carries client-specific manifest data keyed by reverse-domain
+	// namespace. The vendored schema leaves each namespace's object
+	// uninterpreted (extensions.additionalProperties: object), so Vibe's
+	// "ai.mistral.vibe" extension — which gates loading the plugin's native
+	// hooks.toml — validates without any schema change.
+	Extensions map[string]any `json:"extensions,omitempty"`
 }
 
 type agentPluginAuthor struct {
@@ -159,7 +165,7 @@ func classifyAgentPlugin(p PluginInfo) agentPluginCompatibility {
 		}
 	}
 
-	manifest := agentPluginManifest{Schema: agentPluginSchemaID, Name: p.Slug, Version: "0.1.0", Description: p.Description, Author: agentPluginAuthor{Name: "", URL: ""}, Homepage: ""}
+	manifest := agentPluginManifest{Schema: agentPluginSchemaID, Name: p.Slug, Version: "0.1.0", Description: p.Description, Author: agentPluginAuthor{Name: "", URL: ""}, Homepage: "", Extensions: nil}
 	if err := validateAgentPluginDocument(agentPluginSchemaID, manifest); err != nil {
 		reasons = append(reasons, "plugin manifest is invalid: "+err.Error())
 	}
@@ -222,6 +228,7 @@ func compileAgentPlugin(p PluginInfo, cfg GenerateConfig, mode agentPluginCreden
 		Description: p.Description,
 		Author:      agentPluginAuthor{Name: cfg.OrgName, URL: "https://www.speakeasy.com/"},
 		Homepage:    "https://www.speakeasy.com/product/gram",
+		Extensions:  nil,
 	}
 	manifestJSON, err := marshalJSON(manifest)
 	if err != nil {
