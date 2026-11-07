@@ -122,6 +122,9 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 }
 
 func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bool) (context.Context, *metaGateContext, []metaMember, error) {
+	// A callback keeps the execution's record of checked servers when its
+	// context carries one, and otherwise records each server it names once.
+	ctx = authz.WithOneChallengePerResource(ctx)
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, nil, fmt.Errorf("callback cancelled: %w", err)
 	}
