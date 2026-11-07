@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -168,6 +170,207 @@ func (m *ChallengeManager) AuthClientRemoteSessionStatusesForResource(ctx contex
 		states = append(states, remotesessions_repo.ListRemoteSessionStatusesForSubjectRow(row))
 	}
 	return remoteSessionStates(states, resource), nil
+}
+
+// DisconnectAuthClientRemoteSession disconnects a registration authorized by a
+// typed server offer, without requiring an issuer link. An unqualified request
+// may change a singleton only; multiple live grants require an exact resource.
+func (m *ChallengeManager) DisconnectAuthClientRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (int64, error) {
+	return m.disconnectAuthClientRemoteSession(ctx, subject, projectID, organizationID, registrationID, "")
+}
+
+// DisconnectAuthClientRemoteSessionForResource disconnects only a matching bound
+// audience. The caller must first authorize the exact typed server offer and
+// credential owner; registration reach alone is not permission to use an offer.
+func (m *ChallengeManager) DisconnectAuthClientRemoteSessionForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string) (int64, error) {
+	if resource == "" {
+		return 0, focusedResourceRequired()
+	}
+	return m.disconnectAuthClientRemoteSession(ctx, subject, projectID, organizationID, registrationID, resource)
+}
+
+func (m *ChallengeManager) disconnectAuthClientRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string) (int64, error) {
+	var revoked []RevokedCredentials
+	err := m.mutateAuthClientRemoteSession(ctx, subject, projectID, organizationID, registrationID, resource, func(q *remotesessions_repo.Queries, session remotesessions_repo.RemoteSession) error {
+		rows, err := q.SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientInTenantParams{
+			SubjectUrn: subject, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionClientID: registrationID,
+			ID: session.ID, ExpectedUpdatedAt: session.UpdatedAt, Resource: resource,
+		})
+		if err != nil {
+			return fmt.Errorf("disconnect remote session in tenant: %w", err)
+		}
+		if len(rows) == 0 {
+			return remoteSessionReferenceChanged()
+		}
+		for _, row := range rows {
+			revoked = append(revoked, RevokedCredentials{RemoteSessionClientID: row.RemoteSessionClientID, AccessTokenEncrypted: row.AccessTokenEncrypted, RefreshTokenEncrypted: row.RefreshTokenEncrypted})
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	// Never revoke an upstream credential before its tombstone commits.
+	for _, credentials := range revoked {
+		m.revoker.RevokeDetached(ctx, credentials)
+	}
+	return int64(len(revoked)), nil
+}
+
+// SetAuthClientRemoteSessionAutoRefresh changes only a singleton grant for a
+// typed registration. It retains the preference's independent refresh clock.
+func (m *ChallengeManager) SetAuthClientRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, enabled bool) (int64, error) {
+	return m.setAuthClientRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, registrationID, "", enabled)
+}
+
+// SetAuthClientRemoteSessionAutoRefreshForResource changes a matching bound
+// audience, never a legacy NULL grant inferred from another server's resource.
+// The caller must first authorize the exact typed offer and credential owner.
+func (m *ChallengeManager) SetAuthClientRemoteSessionAutoRefreshForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string, enabled bool) (int64, error) {
+	if resource == "" {
+		return 0, focusedResourceRequired()
+	}
+	return m.setAuthClientRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, registrationID, resource, enabled)
+}
+
+func (m *ChallengeManager) setAuthClientRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string, enabled bool) (int64, error) {
+	var changed int64
+	err := m.mutateAuthClientRemoteSession(ctx, subject, projectID, organizationID, registrationID, resource, func(q *remotesessions_repo.Queries, session remotesessions_repo.RemoteSession) error {
+		var err error
+		changed, err = q.SetRemoteSessionAutoRefreshInTenant(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshInTenantParams{
+			SubjectUrn: subject, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionClientID: registrationID,
+			ID: session.ID, ExpectedUpdatedAt: session.UpdatedAt, Resource: resource, AutoRefresh: enabled,
+		})
+		if err != nil {
+			return fmt.Errorf("set remote session auto refresh in tenant: %w", err)
+		}
+		if changed == 0 {
+			return remoteSessionReferenceChanged()
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return changed, nil
+}
+
+// RefreshAuthClientRemoteSession refreshes a singleton authorized by a typed
+// offer, without an issuer link. Registration-only ambiguity fails closed.
+func (m *ChallengeManager) RefreshAuthClientRemoteSession(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID) (RefreshResult, error) {
+	return m.refreshAuthClientRemoteSession(ctx, attribution, subject, projectID, organizationID, registrationID, "")
+}
+
+// RefreshAuthClientRemoteSessionForResource refreshes the selected bound row
+// through existing rotation, singleflight and CAS. It confers no offer access.
+func (m *ChallengeManager) RefreshAuthClientRemoteSessionForResource(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string) (RefreshResult, error) {
+	if resource == "" {
+		return RefreshResult{}, focusedResourceRequired()
+	}
+	return m.refreshAuthClientRemoteSession(ctx, attribution, subject, projectID, organizationID, registrationID, resource)
+}
+
+func (m *ChallengeManager) refreshAuthClientRemoteSession(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string) (RefreshResult, error) {
+	var zero RefreshResult
+	q := remotesessions_repo.New(m.db)
+	session, err := authClientMutationSource(ctx, q, subject, projectID, organizationID, registrationID, resource)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+	if err != nil {
+		return zero, err
+	}
+	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+	result, err := m.refresher.RefreshNow(ctx, session, resource, remotesessionmetrics.RefreshTriggerManual, attribution)
+	if err != nil {
+		return zero, err
+	}
+	if result.Session.ID == uuid.Nil {
+		return result, nil
+	}
+	// A source snapshot is not renewed tenant authority. Recheck admission after
+	// the network call, without returning an out-of-date or sibling result.
+	current, err := authClientMutationSource(ctx, q, subject, projectID, organizationID, registrationID, resource)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return zero, ErrRemoteSessionNotRefreshable
+	}
+	if err != nil {
+		return zero, err
+	}
+	if current.ID != session.ID || current.GrantGeneration != session.GrantGeneration || current.ID != result.Session.ID || !current.UpdatedAt.Time.Equal(result.Session.UpdatedAt.Time) {
+		return zero, remoteSessionReferenceChanged()
+	}
+	return result, nil
+}
+
+// mutateAuthClientRemoteSession holds the same client-row lock as consent while
+// choosing and mutating a source. A new sibling cannot race a singleton action.
+// The callback only writes locally; upstream revocation happens after commit.
+func (m *ChallengeManager) mutateAuthClientRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string, mutate func(*remotesessions_repo.Queries, remotesessions_repo.RemoteSession) error) error {
+	if subject.IsZero() || projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil {
+		return ErrInvalidAuthorizationRequest
+	}
+	tx, err := m.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin typed remote session mutation: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := remotesessions_repo.New(tx)
+	if _, err := q.LockRemoteSessionClientForSessionWrite(ctx, registrationID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		return fmt.Errorf("lock typed remote session registration: %w", err)
+	}
+	session, err := authClientMutationSource(ctx, q, subject, projectID, organizationID, registrationID, resource)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if err := mutate(q, session); err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit typed remote session mutation: %w", err)
+	}
+	return nil
+}
+
+// authClientMutationSource uses the existing typed tenant/consenting-org
+// selector, not an issuer-link check or a second offer authorization resolver.
+func authClientMutationSource(ctx context.Context, q *remotesessions_repo.Queries, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, registrationID uuid.UUID, resource string) (remotesessions_repo.RemoteSession, error) {
+	var zero remotesessions_repo.RemoteSession
+	if subject.IsZero() || projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil {
+		return zero, ErrInvalidAuthorizationRequest
+	}
+	admitted, err := q.CheckAuthClientRemoteSessionSubjectAdmission(ctx, remotesessions_repo.CheckAuthClientRemoteSessionSubjectAdmissionParams{ProjectID: projectID, OrganizationID: organizationID, SubjectUrn: subject.String()})
+	if err != nil {
+		return zero, fmt.Errorf("check typed remote session live admission: %w", err)
+	}
+	if !admitted {
+		return zero, pgx.ErrNoRows
+	}
+	if resource == "" {
+		rows, err := q.ListRemoteSessionStatusesInTenant(ctx, remotesessions_repo.ListRemoteSessionStatusesInTenantParams{SubjectUrn: subject, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionClientIds: []uuid.UUID{registrationID}})
+		if err != nil {
+			return zero, fmt.Errorf("check typed remote session ambiguity: %w", err)
+		}
+		if len(rows) > 1 {
+			return zero, focusedResourceRequired()
+		}
+	}
+	session, err := q.GetActiveRemoteSessionInTenant(ctx, remotesessions_repo.GetActiveRemoteSessionInTenantParams{SubjectUrn: subject, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionClientID: registrationID, Resource: resource})
+	if err != nil {
+		return zero, fmt.Errorf("get typed remote session mutation source: %w", err)
+	}
+	if resource != "" && (!session.Resource.Valid || session.Resource.String == "" || strings.TrimRight(session.Resource.String, "/") != strings.TrimRight(resource, "/")) {
+		return zero, remoteSessionReferenceChanged()
+	}
+	return session, nil
 }
 
 // attachedCaller reports whether the caller resolves through an agent
