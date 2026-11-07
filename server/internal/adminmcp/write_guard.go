@@ -37,6 +37,8 @@ const (
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
 	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
+	// OperationStartRegistryPromotionReview starts a staff-only MCP review in Speakeasy's own organization.
+	OperationStartRegistryPromotionReview WriteOperation = "start_registry_promotion_review"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
@@ -57,6 +59,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateRegistryEntry,
 	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
+	OperationStartRegistryPromotionReview,
 }
 
 // PlatformGlobal reports whether an operation has no tenant target. Global
@@ -64,7 +67,7 @@ var AllWriteOperations = []WriteOperation{
 // only durable record.
 func (op WriteOperation) PlatformGlobal() bool {
 	switch op {
-	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
+	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage, OperationStartRegistryPromotionReview:
 		return true
 	default:
 		return false
@@ -107,7 +110,7 @@ func (op WriteOperation) implemented() bool {
 	switch op {
 	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage, OperationStartRegistryPromotionReview:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false
@@ -117,10 +120,11 @@ func (op WriteOperation) implemented() bool {
 }
 
 // direct reports whether an operation applies immediately instead of through a
-// stored proposal and browser approval. Only changes no customer sees until an
-// approved change references them qualify.
+// stored proposal and browser approval. Only changes no customer sees qualify:
+// an uploaded image stays unseen until an approved change references it, and a
+// promotion review stays inside Speakeasy's own organization, which pays for it.
 func (op WriteOperation) direct() bool {
-	return op == OperationUploadPlatformImage
+	return op == OperationUploadPlatformImage || op == OperationStartRegistryPromotionReview
 }
 
 // WritesAvailable reports whether consent may offer admin:write at all.

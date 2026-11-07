@@ -77,6 +77,9 @@ type testInstance struct {
 
 	// research records the runs the service enqueued.
 	research *fakeResearchStarter
+
+	// assembler is the evidence assembler the service was built with.
+	assembler *evidence.Assembler
 }
 
 // fakeResearchStarter stands in for the Temporal research workflow.
@@ -171,6 +174,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		projectID:      projectID,
 		probes:         probes,
 		research:       starter,
+		assembler:      assembler,
 	}
 
 	enableMCPApproval(ti)

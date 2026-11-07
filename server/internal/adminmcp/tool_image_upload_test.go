@@ -6,9 +6,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
@@ -83,4 +86,47 @@ func TestWriteWorkflowsSeparateDirectUploadFromProposals(t *testing.T) {
 	require.Len(t, both, 2)
 	require.Contains(t, both[0], "separate browser approval")
 	require.Equal(t, uploadOnly[0], both[1])
+}
+
+type fakePromotionReviews struct {
+	actor  string
+	email  string
+	target catalogpromotion.Target
+	err    error
+}
+
+func (f *fakePromotionReviews) StartReview(_ context.Context, target catalogpromotion.Target, actor string, actorEmail *string) (*mcpapproval.StaffReview, error) {
+	f.target, f.actor, f.email = target, actor, *actorEmail
+	if f.err != nil {
+		return nil, f.err
+	}
+	return &mcpapproval.StaffReview{RequestID: "synthetic-review"}, nil
+}
+
+func TestStartPromotionReviewIsADirectWriteForVerifiedStaff(t *testing.T) {
+	t.Parallel()
+	f := newProposalFixture(t, "admin_mcp_promotion_review")
+	ctx := writeContext(t, f)
+	reviews := &fakePromotionReviews{}
+	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationStartRegistryPromotionReview: true}} //nolint:exhaustive // Only the review operation is enabled.
+	input := CatalogPromotionTargetInput{OrganizationID: "org-synthetic", ProjectID: uuid.NewString(), MCPServerID: uuid.NewString()}
+
+	require.True(t, OperationStartRegistryPromotionReview.direct())
+	out, err := startPromotionReview(ctx, reviews, enabled, input)
+	require.NoError(t, err)
+	require.Equal(t, "synthetic-review", out.Review.RequestID)
+	require.Equal(t, "staff@example.test", reviews.email)
+	require.NotEmpty(t, reviews.actor)
+	require.Equal(t, input.OrganizationID, reviews.target.OrganizationID)
+
+	_, err = startPromotionReview(ctx, reviews, WriteConfig{}, input)
+	require.ErrorIs(t, err, ErrWriteDisabled)
+	_, err = startPromotionReview(t.Context(), reviews, enabled, input)
+	require.ErrorIs(t, err, ErrWriteIdentity)
+	_, err = startPromotionReview(ctx, reviews, enabled, CatalogPromotionTargetInput{OrganizationID: "org-synthetic", ProjectID: "not-a-uuid", MCPServerID: uuid.NewString()})
+	require.Error(t, err)
+	_, err = startPromotionReview(ctx, &fakePromotionReviews{err: catalogpromotion.ErrReviewNotAllowed}, enabled, input)
+	require.ErrorIs(t, err, catalogpromotion.ErrReviewNotAllowed)
+	_, err = startPromotionReview(ctx, &fakePromotionReviews{err: errors.New("synthetic outage")}, enabled, input)
+	require.ErrorIs(t, err, errRegistryUnavailable)
 }

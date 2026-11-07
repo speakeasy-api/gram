@@ -109,5 +109,8 @@ func writeWorkflows(operations []WriteOperation) []string {
 	if slices.Contains(operations, OperationUploadPlatformImage) {
 		workflows = append(workflows, "create single-use image upload URLs directly, without browser approval; uploaded images are public and persist immediately")
 	}
+	if slices.Contains(operations, OperationStartRegistryPromotionReview) {
+		workflows = append(workflows, "start catalogue promotion reviews directly, without browser approval; they run and are paid for in Speakeasy's own organization and nothing is recorded in the source account")
+	}
 	return workflows
 }

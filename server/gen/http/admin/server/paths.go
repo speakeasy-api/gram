@@ -342,6 +342,16 @@ func GetRegistryPromotionCandidateAdminPath() string {
 	return "/admin/registry.promotionCandidate"
 }
 
+// GetRegistryPromotionReviewAdminPath returns the URL path to the admin service getRegistryPromotionReview HTTP endpoint.
+func GetRegistryPromotionReviewAdminPath() string {
+	return "/admin/registry.promotionReview"
+}
+
+// StartRegistryPromotionReviewAdminPath returns the URL path to the admin service startRegistryPromotionReview HTTP endpoint.
+func StartRegistryPromotionReviewAdminPath() string {
+	return "/admin/registry.startPromotionReview"
+}
+
 // PromoteRegistryCandidateAdminPath returns the URL path to the admin service promoteRegistryCandidate HTTP endpoint.
 func PromoteRegistryCandidateAdminPath() string {
 	return "/admin/registry.promoteCandidate"

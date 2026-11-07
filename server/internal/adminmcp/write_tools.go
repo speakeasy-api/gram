@@ -145,12 +145,17 @@ type writeTools struct {
 	writers map[WriteOperation]operationWriter
 	// uploads backs the direct upload_platform_image write; nil without asset storage.
 	uploads PlatformImageUploader
+	// reviews backs the direct start_registry_promotion_review write; nil without catalogue promotion.
+	reviews catalogPromotionReviewStarter
 }
 
 // implements reports whether op has a shipped implementation on this server.
 func (t *writeTools) implements(op WriteOperation) bool {
 	if op == OperationUploadPlatformImage {
 		return t.uploads != nil
+	}
+	if op == OperationStartRegistryPromotionReview {
+		return t.reviews != nil
 	}
 	return t.writers[op] != nil
 }
@@ -285,6 +290,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
 		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{store: store, writes: writes, baseURL: oauth.Resource(), mutator: runtime.catalogPromotions, now: time.Now}
+		tools.reviews = runtime.catalogPromotions
 	}
 	for _, op := range writes.EnabledOperations() {
 		if !tools.implements(op) {
@@ -300,6 +306,9 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 	registerWriteTools(runtime.server, tools)
 	if tools.uploads != nil && writes.OperationEnabled(OperationUploadPlatformImage) {
 		registerImageUploadTool(runtime.server, tools.uploads, writes)
+	}
+	if tools.reviews != nil && writes.OperationEnabled(OperationStartRegistryPromotionReview) {
+		registerPromotionReviewTool(runtime.server, tools.reviews, writes)
 	}
 	return nil
 }

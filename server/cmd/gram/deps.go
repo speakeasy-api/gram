@@ -7,6 +7,16 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
+	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/exposure"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1868,4 +1878,37 @@ func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) back
 		return nil
 	}
 	return provisioner
+}
+
+// newMCPApprovalAssembler builds the one evidence assembler every MCP review
+// uses. One probe serves both the authority and tool-declarations slots: they
+// are two views of the same remote prober.
+func newMCPApprovalAssembler(logger *slog.Logger, db *pgxpool.Pool, guardianPolicy *guardian.Policy, traffic exposure.Reader, catalog mcpapprovalcatalog.Catalog, githubToken string) *mcpapprovalevidence.Assembler {
+	remoteProber := remoteprobe.New(logger, guardianPolicy)
+	return mcpapprovalevidence.NewAssembler(
+		packagemeta.NewClient(guardianPolicy.PooledClient()),
+		repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubToken)),
+		mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
+		domainmeta.NewClient(guardianPolicy.PooledClient()),
+		traffic,
+		remoteProber,
+		remoteProber,
+		mcpapprovalcatalog.New(logger, db, catalog),
+	)
+}
+
+// mcpApprovalResearchStarter enqueues research runs on the shared workflow.
+func mcpApprovalResearchStarter(temporalEnv *temporal.Environment) mcpapproval.ResearchStarter {
+	return func(ctx context.Context, run mcpapproval.ResearchRun) error {
+		_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
+			ReportID:  run.ReportID,
+			RequestID: run.RequestID,
+			ProjectID: run.ProjectID,
+			OrgID:     run.OrgID,
+		})
+		if err != nil {
+			return fmt.Errorf("execute research workflow: %w", err)
+		}
+		return nil
+	}
 }

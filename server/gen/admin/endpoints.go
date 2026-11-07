@@ -84,6 +84,8 @@ type Endpoints struct {
 	MigrateExternalMcpServers               goa.Endpoint
 	ListRegistryPromotionCandidates         goa.Endpoint
 	GetRegistryPromotionCandidate           goa.Endpoint
+	GetRegistryPromotionReview              goa.Endpoint
+	StartRegistryPromotionReview            goa.Endpoint
 	PromoteRegistryCandidate                goa.Endpoint
 	CurateRegistryPromotionCandidate        goa.Endpoint
 	RetryRegistryPromotionDocs              goa.Endpoint
@@ -213,6 +215,8 @@ func NewEndpoints(s Service) *Endpoints {
 		MigrateExternalMcpServers:               NewMigrateExternalMcpServersEndpoint(s, a.APIKeyAuth),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
+		GetRegistryPromotionReview:              NewGetRegistryPromotionReviewEndpoint(s, a.APIKeyAuth),
+		StartRegistryPromotionReview:            NewStartRegistryPromotionReviewEndpoint(s, a.APIKeyAuth),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
 		CurateRegistryPromotionCandidate:        NewCurateRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		RetryRegistryPromotionDocs:              NewRetryRegistryPromotionDocsEndpoint(s, a.APIKeyAuth),
@@ -322,6 +326,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.MigrateExternalMcpServers = m(e.MigrateExternalMcpServers)
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
 	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
+	e.GetRegistryPromotionReview = m(e.GetRegistryPromotionReview)
+	e.StartRegistryPromotionReview = m(e.StartRegistryPromotionReview)
 	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
 	e.CurateRegistryPromotionCandidate = m(e.CurateRegistryPromotionCandidate)
 	e.RetryRegistryPromotionDocs = m(e.RetryRegistryPromotionDocs)
@@ -1861,6 +1867,52 @@ func NewGetRegistryPromotionCandidateEndpoint(s Service, authAPIKeyFn security.A
 			return nil, err
 		}
 		return s.GetRegistryPromotionCandidate(ctx, p)
+	}
+}
+
+// NewGetRegistryPromotionReviewEndpoint returns an endpoint function that
+// calls the method "getRegistryPromotionReview" of service "admin".
+func NewGetRegistryPromotionReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetRegistryPromotionReviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetRegistryPromotionReview(ctx, p)
+	}
+}
+
+// NewStartRegistryPromotionReviewEndpoint returns an endpoint function that
+// calls the method "startRegistryPromotionReview" of service "admin".
+func NewStartRegistryPromotionReviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*StartRegistryPromotionReviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.StartRegistryPromotionReview(ctx, p)
 	}
 }
 

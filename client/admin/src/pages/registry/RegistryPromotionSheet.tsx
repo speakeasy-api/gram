@@ -1,4 +1,5 @@
 import { PromotionAuthDiscovery } from "./PromotionAuthDiscovery";
+import { PromotionAccountUsage, PromotionReview } from "./PromotionReview";
 import { useRef, useState, type JSX } from "react";
 import { useBlocker } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -285,6 +286,15 @@ export function RegistryPromotionSheet({
               disabled={mutation.isPending}
               onRetry={() => void query.refetch()}
             />
+          )}
+          {candidate && candidate.status === "candidate" && (
+            <>
+              <PromotionAccountUsage usage={candidate.accountUsage} />
+              <PromotionReview
+                target={target}
+                allowed={candidate.reviewAllowed}
+              />
+            </>
           )}
           {(candidate?.status === "rejected" ||
             candidate?.status === "archived") && (

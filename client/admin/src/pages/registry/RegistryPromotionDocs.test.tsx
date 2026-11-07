@@ -21,6 +21,7 @@ const candidate: AdminRegistryPromotionCandidate = {
   createdAt: new Date("2026-01-02T12:00:00Z"),
   eligible: false,
   canOverrideEligibility: false,
+  reviewAllowed: false,
   reason: "already_promoted",
   status: "promoted",
   observedSuccesses: 30,

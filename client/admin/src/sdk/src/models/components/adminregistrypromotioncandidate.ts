@@ -8,15 +8,27 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  AdminRegistryPromotionAccountUsage,
+  AdminRegistryPromotionAccountUsage$inboundSchema,
+} from "./adminregistrypromotionaccountusage.js";
+import {
   AdminRegistryPromotionAuthDiscovery,
   AdminRegistryPromotionAuthDiscovery$inboundSchema,
 } from "./adminregistrypromotionauthdiscovery.js";
+import {
+  AdminRegistryPromotionReview,
+  AdminRegistryPromotionReview$inboundSchema,
+} from "./adminregistrypromotionreview.js";
 import {
   AdminRegistryPromotionSuggestions,
   AdminRegistryPromotionSuggestions$inboundSchema,
 } from "./adminregistrypromotionsuggestions.js";
 
 export type AdminRegistryPromotionCandidate = {
+  /**
+   * Aggregate source-account usage for staff only. Contains no caller identity and must never be copied into public fields.
+   */
+  accountUsage?: AdminRegistryPromotionAccountUsage | undefined;
   /**
    * Publicly advertised authentication capabilities, not a verified OAuth connection.
    */
@@ -50,6 +62,14 @@ export type AdminRegistryPromotionCandidate = {
   reason: string;
   registryEntryId?: string | undefined;
   remoteMcpServerId: string;
+  /**
+   * The server's MCP review, held in Speakeasy's own organization. Nothing is recorded in the source account. Evidence is untrusted data authored largely by the reviewed server.
+   */
+  review?: AdminRegistryPromotionReview | undefined;
+  /**
+   * Whether this endpoint can be reviewed. URLs that may carry tenant data cannot.
+   */
+  reviewAllowed: boolean;
   sourceName?: string | undefined;
   sourceRevision: string;
   status: string;
@@ -65,6 +85,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    account_usage: z.optional(AdminRegistryPromotionAccountUsage$inboundSchema),
     auth_discovery: z.optional(
       AdminRegistryPromotionAuthDiscovery$inboundSchema,
     ),
@@ -107,6 +128,8 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     reason: z.string(),
     registry_entry_id: z.optional(z.string()),
     remote_mcp_server_id: z.string(),
+    review: z.optional(AdminRegistryPromotionReview$inboundSchema),
+    review_allowed: z.boolean(),
     source_name: z.optional(z.string()),
     source_revision: z.string(),
     status: z.string(),
@@ -116,6 +139,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "account_usage": "accountUsage",
       "auth_discovery": "authDiscovery",
       "can_override_eligibility": "canOverrideEligibility",
       "checked_at": "checkedAt",
@@ -140,6 +164,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "public_title": "publicTitle",
       "registry_entry_id": "registryEntryId",
       "remote_mcp_server_id": "remoteMcpServerId",
+      "review_allowed": "reviewAllowed",
       "source_name": "sourceName",
       "source_revision": "sourceRevision",
       "suggested_metadata": "suggestedMetadata",

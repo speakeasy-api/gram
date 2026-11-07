@@ -4,6 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/externalmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"log/slog"
 	"net"
 	"net/http"
@@ -138,6 +142,23 @@ func newAdminCommand() *cli.Command {
 			Usage:    "The current server environment", // local, dev, prod
 			Required: true,
 			EnvVars:  []string{"GRAM_ENVIRONMENT"},
+		},
+		&cli.StringFlag{
+			Name:    "catalog-review-organization-id",
+			Usage:   "Speakeasy-owned organization that runs catalogue promotion reviews and receives their audit entries",
+			EnvVars: []string{"GRAM_CATALOG_REVIEW_ORGANIZATION_ID"},
+			Value:   constants.SpeakeasyTeamOrganizationID,
+		},
+		&cli.StringFlag{
+			Name:    "catalog-review-project-id",
+			Usage:   "Project inside the catalogue review organization",
+			EnvVars: []string{"GRAM_CATALOG_REVIEW_PROJECT_ID"},
+			Value:   constants.SpeakeasyTeamDefaultProjectID,
+		},
+		&cli.StringFlag{
+			Name:    "github-evidence-token",
+			Usage:   "GitHub API token for MCP evidence repository lookups",
+			EnvVars: []string{"GRAM_GITHUB_EVIDENCE_TOKEN"},
 		},
 		&cli.StringFlag{
 			Name:    "temporal-address",
@@ -532,7 +553,24 @@ func newAdminCommand() *cli.Command {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
 			adminService := admin.NewService(logger, tracerProvider, db, redisClient, adminOIDCClient, adminEncryption, adminAllowedOrigins, adminWorkOSClient, adminOpenRouter, trialNotifier, productFeatures, chatAnalysisSignaler, openRouterSpendCap, billingOperations, telemetry.NewSupportCoverage(db, chDB), telemetry.NewMCPServerHealth(db, chDB), siteURL, registryService)
-			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
+			catalogPromotions := catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy)
+			reviewProjectID, err := uuid.Parse(c.String("catalog-review-project-id"))
+			if err != nil {
+				return fmt.Errorf("invalid catalog review project id: %w", err)
+			}
+			reviewOrganizationID := c.String("catalog-review-organization-id")
+			catalogPromotions.SetHome(catalogpromotion.Home{OrganizationID: reviewOrganizationID, ProjectID: reviewProjectID})
+			if temporalEnv != nil {
+				reviewFlags := newFeatureFlags(ctx, c, logger, posthogClient)
+				// Native catalogue only: this binary holds no Pulse credentials, and
+				// promotion cares about the catalogue it publishes to. Any other
+				// selected source lands in the dossier as a recorded gap.
+				reviewCatalog := externalmcp.NewCatalogService(db, nil, externalmcp.NewNativeRegistryReader(registryService), reviewFlags)
+				catalogPromotions.SetReviewer(mcpapproval.NewStaffReviews(logger, tracerProvider, db, reviewFlags, audit.NewLogger(),
+					newMCPApprovalAssembler(logger, db, guardianPolicy, billingTelemetry, reviewCatalog, c.String("github-evidence-token")),
+					mcpApprovalResearchStarter(temporalEnv), reviewOrganizationID, reviewProjectID))
+			}
+			adminService.SetCatalogPromotionService(catalogPromotions)
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))

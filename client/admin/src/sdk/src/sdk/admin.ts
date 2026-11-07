@@ -45,6 +45,7 @@ import { adminGetProject } from "../funcs/adminGetProject.js";
 import { adminGetRegistryEntry } from "../funcs/adminGetRegistryEntry.js";
 import { adminGetRegistryOktaCandidates } from "../funcs/adminGetRegistryOktaCandidates.js";
 import { adminGetRegistryPromotionCandidate } from "../funcs/adminGetRegistryPromotionCandidate.js";
+import { adminGetRegistryPromotionReview } from "../funcs/adminGetRegistryPromotionReview.js";
 import { adminGetSession } from "../funcs/adminGetSession.js";
 import { adminGetSpendBreakdown } from "../funcs/adminGetSpendBreakdown.js";
 import { adminGetStripeCustomer } from "../funcs/adminGetStripeCustomer.js";
@@ -94,6 +95,7 @@ import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizati
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
+import { adminStartRegistryPromotionReview } from "../funcs/adminStartRegistryPromotionReview.js";
 import { adminStartTrial } from "../funcs/adminStartTrial.js";
 import { adminTriggerOrganizationChatAnalysis } from "../funcs/adminTriggerOrganizationChatAnalysis.js";
 import { adminUpdateGlobalIssuer } from "../funcs/adminUpdateGlobalIssuer.js";
@@ -142,6 +144,7 @@ import { AdminRegistryOktaUnmapped } from "../models/components/adminregistryokt
 import { AdminRegistryPage } from "../models/components/adminregistrypage.js";
 import { AdminRegistryPromotionCandidate } from "../models/components/adminregistrypromotioncandidate.js";
 import { AdminRegistryPromotionCandidates } from "../models/components/adminregistrypromotioncandidates.js";
+import { AdminRegistryPromotionReviewResult } from "../models/components/adminregistrypromotionreviewresult.js";
 import { AdminSession } from "../models/components/adminsession.js";
 import { AdminSignupOffer } from "../models/components/adminsignupoffer.js";
 import { AdminSpendBreakdownResponse } from "../models/components/adminspendbreakdownresponse.js";
@@ -1396,6 +1399,23 @@ export class Admin extends ClientSDK {
   }
 
   /**
+   * getRegistryPromotionReview admin
+   *
+   * @remarks
+   * Read the MCP review for one exact remote MCP deployment's endpoint without gathering evidence or starting research.
+   */
+  async getRegistryPromotionReview(
+    request: GetRegistryPromotionCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionReviewResult> {
+    return unwrapAsync(adminGetRegistryPromotionReview(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
    * retryRegistryPromotionDocs admin
    *
    * @remarks
@@ -1440,6 +1460,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminRegistryEntry> {
     return unwrapAsync(adminSetRegistryEntryPublished(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * startRegistryPromotionReview admin
+   *
+   * @remarks
+   * Gather evidence and start a research run for one exact remote MCP deployment's endpoint. The review runs in Speakeasy's own organization, which pays for it and receives its audit entries; nothing is recorded in the source account. A run already in progress is returned instead of starting another.
+   */
+  async startRegistryPromotionReview(
+    request: GetRegistryPromotionCandidateRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminRegistryPromotionReviewResult> {
+    return unwrapAsync(adminStartRegistryPromotionReview(
       this,
       request,
       options,
