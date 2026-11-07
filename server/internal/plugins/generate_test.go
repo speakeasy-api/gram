@@ -1037,6 +1037,75 @@ func TestGenerateCopilotMarketplaceManifest(t *testing.T) {
 	require.Equal(t, "engineering-tools", bare.Plugins[0].Name)
 }
 
+// TestGenerateVibePluginPackage pins the <slug>-vibe package the device agent
+// unpacks into ~/.vibe/plugins/<slug>/: it carries the portable Agent Plugins
+// 1.0 files (plugin.json, mcp.json, skills/) under the bare slug's name, and
+// none of the Cursor/Codex native manifests that share compileAgentPlugin's
+// output. A plugin that fails the portability gate gets no Vibe package either.
+func TestGenerateVibePluginPackage(t *testing.T) {
+	t.Parallel()
+	plugins := []PluginInfo{{
+		Name:        "Engineering Tools",
+		Slug:        "engineering-tools",
+		Description: "Eng MCP servers.",
+		Servers: []PluginServerInfo{{
+			DisplayName: "eng",
+			MCPURL:      "https://example.com/mcp",
+			IsPublic:    true,
+		}},
+		Skills: []PluginSkillInfo{{Name: "triage", Content: "---\nname: triage\ndescription: Triage\n---\nBody\n"}},
+	}}
+	cfg := GenerateConfig{
+		OrgName:   "Acme Corp",
+		ServerURL: "https://app.getgram.ai",
+	}
+
+	files, err := GeneratePluginPackages(plugins, cfg)
+	require.NoError(t, err)
+
+	for _, p := range []string{
+		"engineering-tools-vibe/plugin.json",
+		"engineering-tools-vibe/mcp.json",
+		"engineering-tools-vibe/skills/triage/SKILL.md",
+	} {
+		_, ok := files[p]
+		require.True(t, ok, "missing Vibe package file: %s", p)
+	}
+	for p := range files {
+		rel := strings.TrimPrefix(p, "engineering-tools-vibe/")
+		if rel != p {
+			require.False(t, strings.HasPrefix(rel, "."), "Vibe package carries a native Cursor/Codex manifest: %s", p)
+		}
+	}
+
+	var meta struct {
+		Name string `json:"name"`
+	}
+	require.NoError(t, json.Unmarshal(files["engineering-tools-vibe/plugin.json"], &meta))
+	require.Equal(t, "engineering-tools", meta.Name, "Vibe package keeps the bare slug as the plugin identity")
+
+	var mcp agentMCPConfig
+	require.NoError(t, json.Unmarshal(files["engineering-tools-vibe/mcp.json"], &mcp))
+	require.Contains(t, mcp.MCPServers, "eng")
+	require.Equal(t, "https://example.com/mcp", mcp.MCPServers["eng"].URL)
+
+	// A plugin whose servers need a Speakeasy credential is not portable, so
+	// no <slug>-vibe package is emitted for it (same gate as agent-plugins/).
+	incompatible := []PluginInfo{{
+		Name: "Proxied Tools",
+		Slug: "proxied-tools",
+		Servers: []PluginServerInfo{{
+			DisplayName: "crm",
+			MCPURL:      "https://app.getgram.ai/mcp/crm",
+		}},
+	}}
+	filesNoVibe, err := GeneratePluginPackages(incompatible, cfg)
+	require.NoError(t, err)
+	for p := range filesNoVibe {
+		require.False(t, strings.HasPrefix(p, "proxied-tools-vibe/"), "non-portable plugin got a Vibe package: %s", p)
+	}
+}
+
 func TestGenerateMarketplaceManifestScopesNonDefaultProject(t *testing.T) {
 	t.Parallel()
 	plugins := []PluginInfo{{Name: "A", Slug: "a"}}
@@ -2066,6 +2135,106 @@ func TestGeneratePiObservabilityPluginPackage(t *testing.T) {
 	require.True(t, ok, "pi package must ship the Windows bootstrapper the extension spawns")
 }
 
+// Mistral Vibe consumes the observability package as a native Agent Plugins
+// 1.0 plugin: plugin.json declares the ai.mistral.vibe extension and
+// ai.mistral.vibe/hooks.toml registers the relay on all three Vibe hook
+// events. Pin the whole shape — flat ZIP layout, TOML wiring, schema
+// validation, and which credentials ride in which file.
+func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		APIKey:      "gram_local_api_key_secret",
+		HooksAPIKey: "gram_local_hooks_secret",
+	}
+	files, err := GenerateObservabilityPluginPackage(cfg, "vibe")
+	require.NoError(t, err)
+
+	// Flat ZIP layout: everything at the package root.
+	for _, name := range []string{
+		"plugin.json",
+		"ai.mistral.vibe/hooks.toml",
+		"speakeasy.json",
+		"hooks/bootstrap.sh",
+		"hooks/bootstrap.ps1",
+	} {
+		require.Contains(t, files, name, "vibe package must ship %s", name)
+	}
+	require.Len(t, files, 5, "vibe package is exactly manifest + hooks.toml + runtime files")
+
+	// hooks.toml wires the relay on all three Vibe events with --provider=vibe.
+	hooksTOML := string(files["ai.mistral.vibe/hooks.toml"])
+	require.Contains(t, hooksTOML, "--provider=vibe")
+	require.Contains(t, hooksTOML, `$PLUGIN_ROOT/hooks/bootstrap.sh`)
+	var decoded struct {
+		Hooks []struct {
+			Name    string  `toml:"name"`
+			Type    string  `toml:"type"`
+			Match   string  `toml:"match"`
+			Timeout float64 `toml:"timeout"`
+			Command string  `toml:"command"`
+		} `toml:"hooks"`
+	}
+	_, err = toml.Decode(hooksTOML, &decoded)
+	require.NoError(t, err, "generated hooks.toml must parse")
+	require.Len(t, decoded.Hooks, 3)
+	types := map[string]bool{}
+	for _, hook := range decoded.Hooks {
+		types[hook.Type] = true
+		require.Equal(t, "*", hook.Match)
+		require.InDelta(t, vibeHookTimeoutSeconds, hook.Timeout, 1e-9)
+		require.Equal(t, `bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`, hook.Command)
+	}
+	require.True(t, types["pre_tool"] && types["post_tool"] && types["post_agent"], "all three Vibe hook events must be registered, got %v", types)
+
+	// plugin.json validates against the vendored AP1.0 schema and declares the
+	// ai.mistral.vibe extension that gates loading hooks.toml.
+	var manifest map[string]any
+	require.NoError(t, json.Unmarshal(files["plugin.json"], &manifest))
+	require.NoError(t, validateAgentPluginDocument(agentPluginSchemaID, manifest))
+	require.Equal(t, "acme-observability", manifest["name"])
+	ext, ok := manifest["extensions"].(map[string]any)["ai.mistral.vibe"].(map[string]any)
+	require.True(t, ok, "plugin.json must declare the ai.mistral.vibe extension")
+	require.InDelta(t, 1, ext["schemaVersion"], 1e-9)
+
+	// The hooks-scoped key is baked into speakeasy.json (that one IS meant to be
+	// embedded — the package is as sensitive as the key); the consumer API key
+	// is not.
+	require.Contains(t, string(files["speakeasy.json"]), "gram_local_hooks_secret")
+	for name, content := range files {
+		require.NotContains(t, string(content), "gram_local_api_key_secret", "%s must not embed the consumer API key", name)
+	}
+}
+
+// The published marketplace repo carries the Vibe observability package at
+// <org>-observability-vibe/ next to the other platforms' subtrees.
+func TestGenerateHooksFilesIncludesVibeSubtree(t *testing.T) {
+	t.Parallel()
+	cfg := GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}
+	files, err := generateHooksFiles(cfg)
+	require.NoError(t, err)
+
+	slug := VibeObservabilitySlug(cfg)
+	require.Equal(t, "acme-observability-vibe", slug)
+	hooksTOML, ok := files[slug+"/ai.mistral.vibe/hooks.toml"]
+	require.True(t, ok, "hooks subtree must ship the vibe package at %s", slug)
+	require.Contains(t, string(hooksTOML), "--provider=vibe")
+	require.Contains(t, files, slug+"/plugin.json")
+	require.Contains(t, files, slug+"/speakeasy.json")
+	require.Contains(t, files, slug+"/hooks/bootstrap.sh")
+	require.Contains(t, files, slug+"/hooks/bootstrap.ps1")
+
+	// The repo README tells Vibe users where to install the observability package.
+	readme := string(generateReadme(nil, cfg))
+	require.Contains(t, readme, "acme-observability-vibe/")
+	require.Contains(t, readme, "~/.vibe/plugins/acme-observability/")
+}
+
 // The dogfood trees are what `hooks:test` renders for local development, so a
 // platform missing here cannot be exercised against a dev server at all.
 func TestDogfoodPluginFilesIncludesPi(t *testing.T) {
@@ -2100,6 +2269,7 @@ func TestGenerateHooksFilesCoversEveryPlatformSubtree(t *testing.T) {
 		}), "hooks subtree prefix %q has no generated files", prefix)
 	}
 	require.Contains(t, files, PiObservabilitySlug(cfg)+"/"+relay.PiExtensionFile)
+	require.Contains(t, files, VibeObservabilitySlug(cfg)+"/ai.mistral.vibe/hooks.toml")
 }
 
 func TestHooksBootstrapConcurrentColdInvocationsDownloadOnce(t *testing.T) {
@@ -2284,7 +2454,7 @@ func TestGeneratedHookScriptsAreValidBash(t *testing.T) {
 		ServerURL:   "https://app.getgram.ai",
 		HooksAPIKey: "gram_local_secret_xyz",
 	}
-	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw"} {
+	for _, platform := range []string{"claude", "cursor", "codex", "opencode", "copilot", "openclaw", "vibe"} {
 		files, err := GenerateObservabilityPluginPackage(cfg, platform)
 		require.NoError(t, err)
 		for name, content := range files {

@@ -162,6 +162,30 @@ describe("installation instructions", () => {
     expect(text).not.toContain("GRAM_CURSOR_INSTALL");
   });
 
+  it("installs the observability plugin into ~/.vibe/plugins for Mistral Vibe", () => {
+    const text = openProvider("Mistral Vibe");
+    // Quick install: the server-generated ZIP for platform=vibe, extracted
+    // straight into the user-scope plugin directory.
+    expect(text).toContain("Download Plugin");
+    expect(text).toContain(
+      "unzip observability-vibe.zip -d ~/.vibe/plugins/<org>-observability",
+    );
+    // Manual install from the marketplace repository's <org>-observability-vibe/
+    // directory, with reload, automatic hooks, and directory removal to uninstall.
+    expect(text).toContain(
+      "cp -R marketplace/<org>-observability-vibe ~/.vibe/plugins/<org>-observability",
+    );
+    expect(text).toContain(
+      "https://github.com/example-owner/example-org-plugins",
+    );
+    expect(text).toContain("/reload-plugins");
+    expect(text).toContain("ai.mistral.vibe/hooks.toml");
+    expect(text).toContain("rm -rf ~/.vibe/plugins/<org>-observability");
+    // MCP servers are declared as [[mcp_servers]] entries in ~/.vibe/config.toml.
+    expect(text).toContain("[[mcp_servers]]");
+    expect(text).toContain("~/.vibe/config.toml");
+  });
+
   it.each(["publish", "manage"] as const)(
     "qualifies GitHub invitations in %s mode",
     (mode) => {

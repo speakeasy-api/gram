@@ -6,6 +6,7 @@
 // Invocation contract (baked into generated provider configs):
 //
 //	speakeasy-hooks agenthooks run --provider=claude-code   # hook event on stdin
+//	speakeasy-hooks agenthooks run --provider=vibe          # Vibe hook event on stdin
 //	speakeasy-hooks pi serve [--config=<path>]               # Pi extension NDJSON stdio
 //	speakeasy-hooks login [--force] [--config=<path>]        # interactive sign-in
 //
@@ -64,6 +65,13 @@ func main() {
 	flagCfg, _ := relay.SplitInlineFlags(relay.Config{ServerURL: "", SiteURL: "", ProjectSlug: "", OrgID: "", HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: "", ConfigError: "", InstallRoute: ""}, os.Args[1:])
 	cfg := relay.LoadConfig(flagCfg)
 
+	// Vibe is decoded by the relay itself: the external agenthooks module
+	// rejects --provider=vibe at parse time, so those invocations never reach
+	// agenthooks.Main.
+	if relay.IsVibeInvocation(os.Args[1:]) {
+		os.Exit(relay.RunVibeCommand(context.Background(), cfg, os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	}
+
 	agenthooks.Main(relay.NewRunner(cfg))
 }
 
@@ -71,7 +79,7 @@ func main() {
 // backs local end-to-end testing; production distribution is wired separately.
 func runInstall(args []string) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
-	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, pi")
+	provider := fs.String("provider", "", "provider slug: claude-code, cursor, codex, opencode, openclaw, copilot, pi, vibe")
 	dir := fs.String("dir", "", "output directory for the plugin package")
 	serverURL := fs.String("server-url", relay.DefaultServerURL, "Speakeasy server URL to bake into the plugin")
 	siteURL := fs.String("site-url", "", "dashboard origin for browser sign-in when it differs from the server URL (local dev)")
