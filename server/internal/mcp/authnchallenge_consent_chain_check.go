@@ -66,7 +66,7 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
 		}
 	}
-	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
+	statuses, err = s.withTypedRegistrationStatusesForResource(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed, endpoint.directConsentResource())
 	if err != nil {
 		return nil, routing, err
 	}
