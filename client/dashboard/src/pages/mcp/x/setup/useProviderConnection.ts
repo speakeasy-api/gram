@@ -970,7 +970,16 @@ export function useProviderConnection(
       if (generation.current !== run) return;
       // Native account-specific sources can finish their existing catalog
       // handoff only after provider configuration is committed.
-      await onConfigured?.();
+      try {
+        await onConfigured?.();
+      } catch {
+        if (generation.current === run)
+          fail(
+            "save",
+            `${name} credentials were saved, but the connection handoff couldn’t be finished. Try again.`,
+          );
+        return;
+      }
       if (generation.current !== run) return;
       dispatch({ type: "field", field: "clientId", value: "" });
       dispatch({ type: "field", field: "clientSecret", value: "" });

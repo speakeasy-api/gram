@@ -323,10 +323,21 @@ function CatalogDraft({
                 : {}),
               name: `${handoff.name} guardrail`,
             })
-        : routes.mcp.details.overview.href(mcpServerRouteParam(server)),
+        : gatewayId
+          ? routes.mcp.gateway.overview.href(gatewayId)
+          : routes.mcp.details.overview.href(mcpServerRouteParam(server)),
       { replace: true },
     );
-  }, [s.screen, server, storageKey, checkpointKey, navigate, routes, handoff]);
+  }, [
+    s.screen,
+    server,
+    storageKey,
+    checkpointKey,
+    navigate,
+    routes,
+    handoff,
+    gatewayId,
+  ]);
 
   const install = async () => {
     if (busy.current || pending) return;

@@ -7,6 +7,7 @@ Read this before changing provider instructions, catalog handoff, or the save/si
 | Concern                                                          | Source                                                                                                                           |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | Page shell and step/footer controls                              | [SetupBody.tsx](./SetupBody.tsx)                                                                                                 |
+| Installed-server loading, provider selection and setup lifecycle | [ProviderSetupPage.tsx](../../mcp/x/setup/ProviderSetupPage.tsx)                                                                 |
 | Endpoint allowlist, catalog handoff, non-secret progress         | [provider-setup.ts](../../mcp/x/setup/provider-setup.ts)                                                                         |
 | Credential saving, OAuth, testing, stale-operation guards        | [useProviderConnection.ts](../../mcp/x/setup/useProviderConnection.ts)                                                           |
 | Provider steps, invalidation, completion conditions              | [state.ts](./state.ts)                                                                                                           |
