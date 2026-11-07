@@ -1,3 +1,5 @@
+import type { CatalogServer } from "../hooks";
+
 /** Salesforce's native endpoints and the separate hosted CRM contract. */
 const salesforceHostedUrl =
   "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
@@ -74,6 +76,29 @@ function nativeUrl(
   environment: string,
 ): string {
   return `https://api.salesforce.com/platform/mcp/v1/${environment === "sandbox" ? server.sandboxPath : server.productionPath}`;
+}
+
+/** The guided page owns Salesforce's endpoint and instance choices. */
+export function salesforceSetupInstallServer(
+  server: CatalogServer,
+): CatalogServer | null {
+  const remotes = server.remotes ?? [];
+  const remote =
+    remotes.find(
+      (item) => item.url === nativeUrl(salesforceServers[0], "production"),
+    ) ?? remotes.find((item) => salesforceSelectionForUrl(item.url));
+  if (!remote) return null;
+  return {
+    ...server,
+    remotes: [
+      {
+        ...remote,
+        headers: remote.headers?.filter(
+          (header) => header.name.toLowerCase() !== "mcp-instance-url",
+        ),
+      },
+    ],
+  };
 }
 
 type Selection = {
