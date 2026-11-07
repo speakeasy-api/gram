@@ -1,0 +1,133 @@
+# Authorization end-to-end suite: the API contract matrix and dashboard
+# permission journeys in e2e/rbac, run against a fully booted local stack.
+#
+# Kept out of pr.yaml for the same reason as wake-stack-e2e.yml: it boots the
+# whole stack, which is far heavier than the main PR workflow. It runs when
+# authorization code or the suite changes, on any pull request labelled
+# `rbac-migration` (so stacked pull requests whose base is not main get it
+# too), and on demand for any ref.
+name: RBAC E2E
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to test (defaults to the dispatching ref)
+        required: false
+        type: string
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rbac-e2e-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Decide whether to run
+    if: github.event_name == 'pull_request'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    permissions:
+      contents: read
+      pull-requests: read # paths-filter lists the pull request files
+    outputs:
+      authz: ${{ steps.filter.outputs.authz }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            authz:
+              - server/internal/authz/**
+              - server/internal/authztest/**
+              - server/internal/access/**
+              - server/internal/auth/**
+              - server/internal/middleware/**
+              - server/internal/authenforcement/**
+              - server/internal/mcpauthz/**
+              - server/internal/mcpaccess/**
+              - server/internal/platformmcp/authorization*.go
+              - server/design/access/**
+              - client/dashboard/src/pages/access/**
+              - client/dashboard/src/hooks/useRBAC.ts
+              - client/dashboard/src/components/require-scope.tsx
+              - e2e/rbac/**
+              - e2e/rbac.config.ts
+              - .mise-tasks/test/rbac-e2e.sh
+              - .github/workflows/rbac-e2e.yml
+
+  rbac-e2e:
+    name: rbac-e2e
+    needs: [changes]
+    # `always()` so a workflow_dispatch run, which skips `changes`, still runs.
+    # A fork pull request gets no ATLAS_TOKEN and cannot boot the stack.
+    if: >-
+      always() && (
+        github.event_name == 'workflow_dispatch' ||
+        (
+          github.event.pull_request.head.repo.full_name == github.repository && (
+            needs.changes.outputs.authz == 'true' ||
+            contains(github.event.pull_request.labels.*.name, 'rbac-migration')
+          )
+        )
+      )
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 45
+    env:
+      GOMAXPROCS: 8
+      ATLAS_TOKEN: ${{ secrets.ATLAS_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
+        with:
+          ref: ${{ inputs.ref || '' }}
+
+      - name: Setup Mise
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Restore Go module cache
+        uses: ./.github/workflows/composite/go-mod-cache # zizmor: ignore[self-repository]
+
+      # See wake-stack-e2e.yml: settles the ClickHouse migration engine so
+      # `./zero --agent` does not stop to ask.
+      - name: Answer zero's questions before it asks them
+        run: |
+          cat > mise.local.toml <<'TOML'
+          [env]
+          CLICKHOUSE_MIGRATION_ENGINE = "golang-migrate"
+          TOML
+
+      # The seed makes whoever `git config user.email` names the organization
+      # admin, and the suite's global setup provisions every other persona
+      # through that admin.
+      - name: Give the seed someone to be
+        run: |
+          git config user.email "rbac-e2e@example.com"
+          git config user.name "RBAC E2E"
+
+      - name: Boot the stack
+        run: ./zero --agent
+
+      - name: Test
+        run: mise run test:rbac-e2e
+
+      # The HTML report only: the persona world file and storage states hold
+      # session tokens and API keys, and traces are off in CI for the same
+      # reason.
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rbac-e2e-playwright
+          path: e2e/.playwright/rbac-report
+          retention-days: 14
+          if-no-files-found: ignore
