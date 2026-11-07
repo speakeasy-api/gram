@@ -25,10 +25,6 @@ import {
 } from "@gram/client/react-query/serverClientAssociations.js";
 import { useDetachServerClientAssociationMutation } from "@gram/client/react-query/detachServerClientAssociation.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
-import {
-  invalidateAllGetRemoteMcpServerScopes,
-  useGetRemoteMcpServerScopes,
-} from "@gram/client/react-query/getRemoteMcpServerScopes.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import type { GetServerIdentityImpactRequest } from "@gram/client/models/operations/getserveridentityimpact.js";
 import {
@@ -56,7 +52,6 @@ import { useCatalogHeaderSuggestions } from "../useCatalogHeaderSuggestions";
 import { useHeaderDrafts } from "@/lib/remote-identity";
 import { identityModeCards } from "@/lib/remote-identity";
 import { useAgentCredentialDraft } from "@/lib/remote-identity";
-import { RequestedScopesSummary } from "./RequestedScopesSummary";
 import { RepointedServersNotice } from "./RepointedServersNotice";
 import type { AuthTarget } from "./authTarget";
 import {
@@ -313,21 +308,6 @@ export function RemoteMcpIdentitySectionBody({
     selectedMode === "agent" && isOAuthFormat(saFormat) ? saFormat : null;
   const oauthSelected = oauthFormat !== null;
 
-  const showScopesSummary =
-    canRead &&
-    identityResolved &&
-    actualMode === "user" &&
-    selectedMode === "user" &&
-    userDraft.connectedClientId !== null;
-  const scopesSummaryQuery = useGetRemoteMcpServerScopes(
-    { mcpServerId: target.permissionResourceId },
-    undefined,
-    {
-      enabled: showScopesSummary && target.permissionResourceId !== "",
-      throwOnError: false,
-    },
-  );
-
   const detachIssuer = useDetachUserSessionIssuerMutation();
   const detachAssociation = useDetachServerClientAssociationMutation();
 
@@ -458,7 +438,6 @@ export function RemoteMcpIdentitySectionBody({
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllServerClientAssociations(queryClient),
-      invalidateAllGetRemoteMcpServerScopes(queryClient),
       invalidateSharedIssuerImpact(queryClient),
     ]);
     return true;
@@ -853,18 +832,6 @@ export function RemoteMcpIdentitySectionBody({
                     ? "1 other MCP server"
                     : `${otherServersOnClient} other MCP servers`}
                   . Changing or rotating it changes their sign-in too.
-                </Text>
-              ) : null}
-              {showScopesSummary && scopesSummaryQuery.data ? (
-                <div className="mt-4 pl-[52px] empty:hidden">
-                  <RequestedScopesSummary
-                    scopes={scopesSummaryQuery.data}
-                    connectedClientId={userDraft.connectedClientId}
-                  />
-                </div>
-              ) : showScopesSummary && scopesSummaryQuery.isError ? (
-                <Text muted small className="mt-4 block pl-[52px]">
-                  Couldn't load requested scopes.
                 </Text>
               ) : null}
             </div>

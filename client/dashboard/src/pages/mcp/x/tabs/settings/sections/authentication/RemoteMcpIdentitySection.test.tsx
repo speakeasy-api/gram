@@ -48,10 +48,6 @@ const mocks = vi.hoisted(() => ({
   detachAssociation: vi.fn(),
   userSessionIssuer: vi.fn(),
   toastSuccess: vi.fn(),
-  scopes: vi.fn(),
-  setPin: vi.fn(),
-  invalidateScopes: vi.fn(),
-  setScopesData: vi.fn(),
   toastError: vi.fn(),
 }));
 
@@ -234,27 +230,6 @@ vi.mock("@/lib/remote-identity/queries/useProtectedResourceMetadata", () => ({
     mocks.protectedResourceMetadata(...args),
 }));
 
-vi.mock("@gram/client/react-query/getRemoteMcpServerScopes.js", () => ({
-  useGetRemoteMcpServerScopes: (...args: unknown[]) => mocks.scopes(...args),
-  setGetRemoteMcpServerScopesData: (...args: unknown[]) =>
-    mocks.setScopesData(...args),
-  invalidateAllGetRemoteMcpServerScopes: (...args: unknown[]) =>
-    mocks.invalidateScopes(...args),
-  queryKeyGetRemoteMcpServerScopes: (params: unknown) => [
-    "@gram/client",
-    "remoteMcp",
-    "getServerScopes",
-    params,
-  ],
-}));
-
-vi.mock("@gram/client/react-query/setRemoteMcpServerScopePin.js", () => ({
-  useSetRemoteMcpServerScopePinMutation: () => ({
-    mutateAsync: mocks.setPin,
-    isPending: false,
-  }),
-}));
-
 vi.mock("@gram/client/react-query/createRemoteMcpServerHeader.js", () => ({
   useCreateRemoteMcpServerHeaderMutation: () => ({
     mutateAsync: mocks.create,
@@ -384,29 +359,6 @@ function configuredHeader(overrides: Record<string, unknown> = {}) {
     isSecret: true,
     createdAt: new Date(0),
     updatedAt: new Date(0),
-    ...overrides,
-  };
-}
-
-function serverScopes(overrides: Record<string, unknown> = {}) {
-  return {
-    resourceUrl: "https://mcp.linear.app/mcp",
-    pinnedScopes: ["read"],
-    advertisedScopesKnown: true,
-    advertisedScopes: ["read", "write"],
-    challengeScopes: [],
-    discoveryEnabled: true,
-    sharedServerCount: 0,
-    canPin: true,
-    clients: [
-      {
-        clientId: "client-1",
-        scopeSource: "resource_pin",
-        requestedScopes: ["read"],
-        unadvertisedPinnedScopes: [],
-        pinWouldDecide: true,
-      },
-    ],
     ...overrides,
   };
 }
@@ -654,17 +606,6 @@ beforeEach(() => {
   mocks.detach.mockResolvedValue({});
   mocks.detachAssociation.mockResolvedValue({});
   mocks.authenticationProbe.mockReturnValue("available");
-  mocks.scopes.mockReturnValue({ data: undefined, isError: false });
-  mocks.setPin.mockImplementation(
-    async ({
-      request,
-    }: {
-      request: { setServerScopePinRequestBody: { scopes: string[] } };
-    }) =>
-      serverScopes({
-        pinnedScopes: request.setServerScopePinRequestBody.scopes,
-      }),
-  );
 });
 
 afterEach(() => {
@@ -1976,7 +1917,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.update).not.toHaveBeenCalled();
-    expect(mocks.setPin).not.toHaveBeenCalled();
     expect(mocks.toastSuccess).not.toHaveBeenCalled();
   });
 
@@ -2999,8 +2939,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(form.clientMode).toBe("manual");
     expect(form.clientConfiguration?.clientId).toBe("manual-client");
     expect(form.clientConfiguration?.scope).toBeUndefined();
-    // The new client changes what the pin view resolves.
-    await waitFor(() => expect(mocks.invalidateScopes).toHaveBeenCalled());
   });
 
   it("drops scopes chosen for a manual client when Auto-Configure is saved", async () => {
@@ -3736,122 +3674,6 @@ describe("RemoteMcpIdentitySectionBody", () => {
         .getByRole("link", { name: "Authorization Servers" })
         .getAttribute("href"),
     ).toBe("/org/projects/project/remote-identity-providers");
-  });
-
-  describe("requested scopes", () => {
-    it("shows a writer the requested scopes without a pin field", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-
-      expect(screen.getByText("Requested at sign-in")).toBeDefined();
-      expect(
-        screen.queryByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeNull();
-    });
-
-    it("shows a reader the requested scopes without a pin field", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-      mocks.hasScope.mockImplementation(
-        (scope: string, resourceId?: string) =>
-          scope === "mcp:read" && resourceId === "mcp-server-1",
-      );
-
-      renderIdentity();
-
-      expect(mocks.scopes).toHaveBeenCalledWith(
-        { mcpServerId: "mcp-server-1" },
-        undefined,
-        expect.objectContaining({ enabled: true, throwOnError: false }),
-      );
-      expect(
-        screen.queryByRole("combobox", { name: "Pinned scopes" }),
-      ).toBeNull();
-      expect(screen.queryByText("Loading pinned scopes…")).toBeNull();
-      expect(
-        within(
-          screen.getByRole("list", { name: "Requested scopes" }),
-        ).getByText("read"),
-      ).toBeDefined();
-      expect(screen.getByText("Requested at sign-in")).toBeDefined();
-    });
-
-    it("tells a reader when the requested scopes fail to load", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: undefined, isError: true });
-      mocks.hasScope.mockImplementation(
-        (scope: string, resourceId?: string) =>
-          scope === "mcp:read" && resourceId === "mcp-server-1",
-      );
-
-      renderIdentity();
-
-      expect(screen.getByText("Couldn't load requested scopes.")).toBeDefined();
-    });
-
-    it("shows only the connected client's request", () => {
-      connectClient();
-      mocks.hasScope.mockImplementation(
-        (scope: string, resourceId?: string) =>
-          scope === "mcp:read" && resourceId === "mcp-server-1",
-      );
-      mocks.scopes.mockReturnValue({
-        data: serverScopes({
-          clients: [
-            {
-              clientId: "client-1",
-              scopeSource: "resource_pin",
-              requestedScopes: ["read"],
-              unadvertisedPinnedScopes: [],
-              pinWouldDecide: true,
-            },
-            {
-              clientId: "client-2",
-              scopeSource: "client_scope",
-              requestedScopes: ["admin"],
-              unadvertisedPinnedScopes: [],
-              pinWouldDecide: false,
-            },
-          ],
-        }),
-        isError: false,
-      });
-
-      renderIdentity();
-
-      const lists = screen.getAllByRole("list", { name: "Requested scopes" });
-      expect(lists).toHaveLength(1);
-      expect(
-        within(lists[0]!)
-          .getAllByRole("listitem")
-          .map((li) => li.textContent),
-      ).toEqual(["read"]);
-      expect(screen.queryByText("admin")).toBeNull();
-      expect(screen.queryByText("Set on this connection.")).toBeNull();
-    });
-
-    it("shows no summary on a server with no bound client", () => {
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-
-      expect(screen.queryByText("Requested at sign-in")).toBeNull();
-    });
-
-    it("shows no summary in Service Account mode", () => {
-      connectClient();
-      mocks.scopes.mockReturnValue({ data: serverScopes(), isError: false });
-
-      renderIdentity();
-      fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
-
-      expect(screen.queryByText("Requested at sign-in")).toBeNull();
-      expect(
-        screen.queryByRole("list", { name: "Requested scopes" }),
-      ).toBeNull();
-    });
   });
 });
 
