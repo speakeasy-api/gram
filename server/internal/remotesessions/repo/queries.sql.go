@@ -14903,6 +14903,71 @@ func (q *Queries) SetRemoteSessionAutoRefreshByRef(ctx context.Context, arg SetR
 	return result.RowsAffected(), nil
 }
 
+const setRemoteSessionAutoRefreshInTenant = `-- name: SetRemoteSessionAutoRefreshInTenant :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $4::uuid
+  AND p.organization_id = $5::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.id = $6
+  AND s.updated_at = $7
+  AND ($8::text = '' OR rtrim(s.resource, '/') = rtrim($8::text, '/'))
+  AND ($8::text <> '' OR NOT EXISTS (
+    SELECT 1 FROM remote_sessions other
+    WHERE other.subject_urn = s.subject_urn
+      AND other.remote_session_client_id = s.remote_session_client_id
+      AND other.deleted IS FALSE AND other.id <> s.id
+  ))
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshInTenantParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+	Resource              string
+}
+
+// SetRemoteSessionAutoRefresh for a registration a server offers through an
+// auth client, scoped as SoftDeleteRemoteSessionBySubjectAndClientInTenant.
+// Does not touch updated_at, which is the refresh CAS token and keepalive
+// clock.
+func (q *Queries) SetRemoteSessionAutoRefreshInTenant(ctx context.Context, arg SetRemoteSessionAutoRefreshInTenantParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefreshInTenant,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+		arg.Resource,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setRemoteSessionClientJsonWebKeySet = `-- name: SetRemoteSessionClientJsonWebKeySet :one
 UPDATE remote_session_clients
 SET
@@ -15393,6 +15458,102 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 	var items []SoftDeleteRemoteSessionBySubjectAndClientRow
 	for rows.Next() {
 		var i SoftDeleteRemoteSessionBySubjectAndClientRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const softDeleteRemoteSessionBySubjectAndClientInTenant = `-- name: SoftDeleteRemoteSessionBySubjectAndClientInTenant :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_clients AS c,
+     remote_session_issuers AS i,
+     -- A deleted sign-in still names the organization the consent was made in.
+     user_session_issuers AS u
+     LEFT JOIN projects AS up ON up.id = u.project_id,
+     projects AS p
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND c.id = s.remote_session_client_id
+  AND i.id = c.remote_session_issuer_id
+  AND i.deleted IS FALSE
+  AND u.id = s.user_session_issuer_id
+  AND p.id = $3::uuid
+  AND p.organization_id = $4::text
+  AND p.deleted IS FALSE
+  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
+  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+  AND c.deleted IS FALSE
+  AND s.id = $5
+  AND s.updated_at = $6
+  AND ($7::text = '' OR rtrim(s.resource, '/') = rtrim($7::text, '/'))
+  AND ($7::text <> '' OR NOT EXISTS (
+    SELECT 1 FROM remote_sessions other
+    WHERE other.subject_urn = s.subject_urn
+      AND other.remote_session_client_id = s.remote_session_client_id
+      AND other.deleted IS FALSE AND other.id <> s.id
+  ))
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+	Resource              string
+}
+
+type SoftDeleteRemoteSessionBySubjectAndClientInTenantRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// SoftDeleteRemoteSessionBySubjectAndClient for a registration a server offers
+// through an auth client, which no user session issuer need link. The caller
+// has checked that offer; the write stays within the tenant as
+// GetActiveRemoteSessionInTenant reads: the client's reach pins a project
+// registration to its project, and the consent must have come through a
+// sign-in of the server's organization. Returns the stored credentials it
+// tombstones, for upstream revocation.
+func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx context.Context, arg SoftDeleteRemoteSessionBySubjectAndClientInTenantParams) ([]SoftDeleteRemoteSessionBySubjectAndClientInTenantRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionBySubjectAndClientInTenant,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionBySubjectAndClientInTenantRow
 		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
 			return nil, err
 		}
