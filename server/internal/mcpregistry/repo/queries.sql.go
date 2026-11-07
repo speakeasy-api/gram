@@ -461,6 +461,15 @@ func (q *Queries) ListOktaMappingConflicts(ctx context.Context, arg ListOktaMapp
 	return items, nil
 }
 
+const lockCatalogRefresh = `-- name: LockCatalogRefresh :exec
+LOCK TABLE mcp_registry_entries IN EXCLUSIVE MODE NOWAIT
+`
+
+func (q *Queries) LockCatalogRefresh(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockCatalogRefresh)
+	return err
+}
+
 const lockCatalogTransfer = `-- name: LockCatalogTransfer :exec
 LOCK TABLE mcp_registry_entries IN SHARE ROW EXCLUSIVE MODE NOWAIT
 `
@@ -522,6 +531,227 @@ func (q *Queries) PublishedCatalogSize(ctx context.Context) (PublishedCatalogSiz
 	var i PublishedCatalogSizeRow
 	err := row.Scan(&i.Entries, &i.Bytes)
 	return i, err
+}
+
+const refreshCanonicalJSONSize = `-- name: RefreshCanonicalJSONSize :one
+SELECT octet_length($1::jsonb::text) AS canonical_bytes
+`
+
+// Match the jsonb::text representation measured by refresh storage constraints.
+func (q *Queries) RefreshCanonicalJSONSize(ctx context.Context, data []byte) (int32, error) {
+	row := q.db.QueryRow(ctx, refreshCanonicalJSONSize, data)
+	var canonical_bytes int32
+	err := row.Scan(&canonical_bytes)
+	return canonical_bytes, err
+}
+
+const refreshCatalogSize = `-- name: RefreshCatalogSize :one
+SELECT count(*)::bigint AS entry_count,
+    COALESCE(sum(octet_length(data::text)), 0)::bigint AS data_bytes
+FROM mcp_registry_entries
+`
+
+type RefreshCatalogSizeRow struct {
+	EntryCount int64
+	DataBytes  int64
+}
+
+func (q *Queries) RefreshCatalogSize(ctx context.Context) (RefreshCatalogSizeRow, error) {
+	row := q.db.QueryRow(ctx, refreshCatalogSize)
+	var i RefreshCatalogSizeRow
+	err := row.Scan(&i.EntryCount, &i.DataBytes)
+	return i, err
+}
+
+const refreshCatalogSnapshot = `-- name: RefreshCatalogSnapshot :many
+SELECT id, data, published, published_at, created_at, updated_at FROM mcp_registry_entries
+ORDER BY data #>> '{server,name}', id
+LIMIT 10001
+`
+
+func (q *Queries) RefreshCatalogSnapshot(ctx context.Context) ([]McpRegistryEntry, error) {
+	rows, err := q.db.Query(ctx, refreshCatalogSnapshot)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpRegistryEntry
+	for rows.Next() {
+		var i McpRegistryEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Data,
+			&i.Published,
+			&i.PublishedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const refreshListPlanOwnersFixture = `-- name: RefreshListPlanOwnersFixture :many
+SELECT owner, (receipt IS NOT NULL)::boolean AS committed
+FROM mcp_catalog_refresh_plans
+WHERE source_identity = $1
+ORDER BY created_at, id
+`
+
+type RefreshListPlanOwnersFixtureRow struct {
+	Owner     string
+	Committed bool
+}
+
+// Test fixture: assert verified staff ownership on persisted bootstrap receipts.
+func (q *Queries) RefreshListPlanOwnersFixture(ctx context.Context, sourceIdentity string) ([]RefreshListPlanOwnersFixtureRow, error) {
+	rows, err := q.db.Query(ctx, refreshListPlanOwnersFixture, sourceIdentity)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RefreshListPlanOwnersFixtureRow
+	for rows.Next() {
+		var i RefreshListPlanOwnersFixtureRow
+		if err := rows.Scan(&i.Owner, &i.Committed); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const refreshLoadPlan = `-- name: RefreshLoadPlan :one
+SELECT data, receipt, expires_at FROM mcp_catalog_refresh_plans
+WHERE id = $1 AND source_identity = $2 AND owner = $3
+`
+
+type RefreshLoadPlanParams struct {
+	ID             uuid.UUID
+	SourceIdentity string
+	Owner          string
+}
+
+type RefreshLoadPlanRow struct {
+	Data      []byte
+	Receipt   []byte
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) RefreshLoadPlan(ctx context.Context, arg RefreshLoadPlanParams) (RefreshLoadPlanRow, error) {
+	row := q.db.QueryRow(ctx, refreshLoadPlan, arg.ID, arg.SourceIdentity, arg.Owner)
+	var i RefreshLoadPlanRow
+	err := row.Scan(&i.Data, &i.Receipt, &i.ExpiresAt)
+	return i, err
+}
+
+const refreshLoadState = `-- name: RefreshLoadState :one
+SELECT state FROM mcp_catalog_refresh_state WHERE source_identity = $1
+`
+
+func (q *Queries) RefreshLoadState(ctx context.Context, sourceIdentity string) ([]byte, error) {
+	row := q.db.QueryRow(ctx, refreshLoadState, sourceIdentity)
+	var state []byte
+	err := row.Scan(&state)
+	return state, err
+}
+
+const refreshLockPlans = `-- name: RefreshLockPlans :exec
+SELECT pg_advisory_xact_lock(724169283419205::bigint)
+`
+
+// Global registry coordination is intentionally not project scoped.
+func (q *Queries) RefreshLockPlans(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, refreshLockPlans)
+	return err
+}
+
+const refreshPrunePlans = `-- name: RefreshPrunePlans :exec
+DELETE FROM mcp_catalog_refresh_plans
+WHERE (receipt IS NULL AND expires_at <= clock_timestamp())
+OR id IN (
+    SELECT id FROM mcp_catalog_refresh_plans
+    WHERE receipt IS NOT NULL
+    ORDER BY updated_at DESC, id DESC
+    OFFSET 128
+)
+`
+
+func (q *Queries) RefreshPrunePlans(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, refreshPrunePlans)
+	return err
+}
+
+const refreshSavePlan = `-- name: RefreshSavePlan :execrows
+INSERT INTO mcp_catalog_refresh_plans (id, source_identity, owner, expires_at, data)
+SELECT $1, $2, $3, $4, $5
+WHERE (SELECT count(*) FROM mcp_catalog_refresh_plans WHERE receipt IS NULL) < 32
+`
+
+type RefreshSavePlanParams struct {
+	ID             uuid.UUID
+	SourceIdentity string
+	Owner          string
+	ExpiresAt      pgtype.Timestamptz
+	Data           []byte
+}
+
+func (q *Queries) RefreshSavePlan(ctx context.Context, arg RefreshSavePlanParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshSavePlan,
+		arg.ID,
+		arg.SourceIdentity,
+		arg.Owner,
+		arg.ExpiresAt,
+		arg.Data,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const refreshSaveReceipt = `-- name: RefreshSaveReceipt :execrows
+UPDATE mcp_catalog_refresh_plans
+SET receipt = $1, data = '{}'::jsonb, updated_at = clock_timestamp()
+WHERE id = $2
+`
+
+type RefreshSaveReceiptParams struct {
+	Receipt []byte
+	ID      uuid.UUID
+}
+
+func (q *Queries) RefreshSaveReceipt(ctx context.Context, arg RefreshSaveReceiptParams) (int64, error) {
+	result, err := q.db.Exec(ctx, refreshSaveReceipt, arg.Receipt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const refreshSaveState = `-- name: RefreshSaveState :exec
+INSERT INTO mcp_catalog_refresh_state (source_identity, state)
+VALUES ($1, $2)
+ON CONFLICT (source_identity) DO UPDATE
+SET state = EXCLUDED.state, updated_at = clock_timestamp()
+`
+
+type RefreshSaveStateParams struct {
+	SourceIdentity string
+	State          []byte
+}
+
+func (q *Queries) RefreshSaveState(ctx context.Context, arg RefreshSaveStateParams) error {
+	_, err := q.db.Exec(ctx, refreshSaveState, arg.SourceIdentity, arg.State)
+	return err
 }
 
 const registryReady = `-- name: RegistryReady :one

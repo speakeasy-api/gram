@@ -11,6 +11,16 @@ import (
 	goahttp "goa.design/goa/v3/http"
 )
 
+func TestCatalogSourceIdentity(t *testing.T) {
+	t.Parallel()
+	identity := catalogSourceIdentity("https://production.example.test/admin/catalog.export", "catalog-audience")
+	require.Len(t, identity, 64)
+	require.Equal(t, identity, catalogSourceIdentity("https://production.example.test/admin/catalog.export", "catalog-audience"))
+	require.NotEqual(t, identity, catalogSourceIdentity("https://another.example.test/admin/catalog.export", "catalog-audience"))
+	require.NotEqual(t, identity, catalogSourceIdentity("https://production.example.test/admin/catalog.export", "other-audience"))
+	require.Empty(t, catalogSourceIdentity("", ""))
+}
+
 func TestCatalogSyncStartupConfiguration(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
