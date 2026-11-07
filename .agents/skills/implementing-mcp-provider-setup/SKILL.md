@@ -38,6 +38,8 @@ Keep each provider choice at its approved step. Preserve approved identity choic
 
 ## Reuse map
 
+Paths are repository-relative; inspect the active branch before relying on them.
+
 | Existing surface                                                                                                    | Reuse for                                                                     |
 | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | `client/dashboard/src/pages/mcp/x/setup/ProviderSetupPage.tsx`                                                      | Page shell, header, step rail, footer, completion to Overview                 |
@@ -60,7 +62,7 @@ Provider-side activation, support handoff or credential requirements represented
 
 ## Verify the extension
 
-Check every issue criterion against code and observed behavior. In the signed-in dashboard, exercise the intended first-time entry and follow the approved sequence to completion, including intermediate controls and handoffs. A direct Setup URL or an already-installed server does not establish that initial experience; report partial coverage explicitly. Cover the required app-registration paths, callback/scopes and completion gating. Test retry, interrupted progress, invalidation and other identity modes where the change affects them. Spot-check affected providers after shared changes. Use focused tests, dashboard type-check/lint/knip and `gram-playwright-cli`, including a narrow viewport.
+Check every issue criterion against code and observed behavior. In the signed-in dashboard, exercise the intended first-time entry and follow the approved sequence to completion, including intermediate controls and handoffs. A direct Setup URL or an already-installed server does not establish that initial experience; report partial coverage explicitly. Cover supported new/existing app paths, callback/scopes and completion gating. Test loading, failure, retry, interrupted progress, invalidation and other identity modes where the change affects them. Spot-check affected providers after shared changes. Use focused tests, dashboard type-check/lint/knip and `gram-playwright-cli`, including a narrow viewport.
 
 Report the exact click path observed and any unverified entry points; claim similarity only for the interactions actually compared. Report controlled-response tests separately from live provider authorization. Assess Platform MCP, Command K and demo-seed implications using their repository skills. Before handoff, compare the diff to the intended base and account for every changed surface. Commit, publish, change Linear, or attach a demo only within the user's authorization.
 
