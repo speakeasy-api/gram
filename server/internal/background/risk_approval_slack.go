@@ -4,17 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
-	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/risk/approval/slackapproval"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 )
@@ -45,8 +42,10 @@ const (
 // Temporal actions/month ≈ 5R, per namespace, where R is approval requests
 // whose approvers get a DM: one start, one send activity, one expiry timer,
 // one decision signal and one update activity. A request with nobody to DM
-// stops after the send activity (2 actions). Scales with approval requests,
-// and each one waits on a person, so the rate stays human-paced.
+// stops after the send activity (2 actions). A send that fails every attempt
+// adds one activity that counts the DMs earlier attempts recorded. Scales with
+// approval requests, and each one waits on a person, so the rate stays
+// human-paced.
 func RiskApprovalSlackWorkflow(ctx workflow.Context, target slackapproval.Target) error {
 	activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 2 * time.Minute,
@@ -55,7 +54,16 @@ func RiskApprovalSlackWorkflow(ctx workflow.Context, target slackapproval.Target
 	var a *riskApprovalSlackActivities
 	var sent slackapproval.NotifyResult
 	if err := workflow.ExecuteActivity(activityCtx, a.NotifyRiskApprovalApprovers, target).Get(activityCtx, &sent); err != nil {
-		return fmt.Errorf("send approval DMs: %w", err)
+		// The last attempt can end without an answer, as when it times out,
+		// while DMs from earlier attempts keep live buttons. The run counts
+		// the recorded DMs and still gives them the outcome.
+		if countErr := workflow.ExecuteActivity(activityCtx, a.CountRiskApprovalDMs, target).Get(activityCtx, &sent); countErr != nil {
+			return fmt.Errorf("send approval DMs: %w", errors.Join(err, countErr))
+		}
+		if sent.Sent == 0 {
+			return fmt.Errorf("send approval DMs: %w", err)
+		}
+		workflow.GetLogger(ctx).Warn("some approvers got no approval DM", "organization_id", target.OrganizationID, "risk_policy_approval_id", target.ApprovalID.String(), "error", err)
 	}
 	if sent.Sent == 0 {
 		return nil
@@ -80,28 +88,23 @@ func RiskApprovalSlackWorkflow(ctx workflow.Context, target slackapproval.Target
 }
 
 type riskApprovalSlackActivities struct {
-	logger   *slog.Logger
 	notifier *slackapproval.Notifier
 }
 
 func (a *riskApprovalSlackActivities) NotifyRiskApprovalApprovers(ctx context.Context, target slackapproval.Target) (slackapproval.NotifyResult, error) {
 	result, err := a.notifier.Notify(ctx, target)
-	if err == nil {
-		return result, nil
+	if err != nil {
+		return result, fmt.Errorf("notify approvers: %w", err)
 	}
-	if keepsSentDMs(result, activity.GetInfo(ctx).Attempt) {
-		a.logger.WarnContext(ctx, "some approvers got no approval DM", attr.SlogOrganizationID(target.OrganizationID), attr.SlogRiskPolicyApprovalID(target.ApprovalID.String()), attr.SlogError(err))
-		return result, nil
-	}
-	return result, fmt.Errorf("notify approvers: %w", err)
+	return result, nil
 }
 
-// keepsSentDMs reports a failed send that ends successfully with the DMs it
-// has: on the last attempt, the run still waits and gives those DMs the
-// outcome instead of failing and leaving their buttons live. Earlier attempts
-// fail, and the retry reaches the approvers still missing a DM.
-func keepsSentDMs(result slackapproval.NotifyResult, attempt int32) bool {
-	return result.Sent > 0 && attempt >= riskApprovalSlackActivityAttempts
+func (a *riskApprovalSlackActivities) CountRiskApprovalDMs(ctx context.Context, target slackapproval.Target) (slackapproval.NotifyResult, error) {
+	result, err := a.notifier.Sent(ctx, target)
+	if err != nil {
+		return result, fmt.Errorf("count approval DMs: %w", err)
+	}
+	return result, nil
 }
 
 func (a *riskApprovalSlackActivities) FinishRiskApprovalCards(ctx context.Context, target slackapproval.Target) error {

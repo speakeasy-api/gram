@@ -412,9 +412,11 @@ export function clearPolicyStartSession(projectSlug: string): void {
   }
 }
 
+/** The badge color of a policy action, the same on every Guardrails screen. */
 export function actionBadgeVariant(
   action: string,
-): "neutral" | "warning" | "destructive" {
+): "neutral" | "information" | "warning" | "destructive" {
+  if (action === "require_approval") return "information";
   if (action === "warn") return "warning";
   if (action === "block" || action === "quarantine") return "destructive";
   return "neutral";

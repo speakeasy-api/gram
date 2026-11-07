@@ -360,3 +360,7 @@ describe("policy forward compatibility", () => {
 it("presents unknown policy actions neutrally", () => {
   expect(actionBadgeVariant("future_action")).toBe("neutral");
 });
+
+it("colors require approval blue on every Guardrails screen", () => {
+  expect(actionBadgeVariant("require_approval")).toBe("information");
+});
