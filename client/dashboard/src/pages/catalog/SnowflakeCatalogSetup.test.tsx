@@ -3,7 +3,7 @@ import { writeSnowflakeHandoff } from "./snowflake-install";
 import { StrictMode } from "react";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SnowflakeCatalogFlow } from "./SnowflakeCatalogSetup";
 import { useSetup } from "./provider-setup/setup-context";
@@ -57,6 +57,9 @@ vi.mock("@/routes", () => ({
   }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
+  invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock("@gram/client/react-query/mcpServers", () => ({
   invalidateAllMcpServers: vi.fn(),
 }));
@@ -73,16 +76,29 @@ vi.mock("@/lib/mcpEndpoints", () => ({
   createDefaultMcpEndpoint: api.endpoint,
 }));
 vi.mock("@/pages/mcp/x/setup/useProviderConnection", () => ({
-  useProviderConnection: (...args: unknown[]) => {
+  useProviderConnection: (
+    ...args: Parameters<
+      typeof import("@/pages/mcp/x/setup/useProviderConnection").useProviderConnection
+    >
+  ) => {
     api.live(...args);
-    return { next: api.next, loading: false, pending: null, error: null };
+    return {
+      next: () => {
+        api.next();
+        void args[4]?.();
+      },
+      loading: false,
+      pending: null,
+      error: null,
+      dispatch: args[1],
+    };
   },
 }));
 // Isolate lifecycle wiring while exercising the real reducer and secret-free progress.
 // The actual shared shell/tasks have separate component tests and browser checks.
-vi.mock("@/pages/mcp/x/setup/ProviderSetupPage", () => ({
+vi.mock("./provider-setup/SetupBody", () => ({
   SetupBody: () => {
-    const { s, live } = useSetup();
+    const { s, live, dispatch } = useSetup();
     return (
       <>
         <output>{s.step}</output>
@@ -102,6 +118,20 @@ vi.mock("@/pages/mcp/x/setup/ProviderSetupPage", () => ({
         />
         <button disabled={!!live.pending} onClick={live.next}>
           Continue
+        </button>
+        <button
+          onClick={() => {
+            dispatch({
+              type: "connection",
+              saved: true,
+              authorized: true,
+              tested: true,
+              configChanged: false,
+            });
+            dispatch({ type: "complete" });
+          }}
+        >
+          Complete mocked connection
         </button>
         {live.error}
         <button onClick={live.retryLoad}>Retry load</button>
@@ -141,11 +171,15 @@ function seedCredentials() {
 function Location() {
   return <output aria-label="Location">{useLocation().pathname}</output>;
 }
-function show() {
+function show(entry = "/") {
   return render(
     <StrictMode>
-      <MemoryRouter>
-        <SnowflakeCatalogFlow />
+      <MemoryRouter initialEntries={[entry]}>
+        <Routes>
+          <Route path="/" element={<SnowflakeCatalogFlow />} />
+          <Route path="/overview" element={<div>Server overview</div>} />
+          <Route path="/catalog/snowflake" element={<div>Catalog entry</div>} />
+        </Routes>
         <Location />
       </MemoryRouter>
     </StrictMode>,
@@ -163,7 +197,11 @@ beforeEach(() => {
   api.members.mockResolvedValue({ members: [] });
   api.policy.mockResolvedValue({ id: "policy" });
 });
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 async function credentials() {
   const user = userEvent.setup();
   await user.type(screen.getByLabelText("Client ID"), "client-id");
@@ -392,5 +430,64 @@ describe("Snowflake catalog draft lifecycle (mocked API)", () => {
     expect(
       JSON.parse(sessionStorage.getItem(key + ":installation") ?? "null"),
     ).toMatchObject({ serverId: "server", guardrailAttempted: true });
+  });
+  it("opens Overview even if storage becomes unavailable during completion", async () => {
+    seedCredentials();
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    const remove = vi.fn(() => {
+      throw new Error("Storage unavailable");
+    });
+    const storage = sessionStorage;
+    vi.stubGlobal("sessionStorage", {
+      getItem: storage.getItem.bind(storage),
+      setItem: storage.setItem.bind(storage),
+      removeItem: remove,
+    });
+    await user.click(screen.getByText("Complete mocked connection"));
+    await screen.findByText("Server overview");
+    expect(remove).toHaveBeenCalled();
+    expect(screen.getByLabelText("Location").textContent).toBe("/overview");
+  });
+  it("keeps edited endpoint values when reusing a partially created upstream", async () => {
+    seedCredentials();
+    sessionStorage.setItem(
+      key + ":installation",
+      JSON.stringify({ remoteId: "remote" }),
+    );
+    const previousUrl = url.replace("/APP/", "/OLD/");
+    api.upstream.mockResolvedValue({ url: previousUrl });
+    show();
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.remote).not.toHaveBeenCalled();
+    expect(api.live.mock.lastCall?.[0]).toMatchObject({
+      step: "credentials",
+      values: {
+        database: "APP",
+        clientId: "client-id",
+        clientSecret: "test-secret",
+      },
+    });
+    expect(api.live.mock.lastCall?.[3]).toEqual({ url: previousUrl });
+  });
+  it("attaches the configured source to the gateway retained by the modal handoff", async () => {
+    seedCredentials();
+    show("/?attachToGateway=gateway-id");
+    const user = await credentials();
+    await user.click(screen.getByText("Continue"));
+    await waitFor(() => expect(api.next).toHaveBeenCalledOnce());
+    expect(api.members).toHaveBeenCalledWith({ metaMcpServerId: "gateway-id" });
+    await waitFor(() =>
+      expect(api.member).toHaveBeenCalledWith({
+        addMetaMcpMemberForm: {
+          metaMcpServerId: "gateway-id",
+          mcpServerId: "server",
+        },
+      }),
+    );
   });
 });

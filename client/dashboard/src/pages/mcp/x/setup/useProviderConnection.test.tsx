@@ -111,6 +111,7 @@ function mount(
     url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
     instanceUrl: "",
   },
+  onConfigured?: () => Promise<void>,
 ) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -131,6 +132,7 @@ function mount(
         provider === "salesforce" || provider === "snowflake"
           ? currentSource
           : undefined,
+        onConfigured,
       );
       return { state, ...connection };
     },
@@ -2128,6 +2130,33 @@ describe("Snowflake shared actions", () => {
     expect(result.current.state.values.clientSecret).toBe("");
     expect(result.current.state.authorized).toBe(false);
   });
+  it.each([false, true])(
+    "finishes the catalog handoff after committing credentials (failure=%s)",
+    async (fails) => {
+      mocks.remote.mockResolvedValue({ id: "upstream", url: oldUrl });
+      mocks.provider.mockRejectedValue({ statusCode: 404 });
+      const onConfigured = vi.fn<() => Promise<void>>();
+      if (fails)
+        onConfigured.mockRejectedValue(new Error("Gateway unavailable"));
+      else onConfigured.mockResolvedValue();
+      const { result } = mount(
+        "snowflake",
+        { step: "credentials", values },
+        { url: oldUrl, instanceUrl: "" },
+        onConfigured,
+      );
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() => expect(onConfigured).toHaveBeenCalledOnce());
+      expect(mocks.commit.mock.invocationCallOrder[0]).toBeLessThan(
+        onConfigured.mock.invocationCallOrder[0]!,
+      );
+      if (fails) {
+        await waitFor(() => expect(result.current.error).toBeTruthy());
+        expect(result.current.state.saved).toBe(false);
+      } else await waitFor(() => expect(result.current.state.saved).toBe(true));
+    },
+  );
   it.each(["shared source", "external edit", "authorization header"])(
     "refuses a save after %s",
     async (reason) => {

@@ -1,3 +1,4 @@
+import { invalidateAllMetaMcpMembers } from "@gram/client/react-query/metaMcpMembers";
 import { toast } from "sonner";
 import {
   buildServerGuardrailRequest,
@@ -45,7 +46,7 @@ import {
   snowflakeSelectionForUrl,
   snowflakeConnection,
 } from "./provider-setup/snowflake";
-import { SetupBody } from "@/pages/mcp/x/setup/ProviderSetupPage";
+import { SetupBody } from "./provider-setup/SetupBody";
 import { useProviderConnection } from "@/pages/mcp/x/setup/useProviderConnection";
 import {
   loadProviderProgress,
@@ -208,15 +209,6 @@ function CatalogDraft({
         throw new Error("Endpoint creation failed");
       target = await sdk.mcpServers.get({ id });
     }
-    if (gatewayId) {
-      const { members } = await sdk.metaMcp.listMembers({
-        metaMcpServerId: gatewayId,
-      });
-      if (!members.some((member) => member.mcpServerId === id))
-        await sdk.metaMcp.addMember({
-          addMetaMcpMemberForm: { metaMcpServerId: gatewayId, mcpServerId: id },
-        });
-    }
     const fingerprint = providerSourceFingerprint(target.remoteMcpServerId, {
       url: upstream.url,
     });
@@ -310,9 +302,13 @@ function CatalogDraft({
   useEffect(() => {
     if (s.screen !== "success" || !server) return;
     // The next catalog Add starts a new setup, rather than reopening this one.
-    sessionStorage.removeItem(storageKey);
-    sessionStorage.removeItem(checkpointKey);
-    sessionStorage.removeItem(`${storageKey}:handoff`);
+    try {
+      sessionStorage.removeItem(storageKey);
+      sessionStorage.removeItem(checkpointKey);
+      sessionStorage.removeItem(`${storageKey}:handoff`);
+    } catch {
+      // Completion still opens the server when browser storage becomes unavailable.
+    }
     void navigate(
       handoff.customize
         ? routes.policyCenter.new.href() +
@@ -395,6 +391,7 @@ function CatalogDraft({
         serverUrl={serverUrl}
         saveOnMount={saveOnMount}
         serverName={handoff.name}
+        gatewayId={gatewayId ?? undefined}
       />
     );
   return (
@@ -445,6 +442,7 @@ function InstalledDraft({
   serverUrl,
   saveOnMount,
   serverName,
+  gatewayId,
 }: {
   s: State;
   dispatch: Dispatch<Action>;
@@ -452,6 +450,7 @@ function InstalledDraft({
   serverUrl: string;
   saveOnMount: boolean;
   serverName: string;
+  gatewayId?: string;
 }): JSX.Element {
   const current = useGetMcpServer({ id: server.id }, undefined, {
     throwOnError: false,
@@ -461,9 +460,33 @@ function InstalledDraft({
     undefined,
     { throwOnError: false },
   );
-  const live = useProviderConnection(s, dispatch, current.data ?? server, {
-    url: remote.data?.url ?? serverUrl,
-  });
+  const sdk = useSdkClient();
+  const queryClient = useQueryClient();
+  const live = useProviderConnection(
+    s,
+    dispatch,
+    current.data ?? server,
+    {
+      url: remote.data?.url ?? serverUrl,
+    },
+    gatewayId
+      ? async () => {
+          // Adding after credential save lets the existing gateway writer attach
+          // the configured provider client to the gateway's issuer.
+          const { members } = await sdk.metaMcp.listMembers({
+            metaMcpServerId: gatewayId,
+          });
+          if (!members.some((member) => member.mcpServerId === server.id))
+            await sdk.metaMcp.addMember({
+              addMetaMcpMemberForm: {
+                metaMcpServerId: gatewayId,
+                mcpServerId: server.id,
+              },
+            });
+          await invalidateAllMetaMcpMembers(queryClient);
+        }
+      : undefined,
+  );
   const autoSave = useRef(saveOnMount);
   const routes = useRoutes();
   useEffect(() => {

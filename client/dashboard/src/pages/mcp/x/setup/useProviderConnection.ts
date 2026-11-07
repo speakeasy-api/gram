@@ -137,6 +137,7 @@ export function useProviderConnection(
   dispatch: Dispatch<Action>,
   server: McpServer,
   source?: { url: string; instanceUrl?: string },
+  onConfigured?: () => Promise<void>,
 ): ProviderConnection {
   const providerKey = s.provider;
   if (providerKey === "salesforce" && source?.instanceUrl)
@@ -815,7 +816,23 @@ export function useProviderConnection(
     if (activeSave.current !== null) return;
     const run = generation.current;
     if (s.saved && !s.values.clientId && !s.values.clientSecret) {
-      dispatch({ type: "goto", step: "test" });
+      if (onConfigured) {
+        setPhase("saving");
+        setFailure(null);
+        try {
+          await onConfigured();
+        } catch {
+          if (generation.current === run)
+            fail(
+              "save",
+              `Couldn’t finish the ${name} connection. Try saving again.`,
+            );
+          return;
+        } finally {
+          setPhase("idle");
+        }
+      }
+      if (generation.current === run) dispatch({ type: "goto", step: "test" });
       return;
     }
     if (Object.keys(validate(s)).length) {
@@ -950,6 +967,10 @@ export function useProviderConnection(
             ...mcpServerVisibilityUpdateForm(current, "private"),
           },
         });
+      if (generation.current !== run) return;
+      // Native account-specific sources can finish their existing catalog
+      // handoff only after provider configuration is committed.
+      await onConfigured?.();
       if (generation.current !== run) return;
       dispatch({ type: "field", field: "clientId", value: "" });
       dispatch({ type: "field", field: "clientSecret", value: "" });

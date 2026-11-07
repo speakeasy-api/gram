@@ -52,6 +52,9 @@ it("round-trips only the User Identity handoff and its existing modal choices", 
   guardrail.categories = new Set(["pii", "secrets"]);
   guardrail.audienceType = "targeted";
   guardrail.audiencePrincipalUrns = new Set(["urn:example:principal"]);
+  guardrail.action = "block";
+  guardrail.score = 3;
+  guardrail.userMessage = "Review the selected tools before retrying.";
   guardrail.toolMode = "selected";
   guardrail.selectedTools = ["example_tool"];
   expect(
