@@ -285,7 +285,6 @@ export type UserIdentityDraft = {
   issuerEditorText: string;
   issuerEditorError: string | null;
   issuerEditorValidated: boolean;
-  openIssuerEditor: () => void;
   setIssuerEditorText: (value: string) => void;
   discoverIssuer: () => void;
   resetIssuer: () => void;
@@ -454,11 +453,35 @@ export function useUserIdentityDraft({
   );
   const advertisedIssuer =
     prm.metadata?.authorizationServers?.[0]?.trim() || null;
-  const issuerContext = JSON.stringify([
+  // Only an answer can change what the upstream advertises. A probe that is
+  // disabled or loading has none, and treating that as a change would discard
+  // what the operator typed whenever a background refetch pauses this draft.
+  const advertisementSource = JSON.stringify([
     mcpServerId,
     remoteMcpServerId,
     upstreamUrl,
-    advertisedIssuer,
+  ]);
+  const advertisementAnswered =
+    prm.status === "available" || prm.status === "unavailable";
+  const [advertisement, setAdvertisement] = useState({
+    source: advertisementSource,
+    issuer: advertisedIssuer,
+  });
+  const newSource = advertisement.source !== advertisementSource;
+  if (
+    newSource ||
+    (advertisementAnswered && advertisement.issuer !== advertisedIssuer)
+  ) {
+    setAdvertisement({
+      source: advertisementSource,
+      issuer: advertisedIssuer,
+    });
+  }
+  const issuerContext = JSON.stringify([
+    advertisementSource,
+    newSource || advertisementAnswered
+      ? advertisedIssuer
+      : advertisement.issuer,
   ]);
   const [correction, setCorrection] = useState({
     context: issuerContext,
@@ -1083,10 +1106,6 @@ export function useUserIdentityDraft({
       !correction.edited &&
       !correction.error &&
       correction.text.trim() === discoveredIssuerUrl,
-    openIssuerEditor: () => {
-      if (!commitStarted.current && selectedDiscovered)
-        setCorrection((current) => ({ ...current, open: true }));
-    },
     setIssuerEditorText: (text) => {
       if (!commitStarted.current)
         setCorrection((current) => ({

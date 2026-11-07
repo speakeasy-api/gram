@@ -139,7 +139,6 @@ describe("unsaved issuer correction", () => {
     const { result, queryClient } = renderDraft();
     await waitFor(() => expect(result.current.discoveryStatus).toBe("loading"));
     act(() => {
-      result.current.openIssuerEditor();
       result.current.setIssuerEditorText(corrected);
     });
     expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
@@ -200,7 +199,6 @@ describe("unsaved issuer correction", () => {
   it("clears issuer-bound input and method on correction and Reset, keeping the editor open", async () => {
     const { result } = renderDraft();
     await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
-    act(() => result.current.openIssuerEditor());
     act(() => {
       result.current.selectChoice("manual");
       result.current.setRegistrationMethod("dcr");
@@ -273,12 +271,52 @@ describe("unsaved issuer correction", () => {
     });
   });
 
+  it.each([
+    ["disabled", { status: "idle", metadata: null }],
+    ["loading", { status: "loading", metadata: null }],
+  ])(
+    "keeps a correction and credentials while the probe is %s",
+    async (_, unanswered) => {
+      const { result, rerender, props } = renderDraft();
+      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      act(() => result.current.setIssuerEditorText(corrected));
+      act(() => result.current.discoverIssuer());
+      await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+      act(() => {
+        result.current.selectChoice("manual");
+        result.current.setClientId("EXAMPLE-CLIENT");
+        result.current.setClientSecret("EXAMPLE-SECRET");
+      });
+      mocks.resource.mockReturnValue(unanswered);
+      rerender({ ...props, enabled: false });
+      mocks.resource.mockReturnValue({
+        status: "available",
+        metadata: { authorizationServers: [advertised] },
+      });
+      rerender({ ...props, enabled: true });
+      expect(result.current).toMatchObject({
+        clientId: "EXAMPLE-CLIENT",
+        clientSecret: "EXAMPLE-SECRET",
+        issuerEditorText: corrected,
+        issuerEditorOpen: true,
+      });
+    },
+  );
+
+  it("drops credentials when the upstream stops advertising the provider", async () => {
+    const { result, rerender, props } = renderDraft();
+    await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+    act(() => result.current.setClientId("EXAMPLE-CLIENT"));
+    mocks.resource.mockReturnValue({ status: "unavailable", metadata: null });
+    rerender({ ...props });
+    expect(result.current.clientId).toBe("");
+  });
+
   it.each(["source", "upstream", "advertisement"])(
     "does not carry a correction or credentials across a changed %s",
     async (change) => {
       const { result, rerender, props } = renderDraft();
       await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
-      act(() => result.current.openIssuerEditor());
       act(() => result.current.setIssuerEditorText(corrected));
       act(() => result.current.discoverIssuer());
       await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
