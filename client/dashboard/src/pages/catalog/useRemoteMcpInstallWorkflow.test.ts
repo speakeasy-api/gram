@@ -250,6 +250,69 @@ describe("useRemoteMcpInstallWorkflow", () => {
     expect(mockCreateServer).not.toHaveBeenCalled();
   });
 
+  it("defers guided setup after catalog admission and before any probe or create", async () => {
+    const servers = [makeServer()];
+    const beforeInstall = vi.fn().mockResolvedValue(true);
+    const deferSetup = vi.fn().mockReturnValue(true);
+    const { result } = renderHook(() =>
+      useRemoteMcpInstallWorkflow({ servers, beforeInstall, deferSetup }),
+    );
+    await act(async () => {
+      if (result.current.phase === "configure")
+        await result.current.startInstall();
+    });
+    expect(beforeInstall).toHaveBeenCalledOnce();
+    expect(deferSetup).toHaveBeenCalledOnce();
+    expect(beforeInstall.mock.invocationCallOrder[0]).toBeLessThan(
+      deferSetup.mock.invocationCallOrder[0]!,
+    );
+    expect(mockProbeURL).not.toHaveBeenCalled();
+    expect(mockCreateServer).not.toHaveBeenCalled();
+    expect(mockMcpServersCreate).not.toHaveBeenCalled();
+    expect(result.current.phase).toBe("configure");
+  });
+
+  it.each(["create", "customize", "skip"] as const)(
+    "preserves the existing %s guardrail choice when installation is deferred",
+    async (choice) => {
+      const servers = [makeServer()];
+      const deferSetup = vi.fn().mockReturnValue(true);
+      const { result } = renderHook(() =>
+        useRemoteMcpInstallWorkflow({
+          servers,
+          deferSetup,
+          offerGuardrails: true,
+        }),
+      );
+      act(() => {
+        if (result.current.phase === "configure")
+          result.current.continueToGuardrails?.();
+      });
+      await act(async () => {
+        if (result.current.phase === "guardrails") {
+          if (choice === "create") await result.current.installWithGuardrail();
+          else if (choice === "customize")
+            await result.current.installForCustomizing();
+          else await result.current.skip();
+        }
+      });
+      expect(deferSetup).toHaveBeenCalledOnce();
+      const options = deferSetup.mock.lastCall?.[1];
+      if (choice === "create")
+        expect(options.guardrail.categories).toEqual(
+          new Set(["secrets", "pii"]),
+        );
+      else if (choice === "customize")
+        expect(options.customize.categories).toEqual(
+          new Set(["secrets", "pii"]),
+        );
+      else expect(options).toEqual({});
+      expect(mockCreatePolicy).not.toHaveBeenCalled();
+      expect(mockProbeURL).not.toHaveBeenCalled();
+      expect(mockCreateServer).not.toHaveBeenCalled();
+    },
+  );
+
   it("retains accepted servers when policy creation fails", async () => {
     const servers = [makeServer()];
     const beforeInstall = vi.fn().mockResolvedValue(true);

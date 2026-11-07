@@ -1,10 +1,20 @@
 import { salesforceConnection } from "./salesforce";
+import {
+  snowflakeConnection,
+  publicSnowflakeHost,
+  idValid,
+  mcpNameValid,
+  agentValid,
+  roleAllowed,
+  users,
+} from "./snowflake";
 /** Provider setup state only. Network actions live in the page integration. */
-export type Provider = "slack" | "github" | "salesforce";
+export type Provider = "slack" | "github" | "salesforce" | "snowflake";
 export const names = {
   slack: "Slack",
   github: "GitHub",
   salesforce: "Salesforce",
+  snowflake: "Snowflake",
 };
 const defaultValues = {
   org: "",
@@ -17,6 +27,21 @@ const defaultValues = {
   clientId: "",
   clientSecret: "",
   access: "all",
+  host: "",
+  network: "public",
+  method: "new",
+  database: "",
+  schema: "",
+  serverName: "SPEAKEASY_MCP",
+  agent: "",
+  toolName: "business_data_agent",
+  toolTitle: "Business data agent",
+  toolDescription: "Answers questions using the configured Cortex Agent.",
+  creatorRole: "",
+  accessRole: "SPEAKEASY_MCP_USER",
+  warehouse: "",
+  users: "",
+  oauthIntegration: "",
 };
 type Values = typeof defaultValues;
 export type FieldName = keyof Values;
@@ -54,6 +79,19 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
+  if (s.provider === "snowflake")
+    return [
+      { id: "begin", title: "Setup plan" },
+      { id: "account", title: "Snowflake account" },
+      { id: "server", title: "MCP server details" },
+      ...(s.values.method === "new"
+        ? [{ id: "create", title: "Create MCP server" }]
+        : []),
+      { id: "access", title: "Grant user access" },
+      { id: "oauth", title: "OAuth integration" },
+      { id: "credentials", title: "Enter app credentials" },
+      { id: "test", title: "Connect and test" },
+    ];
   if (s.provider === "salesforce")
     return [
       { id: "begin", title: "Setup plan" },
@@ -105,6 +143,10 @@ export function orgValid(s: State): boolean {
 export function ready(s: State): boolean {
   return (
     s.saved &&
+    (s.provider !== "snowflake" ||
+      (!s.configChanged &&
+        !!snowflakeConnection(s.values) &&
+        roleAllowed(s.values.accessRole))) &&
     (s.provider !== "salesforce" ||
       (s.values.path === "own" &&
         !s.configChanged &&
@@ -137,6 +179,50 @@ export function validate(s: State): State["errors"] {
           : "Enter Client ID.";
     if (s.provider !== "salesforce" && !s.values.clientSecret.trim())
       errors.clientSecret = "Enter Client Secret.";
+  }
+  if (s.provider === "snowflake") {
+    const v = s.values;
+    if (s.step === "account" && !publicSnowflakeHost(v.host))
+      errors.host =
+        "Enter the public HTTPS Snowflake account hostname, without a path or PrivateLink hostname.";
+    if (s.step === "server") {
+      for (const field of ["database", "schema", "serverName"] as const)
+        if (!mcpNameValid(v[field]))
+          errors[field] =
+            "Enter a valid MCP object name; dot-only names are unsupported. Use double quotes for case-sensitive names.";
+      if (!agentValid(v.agent))
+        errors.agent =
+          "Enter the existing Cortex Agent as DATABASE.SCHEMA.AGENT_NAME.";
+      if (v.method === "new") {
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(v.toolName))
+          errors.toolName =
+            "Use letters, numbers, and underscores for the tool name.";
+        for (const field of ["toolTitle", "toolDescription"] as const)
+          if (!v[field].trim() || v[field].includes("$$"))
+            errors[field] =
+              "Enter the tool title and description without $$ delimiters.";
+        if (v.agent.includes("$$"))
+          errors.agent =
+            "Use an agent identifier without $$ delimiters in the server specification.";
+      }
+    }
+    if (s.step === "create" && !idValid(v.creatorRole))
+      errors.creatorRole = "Enter the server-creator role.";
+    if (s.step === "access") {
+      if (!roleAllowed(v.accessRole))
+        errors.accessRole =
+          "Use an approved non-privileged role, not PUBLIC or an administrator role.";
+      if (!idValid(v.warehouse))
+        errors.warehouse = "Enter the default warehouse.";
+      if (!users(v).length || !users(v).every(idValid))
+        errors.users =
+          "Enter at least one valid Snowflake username, one per line. Quote case-sensitive usernames.";
+    }
+    if (s.step === "oauth" && !idValid(v.oauthIntegration))
+      errors.oauthIntegration = "Enter the OAuth integration name.";
+    if (s.step === "credentials" && !snowflakeConnection(v))
+      errors.host =
+        "Review the Snowflake account and server details before saving credentials.";
   }
   return errors;
 }
@@ -171,9 +257,15 @@ export function reduce(s: State, a: Action): State {
     case "source":
       return {
         ...s,
-        values: { ...s.values, ...a.values, clientId: "", clientSecret: "" },
+        values: {
+          ...(s.provider === "snowflake" ? defaultValues : s.values),
+          ...a.values,
+          clientId: "",
+          clientSecret: "",
+        },
+        configChanged: s.provider === "snowflake" ? false : s.configChanged,
         sourceFingerprint: a.sourceFingerprint,
-        step: "choices",
+        step: s.provider === "snowflake" ? "account" : "choices",
         screen: "setup",
         done: [],
         errors: {},
@@ -185,11 +277,26 @@ export function reduce(s: State, a: Action): State {
       };
     case "field": {
       if (s.values[a.field] === a.value) return s;
+      const connectionChange =
+        s.provider === "snowflake" &&
+        [
+          "host",
+          "database",
+          "schema",
+          "serverName",
+          "network",
+          "oauthIntegration",
+          "accessRole",
+        ].includes(a.field);
+      const credentialChange = ["clientId", "clientSecret"].includes(a.field);
       const boundary = steps(s).findIndex((t) => t.id === s.step);
       const next: State = {
         ...s,
         values: { ...s.values, [a.field]: a.value },
-        saved: a.field === "access" && s.saved,
+        saved:
+          s.provider === "snowflake" && !connectionChange && !credentialChange
+            ? s.saved
+            : a.field === "access" && s.saved,
         authorized: false,
         tested: false,
         errors: {},
@@ -199,6 +306,7 @@ export function reduce(s: State, a: Action): State {
       };
       if (
         a.field === "appChoice" ||
+        connectionChange ||
         (s.provider === "salesforce" &&
           [
             "integration",
@@ -212,7 +320,12 @@ export function reduce(s: State, a: Action): State {
         next.values.clientSecret = "";
         next.showSecret = false;
       }
-      if (s.provider === "salesforce" && a.source !== "configuration")
+      if (
+        (s.provider === "salesforce" ||
+          connectionChange ||
+          (s.provider === "snowflake" && credentialChange)) &&
+        a.source !== "configuration"
+      )
         next.configChanged = true;
       if (a.field === "access" && a.source !== "configuration") {
         next.configChanged = true;

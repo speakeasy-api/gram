@@ -244,6 +244,14 @@ interface UseRemoteMcpInstallWorkflowOptions {
   offerGuardrails?: boolean;
   /** Fresh catalog admission before any create, never after acceptance. */
   beforeInstall?: () => Promise<boolean>;
+  /** Defer an account-specific User Identity install to its guided setup. */
+  deferSetup?: (
+    configs: ServerConfig[],
+    options: {
+      guardrail?: ServerGuardrailState;
+      customize?: ServerGuardrailState;
+    },
+  ) => boolean;
 }
 
 /** Key into [ServerConfig.headerValues] for one header of one remote. */
@@ -393,6 +401,7 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
   offerGuardrails = false,
   beforeInstall,
+  deferSetup,
   initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
@@ -811,6 +820,7 @@ export function useRemoteMcpInstallWorkflow({
   const startInstall = useCallback(
     async (options?: {
       guardrail?: ServerGuardrailState;
+      customize?: ServerGuardrailState;
     }): Promise<string[]> => {
       if (
         !canInstall ||
@@ -825,6 +835,7 @@ export function useRemoteMcpInstallWorkflow({
       try {
         if (beforeInstall && !(await beforeInstall())) return [];
         if (generation !== admissionGeneration.current) return [];
+        if (deferSetup?.(serverConfigs, options ?? {})) return [];
       } finally {
         admissionInFlight.current = false;
       }
@@ -994,6 +1005,7 @@ export function useRemoteMcpInstallWorkflow({
     },
     [
       beforeInstall,
+      deferSetup,
       canInstall,
       client,
       detectorMode,
@@ -1078,7 +1090,8 @@ export function useRemoteMcpInstallWorkflow({
         skip: async () => {
           await startInstall();
         },
-        installForCustomizing: () => startInstall(),
+        installForCustomizing: () =>
+          startInstall({ customize: guardrail ?? catalogPresetState([]) }),
         goBack: configureSkipped ? undefined : backToConfigure,
         ...base,
       };

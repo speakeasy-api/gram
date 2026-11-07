@@ -3,17 +3,26 @@ import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce } from "./state";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { initialState, reduce, validate, type State } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
+const callback = vi.hoisted(() => ({
+  value: "https://current.example/callback",
+  failed: false,
+}));
+beforeEach(() => {
+  callback.value = "https://current.example/callback";
+  callback.failed = false;
+});
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
   () => ({
     useNewRemoteSessionClientCallbackUrl: () => ({
-      data: { callbackUrl: "https://current.example/callback" },
-      isError: false,
+      data: callback.value ? { callbackUrl: callback.value } : undefined,
+      isError: callback.failed,
+      refetch: vi.fn<() => void>(),
     }),
   }),
 );
@@ -325,4 +334,118 @@ it("retains the unresolved support branch with a real correction action and no s
     screen.getByRole("button", { name: "Choose another setup method" }),
   ).toBeDefined();
   expect(screen.queryByText(/Simulate/)).toBeNull();
+});
+
+describe("Snowflake instructions", () => {
+  function task(
+    step: string,
+    values = {},
+    saved = false,
+    errors: State["errors"] = {},
+  ) {
+    const initial = initialState("snowflake"),
+      dispatch = vi.fn<() => void>();
+    return render(
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step,
+            saved,
+            errors,
+            values: { ...initial.values, ...values },
+          },
+          dispatch,
+          live: connectionFixture(dispatch, {
+            loading: false,
+            callbackUrl: "https://retained.example/callback",
+          }),
+        }}
+      >
+        <ProviderTask serverName="Snowflake" />
+      </SetupContext>,
+    );
+  }
+
+  it("uses the approved shared plan card before collecting account details", () => {
+    task("begin");
+    expect(
+      screen.getByRole("heading", {
+        name: "Let’s connect Snowflake to Speakeasy.",
+      }),
+    ).toBeDefined();
+    expect(
+      screen.getByText("Check permissions and region availability"),
+    ).toBeDefined();
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(screen.queryByText("Identity")).toBeNull();
+  });
+
+  it("routes credentials to the Snowflake SQL and required fields", () => {
+    const { container } = task("credentials", {
+      oauthIntegration: "EXAMPLE_OAUTH",
+    });
+    expect(
+      container.querySelector('[data-sql="credentials"]')?.textContent,
+    ).toContain("SYSTEM$SHOW_OAUTH_CLIENT_SECRETS('EXAMPLE_OAUTH')");
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    expect(screen.getByLabelText("Client Secret")).toBeDefined();
+  });
+  it("shows invalid connection recovery on the credentials step", () => {
+    const state = { ...initialState("snowflake"), step: "credentials" };
+    task("credentials", {}, false, validate(state));
+    expect(
+      screen.getByText(/Review the Snowflake account and server details/),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review account" }),
+    ).toBeDefined();
+    expect(
+      screen.getByRole("button", { name: "Review server details" }),
+    ).toBeDefined();
+  });
+  it("withholds incomplete SQL", () => {
+    const { container } = task("create", {
+      creatorRole: "EXAMPLE_CREATOR",
+      database: "",
+      schema: "",
+      serverName: "",
+    });
+    expect(container.querySelector("[data-sql]")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Copy SQL" })).toBeNull();
+  });
+
+  it.each([false, true])(
+    "shows callback recovery without an empty SQL instruction (failed=%s)",
+    (failed) => {
+      callback.value = "";
+      callback.failed = failed;
+      const { container } = task("oauth", {
+        oauthIntegration: "EXAMPLE_OAUTH",
+      });
+      expect(container.querySelector('[data-sql="oauth"]')).toBeNull();
+      expect(
+        screen.queryByText("Create the integration in Snowflake"),
+      ).toBeNull();
+      expect(
+        screen.getByText(
+          failed ? /Couldn’t load the callback URL/ : /Loading callback URL/,
+        ),
+      ).toBeDefined();
+    },
+  );
+  it.each([false, true])("uses the actual callback (saved=%s)", (saved) => {
+    const { container } = task(
+      "oauth",
+      { oauthIntegration: "SPEAKEASY_OAUTH" },
+      saved,
+    );
+    const text = container.querySelector('[data-sql="oauth"]')?.textContent;
+    expect(text).toContain(
+      saved
+        ? "https://retained.example/callback"
+        : "https://current.example/callback",
+    );
+    expect(text).toContain("OAUTH_CLIENT_TYPE = 'CONFIDENTIAL'");
+  });
 });

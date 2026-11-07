@@ -145,3 +145,134 @@ it("does not treat saved-configuration hydration as a permission change", () => 
   expect(state.accessChosen).toBe(false);
   expect(state.configChanged).toBe(false);
 });
+
+describe("Snowflake setup state", () => {
+  it("requires confidential credentials and clears them when server details change", () => {
+    const initial = initialState("snowflake");
+    const values = {
+      ...initial.values,
+      host: "example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+      clientId: "id",
+    };
+    expect(
+      validate({ ...initial, step: "credentials", values }).clientSecret,
+    ).toBeTruthy();
+    const changed = reduce(
+      {
+        ...initial,
+        saved: true,
+        authorized: true,
+        tested: true,
+        values: { ...values, clientSecret: "secret" },
+      },
+      { type: "field", field: "database", value: "OTHER" },
+    );
+    expect(changed.values.clientSecret).toBe("");
+    expect([changed.saved, changed.authorized, changed.tested]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    expect(changed.configChanged).toBe(true);
+  });
+  it("omits server creation for an existing server", () => {
+    const initial = initialState("snowflake");
+    expect(steps(initial).map((x) => x.id)).toContain("create");
+    expect(
+      steps({
+        ...initial,
+        values: { ...initial.values, method: "existing" },
+      }).map((x) => x.id),
+    ).not.toContain("create");
+  });
+});
+
+it("clears old Snowflake instructions when another editor changes the source", () => {
+  const initial = initialState("snowflake");
+  const next = reduce(
+    {
+      ...initial,
+      values: {
+        ...initial.values,
+        agent: "OLD.PUBLIC.AGENT",
+        oauthIntegration: "OLD_OAUTH",
+      },
+      saved: true,
+      authorized: true,
+      tested: true,
+    },
+    {
+      type: "source",
+      values: {
+        host: "example.snowflakecomputing.com",
+        database: "NEW",
+        schema: "PUBLIC",
+        serverName: "MCP",
+      },
+      sourceFingerprint: "new-source",
+    },
+  );
+  expect(next.values.agent).toBe("");
+  expect(next.values.oauthIntegration).toBe("");
+  expect(next.step).toBe("account");
+  expect(next.saved).toBe(false);
+});
+
+it("completes Snowflake setup only for the verified current configuration", () => {
+  const initial = initialState("snowflake");
+  const connected = {
+    ...initial,
+    saved: true,
+    authorized: true,
+    tested: true,
+    values: {
+      ...initial.values,
+      host: "example.snowflakecomputing.com",
+      database: "APP",
+      schema: "PUBLIC",
+      serverName: "MCP",
+    },
+  };
+  for (const state of [
+    { ...connected, saved: false },
+    { ...connected, authorized: false },
+    { ...connected, tested: false },
+    { ...connected, configChanged: true },
+    { ...connected, values: { ...connected.values, host: "" } },
+    { ...connected, values: { ...connected.values, database: "" } },
+    {
+      ...connected,
+      values: { ...connected.values, accessRole: "ACCOUNTADMIN" },
+    },
+  ])
+    expect(reduce(state, { type: "complete" }).screen).toBe("setup");
+  const complete = reduce(connected, { type: "complete" });
+  expect(complete.screen).toBe("success");
+  expect(complete.done).toEqual(steps(connected).map((step) => step.id));
+});
+
+it.each(["warehouse", "users", "toolTitle", "creatorRole"] as const)(
+  "keeps Snowflake credentials when SQL-only %s changes",
+  (field) => {
+    const initial = initialState("snowflake");
+    const changed = reduce(
+      {
+        ...initial,
+        saved: true,
+        authorized: true,
+        tested: true,
+        values: { ...initial.values, clientId: "app", clientSecret: "secret" },
+      },
+      { type: "field", field, value: "EXAMPLE_CHANGED" },
+    );
+    expect(changed.values.clientId).toBe("app");
+    expect(changed.values.clientSecret).toBe("secret");
+    expect(changed.saved).toBe(true);
+    expect(changed.configChanged).toBe(false);
+    expect(changed.authorized).toBe(false);
+    expect(changed.tested).toBe(false);
+  },
+);

@@ -1,3 +1,9 @@
+import { toast } from "sonner";
+import {
+  isSnowflakeCatalogServer,
+  writeSnowflakeHandoff,
+} from "./snowflake-install";
+import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
@@ -22,7 +28,7 @@ import {
 } from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
-import { useProject } from "@/contexts/Auth";
+import { useProject, useSession } from "@/contexts/Auth";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
@@ -85,8 +91,10 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
-  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  /** Catalog-only handoff; headless and plugin callers retain their workflow. */
   openProviderSetup?: boolean;
+  /** Keep the selected gateway when native Snowflake needs guided setup first. */
+  attachToGatewayId?: string;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -188,6 +196,7 @@ export function AddServerDialog({
   projectSlug,
   bulk,
   openProviderSetup = false,
+  attachToGatewayId,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
@@ -240,6 +249,8 @@ export function AddServerDialog({
   // Guardrails are an interactive step (there is nobody to draft a policy in a
   // headless or auto-started install) and follow the policy admin permission.
   const organization = useOrganization();
+  const project = useProject();
+  const session = useSession();
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
@@ -247,6 +258,55 @@ export function AddServerDialog({
     servers: installServers,
     initialConfiguration,
     beforeInstall,
+    deferSetup: (configs, options) => {
+      const config = configs[0];
+      if (
+        providerSetupRollout === "disabled" ||
+        (!openProviderSetup && !attachToGatewayId) ||
+        !open ||
+        headless ||
+        autoStartInstall ||
+        configs.length !== 1 ||
+        !config ||
+        config.identityMode !== "user" ||
+        !isSnowflakeCatalogServer(config.server)
+      )
+        return false;
+      if (providerSetupRollout === "loading") {
+        toast.info("Snowflake setup is loading. Try again in a moment.");
+        return true;
+      }
+      const key = providerProgressKey(
+        "snowflake",
+        session.user.id,
+        organization.id,
+        project.id,
+        "catalog:com.snowflake/cortex-mcp",
+      );
+      if (
+        !writeSnowflakeHandoff(key, {
+          name: config.name,
+          guardrail: options.guardrail ?? options.customize,
+          customize: !!options.customize,
+        })
+      ) {
+        toast.error(
+          "Couldn’t open Snowflake setup. Allow browser storage and try again.",
+        );
+        return true;
+      }
+      setupHandoffRef.current = true;
+      onOpenChange(false);
+      void navigate(
+        routes.mcp.catalog.detail.setup.href(
+          encodeURIComponent(config.server.registrySpecifier),
+        ) +
+          (attachToGatewayId
+            ? `?attachToGateway=${encodeURIComponent(attachToGatewayId)}`
+            : ""),
+      );
+      return true;
+    },
     projectSlug,
     autoSelectRemotes: !!(autoStartInstall || headless),
     offerGuardrails:

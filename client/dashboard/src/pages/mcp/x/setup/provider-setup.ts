@@ -1,3 +1,4 @@
+import { snowflakeSelectionForUrl } from "@/pages/catalog/provider-setup/snowflake";
 import { salesforceSelectionForUrl } from "@/pages/catalog/provider-setup/salesforce";
 import {
   initialState,
@@ -31,6 +32,7 @@ export function setupProviderForUrl(
     if (url.origin === "https://api.githubcopilot.com" && path === "/mcp")
       return "github";
     if (salesforceSelectionForUrl(value)) return "salesforce";
+    if (snowflakeSelectionForUrl(value)) return "snowflake";
     return null;
   } catch {
     return null;
@@ -88,6 +90,27 @@ export function saveProviderProgress(key: string, state: State): void {
                 sourceFingerprint: state.sourceFingerprint,
               }
             : {}),
+          ...(state.provider === "snowflake"
+            ? {
+                host: state.values.host,
+                network: state.values.network,
+                method: state.values.method,
+                database: state.values.database,
+                schema: state.values.schema,
+                serverName: state.values.serverName,
+                agent: state.values.agent,
+                toolName: state.values.toolName,
+                toolTitle: state.values.toolTitle,
+                toolDescription: state.values.toolDescription,
+                creatorRole: state.values.creatorRole,
+                accessRole: state.values.accessRole,
+                warehouse: state.values.warehouse,
+                users: state.values.users,
+                oauthIntegration: state.values.oauthIntegration,
+                configurationPending: state.configChanged,
+                sourceFingerprint: state.sourceFingerprint,
+              }
+            : {}),
           appChoice: state.values.appChoice,
           ...(state.accessChosen ? { access: state.values.access } : {}),
         },
@@ -105,7 +128,8 @@ export function loadProviderProgress(
 ): State {
   const initial = initialState(provider);
   Object.assign(initial.values, defaults);
-  if (provider === "salesforce") initial.sourceFingerprint = sourceFingerprint;
+  if (provider === "salesforce" || provider === "snowflake")
+    initial.sourceFingerprint = sourceFingerprint;
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
     if (
@@ -123,7 +147,7 @@ export function loadProviderProgress(
       return initial;
     const { values } = value;
     const changedSource =
-      provider === "salesforce" &&
+      (provider === "salesforce" || provider === "snowflake") &&
       !!defaults &&
       !!sourceFingerprint &&
       (!("sourceFingerprint" in values) ||
@@ -181,6 +205,51 @@ export function loadProviderProgress(
       if (!["own", "support"].includes(initial.values.path))
         initial.values.path = "own";
     }
+    if (provider === "snowflake") {
+      initial.configChanged =
+        "configurationPending" in values &&
+        values.configurationPending === true;
+      const fields = [
+        "host",
+        "network",
+        "method",
+        "database",
+        "schema",
+        "serverName",
+        "agent",
+        "toolName",
+        "toolTitle",
+        "toolDescription",
+        "creatorRole",
+        "accessRole",
+        "warehouse",
+        "users",
+        "oauthIntegration",
+      ] as const;
+      for (const field of fields) {
+        const candidate = (values as Record<string, unknown>)[field];
+        const sourceField = [
+          "host",
+          "database",
+          "schema",
+          "serverName",
+        ].includes(field);
+        if (
+          (!sourceField ||
+            !defaults ||
+            !sourceFingerprint ||
+            (initial.configChanged && !changedSource)) &&
+          (!changedSource || sourceField) &&
+          typeof candidate === "string" &&
+          candidate.length <= 10000
+        )
+          initial.values[field] = candidate;
+      }
+      if (!["new", "existing"].includes(initial.values.method))
+        initial.values.method = "new";
+      if (!["public", "private"].includes(initial.values.network))
+        initial.values.network = "public";
+    }
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);
     if (
@@ -190,7 +259,8 @@ export function loadProviderProgress(
       validSteps.includes(value.step)
     )
       initial.step = value.step;
-    if (changedSource) initial.step = "choices";
+    if (changedSource)
+      initial.step = provider === "snowflake" ? "account" : "choices";
     if (!changedSource && "done" in value && Array.isArray(value.done))
       initial.done = value.done.filter(
         (id: unknown): id is string =>
@@ -204,7 +274,7 @@ export function loadProviderProgress(
   }
 }
 
-export function salesforceSourceFingerprint(
+export function providerSourceFingerprint(
   remoteMcpServerId: string | undefined,
   source: { url: string; instanceUrl?: string },
 ): string {

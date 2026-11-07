@@ -37,7 +37,7 @@ export const scopesFor = (s: { values: { access: string } }): string[] =>
     : slackScopes;
 
 export function taskTitle(s: State): string {
-  if (s.provider === "salesforce")
+  if (s.provider === "salesforce" || s.provider === "snowflake")
     return (
       steps(s).find((step) => step.id === s.step)?.title ?? "Salesforce setup"
     );

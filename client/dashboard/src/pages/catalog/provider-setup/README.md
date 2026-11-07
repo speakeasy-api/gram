@@ -1,12 +1,13 @@
 # MCP provider setup
 
-Read this before changing provider instructions, catalog handoff, or the save/sign-in/test flow for Slack, GitHub, or Salesforce. Use the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for scope and approval rules. Extend the existing shell and actions; the current provider ticket and explicit user decisions govern requirements.
+Read this before changing provider instructions, catalog handoff, or the save/sign-in/test flow for Slack, GitHub, Salesforce, or Snowflake. Use the [implementing-mcp-provider-setup skill](../../../../../../.agents/skills/implementing-mcp-provider-setup/SKILL.md) for scope and approval rules. Extend the existing shell and actions; the current provider ticket and explicit user decisions govern requirements.
 
 ## Owning code
 
 | Concern                                                          | Source                                                                                                                           |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| Page shell, rollout gate, completion to Overview                 | [ProviderSetupPage.tsx](../../mcp/x/setup/ProviderSetupPage.tsx)                                                                 |
+| Page shell and step/footer controls                              | [SetupBody.tsx](./SetupBody.tsx)                                                                                                 |
+| Installed-server loading, provider selection and setup lifecycle | [ProviderSetupPage.tsx](../../mcp/x/setup/ProviderSetupPage.tsx)                                                                 |
 | Endpoint allowlist, catalog handoff, non-secret progress         | [provider-setup.ts](../../mcp/x/setup/provider-setup.ts)                                                                         |
 | Credential saving, OAuth, testing, stale-operation guards        | [useProviderConnection.ts](../../mcp/x/setup/useProviderConnection.ts)                                                           |
 | Provider steps, invalidation, completion conditions              | [state.ts](./state.ts)                                                                                                           |
@@ -63,10 +64,26 @@ Authoritative references for rechecking Salesforce requirements:
 - [Data 360](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/data360-mcp.html), [Headless 360](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/headless-360-mcp.html), [Tableau Next](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/references/reference/tableau-next.html), [Tableau Next prerequisites](https://help.salesforce.com/s/articleView?id=005462387&language=en_US&type=1)
 - [Hosted CRM registry record](https://github.com/speakeasy-api/mcp-registry/blob/main/data/servers/com.pulsemcp.mirror__gram-salesforce.json)
 
+### Snowflake
+
+The native `com.snowflake/cortex-mcp` record uses an account-specific `/api/v2/databases/{database}/schemas/{schema}/mcp-servers/{name}` endpoint. The older hosted SQL integration is a different contract and stays outside this setup. Catalog Add opens the existing name/identity dialog. Only User Identity hands this exact native record/template to the approved setup wizard, at the point the existing workflow would install. Account and server details are collected in the wizard. The existing name, gateway destination, and optional guardrail/customization choices are retained; gateway membership is added after credentials are configured so the existing gateway writer can attach the provider client; modal controls and other identity paths remain unchanged. The credential-save action creates the disabled source using its resolved URL, then delegates to the existing save/sign-in/test controller. Non-secret installation checkpoints preserve partially created resources for retries. No unauthenticated probe is used as a prerequisite to entering setup. Other providers retain their current installation behavior. See [snowflake.ts](./snowflake.ts) for hostname validation, endpoint encoding, and complete-statement SQL generation; [SnowflakeTask.tsx](./SnowflakeTask.tsx) extends the approved new/existing server React flow.
+
+Use a public `snowflakecomputing.com` account hostname. Government regions, China, PrivateLink upstream hostnames, paths, credentials, and ports are rejected. PrivateLink changes only the generated browser-authorization setting; MCP and token exchange still require public connectivity. Setup provisions no network infrastructure.
+
+Account-scoped OAuth uses `/oauth/authorize`, `/oauth/token-request`, PKCE, required Client ID and primary Client Secret, `client_secret_post`, and `session:role:all`. SQL uses the actual API-provided callback, `OAUTH_USE_SECONDARY_ROLES = NONE`, a non-privileged allowed role, and user defaults. OAuth secret extraction uses uppercase JSON keys. SQL is displayed for the owner to execute; incomplete statements are withheld. Setup never executes provisioning SQL or calls a Cortex Agent during verification.
+
+Preserve identifier quoting/case, SQL literal escaping, specification delimiter guards, and source-bound secret-free progress. Reject MCP object names consisting only of `.` or `..`, which URL path parsing would normalize away. Account/server edits invalidate credentials and verification. The shared source safeguards described above also protect Snowflake endpoint writes; Snowflake adds no instance header or backend capability.
+
+Authoritative references:
+
+- [Speakeasy native setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/snowflake)
+- [Snowflake Cortex Agents MCP](https://docs.snowflake.com/en/user-guide/snowflake-cortex/cortex-agents-mcp)
+- [Snowflake custom OAuth clients](https://docs.snowflake.com/en/user-guide/oauth-custom)
+
 ## Verification and related surfaces
 
 Use the colocated provider tests and the setup integration tests beside `ProviderSetupPage.tsx` and `useProviderConnection.ts`. Cover changed endpoint mappings, credential requirements, invalidation, failed-save retry, stale results, and completion gating; spot-check Slack/GitHub when shared actions change. Inspect affected states in the local dashboard through `gram-playwright-cli`, including a narrow viewport.
 
 Report mocked/controlled checks separately from live provider authorization and authenticated tool discovery. Record run results, account-access gaps, and catalog publication status in the PR or ticket rather than treating them as permanent documentation here.
 
-Platform MCP reuses existing management operations; interactive credential entry and this browser-session-only probe add no agent tool. Command K's registered `useMcpServerCandidates` opens canonical Overview; Setup is an intentionally excluded transient subtask. No new stored data shape requires a demo-seed change, and OAuth credentials/grants/readiness are not seeded. Reassess these decisions if the workflow, API, resources, or permissions change.
+Platform MCP decision: keep the existing `inspect_mcp_candidate` and `register_catalog_mcp` tools for an authenticated project administrator to inspect and register the native Snowflake source with declared non-secret URL values. Registration returns the secure dashboard continuation when manual setup remains. No Snowflake-specific tool is added: server/access SQL is owner-run guidance, OAuth Client Secret entry must stay outside agent transcripts, and sign-in plus connection testing must prove the current browser user’s exact grant. This PR adds no provisioning execution or agent credential-handling contract. A registered source proves registration only; completion requires `remoteSessions.testServerConnection` to return `ready` with a tool count for the exact server and browser user. Command K's registered `useMcpServerCandidates` opens canonical Overview; Setup is an intentionally excluded transient subtask. No new stored data shape requires a demo-seed change, and OAuth credentials/grants/readiness are not seeded. Reassess these decisions if the workflow, API, resources, or permissions change.
