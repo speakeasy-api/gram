@@ -1,5 +1,16 @@
 # admin
 
+## 0.12.0
+
+### Minor Changes
+
+- fe756cd: Staff can redeploy a project's active deployment from the organization's Projects page and through Admin MCP.
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+
+### Patch Changes
+
+- 846b422: Staff Admin MCP write tools now apply changes directly instead of through stored proposals and browser approval. Each tool is named after its operation, for example `set_organization_feature`. The server instructions and tool descriptions require agents to get explicit user confirmation before every change, and the staff event trail now records each write's operation and target.
+
 ## 0.11.0
 
 ### Minor Changes

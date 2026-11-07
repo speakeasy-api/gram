@@ -1,5 +1,28 @@
 # server
 
+## 2.32.0
+
+### Minor Changes
+
+- 846b422: Staff Admin MCP write tools now apply changes directly instead of through stored proposals and browser approval. Each tool is named after its operation, for example `set_organization_feature`. The server instructions and tool descriptions require agents to get explicit user confirmation before every change, and the staff event trail now records each write's operation and target.
+- fe756cd: Staff Admin MCP now exposes every write operation the server implements while `GRAM_ADMIN_MCP_WRITES_ENABLED` is on. The `GRAM_ADMIN_MCP_WRITE_OPERATIONS` setting is gone, so each new write no longer needs a deployment change to go live.
+- fe756cd: Staff can redeploy a project's active deployment from the organization's Projects page and through Admin MCP.
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+- 87607fe: Long-lived SSE responses now end before the load balancer's response deadline. Remote and tunneled MCP listen streams, and POST streams whose response has been relayed, close with an SSE `retry` hint at a configurable maximum age (`GRAM_STREAM_MAX_AGE`, default 55 minutes) so clients reconnect cleanly; `subscriptions/listen` streams receive their completion result first. The chat turn stream sends a keepalive comment every 25 seconds and rotates the same way, and the dashboard resumes it from its cursor. A new `gram.http.stream.duration` histogram records how every long-lived response ended, by route, method and end reason.
+
+### Patch Changes
+
+- f436125: The staff Admin MCP event trail can now record each write's operation and target.
+- f412f9a: Admin dashboard sessions and staff Admin MCP connections now expire after 48 hours of inactivity, and admin sessions end 45 days after sign-in however active they stay. Refreshing a staff Admin MCP token restarts the inactivity timeout, so a connection in regular use no longer needs daily consent. Every use still validates the staff member's session live, and each write still needs browser approval.
+- 813c8c3: `listChallenges` takes `exclude_scopes`, applied before the total and the page. An agent's authorization checks leave out its org:hooks_ingest checks, one per hook event, so the checks that say what the agent may reach are no longer buried. The org Roles & Permissions checks page is unchanged.
+- 58cde2a: Capture and check user prompts delivered through AHP turn-start events, including prompts from the OpenCode adapter.
+- 31c4587: Tool calls and function resource reads that Speakeasy runs itself are now cancelled and answered with a JSON-RPC error (`-32603`, `data.reason` `server_shutdown`) when they are still running 45 seconds into a shutdown, instead of being cut off when the shutdown deadline closes their connection. Tool calls are marked `retryable: false` and resource reads `retryable: true`. Interrupted calls keep their telemetry log and tool call record, which show status 503 and the `gram.tool_call.interrupt_reason` attribute, log a warning, and count on the `mcp.tool_call.shutdown_interrupted` metric.
+- 375e12a: A dashboard connection now only works in the browser that started it: signing in, the consent page (including the Code Mode tool review), and finishing a sign-in to an upstream service started from that page. Another browser that opens any of these links is sent to start again. A connection now has ten minutes from when it starts, the same as a trusted-provider sign-in. When it runs out, the page says the link expired. A sign-in restarted because the earlier one was revoked gets a fresh ten minutes. Sign-ins already in progress when this ships finish as before. One exception: when the consent page is on a different host from the sign-in (a custom domain or the authentication host), a sign-in that was in progress while this was rolling out may need to be started again.
+- 4327322: Connection outcomes now name the right party to fix them. Expired sign-ins, and sign-ins the person ended, count as failures, not policy blocks. A sign-in an admin or the directory ended is blocked, and the admin fixes it. Refresh tokens sent by the wrong app, damaged saved connections and agent connections that no longer match their server get their own outcomes.
+- ef3bf86: A server connection check on the connect page that fails before reaching the service now records a connection event with its reason and who can fix it. Its error page names the check, suggests retrying only for an outage, and no longer shows internal error text. Any unexpected error page now points to Speakeasy support if it keeps happening, instead of telling people to try again shortly.
+- b575f9e: Connection health now records a gateway server whose sign-in setup an admin changed as `setup_changed`, apart from a server the person has not signed in to yet. It names the person when reconnecting fixes it and an admin when it does not.
+- 017d978: Assistant runtimes no longer record a security event each time they start or stop. Every sandbox admits and withdraws its own workload identity, so a busy assistant filled the security log with hundreds of entries that no one had to act on. Creating the runtime's shared issuer, and any person withdrawing it, are still recorded as configuration changes. An agent's Credentials page now shows its running sandboxes as one "Assistant runtime" row with a count, instead of a row per sandbox.
+
 ## 2.31.0
 
 ### Minor Changes
