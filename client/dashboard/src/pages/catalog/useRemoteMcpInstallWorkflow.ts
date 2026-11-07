@@ -229,6 +229,8 @@ interface UseRemoteMcpInstallWorkflowOptions {
   servers: CatalogServer[];
   projectSlug?: string;
   serverNameSuffix?: string;
+  /** Initial choice for a single-server caller that owns the Identity handoff. */
+  initialConfiguration?: Pick<ServerConfig, "identityMode"> & { name?: string };
   /**
    * Install every endpoint of multi-remote servers instead of pausing on the
    * interactive selectRemotes phase. Required by headless/auto-start callers
@@ -260,13 +262,18 @@ export function headerValueKey(remoteUrl: string, headerName: string): string {
 function buildServerConfig(
   server: CatalogServer,
   serverNameSuffix = "",
+  initialConfiguration?: UseRemoteMcpInstallWorkflowOptions["initialConfiguration"],
 ): ServerConfig {
   return {
     server,
-    name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
+    name:
+      initialConfiguration?.name ??
+      `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
     remotes: server.remotes ?? [],
     headerValues: {},
-    identityMode: supportsAutomaticOAuth(server) ? "user" : "none",
+    identityMode:
+      initialConfiguration?.identityMode ??
+      (supportsAutomaticOAuth(server) ? "user" : "none"),
     agentAuthorization: "",
     serviceAccountClient: null,
   };
@@ -395,6 +402,7 @@ export function useRemoteMcpInstallWorkflow({
   offerGuardrails = false,
   beforeInstall,
   deferSetup,
+  initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const detectorMode = useDetectorMode();
@@ -443,16 +451,19 @@ export function useRemoteMcpInstallWorkflow({
     const singleRemote: ServerConfig[] = [];
 
     for (const server of servers) {
+      const initial = servers.length === 1 ? initialConfiguration : undefined;
       const remotes = server.remotes ?? [];
       if (remotes.length > 1 && !autoSelectRemotes) {
         multiRemote.push({
           server,
-          name: `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
+          name:
+            initial?.name ??
+            `${server.title ?? server.registrySpecifier}${serverNameSuffix}`,
           remotes,
           selectedRemoteUrls: new Set(),
         });
       } else {
-        singleRemote.push(buildServerConfig(server, serverNameSuffix));
+        singleRemote.push(buildServerConfig(server, serverNameSuffix, initial));
       }
     }
 
@@ -461,7 +472,7 @@ export function useRemoteMcpInstallWorkflow({
     setCurrentServerIndex(0);
     lastProcessedIndexRef.current = -1;
     setPhase(multiRemote.length > 0 ? "selectRemotes" : "configure");
-  }, [autoSelectRemotes, serverNameSuffix, servers]);
+  }, [autoSelectRemotes, serverNameSuffix, servers, initialConfiguration]);
 
   // Initialize server configs when servers change - partition into multi/single remote.
   useEffect(() => {
@@ -563,9 +574,12 @@ export function useRemoteMcpInstallWorkflow({
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
           headerValues: {},
-          identityMode: supportsAutomaticOAuth(currentConfig.server)
-            ? "user"
-            : "none",
+          identityMode:
+            servers.length === 1 && initialConfiguration
+              ? initialConfiguration.identityMode
+              : supportsAutomaticOAuth(currentConfig.server)
+                ? "user"
+                : "none",
           agentAuthorization: "",
           serviceAccountClient: null,
         },
@@ -578,7 +592,13 @@ export function useRemoteMcpInstallWorkflow({
       // Done with all multi-remote servers, move to configure phase
       setPhase("configure");
     }
-  }, [canProceed, currentServerIndex, multiRemoteConfigs]);
+  }, [
+    canProceed,
+    currentServerIndex,
+    multiRemoteConfigs,
+    servers.length,
+    initialConfiguration,
+  ]);
 
   // The issuer lookup decides whether the install can honour an organization
   // issuer at all. A failed or truncated listing is not "no organization

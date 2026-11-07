@@ -7,6 +7,7 @@ import { providerProgressKey } from "@/pages/mcp/x/setup/provider-setup";
 import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
+import { salesforceSetupInstallServer } from "./provider-setup/salesforce";
 import { useNavigate } from "react-router";
 import { CatalogLogo } from "./CatalogLogo";
 import { CatalogGuardrailsPhase } from "./CatalogGuardrailsPhase";
@@ -52,7 +53,7 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -211,6 +212,36 @@ export function AddServerDialog({
     beforeInstall,
   } = useEnrichedServers(servers, open, projectSlug);
 
+  const [salesforceIdentity, setSalesforceIdentity] = useState<
+    Pick<ServerConfig, "identityMode" | "name"> | undefined
+  >();
+  const salesforceEntry = useMemo(() => {
+    if (
+      !openProviderSetup ||
+      bulk ||
+      headless ||
+      autoStartInstall ||
+      enrichedServers.length !== 1
+    )
+      return null;
+    return salesforceSetupInstallServer(enrichedServers[0]!);
+  }, [openProviderSetup, bulk, headless, autoStartInstall, enrichedServers]);
+  const salesforceSetupEnabled =
+    providerSetupRollout === "enabled" && !!salesforceEntry;
+  const guidedSalesforce =
+    salesforceSetupEnabled &&
+    (salesforceIdentity?.identityMode ?? "user") === "user";
+  const installServers = useMemo(
+    () =>
+      guidedSalesforce && salesforceEntry ? [salesforceEntry] : enrichedServers,
+    [guidedSalesforce, salesforceEntry, enrichedServers],
+  );
+  const initialConfiguration = useMemo(() => {
+    if (providerSetupRollout !== "enabled" || !salesforceEntry)
+      return undefined;
+    return salesforceIdentity ?? { identityMode: "user" as const };
+  }, [providerSetupRollout, salesforceEntry, salesforceIdentity]);
+
   // Use enriched servers (with remotes) for the workflow. Callers that run
   // without a visible dialog can never answer the selectRemotes phase, so
   // multi-remote servers install every endpoint for them.
@@ -222,8 +253,9 @@ export function AddServerDialog({
   const { hasScope } = useRBAC();
   const mcpScoped =
     useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies).status === "enabled";
-  const releaseState = useRemoteMcpInstallWorkflow({
-    servers: enrichedServers,
+  const workflow = useRemoteMcpInstallWorkflow({
+    servers: installServers,
+    initialConfiguration,
     beforeInstall,
     deferSetup: (configs, options) => {
       const config = configs[0];
@@ -284,6 +316,23 @@ export function AddServerDialog({
       // Unproxied servers (e.g. Figma) never pass through Speakeasy.
       enrichedServers.some((server) => !isFigmaCatalogServer(server)),
   });
+  const releaseState = useMemo<RemoteMcpInstallWorkflow>(
+    () =>
+      salesforceSetupEnabled && workflow.phase === "configure"
+        ? {
+            ...workflow,
+            updateServerConfig: (index, updates) => {
+              if (updates.identityMode) {
+                setSalesforceIdentity({
+                  identityMode: updates.identityMode,
+                  name: workflow.serverConfigs[index]!.name,
+                });
+              } else workflow.updateServerConfig(index, updates);
+            },
+          }
+        : workflow,
+    [salesforceSetupEnabled, workflow],
+  );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);
   const finishedRef = useRef(false);
@@ -291,6 +340,7 @@ export function AddServerDialog({
   // Reset when dialog closes
   useEffect(() => {
     if (!open) {
+      setSalesforceIdentity(undefined);
       setupHandoffRef.current = false;
       releaseState.reset();
       autoStartRef.current = false;
@@ -368,6 +418,7 @@ export function AddServerDialog({
   useEffect(() => {
     autoStartRef.current = false;
     finishedRef.current = false;
+    setSalesforceIdentity(undefined);
   }, [projectSlug, serversKey]);
 
   useEffect(() => {
@@ -542,7 +593,10 @@ export function AddServerDialog({
   if (headless) return null;
 
   // Show loading state while fetching server details
-  if (isLoadingDetails) {
+  if (
+    isLoadingDetails ||
+    (salesforceEntry && providerSetupRollout === "loading")
+  ) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
         <Dialog.Content className="gap-2">
