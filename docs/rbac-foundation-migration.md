@@ -9,6 +9,8 @@ Two tests keep the inventory and fixtures honest. The counts in the tables below
 
 Both live in `server/internal/authz/` and run with `mise run test:server ./internal/authz/`.
 
+Design decisions taken while migrating, including those made without reviewer input, are recorded in the [decision log](rbac-decision-log.md).
+
 ## Baseline
 
 The inventory and fixtures are pinned to `main` at the commit this document landed in. The design source's own inspection baseline was `985506c4`; the package paths it names still exist, and the inventory was regenerated against the newer tree rather than copied from it.
@@ -185,5 +187,6 @@ The corpus freezes these as they are. Changing any of them is a product decision
 
 - F6 compares shadow decisions against this corpus, not against new compiler output.
 - The grant evaluator (`authz.RegistryEvaluator`) runs every ordinary-human `require`, `require_any` and `risk_policy_applies` fixture through compiled test declarations (`TestRegistryEvaluatorFoundationCorpus`). Fixtures it cannot express are listed with a reason in `corpusSkips`; the test fails when a listed skip goes stale or the number of selected fixtures changes, so a change to the selection has to be looked at.
+- Policy composition (`RegistryEvaluator.Decide` and `DecideAlternatives`) runs every credential, principal API key and workload `require`/`require_any` fixture, plus the `require_any_unblocked` veto, through the same declarations (`TestPolicyCompositionFoundationCorpus`).
 - Each migration child adds fixtures for its operations when the existing ones do not cover them, and moves its consumers out of `consumers.csv` only by changing the code they point at.
 - A PR that changes an expectation here is an access change and needs its own approval, per the AIS-830 release gate.
