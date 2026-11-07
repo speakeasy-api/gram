@@ -423,7 +423,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// The caller went away, so this says nothing about the member.
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr, ctx.Err()))
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
