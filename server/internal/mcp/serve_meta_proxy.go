@@ -88,8 +88,9 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	found := 0
 	for issuerID, entry := range tokens {
 		if entry.HeldWithoutToken() {
-			// A grant from before resources were recorded still names its member by issuer.
-			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (entry.Resource == "" && member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
+			// A held grant on the member's own issuer answers for it even when its resource
+			// no longer matches: it carries no bearer, and the alternative is an anonymous call.
+			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
 				outage = entry
 			}
 			continue

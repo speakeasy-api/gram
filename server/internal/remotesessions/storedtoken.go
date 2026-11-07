@@ -35,6 +35,9 @@ type storedTokens struct {
 	// unreadable is a grant a decrypt failure leaves with nothing to serve or renew it.
 	// Only a new sign-in recreates it.
 	unreadable bool
+
+	// usable is a grant whose stored access token can serve now or whose refresh token can renew it.
+	usable bool
 }
 
 // readStoredTokens is the one rule for whether a grant's stored tokens can be used, shared by resolution and status.
@@ -46,12 +49,14 @@ func readStoredTokens(enc *encryption.Client, sess remotesessions_repo.RemoteSes
 	}
 	if sess.AccessTokenEncrypted != "" {
 		read.access, read.accessErr = enc.Decrypt(sess.AccessTokenEncrypted)
-		if read.accessErr == nil && accessTokenLive(sess, now) {
+		if read.accessErr == nil && read.access != "" && accessTokenLive(sess, now) {
+			read.usable = true
 			return read
 		}
 	}
 	if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
 		if _, read.refreshErr = enc.Decrypt(sess.RefreshTokenEncrypted.String); read.refreshErr == nil {
+			read.usable = true
 			return read
 		}
 	}
@@ -113,6 +118,16 @@ func (s *RefreshService) refreshTokenUnreadable(ctx context.Context, sess remote
 	}
 	s.logger.Log(ctx, level, "remote session stored refresh token could not be decrypted", storedTokenAttrs(s.enc, sess, err)...)
 	s.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenRefresh, outcome)
+}
+
+// readRefreshToken decrypts the stored refresh token. One that can't be read is never sent and needs a new sign-in.
+func (s *RefreshService) readRefreshToken(ctx context.Context, sess remotesessions_repo.RemoteSession) (string, error) {
+	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	if err != nil {
+		s.refreshTokenUnreadable(ctx, sess, err)
+		return "", newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", fmt.Errorf("%w: %w", errStoredTokenUnreadable, err), refreshRemedyReconnect)
+	}
+	return refreshToken, nil
 }
 
 // storedTokenAttrs names the session and the key that could not decrypt its stored token.

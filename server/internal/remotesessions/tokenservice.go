@@ -1333,10 +1333,9 @@ func (s *RefreshService) refreshSessionTokens(
 		return zero, noToken, newTokenRefreshError("the identity provider's token endpoint is not an https URL; check the issuer's configuration", nil, refreshRemedyAdministrator)
 	}
 
-	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	refreshToken, err := s.readRefreshToken(ctx, sess)
 	if err != nil {
-		s.refreshTokenUnreadable(ctx, sess, err)
-		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", fmt.Errorf("%w: %w", errStoredTokenUnreadable, err), refreshRemedyReconnect)
+		return zero, noToken, err
 	}
 
 	var clientSecret string

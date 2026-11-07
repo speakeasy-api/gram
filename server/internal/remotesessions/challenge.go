@@ -1083,9 +1083,10 @@ const (
 	// RemoteSessionActive: the access token is unexpired, or a refresh token
 	// exists to renew it — the runtime gate will accept it.
 	RemoteSessionActive RemoteSessionStatus = "active"
-	// RemoteSessionExpired: the row exists but the access token has expired
-	// with no refresh token, or nothing stored can be decrypted, so the
-	// runtime gate rejects it (ErrNoValidToken). The user must re-link to recover.
+	// RemoteSessionExpired: the row exists but nothing stored can serve or
+	// renew it (an expired or missing access token with no usable refresh
+	// token, or tokens that can't be decrypted), so the runtime gate rejects it
+	// (ErrNoValidToken). The user must re-link to recover.
 	RemoteSessionExpired RemoteSessionStatus = "expired"
 )
 
@@ -1212,14 +1213,14 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	return m.remoteSessionStates(rows), nil
 }
 
-// remoteSessionStates keys each status row by its client. A row resolution
-// can't read reports expired, so connecting again rewrites it.
+// remoteSessionStates keys each status row by its client. A row with nothing
+// resolution can use reports expired, so connecting again rewrites it.
 func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	now := time.Now()
 	for _, row := range rows {
 		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
-		if status == RemoteSessionActive && readStoredTokens(m.enc, storedTokenRow(row), now).unreadable {
+		if status == RemoteSessionActive && !readStoredTokens(m.enc, storedTokenRow(row), now).usable {
 			status, canRefresh = RemoteSessionExpired, false
 		}
 		var accessExpiresAt *time.Time

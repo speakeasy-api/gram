@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -400,4 +401,53 @@ func TestResolveAccessTokens_UnreadableAccessMisconfiguredRenewalHeldForAdminist
 	require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable)
 	require.EqualValues(t, 2, refreshes.Load())
 	require.Zero(t, storedTokenUnreadableCount(t, env, remotesessionmetrics.StoredTokenAccess, remotesessionmetrics.StoredTokenNeedsSignIn))
+}
+
+// A manual refresh of an unreadable refresh token answers at once, without taking the refresh lease.
+func TestRefreshNow_UnreadableRefreshTokenSkipsTheLease(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "unreadable-refresh-lease", &refreshes, healingRefresh)
+	storeTokens(t, env, "", "", time.Hour)
+	stored, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	held, err := cache.NewRedisCacheAdapter(redisClient).Add(t.Context(), remotesessions.RefreshLockKey(stored.SubjectUrn, stored.RemoteSessionClientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held, "another holder has the lease")
+
+	started := time.Now()
+	for _, trigger := range []remotesessionmetrics.RefreshTrigger{remotesessionmetrics.RefreshTriggerManual, remotesessionmetrics.RefreshTriggerScheduled} {
+		_, err = env.refresher.RefreshNow(t.Context(), stored, "", trigger, remotesessions.RefreshAttribution{})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "not a wait on the lease")
+	}
+	require.Less(t, time.Since(started), 2*time.Second)
+	require.Zero(t, refreshes.Load())
+}
+
+// An empty access token with nothing to renew it reports expired, as resolution finds no token.
+func TestRemoteSessionStatuses_NothingUsableIsExpired(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, logs := unreadableEnv(t, "nothing-usable", &refreshes, healingRefresh)
+	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: "", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, remotesessions.RemoteSessionExpired, storedSessionStatus(t, env).Status)
+	require.True(t, needsReconnect(t, env))
+	_, err = resolveAll(t, env)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable, "nothing stored is not a decrypt failure")
+	require.Empty(t, logs.levelOf("remote session stored"))
 }

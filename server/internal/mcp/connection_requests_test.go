@@ -1308,3 +1308,72 @@ func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *
 	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 	require.NotEmpty(t, row.MemberID)
 }
+
+// A held grant on the member's own issuer answers for the member after its upstream URL moved, never an anonymous call.
+func TestHeldGrantForMovedMemberURLIsNeverAnonymous(t *testing.T) {
+	t.Parallel()
+
+	const oldURL = "https://old.example.com/mcp"
+	t.Run("outage", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPService(t)
+		f := newMemberRefreshOutageFixture(t, ctx, ti, func(string) string { return oldURL })
+		f.down.Store(true)
+
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+		require.True(t, isError)
+		require.Contains(t, text, "Retry")
+		require.Zero(t, f.memberCalls.Load(), "an outage never turns into an anonymous call")
+	})
+	t.Run("unreadable", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPService(t)
+		f := newMemberRefreshOutageFixture(t, ctx, ti, func(string) string { return oldURL })
+		overwriteMemberTokens(t, ctx, f, "", "", time.Hour)
+
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+		require.True(t, isError)
+		require.Contains(t, text, `server "member" can't use its saved sign-in anymore`)
+		require.Zero(t, f.memberCalls.Load())
+	})
+}
+
+// Two members on one issuer share its one grant: an unreadable grant asks each to reconnect, and neither is called without it.
+func TestUnreadableSharedIssuerGrantNeverDialsEitherMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	var calls atomic.Int32
+	newUpstream := func() *httptest.Server {
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				calls.Add(1)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		t.Cleanup(upstream.Close)
+		return upstream
+	}
+	upstreamA, upstreamB := newUpstream(), newUpstream()
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-shared-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-shared", "", []uuid.UUID{issuerID})
+	remoteIssuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID))
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "alpha", upstreamA.URL, remoteIssuer, 0)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "beta", upstreamB.URL, remoteIssuer, 1)
+	subject := createTestUser(t, ctx, ti, "meta-shared-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+	upsertUnreadableRemoteSession(t, ctx, ti, issuerID, clientID, subject, upstreamA.URL)
+
+	for _, member := range []string{"alpha", "beta"} {
+		text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, member+"--ping"))
+		require.True(t, isError, member)
+		require.Contains(t, text, `server "`+member+`" can't use its saved sign-in anymore`)
+	}
+	require.Zero(t, calls.Load(), "neither member is called without credentials")
+}

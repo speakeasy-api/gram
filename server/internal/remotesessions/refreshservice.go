@@ -815,6 +815,13 @@ func (s *RefreshService) refresh(
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
 
+	// An unreadable refresh token can't be sent, so it never takes the lease; the post-lock reread checks again.
+	if hasRefreshToken(sess) {
+		if _, err := s.readRefreshToken(ctx, sess); err != nil {
+			return zero, nil, nil, err
+		}
+	}
+
 	lockKey := RefreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
 	// Only a renewable cache holds the lease through the store; Redis is one.
