@@ -87,7 +87,6 @@ func callFunctionToolWithEnvAndBody(t *testing.T, runnerStatus int, runnerBody s
 	err = proxy.Do(t.Context(), recorder, bytes.NewReader(json.RawMessage(`{"device":"1"}`)), toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: user,
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},

@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/sessionclientinfo"
@@ -45,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -60,19 +58,10 @@ func TestHealthyToolCallRecordsNothing(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 
-	mockServer := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
-		Name:        "ping",
-		Description: "Returns pong",
-		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
-		Response:    testmcp.ToolResponse{Content: []map[string]any{{"type": "text", "text": "pong"}}},
-	}})
-	t.Cleanup(mockServer.Close)
-	target, err := url.Parse(mockServer.URL)
-	require.NoError(t, err)
-	upstream := httptest.NewServer(httputil.NewSingleHostReverseProxy(target))
-	t.Cleanup(upstream.Close)
+	var capturedAuth atomic.Value
+	upstream := newAuthorizationRecorder(t, &capturedAuth)
 
-	fixture := createIssuerGatedExternalMCPFixture(t, ctx, ti, authCtx, "healthy-call", upstream.URL)
+	fixture := createIssuerGatedHTTPToolFixture(t, ctx, ti, authCtx, "healthy-call", upstream.URL)
 	subject := urn.NewUserSubject("healthy-user-" + uuid.NewString())
 	insertRemoteSessionAccessToken(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject, "valid-upstream-token", time.Now().Add(time.Hour))
 	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)

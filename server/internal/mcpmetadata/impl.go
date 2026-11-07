@@ -785,29 +785,6 @@ func (s *Service) buildExportTools(ctx context.Context, toolsetDetails *types.To
 	tools := make([]*types.McpExportTool, 0, len(toolsetDetails.Tools))
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		// Handle proxy tools (external MCP)
-		if conv.IsProxyTool(toolDesc) {
-			// Parse schema from JSON string to any
-			var inputSchema any
-			if toolDesc.ExternalMcpToolDefinition.Schema != "" {
-				if err := json.Unmarshal([]byte(toolDesc.ExternalMcpToolDefinition.Schema), &inputSchema); err != nil {
-					s.logger.WarnContext(ctx, "failed to unmarshal tool schema",
-						attr.SlogError(err),
-						attr.SlogToolName(toolDesc.ExternalMcpToolDefinition.Name))
-				}
-			}
-			if inputSchema == nil {
-				inputSchema = map[string]any{"type": "object", "properties": map[string]any{}}
-			}
-
-			tools = append(tools, &types.McpExportTool{
-				Name:        toolDesc.ExternalMcpToolDefinition.Name,
-				Description: toolDesc.ExternalMcpToolDefinition.Description,
-				InputSchema: inputSchema,
-			})
-			continue
-		}
-
 		baseTool, err := conv.ToBaseTool(toolDesc)
 		if err != nil {
 			s.logger.WarnContext(ctx, "failed to convert tool to base tool", attr.SlogError(err))
@@ -1634,22 +1611,6 @@ func (s *Service) renderToolsetInstallPage(ctx context.Context, w http.ResponseW
 	tools := []toolInfo{}
 
 	for _, toolDesc := range toolsetDetails.Tools {
-		if conv.IsProxyTool(toolDesc) {
-			info := toolInfo{
-				Name:            toolDesc.ExternalMcpToolDefinition.Name,
-				Description:     toolDesc.ExternalMcpToolDefinition.Description,
-				Title:           "",
-				ReadOnlyHint:    false,
-				DestructiveHint: false,
-				IdempotentHint:  false,
-				OpenWorldHint:   false,
-				Tags:            toolfilter.EffectiveToolTags(toolDesc),
-			}
-			applyAnnotations(&info, toolDesc.ExternalMcpToolDefinition.Annotations)
-			tools = append(tools, info)
-			continue
-		}
-
 		baseTool, err := conv.ToBaseTool(toolDesc)
 		if err != nil {
 			s.logger.WarnContext(ctx, "convert tool to base tool", attr.SlogError(err))
@@ -2318,23 +2279,6 @@ func (s *Service) collectEnvironmentVariables(mode securityMode, toolsetDetails 
 					SystemName:  fmt.Sprintf("MCP-%s", functionEnvVar.Name),
 					DisplayName: displayName,
 					Sensitive:   true,
-				})
-			}
-		}
-
-		for _, headerDef := range toolsetDetails.ExternalMcpHeaderDefinitions {
-			if !headerDef.Required {
-				continue
-			}
-			if isExplicitlyNotUserProvided(headerDef.Name) {
-				continue
-			}
-			if !seen[headerDef.Name] {
-				seen[headerDef.Name] = true
-				inputs = append(inputs, securityInput{
-					SystemName:  fmt.Sprintf("MCP-%s", headerDef.Name),
-					DisplayName: fmt.Sprintf("MCP-%s", strings.ReplaceAll(headerDef.Name, "_", "-")),
-					Sensitive:   headerDef.Secret,
 				})
 			}
 		}

@@ -2185,7 +2185,6 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2269,7 +2268,6 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, NewHTTPToolCallPlan(tool, plan), tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)
@@ -2383,7 +2381,6 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 	err = proxy.Do(ctx, recorder, bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemEnv,
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 	}, toolCallPlan, tm.HTTPLogAttributes{})
 
 	require.NoError(t, err)

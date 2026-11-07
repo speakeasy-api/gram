@@ -722,22 +722,6 @@ source_annotations AS (
   JOIN active_deployment ad ON ad.id = f.deployment_id
   WHERE f.project_id = $2
     AND f.deleted IS FALSE
-  UNION ALL
-  SELECT
-    e.tool_urn,
-    e.name AS tool_name,
-    e.read_only_hint,
-    e.destructive_hint,
-    e.idempotent_hint,
-    e.open_world_hint
-  FROM latest_toolset_version tv
-  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
-  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
-  JOIN active_deployment ad ON ad.id = a.deployment_id
-  WHERE e.deleted IS FALSE
-    AND a.deleted IS FALSE
-    AND e.type <> 'proxy'
-    AND e.name IS NOT NULL
 ),
 varied_annotations AS (
   SELECT
@@ -1825,16 +1809,6 @@ SELECT
         WHERE pt.project_id = t.project_id
           AND pt.deleted IS FALSE
           AND pt.tool_urn = ANY(lv.tool_urns)
-      )
-      + (
-        SELECT COUNT(*)
-        FROM external_mcp_tool_definitions x
-        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
-        WHERE e.deployment_id = ad.id
-          AND e.deleted IS FALSE
-          AND x.deleted IS FALSE
-          AND x.tool_urn = ANY(lv.tool_urns)
-          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
       )
     )::bigint AS tool_count
   , ARRAY(

@@ -242,7 +242,6 @@ func handleResourcesRead(
 	err = toolProxy.ReadResource(ctx, rw, strings.NewReader("{}"), toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: "", // Resources do not support OAuth tokens for external MCP
 		GramEmail:  "",
 		GramChatID: payload.chatID,
 		// Resource reads reach functions through a separate payload that

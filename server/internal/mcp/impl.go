@@ -313,9 +313,9 @@ type Service struct {
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
 	// shutdownDrain interrupts tools/call and resources/read work the gateway
-	// runs itself (functions, HTTP tools, external MCP tools) when the server
-	// shuts down. It is the remote proxy manager's drain when there is one,
-	// so one StartDrain reaches relayed and executed requests alike.
+	// runs itself (functions and HTTP tools) when the server shuts down. It is
+	// the remote proxy manager's drain when there is one, so one StartDrain
+	// reaches relayed and executed requests alike.
 	shutdownDrain *shutdowndrain.Drain
 	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
@@ -432,10 +432,6 @@ type mcpInputs struct {
 	// toolVariationsGroupID is the effective variation group resolved per
 	// request (mcp_servers, then toolsets, then nil for the project default).
 	toolVariationsGroupID *uuid.UUID
-	// skipProxyTools drops external-MCP passthrough tools from dispatch.
-	// The meta surface sets it: those tools are hidden from its describe
-	// catalog, so execute must not reach them through the hosted path either.
-	skipProxyTools bool
 	// mcpServerID is the fronting mcp_servers row id: the mcp_endpoint's
 	// server, or on the legacy toolset-by-slug path the canonical wrapper when
 	// one exists. Nil otherwise and for internal (agent-workflow) callers.
@@ -1651,7 +1647,6 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		wrapperIsPublic:          wrapperIsPublic,
 		metaMcpServerID:          "",
 		clientInfoScope:          "",
-		skipProxyTools:           false,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(cfg.isPublic),
 		tags:                     tags,
@@ -2209,10 +2204,10 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 	case mcpversions.MethodNotificationsInitialized, mcpversions.MethodNotificationsCancelled:
 		return nil, nil
 	case mcpversions.MethodToolsList:
-		return handleToolsList(ctx, s.logger, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
+		return handleToolsList(ctx, s.logger, s.authz, s.db, payload, req, s.posthog, &s.toolsetCache, s.vectorToolStore, s.shadowMCPClient, s.platformExtras, s.sessionClientInfo)
 	case mcpversions.MethodToolsCall:
 		recordToolsCallIdentityCoverage(ctx, s.identityCoverage, payload.organizationID, payload)
-		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.guardianPolicy, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+		body, err := handleToolsCall(ctx, s.logger, s.metrics, s.identityCoverage, s.authz, s.db, s.env, payload, req, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache, s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger, s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 		s.recordHostedToolsCallRefusal(ctx, payload, err)
 		return body, err
 	case mcpversions.MethodPromptsList:
@@ -2436,9 +2431,7 @@ func (s *Service) HandleToolsList(
 		ctx,
 		s.logger,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
-		s.env,
 		payload,
 		req,
 		s.posthog,
@@ -2509,7 +2502,6 @@ func (s *Service) HandleToolsCall(
 		s.metrics,
 		s.identityCoverage,
 		s.authz,
-		s.guardianPolicy,
 		s.db,
 		s.env,
 		payload,
