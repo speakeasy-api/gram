@@ -1208,6 +1208,61 @@ func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRemembe
 	return items, nil
 }
 
+const listRememberedUpstreamClients = `-- name: ListRememberedUpstreamClients :many
+SELECT latest.mcp_server_id,
+       latest.remote_session_client_id::uuid AS remote_session_client_id
+FROM (
+  SELECT DISTINCT ON (sel.mcp_server_id)
+         sel.mcp_server_id,
+         sel.remote_session_client_id
+  FROM upstream_client_selections AS sel
+  JOIN user_sessions AS us
+    ON COALESCE(us.credential_id, us.id) = sel.credential_id
+   AND us.subject_urn = $1::text
+  WHERE sel.credential_kind = 'user_session'
+    AND sel.organization_id = $2::text
+    AND sel.mcp_server_id = ANY($3::uuid[])
+    AND sel.deleted IS FALSE
+  ORDER BY sel.mcp_server_id, sel.created_at DESC
+) AS latest
+WHERE latest.remote_session_client_id IS NOT NULL
+`
+
+type ListRememberedUpstreamClientsParams struct {
+	SubjectUrn     string
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListRememberedUpstreamClientsRow struct {
+	McpServerID           uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// The connected service a subject most recently approved for each MCP server
+// through any of their user sessions. It only prefills a new consent and is
+// checked again before use. A latest approval with no service remembers
+// nothing.
+func (q *Queries) ListRememberedUpstreamClients(ctx context.Context, arg ListRememberedUpstreamClientsParams) ([]ListRememberedUpstreamClientsRow, error) {
+	rows, err := q.db.Query(ctx, listRememberedUpstreamClients, arg.SubjectUrn, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRememberedUpstreamClientsRow
+	for rows.Next() {
+		var i ListRememberedUpstreamClientsRow
+		if err := rows.Scan(&i.McpServerID, &i.RemoteSessionClientID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServerAssociatedClients = `-- name: ListServerAssociatedClients :many
 SELECT a.mcp_server_id, a.remote_session_client_id
 FROM mcp_server_remote_session_clients AS a

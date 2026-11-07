@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -526,6 +527,74 @@ func needsNewConsent(err error) bool {
 	}
 	_, stale := errors.AsType[memberStaleChoiceError](err)
 	return stale
+}
+
+// catalogConsentRemedy says who can restore a member's approval. A new consent restores it
+// unless consent would offer the person no usable connection; then only an administrator can.
+// It is unchecked when that lookup fails.
+func (s *Service) catalogConsentRemedy(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) staleChoiceRemedy {
+	authentication := gate.authentication
+	switch {
+	case authentication == nil || authentication.subject.Kind != urn.SessionSubjectKindUser:
+		// Whoever approved this connection gives consent again.
+		return staleChoiceReconnect
+	case !authentication.refreshableUserSession, gate.memberChoices == nil:
+		return staleChoiceReconnectThenAdmin
+	case member.backend != metaMemberBackendProxied:
+		return staleChoiceReconnect
+	}
+	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "check whether consent can approve a changed member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return staleChoiceUnchecked
+	case fixable:
+		return staleChoiceReconnect
+	}
+	return staleChoiceAskAdmin
+}
+
+// catalogConsentMessage names the server when server is set; Code Mode carries the untrusted slug separately.
+// An unchecked remedy reads as reconnect, then ask an administrator.
+func catalogConsentMessage(server string, reason consentRejectionReason, remedy staleChoiceRemedy, person bool) string {
+	what := "settings"
+	if reason == consentRejectionAuthenticationChanged {
+		what = "sign-in"
+	}
+	subject := fmt.Sprintf("The %s for this server", what)
+	if server != "" {
+		subject = fmt.Sprintf("The %s for the %q server", what, server)
+	}
+	switch {
+	case !person:
+		return subject + " changed since this connection was approved. Ask whoever set up this connection to approve it again."
+	case remedy == staleChoiceAskAdmin:
+		return subject + " changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access."
+	case remedy == staleChoiceReconnectThenAdmin, remedy == staleChoiceUnchecked:
+		return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again. If that doesn't help, ask your administrator."
+	}
+	return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again."
+}
+
+// catalogConsentRefusal words a member whose approval no longer matches, without recording it.
+func (s *Service) catalogConsentRefusal(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	if consent.reason != consentRejectionAuthenticationChanged && consent.reason != consentRejectionConfigurationChanged {
+		return consent.message, staleChoiceReconnect
+	}
+	remedy := s.catalogConsentRemedy(ctx, logger, gate, member)
+	server := ""
+	if named {
+		server = member.slug
+	}
+	person := gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser
+	return catalogConsentMessage(server, consent.reason, remedy, person), remedy
+}
+
+// refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
+func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
+	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	return message, remedy
 }
 
 func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, error) {
