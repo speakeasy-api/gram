@@ -12,11 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // logReadEndpoints are the telemetry reads that return individual tool calls or
-// raw log records. Each must require log:read on the active project.
+// raw log records. Each reads the whole project with log:read and only the
+// caller's own scope without it.
 var logReadEndpoints = []struct {
 	name string
 	call func(ctx context.Context, ti *testInstance, check func(error))
@@ -63,15 +63,9 @@ var logReadEndpoints = []struct {
 	},
 }
 
-func requireForbidden(t *testing.T, err error) {
-	t.Helper()
-
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
-}
-
-func TestTelemetry_RBAC_LogReads_DeniedWithNoGrants(t *testing.T) {
+// A member without log:read is not refused; raw reads fall back to their own
+// scope (see own_scope_test.go).
+func TestTelemetry_RBAC_LogReads_NoGrantsFallsBackToOwnScope(t *testing.T) {
 	t.Parallel()
 
 	for _, endpoint := range logReadEndpoints {
@@ -81,14 +75,14 @@ func TestTelemetry_RBAC_LogReads_DeniedWithNoGrants(t *testing.T) {
 			ctx, ti := newTestLogsService(t)
 			ctx = authztest.WithExactGrants(t, ctx)
 
-			endpoint.call(ctx, ti, func(err error) { requireForbidden(t, err) })
+			endpoint.call(ctx, ti, func(err error) { require.NoError(t, err) })
 		})
 	}
 }
 
-// project access and org:admin do not imply log:read: raw tool-call logs carry
-// every member's tool arguments, results, and prompts.
-func TestTelemetry_RBAC_LogReads_DeniedWithProjectAndOrgAdminGrants(t *testing.T) {
+// Project access and org:admin do not imply log:read; such callers read only
+// their own scope.
+func TestTelemetry_RBAC_LogReads_ProjectAndOrgAdminGrantsStayInOwnScope(t *testing.T) {
 	t.Parallel()
 
 	for _, endpoint := range logReadEndpoints {
@@ -104,7 +98,7 @@ func TestTelemetry_RBAC_LogReads_DeniedWithProjectAndOrgAdminGrants(t *testing.T
 				authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
 			)
 
-			endpoint.call(ctx, ti, func(err error) { requireForbidden(t, err) })
+			endpoint.call(ctx, ti, func(err error) { require.NoError(t, err) })
 		})
 	}
 }
@@ -126,7 +120,8 @@ func TestTelemetry_RBAC_LogReads_AllowedWithLogReadGrant(t *testing.T) {
 	}
 }
 
-func TestTelemetry_RBAC_LogReads_DeniedWithOtherProjectLogRead(t *testing.T) {
+// log:read on another project does not widen this project's reads.
+func TestTelemetry_RBAC_LogReads_OtherProjectLogReadStaysInOwnScope(t *testing.T) {
 	t.Parallel()
 
 	for _, endpoint := range logReadEndpoints {
@@ -136,7 +131,7 @@ func TestTelemetry_RBAC_LogReads_DeniedWithOtherProjectLogRead(t *testing.T) {
 			ctx, ti := newTestLogsService(t)
 			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeLogRead, uuid.NewString()))
 
-			endpoint.call(ctx, ti, func(err error) { requireForbidden(t, err) })
+			endpoint.call(ctx, ti, func(err error) { require.NoError(t, err) })
 		})
 	}
 }
@@ -153,4 +148,35 @@ func TestTelemetry_RBAC_SearchChats_AllowedWithProjectReadGrant(t *testing.T) {
 
 	_, err := ti.service.SearchChats(ctx, &telem_gen.SearchChatsPayload{Limit: 10, Sort: "desc"})
 	require.NoError(t, err)
+}
+
+// No grant shape short of log:read on this project widens raw reads past the
+// caller's own scope. One fixture covers all four reads.
+func TestTelemetry_RBAC_LogReads_UnrelatedGrantsStayInOwnScope(t *testing.T) {
+	t.Parallel()
+
+	grants := map[string]func(authCtx *contextvalues.AuthContext) []authz.Grant{
+		"no grants": func(*contextvalues.AuthContext) []authz.Grant { return nil },
+		"project and org admin": func(authCtx *contextvalues.AuthContext) []authz.Grant {
+			return []authz.Grant{
+				authz.NewGrant(authz.ScopeProjectRead, authCtx.ProjectID.String()),
+				authz.NewGrant(authz.ScopeProjectWrite, authCtx.ProjectID.String()),
+				authz.NewGrant(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+			}
+		},
+		"log:read on another project": func(*contextvalues.AuthContext) []authz.Grant {
+			return []authz.Grant{authz.NewGrant(authz.ScopeLogRead, uuid.NewString())}
+		},
+	}
+	for name, grantsFor := range grants {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestLogsService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			ctx = authztest.WithExactGrants(t, ctx, grantsFor(authCtx)...)
+			requireOwnScopeOnly(t, ctx, ti)
+		})
+	}
 }
