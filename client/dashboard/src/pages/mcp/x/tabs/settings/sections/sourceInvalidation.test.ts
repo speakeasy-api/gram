@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { invalidateRemoteMcpSourceViews } from "./sourceInvalidation";
 
 describe("invalidateRemoteMcpSourceViews", () => {
-  it("refetches the scope pin view even while nothing observes it", async () => {
+  it("refetches the requested scopes view even while nothing observes it", async () => {
     const queryClient = new QueryClient();
     const invalidate = vi.spyOn(queryClient, "invalidateQueries");
 
