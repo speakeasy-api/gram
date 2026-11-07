@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures/productfeaturestest"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
 )
 
@@ -26,7 +27,21 @@ func TestGetGcpSetupInfo_ReportsGramPrincipal(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Equal(t, gcpauth.StubResolverPrincipal, *info.ServiceAccountEmail)
+	require.Equal(t, "serviceAccount:"+gcpauth.StubResolverPrincipal, *info.PrincipalMember, "without a configured principal the ambient service account is granted")
 	require.Equal(t, "roles/iam.serviceAccountTokenCreator", info.RequiredRole)
+}
+
+func TestGetGcpSetupInfo_ReportsTheConfiguredGroup(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestServiceWithGrantPrincipal(t, testenv.NewLogger(t), "group:speakeasy-kms@example.com")
+
+	info, err := ti.service.GetGcpSetupInfo(authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, authz.WildcardResource)), &gen.GetGcpSetupInfoPayload{
+		SessionToken: nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "group:speakeasy-kms@example.com", *info.PrincipalMember)
+	require.Equal(t, gcpauth.StubResolverPrincipal, *info.ServiceAccountEmail, "the runtime account is still reported for reference")
 }
 
 // Speakeasy's own identity is fixed for the process lifetime, so it is resolved once
@@ -67,6 +82,7 @@ func TestGetGcpSetupInfo_UnresolvablePrincipal(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Nil(t, info.ServiceAccountEmail)
+	require.Nil(t, info.PrincipalMember)
 	require.Equal(t, "roles/iam.serviceAccountTokenCreator", info.RequiredRole)
 }
 

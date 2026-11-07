@@ -209,7 +209,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	kms := newStubSigningClients(t, jose.ES256)
 
 	svc := externalkeys.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpIdentity, kms.Factory, features, ratelimit.NewRedisStore(redisClient))
-	credSvc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpIdentity, features, ratelimit.NewRedisStore(redisClient))
+	credSvc := externalcredentials.NewService(logger, tracerProvider, testenv.NewMeterProvider(t), conn, sessionManager, authzEngine, auditLogger, gcpIdentity, features, ratelimit.NewRedisStore(redisClient), "")
 
 	ti := &testInstance{
 		service:     svc,

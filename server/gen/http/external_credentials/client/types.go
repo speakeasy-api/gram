@@ -51,9 +51,9 @@ type UpdateAwsIamCredentialRequestBody struct {
 type CreateGcpIamCredentialRequestBody struct {
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account in your project that Speakeasy impersonates. Grant
-	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
-	// see externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant the
+	// principal_member reported by externalCredentials.getGcpSetupInfo
+	// roles/iam.serviceAccountTokenCreator on it.
 	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
@@ -64,9 +64,9 @@ type UpdateGcpIamCredentialRequestBody struct {
 	ID string `form:"id" json:"id" xml:"id"`
 	// A human-readable name for the credential.
 	Name string `form:"name" json:"name" xml:"name"`
-	// The service account in your project that Speakeasy impersonates. Grant
-	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
-	// see externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant the
+	// principal_member reported by externalCredentials.getGcpSetupInfo
+	// roles/iam.serviceAccountTokenCreator on it.
 	ImpersonateServiceAccount string `form:"impersonate_service_account" json:"impersonate_service_account" xml:"impersonate_service_account"`
 }
 
@@ -271,11 +271,18 @@ type VerifyGcpIamCredentialResponseBody struct {
 // GetGcpSetupInfoResponseBody is the type of the "externalCredentials" service
 // "getGcpSetupInfo" endpoint HTTP response body.
 type GetGcpSetupInfoResponseBody struct {
-	// Speakeasy's own service account. Grant it
-	// roles/iam.serviceAccountTokenCreator on the service account you want
-	// Speakeasy to impersonate. Empty when the running environment cannot report
-	// one (local development backed by a user login rather than a service-account
-	// key).
+	// The IAM member to grant roles/iam.serviceAccountTokenCreator on the service
+	// account you want Speakeasy to impersonate, with its type prefix:
+	// group:<email> or serviceAccount:<email>. Use it verbatim in IAM policy
+	// bindings. It is the only Speakeasy principal a customer grants; a group
+	// fronts Speakeasy's service account so the account can change without
+	// customers updating grants. Empty when the running environment cannot report
+	// one.
+	PrincipalMember *string `form:"principal_member,omitempty" json:"principal_member,omitempty" xml:"principal_member,omitempty"`
+	// Speakeasy's own runtime service account. Grant principal_member instead: it
+	// may be a group that contains this account. Empty when the running
+	// environment cannot report one (local development backed by a user login
+	// rather than a service-account key).
 	ServiceAccountEmail *string `form:"service_account_email,omitempty" json:"service_account_email,omitempty" xml:"service_account_email,omitempty"`
 	// The IAM role to grant Speakeasy's service account on the target service
 	// account.
@@ -4539,6 +4546,7 @@ func NewVerifyGcpIamCredentialGatewayError(body *VerifyGcpIamCredentialGatewayEr
 // "getGcpSetupInfo" endpoint result from a HTTP "OK" response.
 func NewGetGcpSetupInfoGcpSetupInfoOK(body *GetGcpSetupInfoResponseBody) *externalcredentials.GcpSetupInfo {
 	v := &externalcredentials.GcpSetupInfo{
+		PrincipalMember:     body.PrincipalMember,
 		ServiceAccountEmail: body.ServiceAccountEmail,
 		RequiredRole:        *body.RequiredRole,
 	}

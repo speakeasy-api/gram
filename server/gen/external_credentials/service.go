@@ -131,9 +131,9 @@ type CreateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account in your project that Speakeasy impersonates. Grant
-	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
-	// see externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant the
+	// principal_member reported by externalCredentials.getGcpSetupInfo
+	// roles/iam.serviceAccountTokenCreator on it.
 	ImpersonateServiceAccount string
 }
 
@@ -198,11 +198,18 @@ type GcpIamCredential struct {
 // GcpSetupInfo is the result type of the externalCredentials service
 // getGcpSetupInfo method.
 type GcpSetupInfo struct {
-	// Speakeasy's own service account. Grant it
-	// roles/iam.serviceAccountTokenCreator on the service account you want
-	// Speakeasy to impersonate. Empty when the running environment cannot report
-	// one (local development backed by a user login rather than a service-account
-	// key).
+	// The IAM member to grant roles/iam.serviceAccountTokenCreator on the service
+	// account you want Speakeasy to impersonate, with its type prefix:
+	// group:<email> or serviceAccount:<email>. Use it verbatim in IAM policy
+	// bindings. It is the only Speakeasy principal a customer grants; a group
+	// fronts Speakeasy's service account so the account can change without
+	// customers updating grants. Empty when the running environment cannot report
+	// one.
+	PrincipalMember *string
+	// Speakeasy's own runtime service account. Grant principal_member instead: it
+	// may be a group that contains this account. Empty when the running
+	// environment cannot report one (local development backed by a user login
+	// rather than a service-account key).
 	ServiceAccountEmail *string
 	// The IAM role to grant Speakeasy's service account on the target service
 	// account.
@@ -285,9 +292,9 @@ type UpdateGcpIamCredentialPayload struct {
 	SessionToken *string
 	// A human-readable name for the credential.
 	Name string
-	// The service account in your project that Speakeasy impersonates. Grant
-	// Speakeasy's own service account roles/iam.serviceAccountTokenCreator on it —
-	// see externalCredentials.getGcpSetupInfo.
+	// The service account in your project that Speakeasy impersonates. Grant the
+	// principal_member reported by externalCredentials.getGcpSetupInfo
+	// roles/iam.serviceAccountTokenCreator on it.
 	ImpersonateServiceAccount string
 }
 

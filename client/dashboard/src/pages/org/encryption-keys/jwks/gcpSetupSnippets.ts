@@ -11,7 +11,10 @@ export type SetupValues = {
    * Overrides the one derived from the project and account name.
    */
   serviceAccountEmail?: string;
-  /** The principal Speakeasy itself runs as, granted the right to impersonate. */
+  /**
+   * The IAM member Speakeasy is granted the right to impersonate as, with its
+   * type prefix (`group:` or `serviceAccount:`). Used verbatim in bindings.
+   */
   speakeasyPrincipal: string;
   location: string;
   keyRing: string;
@@ -50,6 +53,28 @@ const SIGNING_ROLE = "roles/cloudkms.signerVerifier";
 // copied command never silently runs against an empty string.
 function or(value: string, placeholder: string): string {
   return value.trim() || placeholder;
+}
+
+/**
+ * The IAM member a customer grants: the server's `principalMember`, which may
+ * be a group fronting Speakeasy's service account. Servers that predate it
+ * report only the service account email, which is granted as
+ * `serviceAccount:`.
+ */
+export function speakeasyPrincipalMember(info: {
+  principalMember?: string | undefined;
+  serviceAccountEmail?: string | undefined;
+}): string {
+  const member = info.principalMember?.trim();
+  if (member) return member;
+  const email = info.serviceAccountEmail?.trim();
+  return email ? `serviceAccount:${email}` : "";
+}
+
+/** The email part of an IAM member, for places that take a bare principal. */
+export function memberEmail(member: string): string {
+  const colon = member.indexOf(":");
+  return colon === -1 ? member : member.slice(colon + 1);
 }
 
 export function serviceAccountEmail(values: SetupValues): string {
@@ -114,7 +139,7 @@ export function impersonationInstructions(
           ``,
           `gcloud iam service-accounts add-iam-policy-binding ${email} \\`,
           `  --project=${project} \\`,
-          `  --member="serviceAccount:${principal}" \\`,
+          `  --member="${principal}" \\`,
           `  --role="${IMPERSONATION_ROLE}"`,
         ].join("\n"),
       };
@@ -132,7 +157,7 @@ export function impersonationInstructions(
           `resource "google_service_account_iam_member" "speakeasy_impersonation" {`,
           `  service_account_id = google_service_account.speakeasy_signer.name`,
           `  role               = "${IMPERSONATION_ROLE}"`,
-          `  member             = "serviceAccount:${principal}"`,
+          `  member             = "${principal}"`,
           `}`,
         ].join("\n"),
       };
@@ -143,7 +168,7 @@ export function impersonationInstructions(
           `In the Google Cloud console, open IAM & Admin › Service Accounts for project ${project}.`,
           `Create a service account named ${account}. Skip the optional role grants.`,
           `Open the new account, go to Principals with access, and choose Grant access.`,
-          `Add ${principal} as the principal with the Service Account Token Creator role, then save.`,
+          `Add ${memberEmail(principal)} as the principal with the Service Account Token Creator role, then save.`,
         ],
       };
   }
