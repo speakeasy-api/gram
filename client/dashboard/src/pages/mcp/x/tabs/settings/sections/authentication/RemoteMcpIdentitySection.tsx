@@ -112,6 +112,7 @@ export function RemoteMcpIdentitySectionBody({
   const {
     items: clients,
     isLoading: clientsLoading,
+    isRefreshing: clientsRefreshing,
     isError: clientsError,
     error: clientsQueryError,
   } = useAllRemoteSessionClients(
@@ -208,9 +209,11 @@ export function RemoteMcpIdentitySectionBody({
     : selfClient
       ? "agent"
       : deriveIdentityMode(subjectClients.length, headers);
+  // A refresh keeps the panel, and what was typed into it, on screen. Save waits
+  // for it instead, so nothing commits against a list being rechecked.
   const loading =
     headersQuery.isLoading ||
-    clientsLoading ||
+    (clientsLoading && !clientsRefreshing) ||
     siblingsQuery.isLoading ||
     associationsQuery.isLoading;
   const identityResolved = !loading && !identityQueryError;
@@ -1032,6 +1035,7 @@ export function RemoteMcpIdentitySectionBody({
                   disabled={
                     !canSave ||
                     savePending ||
+                    clientsRefreshing ||
                     (identityReadOnly && !pinOnlyChange) ||
                     repointLookupPending
                   }
@@ -1093,6 +1097,7 @@ export function RemoteMcpIdentitySectionBody({
               variant="destructive-primary"
               disabled={
                 savePending ||
+                clientsRefreshing ||
                 !canWrite ||
                 rbacLoading ||
                 repointLookupPending ||
