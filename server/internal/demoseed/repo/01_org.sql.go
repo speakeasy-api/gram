@@ -781,7 +781,9 @@ VALUES
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
   ($8::uuid, $2::text, $5::text,
-   'Release notes assistant', NULL, NULL)
+   'Release notes assistant', NULL, NULL),
+  ($9::uuid, $2::text, $10::text,
+   'Deploy watcher', NULL, NULL)
 `
 
 type OrgInsertManagedAgentsParams struct {
@@ -793,6 +795,8 @@ type OrgInsertManagedAgentsParams struct {
 	Agent3 uuid.UUID
 	Owner3 string
 	Agent4 uuid.UUID
+	Agent5 uuid.UUID
+	Owner5 string
 }
 
 // Managed identities are distinct from OAuth client registrations. Existing
@@ -809,6 +813,8 @@ func (q *Queries) OrgInsertManagedAgents(ctx context.Context, arg OrgInsertManag
 		arg.Agent3,
 		arg.Owner3,
 		arg.Agent4,
+		arg.Agent5,
+		arg.Owner5,
 	)
 	return err
 }

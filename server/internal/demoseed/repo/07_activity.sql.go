@@ -78,6 +78,41 @@ func (q *Queries) ActivityDeleteSpendRules(ctx context.Context, organizationID s
 	return err
 }
 
+const activityInsertAgentChat = `-- name: ActivityInsertAgentChat :exec
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, agent_id, created_at, updated_at)
+VALUES ($1, $2, $3, NULL, NULL, $4::text,
+        $5::text, $6::uuid,
+        now() - $7::interval, now() - $8::interval)
+`
+
+type ActivityInsertAgentChatParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Title          string
+	SessionSurface pgtype.Text
+	AgentID        uuid.UUID
+	CreatedAge     pgtype.Interval
+	UpdatedAge     pgtype.Interval
+}
+
+// A session an agent credential drove: the agent is the actor and there is no
+// user to name, as the chat completions path records it. Its owner reads it
+// through ownership rather than chat:read.
+func (q *Queries) ActivityInsertAgentChat(ctx context.Context, arg ActivityInsertAgentChatParams) error {
+	_, err := q.db.Exec(ctx, activityInsertAgentChat,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Title,
+		arg.SessionSurface,
+		arg.AgentID,
+		arg.CreatedAge,
+		arg.UpdatedAge,
+	)
+	return err
+}
+
 const activityInsertAnthropicInferenceConfig = `-- name: ActivityInsertAnthropicInferenceConfig :exec
 INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, enabled)
 VALUES ($1, $2, $3, 'anthropic_inference', '', false)
@@ -159,11 +194,11 @@ func (q *Queries) ActivityInsertChat(ctx context.Context, arg ActivityInsertChat
 }
 
 const activityInsertChatMessage = `-- name: ActivityInsertChatMessage :exec
-INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, created_at, risk_analyzed_at)
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, content_raw, tool_calls, source, model, tool_call_id, created_at, risk_analyzed_at)
 VALUES ($1, $2, $3::uuid, $4, $5,
         $6::jsonb, $7::jsonb,
-        $8::text, $9::text,
-        now() - $10::interval, now())
+        $8::text, $9::text, $10::text,
+        now() - $11::interval, now())
 `
 
 type ActivityInsertChatMessageParams struct {
@@ -176,11 +211,12 @@ type ActivityInsertChatMessageParams struct {
 	ToolCalls  []byte
 	Source     pgtype.Text
 	Model      pgtype.Text
+	ToolCallID pgtype.Text
 	Age        pgtype.Interval
 }
 
-// Columns a message does not set (content_raw, tool_calls, source, model) are
-// passed as NULL, which is what omitting them wrote.
+// Columns a message does not set (content_raw, tool_calls, source, model,
+// tool_call_id) are passed as NULL, which is what omitting them wrote.
 func (q *Queries) ActivityInsertChatMessage(ctx context.Context, arg ActivityInsertChatMessageParams) error {
 	_, err := q.db.Exec(ctx, activityInsertChatMessage,
 		arg.ID,
@@ -192,6 +228,7 @@ func (q *Queries) ActivityInsertChatMessage(ctx context.Context, arg ActivityIns
 		arg.ToolCalls,
 		arg.Source,
 		arg.Model,
+		arg.ToolCallID,
 		arg.Age,
 	)
 	return err
