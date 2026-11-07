@@ -145,7 +145,8 @@ type AgentCredentialPerson struct {
 	ConnectionExpired bool `json:"connection_expired"`
 }
 
-// AgentMCPServerAccess is one MCP server an agent may connect to.
+// AgentMCPServerAccess is one MCP server an agent's mcp:connect, mcp:read or
+// mcp:write grants let it connect to.
 type AgentMCPServerAccess struct {
 	// ResourceID is the ID mcp:connect grants and checks name for the server.
 	ResourceID string `json:"resource_id"`
@@ -158,11 +159,12 @@ type AgentMCPServerAccess struct {
 
 	ProjectName string `json:"project_name"`
 
-	// Grant is how the narrowest matching mcp:connect grant reaches the
-	// server: server, project, or organization.
+	// Grant is how the narrowest matching mcp:connect, mcp:read or mcp:write
+	// grant reaches the server: server, project, or organization.
 	Grant string `json:"grant"`
 
-	// CredentialMode is shared, on_behalf_of, or not_assigned.
+	// CredentialMode is shared, on_behalf_of, not_assigned, or
+	// caller_provided.
 	CredentialMode string `json:"credential_mode"`
 
 	// OnBehalfOf lists the people whose connections the agent uses; empty
@@ -178,7 +180,8 @@ type AgentMCPServerAccess struct {
 type AgentMCPAccessOutput struct {
 	Agent AgentIdentity `json:"agent"`
 
-	// Servers are the MCP servers the agent's mcp:connect grants reach.
+	// Servers are the MCP servers the agent's mcp:connect, mcp:read and
+	// mcp:write grants reach.
 	Servers []AgentMCPServerAccess `json:"servers"`
 
 	// MissingServerGrants counts grants naming a server that no longer exists.
@@ -260,7 +263,7 @@ type agentConnectTarget struct {
 	issuerID    uuid.NullUUID
 }
 
-// MCPAccess reads the MCP servers an agent's mcp:connect grants reach and
+// MCPAccess reads the MCP servers an agent's mcp:connect, mcp:read and mcp:write grants reach and
 // whose credential it uses on each. It needs what the dashboard's Permissions
 // tab needs: the agent's owner, or agent:write on the agent.
 func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Principal, input AgentIdentityInput) (AgentMCPAccessOutput, error) {
@@ -361,7 +364,10 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 	// Live organization access is settled before the input is judged, so a
 	// caller without org:read learns nothing from a window error.
 	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
-		return zero, ErrAgentChecksForbidden
+		if isAuthorizationRefusal(err) {
+			return zero, ErrAgentChecksForbidden
+		}
+		return zero, fmt.Errorf("authorize agent checks: %w", err)
 	}
 	from, to, err := agentChecksWindow(input.From, input.To, s.now())
 	if err != nil {
@@ -386,7 +392,7 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 			ApikeyToken:   nil,
 			SessionToken:  nil,
 		})
-		if shared, ok := errors.AsType[*oops.ShareableError](err); ok && (shared.Code == oops.CodeForbidden || shared.Code == oops.CodeUnauthorized) {
+		if isAuthorizationRefusal(err) {
 			return nil, ErrAgentChecksForbidden
 		}
 		if err != nil {
@@ -440,7 +446,10 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 		return agent, nil
 	}
 	if err := s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}); err != nil {
-		return zero, ErrAgentNotAvailable
+		if isAuthorizationRefusal(err) {
+			return zero, ErrAgentNotAvailable
+		}
+		return zero, fmt.Errorf("authorize agent read: %w", err)
 	}
 	return agent, nil
 }
@@ -650,6 +659,13 @@ func offersPersonalSignIn(auth *types.McpServerAuthentication) bool {
 	return slices.ContainsFunc(auth.Clients, func(client *types.AuthClient) bool {
 		return client != nil && client.Enabled && client.ClientType == authz.AuthClientTypeRemoteSession
 	})
+}
+
+// isAuthorizationRefusal reports whether err is the caller being refused, as
+// opposed to authorization itself failing.
+func isAuthorizationRefusal(err error) bool {
+	shared, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && (shared.Code == oops.CodeForbidden || shared.Code == oops.CodeUnauthorized)
 }
 
 // passesCallerCredentialThrough reports whether a server takes the credential
