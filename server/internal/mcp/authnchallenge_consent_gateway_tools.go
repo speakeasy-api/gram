@@ -47,8 +47,9 @@ type consentMemberOutcome struct {
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
-		DirectAuthClient: nil,
-		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
+		DirectAuthClient:     nil,
+		otherModeBackendHash: "",
+		CompletedAt:          time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, reservation); err != nil {
 		return "", fmt.Errorf("%w: reserve gateway capture: %w", errConsentInventoryUnavailable, err)
@@ -297,7 +298,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 			}
 			authBinding = &connectionCatalogAuth{ClientID: clientID, RegistrationID: member.chosenClientID}
 		}
-		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID], Auth: authBinding}
+		toolMembers[member.slug] = connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: backendHashes[member.serverID].hash, TypedBackendHash: backendHashes[member.serverID].typedHash, Auth: authBinding}
 	}
 	for _, tool := range inventory {
 		var hints []string

@@ -495,9 +495,18 @@ func (g metaGateContext) memberReconnectURL(member metaMember) string {
 
 // memberConnectURL is the URL a person opens to connect member on this
 // gateway, or empty when the gateway has no connect pages or the member signs
-// in through no service.
+// in through no service. Where the typed auth client resolver judged the
+// member under enforcement, the service is the registration its choice names.
+// A choice that cannot serve still links, since consent can offer another,
+// unless the server needs no upstream authentication or the choice is a stale
+// no-auth one, which only a new consent replaces. The authorization server
+// derived for the member decides nothing there.
 func (g metaGateContext) memberConnectURL(member metaMember) string {
-	if g.connectRoot == "" || !member.remoteSessionIssuerID.Valid {
+	signsIn := member.remoteSessionIssuerID.Valid
+	if res := member.authClient; g.memberChoices != nil && g.memberChoices.enforced && res != nil {
+		signsIn = member.chosenClientID.Valid || (res.outcome == authClientGap && !res.noAuthAllowed && !res.staleNoAuth())
+	}
+	if g.connectRoot == "" || !signsIn {
 		return ""
 	}
 	return gatewayServerConnectURL(g.connectRoot, member.slug)

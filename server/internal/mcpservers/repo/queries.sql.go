@@ -933,8 +933,9 @@ func (q *Queries) ListLiveMCPServerIDsInOrganization(ctx context.Context, arg Li
 }
 
 const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
-SELECT m.id, m.project_id,
-       encode(sha256(convert_to(jsonb_build_object(
+WITH configured AS (
+SELECT m.id, m.project_id, m.toolset_id,
+       jsonb_build_object(
            'remote', m.remote_mcp_server_id, 'url', r.url,
            'transport', r.transport_type,
            'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
@@ -950,7 +951,7 @@ SELECT m.id, m.project_id,
                FROM remote_mcp_server_headers AS h
                WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
            ), '[]'::jsonb)
-       )::text, 'UTF8')), 'hex')::text AS configuration_hash
+       ) AS configuration
 FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
  AND p.organization_id = $1::text AND p.deleted IS FALSE
@@ -959,6 +960,12 @@ LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
  AND t.project_id = m.project_id AND t.deleted IS FALSE
 WHERE m.id = ANY($2::uuid[]) AND m.deleted IS FALSE
+)
+SELECT c.id, c.project_id,
+       encode(sha256(convert_to(c.configuration::text, 'UTF8')), 'hex')::text AS configuration_hash,
+       encode(sha256(convert_to((CASE WHEN c.toolset_id IS NULL THEN c.configuration - 'issuer'
+                                      ELSE c.configuration END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash
+FROM configured AS c
 `
 
 type ListMCPServerConsentConfigurationsParams struct {
@@ -967,13 +974,19 @@ type ListMCPServerConsentConfigurationsParams struct {
 }
 
 type ListMCPServerConsentConfigurationsRow struct {
-	ID                uuid.UUID
-	ProjectID         uuid.UUID
-	ConfigurationHash string
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
+	ConfigurationHash      string
+	TypedConfigurationHash string
 }
 
 // Hash stored routing configuration in one tenant-scoped read. Header secrets
 // remain ciphertext; tool definitions are deliberately outside this boundary.
+// typed_configuration_hash is what an approval is compared on where typed auth
+// clients choose upstream authentication: it leaves out a proxied server's
+// derived authorization server, which decides nothing there, so resynchronizing
+// it changes nothing an approval covers. A hosted server is still routed by
+// that authorization server, so both hashes cover it.
 func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -983,7 +996,12 @@ func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg Li
 	var items []ListMCPServerConsentConfigurationsRow
 	for rows.Next() {
 		var i ListMCPServerConsentConfigurationsRow
-		if err := rows.Scan(&i.ID, &i.ProjectID, &i.ConfigurationHash); err != nil {
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ConfigurationHash,
+			&i.TypedConfigurationHash,
+		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

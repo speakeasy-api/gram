@@ -86,6 +86,9 @@ type consentToolInventory struct {
 	// BackendHash pins evidence to the configured backend, not just a tool name.
 	BackendHash string `json:"backend_hash,omitempty"`
 
+	// Recomputed at reuse validation, never trusted from the cache.
+	otherModeBackendHash string
+
 	// StateID keys the snapshot to one authn challenge.
 	StateID string `json:"state_id"`
 
@@ -167,18 +170,19 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
-		DirectAuthClient: nil,
-		CompletedAt:      time.Time{},
-		BackendHash:      backendHash,
-		StateID:          stateID,
-		Attempt:          attempt,
-		Resource:         endpointToolSelectionResource(endpoint),
-		Tools:            []consentInventoryTool{},
-		ExpectedCursor:   "",
-		Complete:         false,
-		McpSessionID:     "",
-		MemberBindings:   nil,
-		MemberOutcomes:   nil,
+		DirectAuthClient:     nil,
+		otherModeBackendHash: "",
+		CompletedAt:          time.Time{},
+		BackendHash:          backendHash,
+		StateID:              stateID,
+		Attempt:              attempt,
+		Resource:             endpointToolSelectionResource(endpoint),
+		Tools:                []consentInventoryTool{},
+		ExpectedCursor:       "",
+		Complete:             false,
+		McpSessionID:         "",
+		MemberBindings:       nil,
+		MemberOutcomes:       nil,
 	}, nil
 }
 

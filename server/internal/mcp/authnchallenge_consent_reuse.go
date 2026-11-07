@@ -149,6 +149,19 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 	if reuse && (inventoryHash == "" || remoteHash == "") {
 		return nil, nil
 	}
+	// The inventory is fingerprinted without a proxied server's derived
+	// authorization server where typed auth clients choose upstream
+	// authentication, and with it elsewhere. A saved approval holds the form
+	// written when it was approved, so it is compared in both: switching mode
+	// alone asks nobody again. One approved under typed auth clients then keeps
+	// ignoring the derived authorization server, and its upstream clients,
+	// resource and permissions are still compared through the remote set.
+	otherModeHash := ""
+	if reuse {
+		otherMode := *inventory
+		otherMode.BackendHash = inventory.otherModeBackendHash
+		otherModeHash = consentInventoryFingerprint(&otherMode)
+	}
 	// Resolve the default only when saving reusable evidence. Other explicit
 	// grants keep zero so token exchange applies its normal duration default.
 	if duration == 0 && !reuse && inventoryHash != "" && remoteHash != "" {
@@ -188,7 +201,7 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 		if err != nil {
 			return nil, fmt.Errorf("read resource approval: %w", err)
 		}
-		if saved.InventoryHash != inventoryHash || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
+		if (saved.InventoryHash != inventoryHash && saved.InventoryHash != otherModeHash) || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
 			return nil, nil
 		}
 		selection, err = toolfilter.ParseSessionSelection(saved.ToolSelection)
@@ -292,9 +305,19 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if inventory.CompletedAt.IsZero() || time.Since(inventory.CompletedAt) > time.Minute {
 		return nil, nil
 	}
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
 	if err != nil {
 		return nil, err
+	}
+	backend, err := s.consentBackendEvidence(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	backendHash := backend.hash
+	inventory.otherModeBackendHash = backend.typedHash
+	if enforced {
+		backendHash = backend.typedHash
+		inventory.otherModeBackendHash = backend.hash
 	}
 	if inventory.BackendHash != backendHash {
 		return nil, nil
@@ -315,16 +338,39 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 
 // consentBackendFingerprint binds discovery to access-relevant configuration.
 // Display names and update timestamps do not change the authorization surface.
+// Where typed auth clients choose upstream authentication, a proxied server's
+// derived authorization server decides nothing and is left out, so
+// resynchronizing it changes no evidence.
 func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (string, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return "", err
+	}
+	evidence, err := s.consentBackendEvidence(ctx, endpoint)
+	if err != nil {
+		return "", err
+	}
+	if enforced {
+		return evidence.typedHash, nil
+	}
+	return evidence.hash, nil
+}
+
+// consentBackendEvidence fingerprints the endpoint's access-relevant
+// configuration in both modes from the same reads. The typed form omits a
+// proxied server's derived authorization server. A hosted server is routed
+// by that authorization server, so both forms cover it.
+func (s *Service) consentBackendEvidence(ctx context.Context, endpoint *ResolvedMcpEndpoint) (memberConfiguration, error) {
 	evidence := map[string]any{"resource": endpoint.UpstreamResource, "toolset": endpoint.ToolsetID}
 	if !endpoint.McpServerID.Valid {
-		return consentEvidenceHash(evidence), nil
+		hash := consentEvidenceHash(evidence)
+		return memberConfiguration{hash: hash, typedHash: hash}, nil
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("read consent backend: %w", err)
+		return memberConfiguration{}, fmt.Errorf("read consent backend: %w", err)
 	}
 	evidence["server"] = server.ID
 	evidence["remote"] = server.RemoteMcpServerID
@@ -339,14 +385,18 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 			ID: server.RemoteMcpServerID.UUID, ProjectID: endpoint.ProjectID,
 		})
 		if err != nil {
-			return "", fmt.Errorf("read consent remote backend: %w", err)
+			return memberConfiguration{}, fmt.Errorf("read consent remote backend: %w", err)
 		}
 		headerFingerprint, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ConfigurationFingerprint(ctx, remote.ID)
 		if err != nil {
-			return "", fmt.Errorf("read consent backend headers: %w", err)
+			return memberConfiguration{}, fmt.Errorf("read consent backend headers: %w", err)
 		}
 		evidence["url"] = remote.Url
 		evidence["headers"] = headerFingerprint
 	}
-	return consentEvidenceHash(evidence), nil
+	hash := consentEvidenceHash(evidence)
+	if !server.ToolsetID.Valid {
+		delete(evidence, "issuer")
+	}
+	return memberConfiguration{hash: hash, typedHash: consentEvidenceHash(evidence)}, nil
 }
