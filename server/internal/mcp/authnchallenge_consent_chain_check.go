@@ -47,7 +47,7 @@ type consentChainCheckResult struct {
 // that decides which grants still route. Statuses are empty before the subject
 // is stamped, so every card then reads not connected.
 func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, clients []remotesessions.Client, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, consentRouting, error) {
-	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, unroutableClients: nil, members: nil}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}

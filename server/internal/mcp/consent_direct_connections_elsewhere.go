@@ -61,7 +61,11 @@ func (s *Service) withDirectConnectionsElsewhere(ctx context.Context, endpoint *
 		}
 		// Synthetic, always different from this target, and not a sibling's resource.
 		// No row ID, timestamps, scope, identity, validation, or lifecycle authority.
-		statuses[client.ID] = remotesessions.RemoteSessionState{Status: remotesessions.RemoteSessionActive, Resource: resource + "#connected-elsewhere", AutoRefresh: true}
+		var marker remotesessions.RemoteSessionState
+		marker.Status = remotesessions.RemoteSessionActive
+		marker.Resource = resource + "#connected-elsewhere"
+		marker.AutoRefresh = true
+		statuses[client.ID] = marker
 	}
 	return statuses, nil
 }

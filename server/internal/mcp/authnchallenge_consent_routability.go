@@ -92,7 +92,7 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, unroutableClients: nil, members: nil}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)
