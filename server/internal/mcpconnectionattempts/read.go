@@ -77,6 +77,9 @@ func (f AttemptFilter) where() (string, []any, error) {
 	if f.StartedFrom.IsZero() || f.StartedBefore.IsZero() {
 		return "", nil, errors.New("attempt filter needs a start range")
 	}
+	if f.PeopleFailingFrom.IsZero() != f.PeopleFailingBefore.IsZero() {
+		return "", nil, errors.New("attempt filter needs both ends of the people range")
+	}
 	conds := []string{"attempt_started_at >= fromUnixTimestamp64Nano(?)", "attempt_started_at < fromUnixTimestamp64Nano(?)"}
 	args := []any{f.StartedFrom.UnixNano(), f.StartedBefore.UnixNano()}
 	if f.OrganizationID != "" {

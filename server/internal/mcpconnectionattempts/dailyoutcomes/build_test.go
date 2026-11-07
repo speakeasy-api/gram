@@ -20,7 +20,7 @@ import (
 )
 
 // The long-term table has no tenant, so each test owns the days it writes. Days are
-// counted back from today and stay well inside the 28 days the job reads.
+// counted back from today and stay inside the rawSafeDays (29) the job reads.
 const (
 	daysAgoOutcomes    = 25
 	daysAgoRerun       = 23

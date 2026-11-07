@@ -107,7 +107,11 @@ func TestSQLAgreesWithSummarize(t *testing.T) {
 	byPerson.PeopleFailingFrom, byPerson.PeopleFailingBefore = day, day.AddDate(0, 0, 1)
 	var personal []AttemptSummary
 	require.NoError(t, ReadAttempts(t.Context(), ch, byPerson, func(s AttemptSummary) { personal = append(personal, s) }))
-	require.NotEmpty(t, personal)
+	ids := make([]uuid.UUID, 0, len(personal))
+	for _, got := range personal {
+		ids = append(ids, got.AttemptID)
+	}
+	require.ElementsMatch(t, []uuid.UUID{a1.ID(), a2.ID(), a3.ID(), twoPeople.ID()}, ids, "the gateway attempt names no person")
 	for _, got := range personal {
 		want := Summarize(byAttempt[got.AttemptID])
 		require.Equal(t, want.LastStep, got.LastStep, "attempt %s", got.AttemptID)
@@ -122,4 +126,17 @@ func TestReadAttemptsNeedsAStartRange(t *testing.T) {
 	require.NoError(t, err)
 	err = ReadAttempts(t.Context(), ch, AttemptFilter{OrganizationID: "org-any"}, func(AttemptSummary) {})
 	require.Error(t, err)
+}
+
+func TestReadAttemptsNeedsBothEndsOfThePeopleRange(t *testing.T) {
+	t.Parallel()
+	ch, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	now := time.Now().UTC()
+	for _, filter := range []AttemptFilter{
+		{StartedFrom: now.Add(-time.Hour), StartedBefore: now, PeopleFailingFrom: now.Add(-time.Hour)},
+		{StartedFrom: now.Add(-time.Hour), StartedBefore: now, PeopleFailingBefore: now},
+	} {
+		require.Error(t, ReadAttempts(t.Context(), ch, filter, func(AttemptSummary) {}))
+	}
 }
