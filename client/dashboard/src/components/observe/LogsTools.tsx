@@ -81,6 +81,7 @@ import {
 import { parseFilters, serializeFilters } from "@/pages/logs/log-filter-url";
 import { TraceLogsList } from "@/pages/logs/TraceLogsList";
 import { formatPlatform } from "@/lib/formatPlatform";
+import { useStalePendingRerender } from "@/lib/toolCallStatus";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { type DateRangePreset } from "@/elements";
@@ -94,6 +95,7 @@ import type { TelemetryLogRecord } from "@gram/client/models/components/telemetr
 import type { ToolUsageTargetTimeSeriesPoint } from "@gram/client/models/components/toolusagetargettimeseriespoint.js";
 import type { ToolUsageTotals } from "@gram/client/models/components/toolusagetotals.js";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
+import { getToolLogStatusConfig } from "./toolLogStatus";
 import { Operator } from "@gram/client/models/components/logfilter";
 import type { ListToolUsageTracesPayloadTargetTypes } from "@gram/client/models/components/listtoolusagetracespayload";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -1994,7 +1996,14 @@ function LogsToolsTraceRow({
     trace.targetType,
   ]);
 
-  const statusConfig = getStatusConfig(trace);
+  // A pending call turns Unknown after a while; re-render then so the label
+  // does not wait for an unrelated update.
+  useStalePendingRerender(
+    trace.hookStatus === "pending"
+      ? Number(BigInt(trace.startTimeUnixNano) / 1_000_000n)
+      : undefined,
+  );
+  const statusConfig = getToolLogStatusConfig(trace);
   const targetConfig = getTargetConfig(trace.targetType);
   const skillsOverMcpEnabled = useSkillsOverMcpEnabled();
   const skillChannel = skillsOverMcpEnabled ? skillLoadChannel(trace) : null;
@@ -2290,52 +2299,4 @@ function getTargetConfig(targetType: ToolUsageTraceSummary["targetType"]) {
         badgeClassName: "bg-muted text-muted-foreground",
       };
   }
-}
-
-// Status renders as a plain mono word: color only where attention is due
-// (error red, blocked orange); success and pending stay muted ink.
-function getStatusConfig(trace: ToolUsageTraceSummary): {
-  className: string;
-  dotClassName: string;
-  label: string;
-} | null {
-  const ok = {
-    className: "text-muted-foreground",
-    dotClassName: "bg-emerald-500",
-    label: "Success",
-  };
-  const failed = {
-    className: "text-destructive",
-    dotClassName: "bg-rose-500",
-    label: "Error",
-  };
-
-  if (trace.hookStatus) {
-    switch (trace.hookStatus) {
-      case "blocked":
-        // Blocked is the same answer to "did this call run" — it did not — but
-        // it is the policy working rather than something broken, so it takes
-        // amber and leaves red to mean failure.
-        return { ...failed, dotClassName: "bg-amber-500", label: "Blocked" };
-      case "failure":
-        return failed;
-      case "success":
-        return ok;
-      case "pending":
-        return {
-          className: "text-muted-foreground",
-          dotClassName: "bg-muted-foreground/30",
-          label: "Pending",
-        };
-      default:
-        return null;
-    }
-  }
-
-  if (trace.httpStatusCode !== undefined) {
-    if (trace.httpStatusCode >= 400) return failed;
-    if (trace.httpStatusCode >= 200 && trace.httpStatusCode < 400) return ok;
-  }
-
-  return null;
 }
