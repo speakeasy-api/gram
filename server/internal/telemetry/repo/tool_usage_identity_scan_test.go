@@ -63,12 +63,11 @@ func TestToolUsageScanIdentityFilter(t *testing.T) {
 		require.Equal(t, []any{"agent-123"}, args)
 	})
 
-	t.Run("each user kind maps to its trace_summaries column", func(t *testing.T) {
+	t.Run("id kinds map to their trace_summaries columns", func(t *testing.T) {
 		t.Parallel()
 		pred := toolUsageScanIdentityFilter(GetToolUsageSummaryParams{
 			UserFilters: []ToolUsageUserFilter{
 				{Kind: ToolUsageUserKindAgentID, Key: "agent-123"},
-				{Kind: toolUsageUserKindEmail, Key: "a@example.com"},
 				{Kind: toolUsageUserKindExternalUserID, Key: "ext-1"},
 				{Kind: toolUsageUserKindUserID, Key: "user-1"},
 			},
@@ -76,10 +75,31 @@ func TestToolUsageScanIdentityFilter(t *testing.T) {
 		sql, args, err := pred.ToSql()
 		require.NoError(t, err)
 		require.Contains(t, sql, "agent_id = ?")
-		require.Contains(t, sql, "user_email = ?")
 		require.Contains(t, sql, "external_user_id = ?")
 		require.Contains(t, sql, "user_id = ?")
-		require.Equal(t, []any{"agent-123", "a@example.com", "ext-1", "user-1"}, args)
+		require.Equal(t, []any{"agent-123", "ext-1", "user-1"}, args)
+	})
+
+	t.Run("email filters fold through the identity_map", func(t *testing.T) {
+		t.Parallel()
+		pred := toolUsageScanIdentityFilter(GetToolUsageSummaryParams{
+			CanonicalIdentityOrg: "org-1",
+			UserFilters:          []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "A@Example.com"}},
+		})
+		sql, args, err := pred.ToSql()
+		require.NoError(t, err)
+		require.Contains(t, sql, "joinGet('identity_map', 'canonical_email', 'org-1'")
+		require.Contains(t, sql, "user_email")
+		require.NotContains(t, sql, "user_email = ?")
+		// The requested value is bound normalized, on both sides of the fold.
+		require.Equal(t, []any{"a@example.com", "a@example.com"}, args)
+	})
+
+	t.Run("email filter without an org disables the pushdown", func(t *testing.T) {
+		t.Parallel()
+		require.Nil(t, toolUsageScanIdentityFilter(GetToolUsageSummaryParams{
+			UserFilters: []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "a@example.com"}},
+		}))
 	})
 
 	t.Run("authorizer ids join the user filter as an OR branch", func(t *testing.T) {
@@ -98,14 +118,14 @@ func TestToolUsageScanIdentityFilter(t *testing.T) {
 	t.Run("agent ids are ANDed with the user filter", func(t *testing.T) {
 		t.Parallel()
 		pred := toolUsageScanIdentityFilter(GetToolUsageSummaryParams{
-			UserFilters: []ToolUsageUserFilter{{Kind: toolUsageUserKindEmail, Key: "a@example.com"}},
+			UserFilters: []ToolUsageUserFilter{{Kind: toolUsageUserKindUserID, Key: "user-1"}},
 			AgentIDs:    []string{"agent-1", "agent-2"},
 		})
 		sql, args, err := pred.ToSql()
 		require.NoError(t, err)
-		require.Contains(t, sql, "user_email = ?")
+		require.Contains(t, sql, "user_id = ?")
 		require.Contains(t, sql, "agent_id IN (?,?)")
-		require.Equal(t, []any{"a@example.com", "agent-1", "agent-2"}, args)
+		require.Equal(t, []any{"user-1", "agent-1", "agent-2"}, args)
 	})
 
 	t.Run("agent ids alone still narrow the scan", func(t *testing.T) {
@@ -115,7 +135,8 @@ func TestToolUsageScanIdentityFilter(t *testing.T) {
 		})
 		sql, args, err := pred.ToSql()
 		require.NoError(t, err)
-		require.Equal(t, "(agent_id = ?)", sql)
+		// A single-element id slice renders as IN, still a single column.
+		require.Equal(t, "agent_id IN (?)", sql)
 		require.Equal(t, []any{"agent-1"}, args)
 	})
 }

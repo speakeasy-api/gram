@@ -4215,6 +4215,11 @@ type GetToolUsageSummaryParams struct {
 	ShadowServerNames  []string
 	MetaMCPServerIDs   []string
 	UserFilters        []ToolUsageUserFilter
+	// CanonicalIdentityOrg, when set, folds the email user filters through the
+	// identity_map for that organization when they are pushed into the
+	// trace_summaries scan (see toolUsageScanIdentityFilter). Empty disables
+	// the fold and skips the pushdown for email filters.
+	CanonicalIdentityOrg string
 	// AuthorizerUserIDs are the user ids behind the email user filters. An agent
 	// call made on one of these people's behalf matches the user filter too.
 	AuthorizerUserIDs []string
@@ -6717,17 +6722,29 @@ FROM normalized_traces`, success, failure, blocked, pending)
 // aggregation reads the wider columns.
 func toolUsageScanIdentityFilter(arg GetToolUsageSummaryParams) squirrel.Sqlizer {
 	userPreds := squirrel.Or{}
+	var emails []string
 	for _, filter := range arg.UserFilters {
 		switch filter.Kind {
 		case ToolUsageUserKindAgentID:
 			userPreds = append(userPreds, squirrel.Eq{"agent_id": filter.Key})
 		case toolUsageUserKindEmail:
-			userPreds = append(userPreds, squirrel.Eq{"user_email": filter.Key})
+			// Email matching goes through the canonical identity fold, never a
+			// raw comparison: raw matching splits one employee across their
+			// linked emails. Without an org to fold against the pushdown is
+			// skipped entirely rather than fall back to raw matching.
+			emails = append(emails, filter.Key)
 		case toolUsageUserKindExternalUserID:
 			userPreds = append(userPreds, squirrel.Eq{"external_user_id": filter.Key})
 		case toolUsageUserKindUserID:
 			userPreds = append(userPreds, squirrel.Eq{"user_id": filter.Key})
 		}
+	}
+	if len(emails) > 0 {
+		orgLit := canonicalIdentityOrgLiteral(arg.CanonicalIdentityOrg)
+		if orgLit == "" {
+			return nil
+		}
+		userPreds = append(userPreds, canonicalEmailPredicate(orgLit, "user_email", emails))
 	}
 	if len(arg.AuthorizerUserIDs) > 0 {
 		userPreds = append(userPreds, squirrel.Eq{"authorizer_user_id": arg.AuthorizerUserIDs})
