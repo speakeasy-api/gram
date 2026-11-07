@@ -5211,6 +5211,125 @@ func (q *Queries) ListOwnedChatTranscriptMessagesForRecall(ctx context.Context, 
 	return items, nil
 }
 
+const listPlatformMCPAgentConnectServers = `-- name: ListPlatformMCPAgentConnectServers :many
+SELECT
+  COALESCE(server.toolset_id, server.id)::uuid AS resource_id,
+  server.id AS mcp_server_id,
+  server.project_id,
+  projects.name AS project_name,
+  COALESCE(server.name, server.slug, '')::text AS name,
+  server.user_session_issuer_id
+FROM mcp_servers AS server
+JOIN projects ON projects.id = server.project_id
+WHERE projects.organization_id = $1
+  AND projects.deleted IS FALSE
+  AND server.deleted IS FALSE
+ORDER BY projects.name, COALESCE(server.name, server.slug, ''), server.id
+LIMIT $2
+`
+
+type ListPlatformMCPAgentConnectServersParams struct {
+	OrganizationID string
+	LimitValue     int32
+}
+
+type ListPlatformMCPAgentConnectServersRow struct {
+	ResourceID          uuid.UUID
+	McpServerID         uuid.UUID
+	ProjectID           uuid.UUID
+	ProjectName         string
+	Name                string
+	UserSessionIssuerID uuid.NullUUID
+}
+
+// Every MCP server in the organization, keyed by the resource ID an agent's
+// mcp:connect grant names: the toolset ID when the server has one, otherwise
+// the server ID. Callers match grants against these rows; the rows grant
+// nothing.
+func (q *Queries) ListPlatformMCPAgentConnectServers(ctx context.Context, arg ListPlatformMCPAgentConnectServersParams) ([]ListPlatformMCPAgentConnectServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPAgentConnectServers, arg.OrganizationID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPAgentConnectServersRow
+	for rows.Next() {
+		var i ListPlatformMCPAgentConnectServersRow
+		if err := rows.Scan(
+			&i.ResourceID,
+			&i.McpServerID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.Name,
+			&i.UserSessionIssuerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPAgentConnectToolsets = `-- name: ListPlatformMCPAgentConnectToolsets :many
+SELECT toolset.id AS resource_id, toolset.project_id, projects.name AS project_name, toolset.name
+FROM toolsets AS toolset
+JOIN projects ON projects.id = toolset.project_id
+WHERE projects.organization_id = $1
+  AND projects.deleted IS FALSE
+  AND toolset.deleted IS FALSE
+  AND toolset.mcp_enabled IS TRUE
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers AS served
+    WHERE served.toolset_id = toolset.id
+      AND served.project_id = toolset.project_id
+      AND served.deleted IS FALSE
+  )
+ORDER BY projects.name, toolset.name, toolset.id
+LIMIT $2
+`
+
+type ListPlatformMCPAgentConnectToolsetsParams struct {
+	OrganizationID string
+	LimitValue     int32
+}
+
+type ListPlatformMCPAgentConnectToolsetsRow struct {
+	ResourceID  uuid.UUID
+	ProjectID   uuid.UUID
+	ProjectName string
+	Name        string
+}
+
+// MCP-enabled toolsets no server serves: an mcp:connect grant can name one by
+// its toolset ID.
+func (q *Queries) ListPlatformMCPAgentConnectToolsets(ctx context.Context, arg ListPlatformMCPAgentConnectToolsetsParams) ([]ListPlatformMCPAgentConnectToolsetsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPAgentConnectToolsets, arg.OrganizationID, arg.LimitValue)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPAgentConnectToolsetsRow
+	for rows.Next() {
+		var i ListPlatformMCPAgentConnectToolsetsRow
+		if err := rows.Scan(
+			&i.ResourceID,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.Name,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPAssignedPluginInventory = `-- name: ListPlatformMCPAssignedPluginInventory :many
 SELECT
     p.id,

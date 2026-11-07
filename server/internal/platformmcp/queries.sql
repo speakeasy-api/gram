@@ -4189,3 +4189,42 @@ UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 se
 -- name: PingPlatformMCPDatabaseFixture :exec
 -- Test fixture: proves a pooled connection is still healthy.
 SELECT 1;
+
+-- name: ListPlatformMCPAgentConnectServers :many
+-- Every MCP server in the organization, keyed by the resource ID an agent's
+-- mcp:connect grant names: the toolset ID when the server has one, otherwise
+-- the server ID. Callers match grants against these rows; the rows grant
+-- nothing.
+SELECT
+  COALESCE(server.toolset_id, server.id)::uuid AS resource_id,
+  server.id AS mcp_server_id,
+  server.project_id,
+  projects.name AS project_name,
+  COALESCE(server.name, server.slug, '')::text AS name,
+  server.user_session_issuer_id
+FROM mcp_servers AS server
+JOIN projects ON projects.id = server.project_id
+WHERE projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND server.deleted IS FALSE
+ORDER BY projects.name, COALESCE(server.name, server.slug, ''), server.id
+LIMIT @limit_value;
+
+-- name: ListPlatformMCPAgentConnectToolsets :many
+-- MCP-enabled toolsets no server serves: an mcp:connect grant can name one by
+-- its toolset ID.
+SELECT toolset.id AS resource_id, toolset.project_id, projects.name AS project_name, toolset.name
+FROM toolsets AS toolset
+JOIN projects ON projects.id = toolset.project_id
+WHERE projects.organization_id = @organization_id
+  AND projects.deleted IS FALSE
+  AND toolset.deleted IS FALSE
+  AND toolset.mcp_enabled IS TRUE
+  AND NOT EXISTS (
+    SELECT 1 FROM mcp_servers AS served
+    WHERE served.toolset_id = toolset.id
+      AND served.project_id = toolset.project_id
+      AND served.deleted IS FALSE
+  )
+ORDER BY projects.name, toolset.name, toolset.id
+LIMIT @limit_value;
