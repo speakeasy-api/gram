@@ -254,9 +254,18 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	}
 
 	sess, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		Resource:              resource,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) && resource != "" {
+		// Legacy issuer-derived serving preserves a singleton for the final
+		// audience router, which strips a mismatched bearer (tunnels may still
+		// carry their signed caller assertion). Auth-client serving uses the
+		// strict tenant selector instead. Multi-resource ambiguity never falls back.
+		sess, err = remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: ""})
+	}
+
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return zero, nil
@@ -629,6 +638,7 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	subject urn.SessionSubject,
 	mcpServerID uuid.UUID,
 	skipUnusable bool,
+	resources ...string,
 ) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
@@ -651,7 +661,7 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
 		return !slices.Contains(required, client.ClientID)
 	})
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable, resources...)
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
@@ -694,7 +704,12 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 	subject urn.SessionSubject,
 	clientID uuid.UUID,
 	skipUnusable bool,
+	resources ...string,
 ) (map[uuid.UUID]UpstreamToken, error) {
+	return m.resolveClientAccessTokensForResource(ctx, attribution, projectID, organizationID, userSessionIssuerID, subject, clientID, skipUnusable, firstResource(resources))
+}
+
+func (m *ChallengeManager) resolveClientAccessTokensForResource(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, clientID uuid.UUID, skipUnusable bool, resource string) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
@@ -705,7 +720,7 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 	if len(chosen) == 0 {
 		return nil, ErrChosenClientUnbound
 	}
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable, resource)
 }
 
 func (m *ChallengeManager) resolveBoundAccessTokens(
@@ -739,7 +754,9 @@ func (m *ChallengeManager) resolveClientTokens(
 	subject urn.SessionSubject,
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	skipUnusable bool,
+	resources ...string,
 ) (map[uuid.UUID]UpstreamToken, error) {
+	resource := firstResource(resources)
 
 	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
 	// invariant up front, before resolving any tokens. Folding this into the
@@ -783,9 +800,9 @@ func (m *ChallengeManager) resolveClientTokens(
 			// from the same row load that produced the token, so a
 			// disconnect+reconnect between two reads can never pair an old
 			// token with a new row's resource.
-			// No endpoint-level fallback: a refresh of a legacy NULL-resource
-			// row derives the client's own resource in RefreshNow.
-			resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
+			// Typed requests select by the server's resource before refresh.
+			// Legacy registration-only requests require a singleton grant.
+			resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, resource)
 		}
 		switch {
 		case errors.Is(err, ErrNoValidToken):
@@ -802,7 +819,7 @@ func (m *ChallengeManager) resolveClientTokens(
 			// A refined failure can still be outranked by a later client that
 			// needs re-linking. Resolving the rest could cost one failing
 			// upstream refresh each, so their stored state decides instead.
-			reconnect, rerr := m.storedGrantsNeedReconnect(ctx, lookup, projectID, organizationID, userSessionIssuerID, clients[i+1:], subject)
+			reconnect, rerr := m.storedGrantsNeedReconnect(ctx, lookup, projectID, organizationID, userSessionIssuerID, clients[i+1:], subject, resource)
 			if rerr != nil {
 				return nil, rerr
 			}
@@ -990,6 +1007,7 @@ func (m *ChallengeManager) ClientNeedsReconnect(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 	clientID uuid.UUID,
+	resources ...string,
 ) (bool, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
@@ -1001,7 +1019,7 @@ func (m *ChallengeManager) ClientNeedsReconnect(
 	if chosen < 0 {
 		return true, nil
 	}
-	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject)
+	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject, resources...)
 }
 
 // storedGrantsNeedReconnect reports whether the stored credential the caller
@@ -1017,7 +1035,9 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	userSessionIssuerID uuid.UUID,
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	subject urn.SessionSubject,
+	resources ...string,
 ) (bool, error) {
+	resource := firstResource(resources)
 	// The auth client resolver serves principal credentials from the
 	// authorizing user's session, as resolveCallerUpstreamToken does. The
 	// sign-in lookup keeps its existing reconnect check unchanged, so behavior
@@ -1057,12 +1077,12 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 		var err error
 		switch {
 		case workloadOwner != "":
-			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(workloadOwner), c.ClientID, projectID, organizationID, userSessionIssuerID)
+			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(workloadOwner), c.ClientID, projectID, organizationID, userSessionIssuerID, resource)
 		case authorizer != nil:
 			if *authorizer == "" {
 				return true, nil
 			}
-			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(*authorizer), c.ClientID, projectID, organizationID, userSessionIssuerID)
+			sess, err = tenantUserRemoteSession(ctx, q, lookup, urn.NewUserSubject(*authorizer), c.ClientID, projectID, organizationID, userSessionIssuerID, resource)
 		case attached:
 			sess, err = q.GetPrincipalRemoteSessionBinding(ctx, remotesessions_repo.GetPrincipalRemoteSessionBindingParams{
 				ProjectID:             projectID,
@@ -1072,7 +1092,7 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 				RemoteSessionClientID: c.ClientID,
 			})
 		default:
-			sess, err = activeUserRemoteSession(ctx, q, lookup, subject, c.ClientID, projectID, organizationID)
+			sess, err = activeUserRemoteSession(ctx, q, lookup, subject, c.ClientID, projectID, organizationID, resource)
 		}
 		switch {
 		case errors.Is(err, pgx.ErrNoRows):
@@ -1360,6 +1380,7 @@ func (s *RefreshService) refreshSessionTokens(
 	// else rotated would persist a refresh token the provider has already
 	// consumed. A revocation mid-POST drops the row out of scope too.
 	updated, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, remotesessions_repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		ID:                     sess.ID,
 		SubjectUrn:             sess.SubjectUrn,
 		RemoteSessionClientID:  sess.RemoteSessionClientID,
 		AccessTokenEncrypted:   accessEnc,

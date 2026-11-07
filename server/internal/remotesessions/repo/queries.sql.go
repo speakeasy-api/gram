@@ -3218,23 +3218,90 @@ func (q *Queries) ForceRemoteSessionIssuerRegistrationEndpointFixture(ctx contex
 }
 
 const getActiveRemoteSession = `-- name: GetActiveRemoteSession :one
-SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
-FROM remote_sessions
-WHERE subject_urn = $1
-  AND remote_session_client_id = $2
-  AND deleted IS FALSE
+SELECT s.id, s.grant_generation, s.subject_urn, s.user_session_issuer_id, s.remote_session_client_id, s.access_token_encrypted, s.access_expires_at, s.refresh_token_encrypted, s.authorization_expires_at, s.refresh_expires_at, s.scopes, s.resource, s.auto_refresh, s.last_refresh_attempt_at, s.last_used_at, s.upstream_subject, s.upstream_email, s.upstream_display_name, s.identity_source, s.enrichment, s.last_validated_at, s.validation_status, s.validation_reason, s.created_at, s.updated_at, s.deleted_at, s.deleted
+FROM remote_sessions s
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND s.deleted IS FALSE
+ AND ($3::text = '' OR rtrim(s.resource, '/') = rtrim($3::text, '/') OR s.resource IS NULL)
+ AND ($3::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim($3::text, '/')
+ ) <= 1)
+ AND ($3::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1
 `
 
 type GetActiveRemoteSessionParams struct {
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
+	Resource              string
 }
 
-// Look up the active remote_session for a (subject, client) binding.
-// Single-row exact lookup; uniqueness enforced by the partial unique
-// index on (subject_urn, remote_session_client_id) WHERE deleted IS FALSE.
+// Exact resource first, then a legacy unbound grant. Registration-only callers
+// may use a singleton, but never choose arbitrarily among resources.
 func (q *Queries) GetActiveRemoteSession(ctx context.Context, arg GetActiveRemoteSessionParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, getActiveRemoteSession, arg.SubjectUrn, arg.RemoteSessionClientID)
+	row := q.db.QueryRow(ctx, getActiveRemoteSession, arg.SubjectUrn, arg.RemoteSessionClientID, arg.Resource)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getActiveRemoteSessionByID = `-- name: GetActiveRemoteSessionByID :one
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM remote_sessions
+WHERE id = $1 AND subject_urn = $2
+  AND remote_session_client_id = $3 AND deleted IS FALSE
+`
+
+type GetActiveRemoteSessionByIDParams struct {
+	ID                    uuid.UUID
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+}
+
+// Internal reload of a previously tenant/owner-authorized source snapshot, not
+// a credential discovery query. Exact ID, subject and registration prevent
+// adopting a sibling grant after refresh; provenance is not fresh authority.
+func (q *Queries) GetActiveRemoteSessionByID(ctx context.Context, arg GetActiveRemoteSessionByIDParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, getActiveRemoteSessionByID, arg.ID, arg.SubjectUrn, arg.RemoteSessionClientID)
 	var i RemoteSession
 	err := row.Scan(
 		&i.ID,
@@ -3279,6 +3346,23 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND ($5::text = '' OR rtrim(s.resource, '/') = rtrim($5::text, '/') OR s.resource IS NULL)
+ AND ($5::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim($5::text, '/')
+ ) <= 1)
+ AND ($5::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1
 `
 
 type GetActiveRemoteSessionInTenantParams struct {
@@ -3286,6 +3370,7 @@ type GetActiveRemoteSessionInTenantParams struct {
 	OrganizationID        string
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
+	Resource              string
 }
 
 // GetActiveRemoteSession for the auth client resolver, which takes no user
@@ -3300,6 +3385,7 @@ func (q *Queries) GetActiveRemoteSessionInTenant(ctx context.Context, arg GetAct
 		arg.OrganizationID,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
+		arg.Resource,
 	)
 	var i RemoteSession
 	err := row.Scan(
@@ -6656,6 +6742,23 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (u.project_id = p.id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND ($6::text = '' OR rtrim(s.resource, '/') = rtrim($6::text, '/') OR s.resource IS NULL)
+ AND ($6::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim($6::text, '/')
+ ) <= 1)
+ AND ($6::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1
 `
 
 type GetTenantUserRemoteSessionParams struct {
@@ -6664,6 +6767,7 @@ type GetTenantUserRemoteSessionParams struct {
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
+	Resource              string
 }
 
 // A user's own session, only when its consent originated in this tenant and
@@ -6675,6 +6779,7 @@ func (q *Queries) GetTenantUserRemoteSession(ctx context.Context, arg GetTenantU
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.UserSessionIssuerID,
+		arg.Resource,
 	)
 	var i RemoteSession
 	err := row.Scan(
@@ -6723,6 +6828,23 @@ WHERE s.subject_urn = $3 AND s.remote_session_client_id = $4 AND NOT s.deleted
  AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
  AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
  AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
+ AND ($5::text = '' OR rtrim(s.resource, '/') = rtrim($5::text, '/') OR s.resource IS NULL)
+ AND ($5::text = '' OR (
+   SELECT count(*) FROM remote_sessions matching
+   WHERE matching.subject_urn = s.subject_urn
+     AND matching.remote_session_client_id = s.remote_session_client_id
+     AND matching.deleted IS FALSE
+     AND matching.resource IS NOT NULL
+     AND rtrim(matching.resource, '/') = rtrim($5::text, '/')
+ ) <= 1)
+ AND ($5::text <> '' OR NOT EXISTS (
+   SELECT 1 FROM remote_sessions other
+   WHERE other.subject_urn = s.subject_urn
+     AND other.remote_session_client_id = s.remote_session_client_id
+     AND other.deleted IS FALSE AND other.id <> s.id
+ ))
+ORDER BY s.resource IS NULL
+LIMIT 1
 `
 
 type GetTenantUserRemoteSessionForClientParams struct {
@@ -6730,6 +6852,7 @@ type GetTenantUserRemoteSessionForClientParams struct {
 	OrganizationID        string
 	SubjectUrn            urn.SessionSubject
 	RemoteSessionClientID uuid.UUID
+	Resource              string
 }
 
 // GetTenantUserRemoteSession without the user session issuer link, for the
@@ -6744,6 +6867,7 @@ func (q *Queries) GetTenantUserRemoteSessionForClient(ctx context.Context, arg G
 		arg.OrganizationID,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
+		arg.Resource,
 	)
 	var i RemoteSession
 	err := row.Scan(
@@ -10871,6 +10995,65 @@ func (q *Queries) ListRemoteSessionIssuersByProjectID(ctx context.Context, arg L
 	return items, nil
 }
 
+const listRemoteSessionMutationCandidates = `-- name: ListRemoteSessionMutationCandidates :many
+SELECT s.id, s.resource
+FROM remote_sessions AS s
+JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = s.remote_session_client_id
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $3
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
+  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.deleted IS FALSE
+  AND ($6::text = '' OR rtrim(s.resource, '/') = rtrim($6::text, '/'))
+`
+
+type ListRemoteSessionMutationCandidatesParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	Resource              string
+}
+
+type ListRemoteSessionMutationCandidatesRow struct {
+	ID       uuid.UUID
+	Resource pgtype.Text
+}
+
+func (q *Queries) ListRemoteSessionMutationCandidates(ctx context.Context, arg ListRemoteSessionMutationCandidatesParams) ([]ListRemoteSessionMutationCandidatesRow, error) {
+	rows, err := q.db.Query(ctx, listRemoteSessionMutationCandidates,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Resource,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRemoteSessionMutationCandidatesRow
+	for rows.Next() {
+		var i ListRemoteSessionMutationCandidatesRow
+		if err := rows.Scan(&i.ID, &i.Resource); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRemoteSessionStatusesForSubject = `-- name: ListRemoteSessionStatusesForSubject :many
 SELECT
   s.remote_session_client_id,
@@ -10956,18 +11139,16 @@ type ListRemoteSessionStatusesForSubjectRow struct {
 // remote_session the subject holds on a client bound to the requesting
 // user_session_issuer, tagged with whether it is still usable. The session's
 // own user_session_issuer_id is provenance only — a credential is one shared
-// upstream grant per (subject, client), so a session created through a
+// upstream grant per (subject, client, resource), so a session created through a
 // sibling issuer bound to the same client reports the same status here.
 // Tenancy comes from the requesting issuer's binding (link row) plus its
 // project, and from the client itself (the requesting project's own clients
 // plus org-level clients of its org, mirroring
 // CheckRemoteSessionClientBindingForUserSessionIssuer) so the tenant boundary
 // holds even if a binding row were ever attached across tenants. Folds the N
-// per-card lookups into one round-trip. The partial
-// unique index on (subject_urn, remote_session_client_id) WHERE deleted IS
-// FALSE plus the binding PK mean at most one row per (subject, client), so
-// the result doubles as a per-client map without DISTINCT. A soft-deleted row
-// is absent here entirely (truly disconnected).
+// per-card lookups into one round-trip. A client can return several resource
+// grants; callers must select the target resource rather than overwriting a
+// per-client map entry. A soft-deleted row is absent (truly disconnected).
 //
 // Scope is the requesting issuer's bound clients; the joins below are what
 // bound the result, so no caller-supplied client id list is needed. The
@@ -14628,6 +14809,12 @@ WHERE s.subject_urn = $2
   AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND ($7::text = '' OR rtrim(s.resource, '/') = rtrim($7::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND ($7::text = '' OR rtrim(matching.resource, '/') = rtrim($7::text, '/'))) = 1
   AND s.deleted IS FALSE
 `
 
@@ -14638,6 +14825,7 @@ type SetRemoteSessionAutoRefreshParams struct {
 	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 	OrganizationID        string
+	Resource              string
 }
 
 // Records the subject's consent-screen auto-refresh choice. Deliberately does
@@ -14648,9 +14836,8 @@ type SetRemoteSessionAutoRefreshParams struct {
 // project/org tenancy, mirroring
 // CheckRemoteSessionClientBindingForUserSessionIssuer) so the write cannot
 // cross tenant boundaries. The session's own user_session_issuer_id is
-// provenance only: the credential is one shared grant per (subject, client),
-// so the preference set from any bound surface is the preference every bound
-// surface reads.
+// provenance only. A resource-qualified request changes only that resource;
+// an unqualified request is refused when the registration is ambiguous.
 func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemoteSessionAutoRefreshParams) (int64, error) {
 	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefresh,
 		arg.AutoRefresh,
@@ -14659,6 +14846,56 @@ func (q *Queries) SetRemoteSessionAutoRefresh(ctx context.Context, arg SetRemote
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.Resource,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setRemoteSessionAutoRefreshByRef = `-- name: SetRemoteSessionAutoRefreshByRef :execrows
+UPDATE remote_sessions AS s
+SET auto_refresh = $1
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $2
+  AND s.remote_session_client_id = $3
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $4
+  AND (usi.project_id = $5::uuid OR (usi.project_id IS NULL AND usi.organization_id = $6::text))
+  AND (c.project_id = $5::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $6::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = $7
+  AND s.updated_at = $8
+  AND s.deleted IS FALSE
+`
+
+type SetRemoteSessionAutoRefreshByRefParams struct {
+	AutoRefresh           bool
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+// Explicit source-reference operation, including legacy NULL-resource grants.
+// Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+func (q *Queries) SetRemoteSessionAutoRefreshByRef(ctx context.Context, arg SetRemoteSessionAutoRefreshByRefParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setRemoteSessionAutoRefreshByRef,
+		arg.AutoRefresh,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
 	)
 	if err != nil {
 		return 0, err
@@ -15000,6 +15237,82 @@ func (q *Queries) SoftDeleteOrganizationRemoteSessionClientFixture(ctx context.C
 	return err
 }
 
+const softDeleteRemoteSessionByRef = `-- name: SoftDeleteRemoteSessionByRef :many
+UPDATE remote_sessions AS s
+SET deleted_at = clock_timestamp(),
+    -- Tombstones keep credentials for upstream revocation but no identity.
+    upstream_subject = NULL,
+    upstream_email = NULL,
+    upstream_display_name = NULL,
+    identity_source = NULL,
+    enrichment = NULL,
+    -- The credential is gone, so nothing it was observed doing survives it.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS c ON c.id = link.remote_session_client_id
+JOIN user_session_issuers AS usi ON usi.id = link.user_session_issuer_id
+WHERE s.subject_urn = $1
+  AND s.remote_session_client_id = $2
+  AND link.remote_session_client_id = s.remote_session_client_id
+  AND link.user_session_issuer_id = $3
+  AND (usi.project_id = $4::uuid OR (usi.project_id IS NULL AND usi.organization_id = $5::text))
+  AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
+  AND c.deleted IS FALSE
+  AND usi.deleted IS FALSE
+  AND s.id = $6
+  AND s.updated_at = $7
+  AND s.deleted IS FALSE
+RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
+`
+
+type SoftDeleteRemoteSessionByRefParams struct {
+	SubjectUrn            urn.SessionSubject
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+	ProjectID             uuid.UUID
+	OrganizationID        string
+	ID                    uuid.UUID
+	ExpectedUpdatedAt     pgtype.Timestamptz
+}
+
+type SoftDeleteRemoteSessionByRefRow struct {
+	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
+	RefreshTokenEncrypted pgtype.Text
+}
+
+// Explicit source-reference operation, including legacy NULL-resource grants.
+// Retains the subject/client, tenant and issuer-binding boundary plus row CAS.
+func (q *Queries) SoftDeleteRemoteSessionByRef(ctx context.Context, arg SoftDeleteRemoteSessionByRefParams) ([]SoftDeleteRemoteSessionByRefRow, error) {
+	rows, err := q.db.Query(ctx, softDeleteRemoteSessionByRef,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedUpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SoftDeleteRemoteSessionByRefRow
+	for rows.Next() {
+		var i SoftDeleteRemoteSessionByRefRow
+		if err := rows.Scan(&i.RemoteSessionClientID, &i.AccessTokenEncrypted, &i.RefreshTokenEncrypted); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const softDeleteRemoteSessionBySubjectAndClient = `-- name: SoftDeleteRemoteSessionBySubjectAndClient :many
 UPDATE remote_sessions AS s
 SET deleted_at = clock_timestamp(),
@@ -15024,6 +15337,12 @@ WHERE s.subject_urn = $1
   AND (c.project_id = $4::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = $5::text)))
   AND c.deleted IS FALSE
   AND usi.deleted IS FALSE
+  AND ($6::text = '' OR rtrim(s.resource, '/') = rtrim($6::text, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching
+       WHERE matching.subject_urn = s.subject_urn
+         AND matching.remote_session_client_id = s.remote_session_client_id
+         AND matching.deleted IS FALSE
+         AND ($6::text = '' OR rtrim(matching.resource, '/') = rtrim($6::text, '/'))) = 1
   AND s.deleted IS FALSE
 RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_encrypted
 `
@@ -15034,6 +15353,7 @@ type SoftDeleteRemoteSessionBySubjectAndClientParams struct {
 	UserSessionIssuerID   uuid.UUID
 	ProjectID             uuid.UUID
 	OrganizationID        string
+	Resource              string
 }
 
 type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
@@ -15049,11 +15369,11 @@ type SoftDeleteRemoteSessionBySubjectAndClientRow struct {
 // (binding row, the issuer's project, and the client's own project/org
 // tenancy, mirroring CheckRemoteSessionClientBindingForUserSessionIssuer) so
 // the write cannot cross tenants. The session's own user_session_issuer_id is
-// provenance only: a disconnect from any bound surface destroys the shared
-// credential globally (the caller then attempts upstream revocation).
+// provenance only. Disconnect affects one resource grant; registration-only
+// requests do not guess among multiple resources.
 //
-// Returns the stored credentials it tombstones; the partial unique index on
-// (subject_urn, remote_session_client_id) caps that at one row. The
+// Returns the stored credentials it tombstones; the matching count caps that
+// at one row. The
 // user_session_issuers join constrains the *requesting* issuer, never the
 // grant's provenance issuer, so a grant minted through a now-soft-deleted
 // issuer stays reachable — and still RFC 7009'd — from any live bound surface.
@@ -15064,6 +15384,7 @@ func (q *Queries) SoftDeleteRemoteSessionBySubjectAndClient(ctx context.Context,
 		arg.UserSessionIssuerID,
 		arg.ProjectID,
 		arg.OrganizationID,
+		arg.Resource,
 	)
 	if err != nil {
 		return nil, err
@@ -17056,10 +17377,11 @@ SET
         THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
         ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
     updated_at = clock_timestamp()
-WHERE subject_urn = $9
-  AND remote_session_client_id = $10
+WHERE id = $9
+  AND subject_urn = $10
+  AND remote_session_client_id = $11
   AND deleted IS FALSE
-  AND updated_at = $11
+  AND updated_at = $12
 RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
 `
 
@@ -17072,6 +17394,7 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 	RefreshExpiresAt       pgtype.Timestamptz
 	Scopes                 []string
 	BackfillResource       pgtype.Text
+	ID                     uuid.UUID
 	SubjectUrn             urn.SessionSubject
 	RemoteSessionClientID  uuid.UUID
 	ExpectedUpdatedAt      pgtype.Timestamptz
@@ -17080,7 +17403,7 @@ type UpdateRemoteSessionTokensIfUnchangedParams struct {
 // Compare-and-swap write for the refresh path. Update-only on purpose: an
 // INSERT here would undo a revocation that landed mid-refresh. No rows means
 // another writer won or the session was revoked; both end in a re-auth challenge.
-// Keyed by (subject, client) + CAS only: the session's user_session_issuer_id
+// Keyed by id + (subject, client) + CAS only: the session's user_session_issuer_id
 // is provenance, never part of the credential's identity.
 // backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
 // COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
@@ -17096,6 +17419,7 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		arg.RefreshExpiresAt,
 		arg.Scopes,
 		arg.BackfillResource,
+		arg.ID,
 		arg.SubjectUrn,
 		arg.RemoteSessionClientID,
 		arg.ExpectedUpdatedAt,
@@ -17353,7 +17677,35 @@ func (q *Queries) UpsertEMACredential(ctx context.Context, arg UpsertEMACredenti
 	return i, err
 }
 
-const upsertRemoteSession = `-- name: UpsertRemoteSession :one
+const upsertRemoteSessionGrant = `-- name: UpsertRemoteSessionGrant :one
+WITH updated AS (
+UPDATE remote_sessions AS current SET
+    grant_generation = current.grant_generation + 1,
+    access_token_encrypted = $1,
+    access_expires_at = $2,
+    refresh_token_encrypted = $3,
+    authorization_expires_at = $4,
+    refresh_expires_at = $5,
+    scopes = $6,
+    resource = $7,
+    -- A new grant replaces the identity wholesale and resets observed validity.
+    upstream_subject = $8,
+    upstream_email = $9,
+    upstream_display_name = $10,
+    identity_source = $11,
+    enrichment = $12,
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    updated_at = clock_timestamp()
+WHERE current.subject_urn = $13 AND current.remote_session_client_id = $14
+    AND current.deleted IS FALSE
+    AND (current.resource IS NOT DISTINCT FROM $7 OR rtrim(current.resource, '/') = rtrim($7, '/'))
+  AND (SELECT count(*) FROM remote_sessions matching WHERE matching.subject_urn = $13 AND matching.remote_session_client_id = $14
+    AND matching.deleted IS FALSE
+    AND (matching.resource IS NOT DISTINCT FROM $7 OR rtrim(matching.resource, '/') = rtrim($7, '/'))) = 1
+RETURNING current.id, current.grant_generation, current.subject_urn, current.user_session_issuer_id, current.remote_session_client_id, current.access_token_encrypted, current.access_expires_at, current.refresh_token_encrypted, current.authorization_expires_at, current.refresh_expires_at, current.scopes, current.resource, current.auto_refresh, current.last_refresh_attempt_at, current.last_used_at, current.upstream_subject, current.upstream_email, current.upstream_display_name, current.identity_source, current.enrichment, current.last_validated_at, current.validation_status, current.validation_reason, current.created_at, current.updated_at, current.deleted_at, current.deleted
+), inserted AS (
 INSERT INTO remote_sessions (
     subject_urn,
     user_session_issuer_id,
@@ -17372,7 +17724,10 @@ INSERT INTO remote_sessions (
     identity_source,
     enrichment
 )
-VALUES (
+SELECT
+    $13,
+    $15,
+    $14,
     $1,
     $2,
     $3,
@@ -17380,41 +17735,46 @@ VALUES (
     $5,
     $6,
     $7,
+    $16,
     $8,
     $9,
     $10,
     $11,
-    $12,
-    $13,
-    $14,
-    $15,
-    $16
-)
-ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
-DO UPDATE SET
-    grant_generation = remote_sessions.grant_generation + 1,
-    access_token_encrypted = EXCLUDED.access_token_encrypted,
-    access_expires_at = EXCLUDED.access_expires_at,
-    refresh_token_encrypted = EXCLUDED.refresh_token_encrypted,
-    authorization_expires_at = EXCLUDED.authorization_expires_at,
-    refresh_expires_at = EXCLUDED.refresh_expires_at,
-    scopes = EXCLUDED.scopes,
-    resource = EXCLUDED.resource,
-    -- A new grant replaces the identity wholesale and resets observed validity.
-    upstream_subject = EXCLUDED.upstream_subject,
-    upstream_email = EXCLUDED.upstream_email,
-    upstream_display_name = EXCLUDED.upstream_display_name,
-    identity_source = EXCLUDED.identity_source,
-    enrichment = EXCLUDED.enrichment,
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL,
-    updated_at = clock_timestamp()
+    $12
+
+WHERE NOT EXISTS (SELECT 1 FROM updated)
+  AND NOT EXISTS (SELECT 1 FROM remote_sessions existing WHERE existing.subject_urn = $13 AND existing.remote_session_client_id = $14
+    AND existing.deleted IS FALSE
+    AND (existing.resource IS NOT DISTINCT FROM $7 OR rtrim(existing.resource, '/') = rtrim($7, '/')))
+ON CONFLICT DO NOTHING
 RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
+)
+SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM updated UNION ALL SELECT id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted FROM inserted
 `
 
-type UpsertRemoteSessionParams struct {
+type UpsertRemoteSessionGrantParams struct {
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	Resource               pgtype.Text
+	UpstreamSubject        pgtype.Text
+	UpstreamEmail          pgtype.Text
+	UpstreamDisplayName    pgtype.Text
+	IdentitySource         pgtype.Text
+	Enrichment             []byte
 	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientID  uuid.UUID
+	UserSessionIssuerID    uuid.UUID
+	AutoRefresh            bool
+}
+
+type UpsertRemoteSessionGrantRow struct {
+	ID                     uuid.UUID
+	GrantGeneration        int64
+	SubjectUrn             string
 	UserSessionIssuerID    uuid.UUID
 	RemoteSessionClientID  uuid.UUID
 	AccessTokenEncrypted   string
@@ -17425,26 +17785,28 @@ type UpsertRemoteSessionParams struct {
 	Scopes                 []string
 	Resource               pgtype.Text
 	AutoRefresh            bool
+	LastRefreshAttemptAt   pgtype.Timestamptz
+	LastUsedAt             pgtype.Timestamptz
 	UpstreamSubject        pgtype.Text
 	UpstreamEmail          pgtype.Text
 	UpstreamDisplayName    pgtype.Text
 	IdentitySource         pgtype.Text
 	Enrichment             []byte
+	LastValidatedAt        pgtype.Timestamptz
+	ValidationStatus       pgtype.Text
+	ValidationReason       pgtype.Text
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+	DeletedAt              pgtype.Timestamptz
+	Deleted                bool
 }
 
-// Used by /mcp/remote_login_callback to materialise a fresh authorization for the
-// remote_session for a (subject, client) pair. Conflict target matches the
-// partial unique index on (subject_urn, remote_session_client_id) WHERE
-// deleted IS FALSE; on conflict advance the grant generation and overwrite tokens.
-// Attachments keep this source row and read its current credentials. Token refresh uses
-// UpdateRemoteSessionTokensIfUnchanged and never advances this generation. A
-// soft-deleted row falls outside the partial index, so a re-auth after
-// revocation inserts a fresh active row alongside the tombstone.
-func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessionParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, upsertRemoteSession,
-		arg.SubjectUrn,
-		arg.UserSessionIssuerID,
-		arg.RemoteSessionClientID,
+// Consent writes hold the registration lock. Match the routing identity while
+// preserving the provider-facing resource spelling and the existing source ID.
+// Targetless conflict detection supports both index generations: old-schema
+// cross-resource reuse returns no row without replacing another audience.
+func (q *Queries) UpsertRemoteSessionGrant(ctx context.Context, arg UpsertRemoteSessionGrantParams) (UpsertRemoteSessionGrantRow, error) {
+	row := q.db.QueryRow(ctx, upsertRemoteSessionGrant,
 		arg.AccessTokenEncrypted,
 		arg.AccessExpiresAt,
 		arg.RefreshTokenEncrypted,
@@ -17452,14 +17814,17 @@ func (q *Queries) UpsertRemoteSession(ctx context.Context, arg UpsertRemoteSessi
 		arg.RefreshExpiresAt,
 		arg.Scopes,
 		arg.Resource,
-		arg.AutoRefresh,
 		arg.UpstreamSubject,
 		arg.UpstreamEmail,
 		arg.UpstreamDisplayName,
 		arg.IdentitySource,
 		arg.Enrichment,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.UserSessionIssuerID,
+		arg.AutoRefresh,
 	)
-	var i RemoteSession
+	var i UpsertRemoteSessionGrantRow
 	err := row.Scan(
 		&i.ID,
 		&i.GrantGeneration,

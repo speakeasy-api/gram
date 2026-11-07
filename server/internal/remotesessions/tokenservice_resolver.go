@@ -141,7 +141,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attri
 func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	q := remotesessions_repo.New(m.db)
-	sess, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID)
+	sess, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID, resource)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return zero, nil
@@ -153,7 +153,7 @@ func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attri
 		return resolved, err
 	}
 	// Recheck after a possibly blocking refresh, without adopting a reconnected grant.
-	current, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID)
+	current, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID, resource)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return zero, nil
@@ -179,7 +179,7 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, a
 	}
 	q := remotesessions_repo.New(m.db)
 	authorizer := urn.NewUserSubject(authorizerUserID)
-	selected, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
+	selected, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID, resource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
@@ -191,7 +191,7 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, a
 		return resolved, err
 	}
 	// Recheck after a possibly blocking refresh, without adopting a reconnected grant.
-	current, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID)
+	current, err := tenantUserRemoteSession(ctx, q, lookup, authorizer, clientID, projectID, organizationID, userSessionIssuerID, resource)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return zero, nil
@@ -240,7 +240,7 @@ func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, att
 	}
 	q := remotesessions_repo.New(m.db)
 	owner := urn.NewUserSubject(admission.OwnerUserID)
-	selected, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID)
+	selected, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID, resource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}
@@ -260,7 +260,7 @@ func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, att
 	}
 	// Recheck the tenant binding, membership and grant after refresh, without
 	// adopting a replacement session or a reconnected grant.
-	session, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID)
+	session, err := tenantUserRemoteSession(ctx, q, lookup, owner, clientID, projectID, organizationID, userSessionIssuerID, resource)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return zero, nil
 	}

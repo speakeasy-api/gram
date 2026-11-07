@@ -449,6 +449,8 @@ type fakeUpstreamTokens struct {
 	bound     uuid.UUID
 	// subjects records whose connection each read asked for.
 	subjects []urn.SessionSubject
+	// resources records the trusted upstream audience forwarded by each source path.
+	resources []string
 }
 
 func (f *fakeUpstreamTokens) tokens() map[uuid.UUID]remotesessions.UpstreamToken {
@@ -457,11 +459,17 @@ func (f *fakeUpstreamTokens) tokens() map[uuid.UUID]remotesessions.UpstreamToken
 
 func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.subjects = append(f.subjects, req.Subject)
+	f.resources = append(f.resources, req.Resource)
 	return f.tokens(), nil
 }
 
-func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool, resources ...string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.subjects = append(f.subjects, subject)
+	resource := ""
+	if len(resources) > 0 {
+		resource = resources[0]
+	}
+	f.resources = append(f.resources, resource)
 	if f.clientErr != nil {
 		return nil, f.clientErr
 	}

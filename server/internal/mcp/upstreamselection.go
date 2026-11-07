@@ -491,7 +491,8 @@ func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authenticatio
 		if client.connection.authorizer {
 			subject = urn.NewUserSubject(client.connection.owner)
 		}
-		resolved, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+		resolved, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{Resource: endpoint.UpstreamResource,
+
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -555,7 +556,8 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	if authentication.chosenClient.Valid && (authentication.authClient != nil || authentication.checkedRegistration) {
 		// A typed auth client was checked against the server, which authorizes
 		// its registration without a sign-in link.
-		tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+		tokens, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{Resource: endpoint.UpstreamResource,
+
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -570,7 +572,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 		return tokens, nil
 	}
 	if authentication.chosenClient.Valid {
-		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable)
+		tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(authentication.subject, authentication.authorizerOwner), authentication.chosenClient.UUID, skipUnusable, endpoint.UpstreamResource)
 		if err != nil {
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
@@ -578,7 +580,7 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	}
 	if authentication.ownClientsOnly {
 		if serverID := endpoint.proxiedServerID(); serverID.Valid {
-			tokens, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
+			tokens, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable, endpoint.UpstreamResource)
 			if err != nil {
 				return nil, fmt.Errorf("resolve server clients: %w", err)
 			}
@@ -743,7 +745,8 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution rem
 	// Under enforcement the resolver checked every chosen registration
 	// against the member, which authorizes it without a sign-in link.
 	if member.typedAuthClient || enforced {
-		tokens, err := s.upstreamTokenSource().ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+		tokens, err := s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -757,7 +760,8 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution rem
 		}
 		return pinAttachedSession(tokens, pinned, false)
 	}
-	tokens, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, handbackSubject(subject, authorizerOwner), member.chosenClientID.UUID, true)
+	tokens, err := s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+		Attribution: attribution, ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: handbackSubject(subject, authorizerOwner), RegistrationID: member.chosenClientID.UUID, SkipUnusable: true})
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		return nil, fmt.Errorf("resolve chosen client: %w", err)
@@ -1090,7 +1094,8 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 					return true, nil
 				}
 				// An existing connection needs no Connect.
-				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+				reconnect, err := s.resourceQualifiedNeedsReconnect(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
+
 					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
 					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
 					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,

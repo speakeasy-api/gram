@@ -183,11 +183,12 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 			identityProviderRegistrations = append(identityProviderRegistrations, row.RemoteSessionClientID)
 			continue
 		case clientType == authz.AuthClientTypeRemoteSession:
-			req := remotesessions.AuthClientTokenRequest{
+			req := remotesessions.AuthClientTokenRequest{Resource: "",
+
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
 				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			}
-			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
+			reconnect, err := s.resourceQualifiedNeedsReconnect(ctx, member.id, req)
 			if err != nil {
 				return none, unresolved, false, fmt.Errorf("check member connection: %w", err)
 			}
@@ -195,7 +196,7 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 			// authorizer's own connection.
 			if reconnect && res.authorizerOwner != "" {
 				req.Subject = urn.NewUserSubject(res.authorizerOwner)
-				reconnect, err = s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, req)
+				reconnect, err = s.resourceQualifiedNeedsReconnect(ctx, member.id, req)
 				if err != nil {
 					return none, unresolved, false, fmt.Errorf("check authorizer connection: %w", err)
 				}

@@ -1702,7 +1702,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		case choice.noAuth(), !reauthorizes:
 			return upstreamRefreshServed
 		}
-		reconnect, err = s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
+		reconnect, err = s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID, endpoint.UpstreamResource)
 		if err != nil {
 			logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
 			return upstreamRefreshCheckFailed

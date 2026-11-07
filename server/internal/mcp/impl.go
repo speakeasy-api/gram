@@ -141,6 +141,9 @@ type Service struct {
 	// upstreamTokens overrides how chosen clients' upstream tokens are read
 	// for serving; nil uses remoteChallengeMgr.
 	upstreamTokens upstreamTokenSource
+	// upstreamResource overrides the target URL read alongside an injected token source.
+	// Nil loads the exact project-scoped server backend.
+	upstreamResource func(context.Context, uuid.UUID, uuid.UUID) (string, error)
 	// authEnforcement says which organizations have upstream auth
 	// enforcement enabled; the resolver is authoritative only for them.
 	authEnforcement           *authenforcement.Gate
@@ -617,6 +620,7 @@ func NewService(
 		authClientPermitter:       nil,
 		attachedConnections:       nil,
 		upstreamTokens:            nil,
+		upstreamResource:          nil,
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,

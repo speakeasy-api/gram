@@ -305,7 +305,8 @@ func (s *Service) headlessReadiness(ctx context.Context, endpoint *ResolvedMcpEn
 			if option.State != consentClientConnect || !option.registrationID.Valid {
 				continue
 			}
-			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+			reconnect, err := s.resourceQualifiedNeedsReconnect(ctx, server.id, remotesessions.AuthClientTokenRequest{Resource: "",
+
 				ProjectID: server.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			})

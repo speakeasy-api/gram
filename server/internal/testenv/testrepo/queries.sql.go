@@ -929,6 +929,16 @@ func (q *Queries) CreateHostedToolsetEndpointFixture(ctx context.Context, arg Cr
 	return result.RowsAffected(), nil
 }
 
+const createLegacyRemoteSessionSubjectClientIndexFixture = `-- name: CreateLegacyRemoteSessionSubjectClientIndexFixture :exec
+CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
+ON remote_sessions (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+`
+
+func (q *Queries) CreateLegacyRemoteSessionSubjectClientIndexFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, createLegacyRemoteSessionSubjectClientIndexFixture)
+	return err
+}
+
 const createMCPGatewayFixture = `-- name: CreateMCPGatewayFixture :one
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name)
 VALUES ($1, $2, $3, $4)
@@ -1641,6 +1651,25 @@ type EnablePreparationFixtureCIMDParams struct {
 
 func (q *Queries) EnablePreparationFixtureCIMD(ctx context.Context, arg EnablePreparationFixtureCIMDParams) error {
 	_, err := q.db.Exec(ctx, enablePreparationFixtureCIMD, arg.ID, arg.ProjectID)
+	return err
+}
+
+const expandRemoteSessionResourceIndexesFixture = `-- name: ExpandRemoteSessionResourceIndexesFixture :exec
+DO $resource_indexes$
+BEGIN
+    DROP INDEX IF EXISTS remote_sessions_subject_client_key;
+    DROP INDEX IF EXISTS remote_sessions_subject_client_issuer_key;
+    CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_resource_key
+        ON remote_sessions (subject_urn, remote_session_client_id, (rtrim(resource, '/'))) NULLS NOT DISTINCT WHERE deleted IS FALSE;
+    CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_resource_key
+        ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id, (rtrim(resource, '/'))) NULLS NOT DISTINCT WHERE deleted IS FALSE;
+END
+$resource_indexes$
+`
+
+// Test-only model expansion, invoked only in the test's private cloned database.
+func (q *Queries) ExpandRemoteSessionResourceIndexesFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, expandRemoteSessionResourceIndexesFixture)
 	return err
 }
 
@@ -3683,6 +3712,25 @@ func (q *Queries) InsertRemoteSessionEMABindingFixture(ctx context.Context, arg 
 		arg.Resource,
 		arg.RemoteSessionClientID,
 	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertRemoteSessionResourceVariantFixture = `-- name: InsertRemoteSessionResourceVariantFixture :one
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, scopes, resource)
+SELECT source.subject_urn, source.user_session_issuer_id, source.remote_session_client_id, source.access_token_encrypted, source.access_expires_at, source.scopes, $1::text
+FROM remote_sessions AS source WHERE source.id = $2 AND source.deleted IS FALSE
+RETURNING remote_sessions.id
+`
+
+type InsertRemoteSessionResourceVariantFixtureParams struct {
+	Resource string
+	SourceID uuid.UUID
+}
+
+func (q *Queries) InsertRemoteSessionResourceVariantFixture(ctx context.Context, arg InsertRemoteSessionResourceVariantFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertRemoteSessionResourceVariantFixture, arg.Resource, arg.SourceID)
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
@@ -7556,6 +7604,20 @@ func (q *Queries) SetRemoteSessionListFixture(ctx context.Context, arg SetRemote
 		arg.ID,
 		arg.OrganizationID,
 	)
+	return err
+}
+
+const setRemoteSessionResourceByIDFixture = `-- name: SetRemoteSessionResourceByIDFixture :exec
+UPDATE remote_sessions SET resource = $1 WHERE id = $2 AND deleted IS FALSE
+`
+
+type SetRemoteSessionResourceByIDFixtureParams struct {
+	Resource pgtype.Text
+	ID       uuid.UUID
+}
+
+func (q *Queries) SetRemoteSessionResourceByIDFixture(ctx context.Context, arg SetRemoteSessionResourceByIDFixtureParams) error {
+	_, err := q.db.Exec(ctx, setRemoteSessionResourceByIDFixture, arg.Resource, arg.ID)
 	return err
 }
 

@@ -1,4 +1,4 @@
-// A remote_session is one grant per (subject, client), shared by every
+// A remote_session is one grant per (subject, client, resource), shared by every
 // endpoint bound to that client, so the consent page sees live sessions the
 // endpoint's runtime routing will never forward. Those must render as needing
 // a reconnect, never as "Connected".
@@ -39,6 +39,7 @@ func grant(t *testing.T, ctx context.Context, fx consentActionFixture, clientID 
 	t.Helper()
 	encrypted, err := fx.ti.enc.Encrypt([]byte("token-" + clientID.String()))
 	require.NoError(t, err)
+	setExistingFixtureSessionResource(t, ctx, fx.ti.conn, fx.subject, clientID, conv.ToPGTextEmpty(resource))
 	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:             fx.subject,
 		UserSessionIssuerID:    fx.shared,

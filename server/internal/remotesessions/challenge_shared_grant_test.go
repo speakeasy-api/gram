@@ -696,24 +696,11 @@ func newResourceCapturingRefreshHandler(refreshCount *atomic.Int64, captured *at
 	}
 }
 
-// setStoredSessionResource stamps a persisted RFC 8707 resource onto the
-// fixture's session via the same upsert the code-exchange callback uses.
+// setStoredSessionResource builds the fixture's recorded resource; production
+// reconsent cannot overwrite a different audience's grant.
 func setStoredSessionResource(t *testing.T, ctx context.Context, fx sharedGrantFixture, resource string) {
 	t.Helper()
-	_, err := repo.New(fx.ti.conn).UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
-		SubjectUrn:             fx.subject,
-		UserSessionIssuerID:    fx.session.UserSessionIssuerID,
-		RemoteSessionClientID:  fx.clientID,
-		AccessTokenEncrypted:   fx.session.AccessTokenEncrypted,
-		AccessExpiresAt:        fx.session.AccessExpiresAt,
-		RefreshTokenEncrypted:  fx.session.RefreshTokenEncrypted,
-		AuthorizationExpiresAt: fx.session.AuthorizationExpiresAt,
-		RefreshExpiresAt:       fx.session.RefreshExpiresAt,
-		Scopes:                 fx.session.Scopes,
-		Resource:               conv.ToPGText(resource),
-		AutoRefresh:            fx.session.AutoRefresh,
-	})
-	require.NoError(t, err)
+	require.NoError(t, testrepo.New(fx.ti.conn).SetRemoteSessionResourceByIDFixture(ctx, testrepo.SetRemoteSessionResourceByIDFixtureParams{ID: fx.session.ID, Resource: conv.ToPGText(resource)}))
 }
 
 // A persisted resource wins on explicit refresh: no derivation replaces it,
