@@ -433,6 +433,13 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
+		// An exact typed offer authorizes this registration for this server.
+		// Alternative providers offering the same server are not competing
+		// resource owners; keep the selected server's concrete target. Legacy
+		// issuer bindings and ambiguous gateway members retain their derivation.
+		if !claimedByMember && endpoint.McpServerID.Valid && endpoint.UpstreamResource != "" && typedAuthorization.ServerID == endpoint.McpServerID.UUID {
+			clientResource = endpoint.UpstreamResource
+		}
 	}
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,

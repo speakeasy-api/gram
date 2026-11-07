@@ -936,7 +936,19 @@ func (m *ChallengeManager) loginResourceScopes(ctx context.Context, parent Paren
 	// The gateway qualified the client to its member before the login, so
 	// only the member's URL must still be the resource the grant names.
 	applies := viaMember && sameUpstream(resourceURL, parent.Resource)
-	if !viaMember {
+	// The consent handler validated the exact typed offer before building
+	// this login. Its selected server may offer multiple alternative
+	// registrations, so legacy sibling ownership must not discard its scopes.
+	typedTarget := parent.TypedAuthorization != nil &&
+		parent.TypedAuthorization.ServerID == serverID.UUID &&
+		parent.TypedAuthorization.RemoteSessionClientID == client.ID &&
+		parent.TypedAuthorization.ProjectID == parent.ProjectID &&
+		parent.TypedAuthorization.OrganizationID == parent.OrganizationID &&
+		resourceURL == parent.Resource
+	if typedTarget {
+		applies = true
+	}
+	if !viaMember && !typedTarget {
 		siblingIDs, err := q.ListRemoteSessionClientIDsForUserSessionIssuer(ctx, remotesessions_repo.ListRemoteSessionClientIDsForUserSessionIssuerParams{
 			UserSessionIssuerID: parent.UserSessionIssuerID,
 			ProjectID:           parent.ProjectID,
