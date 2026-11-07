@@ -261,6 +261,8 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		if !found {
 			// Absence from this cached view does not prove consent excluded a real
 			// tool: misspelled, removed, or unknown member tools are absent too.
+			// The call still named its server, so that server's check is recorded.
+			s.findNamedMember(ctx, gate, members, serverSlug)
 			attempt.fail(http.StatusForbidden, remotemcp.ToolNotApprovedMessage)
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
@@ -642,7 +644,7 @@ func (s *Service) loadMemberToolset(
 	if member.serverID == toolset.ID && !hosting.Enabled {
 		return nil, hostingstate.NotHosted(), uuid.Nil, &metaMemberError{message: fmt.Sprintf("server %q is not currently servable", member.slug)}
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, s.newMandatoryShadow(ctx, toolset.OrganizationID), mandatorySurfaceGatewayMember, gate.authenticated, &toolset, hosting.Public, true)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), uuid.Nil, oops.E(oops.CodeUnexpected, err, "check toolset-level authz").LogError(ctx, logger)
 	}
@@ -655,10 +657,12 @@ func (s *Service) loadMemberToolset(
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved. It records no authorization
-// check: it runs for every member a gateway admits or lists, and the check a
-// call names is recorded once by findNamedMember.
-func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
+// prepared when the member snapshot was resolved. With record false it records
+// no authorization check, for admission, which runs it for every member.
+// Loading a member for a call records it: a listing runs under
+// authz.WithoutChallenges, and a call that named a private member already
+// recorded the same check, so the request keeps one.
+func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool, record bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
 	if public {
 		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
@@ -668,12 +672,19 @@ func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *manda
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	allowed, err := s.authz.Evaluate(ctx, connect)
+	checkCtx := ctx
+	if !record {
+		checkCtx = authz.WithoutChallenges(ctx)
+	}
+	err := s.authz.Require(checkCtx, connect)
+	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
 	if err != nil {
+		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
+			return false, nil
+		}
 		return false, fmt.Errorf("check toolset-level authz: %w", err)
 	}
-	shadow.recordServer(ctx, shadowSurface, allowed, authz.MandatoryServerPrivate, connect)
-	return allowed, nil
+	return true, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's

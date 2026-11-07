@@ -70,9 +70,8 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 
-	// A listing records nothing, and a request records each resource it
-	// names once (see WithOneChallengePerResource).
-	if !claimChallenge(ctx, l) {
+	// A listing records nothing (see WithoutChallenges).
+	if challengesSilenced(ctx) {
 		return
 	}
 
@@ -89,6 +88,11 @@ func (l challengeLogger) Log(ctx context.Context, dbtx database.DBTX, logger *sl
 		return
 	}
 	if !enabled {
+		return
+	}
+	// A request records each resource it names once (see
+	// WithOneChallengePerResource).
+	if !claimChallenge(ctx, l) {
 		return
 	}
 

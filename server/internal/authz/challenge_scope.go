@@ -61,19 +61,30 @@ func WithoutChallenges(ctx context.Context) context.Context {
 	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{silent: true, recorded: nil})
 }
 
+// challengesSilenced reports a context that records no checks. It is read
+// before anything else a recorded check costs, such as the feature flag.
+func challengesSilenced(ctx context.Context) bool {
+	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
+	return ok && scope.silent
+}
+
 // claimChallenge reports whether a decision is recorded under ctx's scope, and
-// marks it recorded.
+// marks it recorded. Call it only once the decision is about to be written.
 func claimChallenge(ctx context.Context, l challengeLogger) bool {
 	scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope)
 	if !ok {
 		return true
 	}
-	if scope.silent {
+	if scope.recorded == nil {
 		return false
 	}
 
+	// A batch (Filter, FindMatched) names no one resource. It never takes a
+	// resource's slot, so a later decision about that resource still records,
+	// but it is skipped once that resource has a recorded decision.
+	batch := l.Focus == nil
 	focus := l.Focus
-	if focus == nil && len(l.Checks) > 0 {
+	if batch && len(l.Checks) > 0 {
 		focus = &l.Checks[0]
 	}
 	if focus == nil {
@@ -84,6 +95,9 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 	scope.recorded.mu.Lock()
 	defer scope.recorded.mu.Unlock()
 	seen := scope.recorded.outcome[key]
+	if batch {
+		return !seen.allowed && !seen.denied
+	}
 	switch l.Outcome {
 	case authzrepo.OutcomeAllow:
 		if seen.allowed || seen.denied {
@@ -91,6 +105,8 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 		}
 		seen.allowed = true
 	case authzrepo.OutcomeDeny:
+		// A denial after an allow is still recorded: connecting was allowed
+		// but this tool or disposition was not, and that refusal is real.
 		if seen.denied {
 			return false
 		}

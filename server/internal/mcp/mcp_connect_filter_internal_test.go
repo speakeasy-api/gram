@@ -64,15 +64,31 @@ func TestFilterToolsByMCPConnect_RecordsNoChecks(t *testing.T) {
 	require.Zero(t, *recorded)
 }
 
+// cancelAfterChecks reports the context canceled once Err has been asked a set
+// number of times, so cancellation lands partway through a filter loop.
+type cancelAfterChecks struct {
+	context.Context //nolint:containedctx // the wrapped context is the thing under test
+	calls           int
+	after           int
+}
+
+func (c *cancelAfterChecks) Err() error {
+	c.calls++
+	if c.calls > c.after {
+		return context.Canceled
+	}
+	return nil
+}
+
 func TestFilterToolsByMCPConnect_StopsAfterCancel(t *testing.T) {
 	t.Parallel()
 
 	toolsetID := uuid.NewString()
 	ctx, engine, _ := filterFixture(t, toolsetID)
-	ctx, cancel := context.WithCancel(ctx)
-	cancel()
+	canceling := &cancelAfterChecks{Context: ctx, calls: 0, after: 3}
 
-	_, err := filterToolsByMCPConnect(ctx, testenv.NewLogger(t), engine, toolsetID, uuid.NewString(), filterTools(50))
+	_, err := filterToolsByMCPConnect(canceling, testenv.NewLogger(t), engine, toolsetID, uuid.NewString(), filterTools(50))
 
 	require.ErrorIs(t, err, context.Canceled)
+	require.Less(t, canceling.calls, 50, "the loop kept checking tools after the request was canceled")
 }

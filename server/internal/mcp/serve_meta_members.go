@@ -460,21 +460,21 @@ func (s *Service) admitMetaMembers(
 		// member whose toolset is private still lists here (its endpoint is
 		// public), then reads as nonexistent on drill-down (loadMemberToolset).
 		//
-		// Admission evaluates without recording an authorization check: it
-		// filters every server the caller could reach, not one it asked for.
-		// The check is recorded when a call names the member
-		// (recordNamedMemberCheck), so denied members are kept aside for that.
+		// Admission records no authorization check: it filters every server
+		// the caller could reach, not one it asked for. The check is recorded
+		// when a call names the member (findNamedMember), so denied members
+		// are kept aside for that.
 		connect := memberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
 		admitted := true
 		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
 			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
-			allowed, err := s.authz.Evaluate(ctx, connect)
+			err := s.authz.Require(authz.WithoutChallenges(ctx), connect)
 			if err != nil && !isMemberDenial(err) {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
-			admitted = allowed && err == nil
+			admitted = err == nil
 			shadow.recordServer(ctx, surface, admitted, authz.MandatoryServerPrivate, connect)
 		default:
 			continue
@@ -537,10 +537,11 @@ func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID u
 }
 
 // findNamedMember resolves the server a call names and records the one
-// authorization check the request makes for it: allowed for an admitted
-// private member, denied for a private member admission turned away. Public
-// members need no grant and record nothing, as at admission. A slug that
-// names no server records nothing either.
+// authorization check the request makes for it: allowed for an admitted or
+// hidden private member, denied for a private member admission turned away.
+// Public members need no grant and record nothing here; a private toolset
+// behind one records when the call loads it (loadMemberToolset). A slug that
+// names no server records nothing.
 func (s *Service) findNamedMember(ctx context.Context, gate *metaGateContext, members []metaMember, slug string) (metaMember, bool) {
 	member, ok := findMetaMember(members, slug)
 	if ok {
@@ -549,6 +550,11 @@ func (s *Service) findNamedMember(ctx context.Context, gate *metaGateContext, me
 	}
 	if denied, found := findDeniedMember(gate.deniedMembers, slug); found {
 		s.recordNamedMemberCheck(ctx, denied)
+	}
+	// A server the caller hid is still one it may use: its check is
+	// recorded, though the call is refused as hidden.
+	if hidden, found := findMetaMember(gate.hiddenMembers, slug); found {
+		s.recordNamedMemberCheck(ctx, hidden)
 	}
 	return member, false
 }

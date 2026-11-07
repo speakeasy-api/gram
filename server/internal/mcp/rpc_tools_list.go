@@ -359,16 +359,16 @@ func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngi
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		ok, err := authzEngine.Evaluate(ctx, authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
+		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
 			Tool:        t.Name,
 			Disposition: dispositionFromAnnotations(t.Annotations),
 			ProjectID:   projectID,
-		}))
-		if err != nil {
+		})); err != nil {
+			var oopsErr *oops.ShareableError
+			if errors.As(err, &oopsErr) && oopsErr.Code == oops.CodeForbidden {
+				continue
+			}
 			return nil, oops.E(oops.CodeUnexpected, err, "check tool-level authz for tools/list").LogError(ctx, logger)
-		}
-		if !ok {
-			continue
 		}
 		allowed = append(allowed, t)
 	}

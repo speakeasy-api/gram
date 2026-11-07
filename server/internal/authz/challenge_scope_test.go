@@ -103,3 +103,23 @@ func TestWithoutChallenges_recordsNothing(t *testing.T) {
 
 	require.Empty(t, listChallengeOutboxRows(t, conn))
 }
+
+func TestWithOneChallengePerResource_batchesDoNotTakeAResourcesSlot(t *testing.T) {
+	t.Parallel()
+
+	ctx, engine, conn, _ := challengeScopeFixture(t)
+	ctx = WithOneChallengePerResource(ctx)
+	ungranted := uuid.NewString()
+
+	// A batch filtering the server's tools records, but leaves the server's
+	// own denial to be recorded when a call names it. Once that is recorded,
+	// a later batch about the server records nothing.
+	_, err := engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})})
+	require.NoError(t, err)
+	require.Error(t, engine.Require(ctx, MCPCheck(ScopeMCPConnect, ungranted, "")))
+	_, err = engine.FindMatched(ctx, []Check{MCPToolCallCheck(ungranted, MCPToolCallDimensions{Tool: "search", Disposition: "", ProjectID: ""})})
+	require.NoError(t, err)
+
+	// A batch row names no single resource.
+	require.Equal(t, [][2]string{{"", "deny"}, {ungranted, "deny"}}, recordedChallengeOutcomes(t, conn))
+}
