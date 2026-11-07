@@ -183,6 +183,38 @@ func (q *Queries) AuthorizeEMADelegation(ctx context.Context, arg AuthorizeEMADe
 	return authorized, err
 }
 
+const checkAuthClientRemoteSessionSubjectAdmission = `-- name: CheckAuthClientRemoteSessionSubjectAdmission :one
+SELECT EXISTS (
+  SELECT 1 FROM projects p
+  JOIN organization_metadata org ON org.id = p.organization_id AND org.disabled_at IS NULL
+  WHERE p.id = $1 AND p.organization_id = $2 AND NOT p.deleted
+    AND ($3::text NOT LIKE 'user:%' OR EXISTS (
+      SELECT 1 FROM users person
+      JOIN organization_user_relationships membership
+        ON membership.user_id = person.id AND membership.organization_id = org.id
+        AND NOT membership.deleted AND membership.deleted_at IS NULL
+      WHERE $3::text = 'user:' || person.id
+        AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+    ))
+)::boolean
+`
+
+type CheckAuthClientRemoteSessionSubjectAdmissionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	SubjectUrn     string
+}
+
+// Live lifecycle admission, not authorization of a typed offer. All subjects
+// require a live tenant; user subjects additionally require a live user and
+// current membership. Non-user subjects retain their existing caller admission.
+func (q *Queries) CheckAuthClientRemoteSessionSubjectAdmission(ctx context.Context, arg CheckAuthClientRemoteSessionSubjectAdmissionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, checkAuthClientRemoteSessionSubjectAdmission, arg.ProjectID, arg.OrganizationID, arg.SubjectUrn)
+	var column_1 bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const checkRemoteSessionClientBindingForUserSessionIssuer = `-- name: CheckRemoteSessionClientBindingForUserSessionIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -14924,6 +14956,18 @@ WHERE s.subject_urn = $2
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata org
+    WHERE org.id = p.organization_id AND org.disabled_at IS NULL
+      AND (s.subject_urn NOT LIKE 'user:%' OR EXISTS (
+        SELECT 1 FROM users person
+        JOIN organization_user_relationships membership
+          ON membership.user_id = person.id AND membership.organization_id = org.id
+          AND NOT membership.deleted AND membership.deleted_at IS NULL
+        WHERE s.subject_urn = 'user:' || person.id
+          AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+      ))
+  )
   AND s.id = $6
   AND s.updated_at = $7
   AND ($8::text = '' OR rtrim(s.resource, '/') = rtrim($8::text, '/'))
@@ -15501,6 +15545,18 @@ WHERE s.subject_urn = $1
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata org
+    WHERE org.id = p.organization_id AND org.disabled_at IS NULL
+      AND (s.subject_urn NOT LIKE 'user:%' OR EXISTS (
+        SELECT 1 FROM users person
+        JOIN organization_user_relationships membership
+          ON membership.user_id = person.id AND membership.organization_id = org.id
+          AND NOT membership.deleted AND membership.deleted_at IS NULL
+        WHERE s.subject_urn = 'user:' || person.id
+          AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+      ))
+  )
   AND s.id = $5
   AND s.updated_at = $6
   AND ($7::text = '' OR rtrim(s.resource, '/') = rtrim($7::text, '/'))

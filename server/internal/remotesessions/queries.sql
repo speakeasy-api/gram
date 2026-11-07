@@ -6711,6 +6711,18 @@ WHERE s.subject_urn = @subject_urn
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata org
+    WHERE org.id = p.organization_id AND org.disabled_at IS NULL
+      AND (s.subject_urn NOT LIKE 'user:%' OR EXISTS (
+        SELECT 1 FROM users person
+        JOIN organization_user_relationships membership
+          ON membership.user_id = person.id AND membership.organization_id = org.id
+          AND NOT membership.deleted AND membership.deleted_at IS NULL
+        WHERE s.subject_urn = 'user:' || person.id
+          AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+      ))
+  )
   AND s.id = @id
   AND s.updated_at = @expected_updated_at
   AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/'))
@@ -6748,6 +6760,18 @@ WHERE s.subject_urn = @subject_urn
   AND (i.project_id = p.id OR (i.project_id IS NULL AND (i.organization_id IS NULL OR i.organization_id = p.organization_id)))
   AND (up.organization_id = p.organization_id OR (u.project_id IS NULL AND u.organization_id = p.organization_id))
   AND c.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1 FROM organization_metadata org
+    WHERE org.id = p.organization_id AND org.disabled_at IS NULL
+      AND (s.subject_urn NOT LIKE 'user:%' OR EXISTS (
+        SELECT 1 FROM users person
+        JOIN organization_user_relationships membership
+          ON membership.user_id = person.id AND membership.organization_id = org.id
+          AND NOT membership.deleted AND membership.deleted_at IS NULL
+        WHERE s.subject_urn = 'user:' || person.id
+          AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+      ))
+  )
   AND s.id = @id
   AND s.updated_at = @expected_updated_at
   AND (@resource::text = '' OR rtrim(s.resource, '/') = rtrim(@resource::text, '/'))
@@ -6758,3 +6782,21 @@ WHERE s.subject_urn = @subject_urn
       AND other.deleted IS FALSE AND other.id <> s.id
   ))
   AND s.deleted IS FALSE;
+
+-- name: CheckAuthClientRemoteSessionSubjectAdmission :one
+-- Live lifecycle admission, not authorization of a typed offer. All subjects
+-- require a live tenant; user subjects additionally require a live user and
+-- current membership. Non-user subjects retain their existing caller admission.
+SELECT EXISTS (
+  SELECT 1 FROM projects p
+  JOIN organization_metadata org ON org.id = p.organization_id AND org.disabled_at IS NULL
+  WHERE p.id = @project_id AND p.organization_id = @organization_id AND NOT p.deleted
+    AND (@subject_urn::text NOT LIKE 'user:%' OR EXISTS (
+      SELECT 1 FROM users person
+      JOIN organization_user_relationships membership
+        ON membership.user_id = person.id AND membership.organization_id = org.id
+        AND NOT membership.deleted AND membership.deleted_at IS NULL
+      WHERE @subject_urn::text = 'user:' || person.id
+        AND person.deleted_at IS NULL AND person.workos_deleted_at IS NULL
+    ))
+)::boolean;

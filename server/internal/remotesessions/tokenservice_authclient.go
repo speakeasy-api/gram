@@ -347,6 +347,13 @@ func authClientMutationSource(ctx context.Context, q *remotesessions_repo.Querie
 	if subject.IsZero() || projectID == uuid.Nil || organizationID == "" || registrationID == uuid.Nil {
 		return zero, ErrInvalidAuthorizationRequest
 	}
+	admitted, err := q.CheckAuthClientRemoteSessionSubjectAdmission(ctx, remotesessions_repo.CheckAuthClientRemoteSessionSubjectAdmissionParams{ProjectID: projectID, OrganizationID: organizationID, SubjectUrn: subject.String()})
+	if err != nil {
+		return zero, fmt.Errorf("check typed remote session live admission: %w", err)
+	}
+	if !admitted {
+		return zero, pgx.ErrNoRows
+	}
 	if resource == "" {
 		rows, err := q.ListRemoteSessionStatusesInTenant(ctx, remotesessions_repo.ListRemoteSessionStatusesInTenantParams{SubjectUrn: subject, ProjectID: projectID, OrganizationID: organizationID, RemoteSessionClientIds: []uuid.UUID{registrationID}})
 		if err != nil {

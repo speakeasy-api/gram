@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -17,6 +19,104 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func admitTypedLifecycleUser(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, subject urn.SessionSubject) {
+	t.Helper()
+	seedUser(t, ctx, ti.conn, subject.ID, subject.ID+"@example.test", "Lifecycle fixture")
+	require.NoError(t, testrepo.New(ti.conn).CreateOrganizationUserRelationshipFixture(ctx, testrepo.CreateOrganizationUserRelationshipFixtureParams{OrganizationID: organizationID, UserID: conv.ToPGText(subject.ID)}))
+}
+
+func TestAuthClientResourceLifecycle_RequiresLiveUserAndTenant(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		revoke func(context.Context, *testrepo.Queries, string, string) error
+	}{
+		{"disabled organization", func(ctx context.Context, q *testrepo.Queries, org, _ string) error {
+			return q.DisableDelegationOrganizationFixture(ctx, org)
+		}},
+		{"removed membership", func(ctx context.Context, q *testrepo.Queries, org, _ string) error {
+			return q.ForceSoftDeleteOrganizationUserRelationshipsFixture(ctx, org)
+		}},
+		{"deleted user", func(ctx context.Context, q *testrepo.Queries, _, user string) error {
+			return q.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: user, DeletedAt: conv.ToPGTimestamptz(time.Now()), WorkosDeletedAt: pgtype.Timestamptz{}, LastLogin: pgtype.Timestamptz{}})
+		}},
+		{"user deleted in identity provider", func(ctx context.Context, q *testrepo.Queries, _, user string) error {
+			return q.SetUserLifecycleFixture(ctx, testrepo.SetUserLifecycleFixtureParams{ID: user, DeletedAt: pgtype.Timestamptz{}, WorkosDeletedAt: conv.ToPGTimestamptz(time.Now()), LastLogin: pgtype.Timestamptz{}})
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, f := newAuthClientTokenFixture(t, "typed-live-admission")
+			subject := f.member(t, ctx)
+			const resource = "https://typed-live.example/mcp"
+			row := typedLifecycleGrant(t, ctx, f, subject, resource)
+			q := repo.New(f.ti.conn)
+			require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: f.clientID, ProjectID: conv.ToNullUUID(f.projectID)}))
+			n, err := f.mgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, resource, false)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, n)
+			require.NoError(t, tc.revoke(ctx, testrepo.New(f.ti.conn), f.organizationID, subject.ID))
+			for _, focused := range []bool{false, true} {
+				target := ""
+				if focused {
+					target = resource
+				}
+				if focused {
+					n, err = f.mgr.DisconnectAuthClientRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, target)
+				} else {
+					n, err = f.mgr.DisconnectAuthClientRemoteSession(ctx, subject, f.projectID, f.organizationID, f.clientID)
+				}
+				require.NoError(t, err)
+				require.Zero(t, n)
+				if focused {
+					n, err = f.mgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, target, true)
+				} else {
+					n, err = f.mgr.SetAuthClientRemoteSessionAutoRefresh(ctx, subject, f.projectID, f.organizationID, f.clientID, true)
+				}
+				require.NoError(t, err)
+				require.Zero(t, n)
+				if focused {
+					_, err = f.mgr.RefreshAuthClientRemoteSessionForResource(ctx, remotesessions.RefreshAttribution{}, subject, f.projectID, f.organizationID, f.clientID, target)
+				} else {
+					_, err = f.mgr.RefreshAuthClientRemoteSession(ctx, remotesessions.RefreshAttribution{}, subject, f.projectID, f.organizationID, f.clientID)
+				}
+				require.ErrorIs(t, err, remotesessions.ErrRemoteSessionNotRefreshable)
+			}
+			// The writes independently repeat live admission: a stale authorized read
+			// cannot change the grant after membership/organization admission is lost.
+			n, err = q.SetRemoteSessionAutoRefreshInTenant(ctx, repo.SetRemoteSessionAutoRefreshInTenantParams{SubjectUrn: subject, RemoteSessionClientID: f.clientID, ProjectID: f.projectID, OrganizationID: f.organizationID, ID: row.ID, ExpectedUpdatedAt: row.UpdatedAt, Resource: resource, AutoRefresh: true})
+			require.NoError(t, err)
+			require.Zero(t, n)
+			removed, err := q.SoftDeleteRemoteSessionBySubjectAndClientInTenant(ctx, repo.SoftDeleteRemoteSessionBySubjectAndClientInTenantParams{SubjectUrn: subject, RemoteSessionClientID: f.clientID, ProjectID: f.projectID, OrganizationID: f.organizationID, ID: row.ID, ExpectedUpdatedAt: row.UpdatedAt, Resource: resource})
+			require.NoError(t, err)
+			require.Empty(t, removed)
+			current, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: row.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+			require.NoError(t, err)
+			require.Equal(t, row, current)
+		})
+	}
+}
+
+func TestAuthClientResourceLifecycle_PreservesAgentSubjectPath(t *testing.T) {
+	t.Parallel()
+	ctx, f := newAuthClientTokenFixture(t, "typed-agent-admission")
+	agent, err := agentsrepo.New(f.ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{OrganizationID: f.organizationID, OwnerUserID: f.member(t, ctx).ID, Name: "typed-lifecycle-agent", ProjectID: conv.ToNullUUID(f.projectID)})
+	require.NoError(t, err)
+	subject := urn.NewAgentSubject(agent.ID)
+	const resource = "https://typed-agent.example/mcp"
+	row := typedLifecycleGrant(t, ctx, f, subject, resource)
+	require.NoError(t, repo.New(f.ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: f.clientID, ProjectID: conv.ToNullUUID(f.projectID)}))
+	n, err := f.mgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, resource, true)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+	current, err := repo.New(f.ti.conn).GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: row.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.True(t, current.AutoRefresh)
+	n, err = f.mgr.DisconnectAuthClientRemoteSessionForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, resource)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, n)
+}
 
 func typedLifecycleGrant(t *testing.T, ctx context.Context, f authClientTokenFixture, subject urn.SessionSubject, resource string) repo.RemoteSession {
 	t.Helper()
@@ -48,7 +148,7 @@ func TestAuthClientResourceLifecycle_NoLinkBothSchemas(t *testing.T) {
 			}
 			q := repo.New(f.ti.conn)
 			require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: f.clientID, ProjectID: conv.ToNullUUID(f.projectID)}))
-			subject := urn.NewUserSubject("typed-lifecycle-owner")
+			subject := f.member(t, ctx)
 			const resourceA = "https://typed-a.example/mcp"
 			a := typedLifecycleGrant(t, ctx, f, subject, resourceA)
 			var siblings []repo.RemoteSession
@@ -143,7 +243,7 @@ func TestAuthClientResourceLifecycle_CASRejectsReconsent(t *testing.T) {
 	t.Parallel()
 	ctx, f := newAuthClientTokenFixture(t, "typed-cas")
 	expandResourceGrantIndexes(t, ctx, f.ti.conn)
-	subject := urn.NewUserSubject("typed-cas-owner")
+	subject := f.member(t, ctx)
 	a := typedLifecycleGrant(t, ctx, f, subject, "https://typed-cas-a.example/mcp")
 	b := typedLifecycleGrant(t, ctx, f, subject, "https://typed-cas-b.example/mcp")
 	replacement := typedLifecycleGrant(t, ctx, f, subject, a.Resource.String)
@@ -183,6 +283,7 @@ func TestAuthClientResourceLifecycle_RefreshRotatesOnlySelectedNoLinkGrant(t *te
 	expandResourceGrantIndexes(t, ctx, ti.conn)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	admitTypedLifecycleUser(t, ctx, ti, auth.ActiveOrganizationID, subject)
 	q := repo.New(ti.conn)
 	a, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: resourceA})
 	require.NoError(t, err)
@@ -217,6 +318,7 @@ func TestAuthClientResourceLifecycle_DisconnectRevokesOnlySelectedNoLinkGrant(t 
 	spy := &revocationSpy{}
 	upstream := newRevocationUpstream(t, spy)
 	fx := seedRevocableSession(t, ctx, ti, "typed-resource-revoke", upstream.URL+"/revoke", "fixture-secret", true)
+	admitTypedLifecycleUser(t, ctx, ti, fx.organizationID, fx.subject)
 	expandResourceGrantIndexes(t, ctx, ti.conn)
 	q := repo.New(ti.conn)
 	a, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
@@ -271,7 +373,7 @@ func TestAuthClientResourceLifecycle_LegacySingletonWithoutLink(t *testing.T) {
 	ctx, f := newAuthClientTokenFixture(t, "typed-legacy-singleton")
 	q := repo.New(f.ti.conn)
 	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: f.clientID, ProjectID: conv.ToNullUUID(f.projectID)}))
-	subject := urn.NewUserSubject("typed-legacy-singleton-owner")
+	subject := f.member(t, ctx)
 	legacy := typedLifecycleGrant(t, ctx, f, subject, "")
 	n, err := f.mgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.organizationID, f.clientID, "https://not-inferred.example/mcp", true)
 	require.Error(t, err)
@@ -317,6 +419,7 @@ func TestAuthClientResourceLifecycle_RefreshRefusesConcurrentReconsent(t *testin
 	q := repo.New(ti.conn)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	admitTypedLifecycleUser(t, ctx, ti, auth.ActiveOrganizationID, subject)
 	original, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
 	require.NoError(t, err)
 	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionResourceByIDFixture(ctx, testrepo.SetRemoteSessionResourceByIDFixtureParams{ID: original.ID, Resource: conv.ToPGText(resource)}))
@@ -359,6 +462,7 @@ func TestAuthClientResourceLifecycle_RefreshLegacySingletonWithoutLink(t *testin
 	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "typed-legacy-refresh", conv.ToPGTextEmpty(""), spyRefreshHandler(&spy))
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	admitTypedLifecycleUser(t, ctx, ti, auth.ActiveOrganizationID, subject)
 	q := repo.New(ti.conn)
 	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: clientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
 	result, err := mgr.RefreshAuthClientRemoteSession(ctx, remotesessions.RefreshAttribution{}, subject, *auth.ProjectID, auth.ActiveOrganizationID, clientID)
