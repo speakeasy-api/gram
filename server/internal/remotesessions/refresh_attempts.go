@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,6 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
+
+// emaBindingLookupTimeout bounds the binding lookup a refresh's row waits on. It is one
+// indexed EXISTS, so a slower answer means a struggling database, not a busy one.
+const emaBindingLookupTimeout = 500 * time.Millisecond
 
 // recordRefresh writes one refresh's row. A carried attempt gets a step; otherwise the refresh is its own attempt.
 // It reports whether a failed row was accepted, as its own attempt or as a step.
@@ -31,16 +36,7 @@ func (s *RefreshService) recordRefresh(
 		return false, false
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
-		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-		defer cancel()
-		managed, lookupErr := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
-			RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
-			UserSessionIssuerID:   sess.UserSessionIssuerID,
-		})
-		// Do not recommend re-registration unless the tenant's binding is known.
-		if lookupErr != nil || managed {
-			what = mcpconnectionattempts.CodeProviderOAuthInvalidClient
-		}
+		what = s.invalidClientHappened(ctx, attribution, sess)
 	}
 	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Provider(client.IssuerUrl),
@@ -59,6 +55,31 @@ func (s *RefreshService) recordRefresh(
 	}
 	accepted := s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
 	return accepted && failed, false
+}
+
+// invalidClientHappened names a refresh_invalid_client row, recommending re-registration only
+// when the tenant's binding is known. A row that won't be stored skips the lookup and keeps
+// the code refreshHappened chose, so its steps metric stays refresh_invalid_client even when
+// the binding is managed.
+func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) mcpconnectionattempts.Code {
+	scope := attribution.scope
+	if !attribution.attempt.IsZero() {
+		scope = attribution.attempt.Scope()
+	}
+	// Detached: a cancelled request reads as logs off on a feature cache miss.
+	if !s.connections.Stores(context.WithoutCancel(ctx), scope) {
+		return mcpconnectionattempts.CodeRefreshInvalidClient
+	}
+	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), emaBindingLookupTimeout)
+	defer cancel()
+	managed, err := remotesessions_repo.New(s.db).HasActiveEMABindingForRefresh(lookupCtx, remotesessions_repo.HasActiveEMABindingForRefreshParams{
+		RemoteSessionClientID: uuid.NullUUID{UUID: sess.RemoteSessionClientID, Valid: true},
+		UserSessionIssuerID:   sess.UserSessionIssuerID,
+	})
+	if err != nil || managed {
+		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
+	}
+	return mcpconnectionattempts.CodeRefreshInvalidClient
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.
