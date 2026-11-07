@@ -2147,12 +2147,43 @@ WITH resolved AS (
            ON i.id = c.remote_session_issuer_id
           AND i.deleted IS FALSE
     GROUP BY input.user_session_issuer_id
+), associated AS (
+    SELECT server.id,
+           resolved.remote_session_issuer_id AS resolved_issuer_id,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = server.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM resolved
+    JOIN mcp_servers AS server
+      ON server.user_session_issuer_id = resolved.user_session_issuer_id
+     AND server.project_id = $1::uuid
+), derived AS (
+    -- Associations decide when there are any: one provider stamps it, several
+    -- leave it NULL. With none, the issuer's bindings decide.
+    SELECT id,
+           CASE WHEN cardinality(association_provider_ids) = 0 THEN resolved_issuer_id
+                WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1]
+           END AS remote_session_issuer_id
+    FROM associated
 )
 UPDATE mcp_servers AS s
-SET remote_session_issuer_id = resolved.remote_session_issuer_id,
+SET remote_session_issuer_id = derived.remote_session_issuer_id,
     updated_at = clock_timestamp()
-FROM resolved
-WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
+FROM derived
+WHERE s.id = derived.id
   AND s.project_id = $1::uuid
   -- Belt and suspenders on the caller's org/project pair agreeing.
   AND EXISTS (SELECT 1
@@ -2160,7 +2191,7 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
               WHERE p.id = s.project_id
                 AND p.organization_id = $2::text)
   AND s.deleted IS FALSE
-  AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id
+  AND s.remote_session_issuer_id IS DISTINCT FROM derived.remote_session_issuer_id
 `
 
 type ResyncMCPServerRemoteSessionIssuersParams struct {
@@ -2169,9 +2200,12 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
-// Recomputes mcp_servers.remote_session_issuer_id from the live client
-// bindings on each named user session issuer. Exactly one distinct remote
-// issuer stamps it; none or several leave it NULL and readers fail closed.
+// Recomputes mcp_servers.remote_session_issuer_id for the servers on each named
+// user session issuer. A server with a live client association takes its one
+// provider, or NULL with several. A server with none falls back to the live
+// client bindings on its issuer: exactly one distinct remote issuer stamps it,
+// none or several leave it NULL and readers fail closed. The fallback only
+// feeds readers of this column and goes away with it.
 //
 // Best effort: runs post-commit outside the mutating transaction, so it takes
 // no advisory lock and a raced run merely leaves a stale value, which the
@@ -2186,7 +2220,10 @@ type ResyncMCPServerRemoteSessionIssuersParams struct {
 // pinned to the caller's own project — a foreign id derives no row and writes
 // nothing — and only that project's servers are written. Organization-level
 // clients of the caller's organization count toward the derivation, matching
-// what the attach surface permits.
+// what the attach surface permits. An association counts only through a live
+// client and provider visible to the association's own project, its
+// organization, or globally, the tiers the resolver admits; foreign keys pin
+// the association to the server's project and organization.
 func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg ResyncMCPServerRemoteSessionIssuersParams) (int64, error) {
 	result, err := q.db.Exec(ctx, resyncMCPServerRemoteSessionIssuers, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
