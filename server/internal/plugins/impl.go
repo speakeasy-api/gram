@@ -1574,6 +1574,8 @@ func (s *Service) DownloadObservabilityPlugin(ctx context.Context, payload *gen.
 		filename = "observability-openclaw"
 	case "pi":
 		filename = "observability-pi"
+	case "vibe":
+		filename = "observability-vibe"
 	}
 	return &gen.DownloadObservabilityPluginResult{
 		ContentType:        "application/zip",

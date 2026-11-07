@@ -46,8 +46,8 @@ const configFileName = "speakeasy.json"
 
 // WritePlugin renders a provider hook package under dir that drives the
 // speakeasy-hooks binary. provider is the agenthooks slug (claude-code,
-// cursor, codex, opencode, copilot, openclaw) or "pi". For claude-code, cursor
-// and copilot, dir is a plugin directory; for codex, which has no plugin
+// cursor, codex, opencode, copilot, openclaw) or "pi"/"vibe". For claude-code,
+// cursor and copilot, dir is a plugin directory; for codex, which has no plugin
 // layout for hooks, dir is the Codex home the config installs into; for
 // opencode, dir receives an .opencode/plugin shim usable either as a project
 // directory or referenced from an OpenCode config's plugin list; for openclaw,
@@ -55,16 +55,24 @@ const configFileName = "speakeasy.json"
 // install <dir>` (plus a Gateway restart, and plugins.entries.<id>.hooks
 // .allowConversationAccess: true for the prompt/stop/llm events); for pi, dir
 // receives a .pi/extensions module usable as a project directory (or copied
-// into ~/.pi/agent).
+// into ~/.pi/agent); for vibe, dir receives a .vibe/hooks.toml usable as a
+// trusted project directory.
 func WritePlugin(ctx context.Context, provider, dir string, cfg PluginConfig) error {
-	// Pi is rendered here rather than by agenthooks/install: it has no hook
-	// config dialect to render, only a TypeScript extension module, and the
-	// frame protocol that module speaks is this package's own.
+	// Pi and Vibe are rendered here rather than by agenthooks/install: neither
+	// has a hook config dialect in that module. Pi's surface is a TypeScript
+	// extension module; Vibe's is a hooks.toml of per-event subprocess
+	// commands. Both frame protocols are this package's own.
 	if provider == "pi" {
 		if err := writeConfigFile(dir, cfg); err != nil {
 			return err
 		}
 		return writePiExtensionPackage(dir, cfg)
+	}
+	if provider == "vibe" {
+		if err := writeConfigFile(dir, cfg); err != nil {
+			return err
+		}
+		return writeVibeHooksPackage(dir, cfg)
 	}
 
 	var target install.Target
@@ -109,6 +117,20 @@ func writePiExtensionPackage(dir string, cfg PluginConfig) error {
 	}
 	if err := os.WriteFile(path, content, 0o644); err != nil {
 		return fmt.Errorf("write pi extension: %w", err)
+	}
+	return nil
+}
+
+// writeVibeHooksPackage installs Vibe's project-local hooks config into dir's
+// .vibe directory, pointed at the binary and the speakeasy.json already
+// written beside it. The project folder must be trusted for Vibe to load it.
+func writeVibeHooksPackage(dir string, cfg PluginConfig) error {
+	path := filepath.Join(dir, ".vibe", "hooks.toml")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create vibe hooks directory: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(vibeHooksToml(cfg, dir)), 0o644); err != nil {
+		return fmt.Errorf("write vibe hooks.toml: %w", err)
 	}
 	return nil
 }
