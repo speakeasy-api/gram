@@ -286,8 +286,8 @@ func mcpServerHealthMethods() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminDescribeMcpServerHealth"}`)
 	})
 
-	// MCP parity: describe_mcp_server_health returns resource_scopes. Admin MCP
-	// has no pin write tool yet.
+	// MCP parity: describe_mcp_server_health returns resource_scopes. Setting a
+	// pin stays dashboard-only.
 	Method("setMcpServerScopePin", func() {
 		Description("Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.")
 

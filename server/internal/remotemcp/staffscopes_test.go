@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-func TestStaffScopes_DescribeResolvesAsIfDiscoveryWereOn(t *testing.T) {
+func TestStaffScopes_DescribeResolvesThePin(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	srv := seedScopeServer(t, ctx, ti, "https://staff-describe.example.com/mcp")
@@ -35,7 +35,7 @@ func TestStaffScopes_DescribeResolvesAsIfDiscoveryWereOn(t *testing.T) {
 	require.Equal(t, srv.url, got.ResourceURL)
 	require.Equal(t, []string{"read"}, got.PinnedScopes)
 	c := clientEntry(t, got, owner)
-	require.Equal(t, "resource_pin", c.ScopeSource, "the staff view ignores the organization's rollout flag")
+	require.Equal(t, "resource_pin", c.ScopeSource, "the pin decides what the owning client requests")
 	require.True(t, c.PinWouldDecide)
 }
 
@@ -67,7 +67,7 @@ func TestStaffScopes_DescribeReportsServerWithoutRemoteBackend(t *testing.T) {
 	require.ErrorIs(t, err, remotemcp.ErrNotRemoteBacked)
 }
 
-func TestStaffScopes_SetPinIgnoresFlagAndAuditsTheStaffActor(t *testing.T) {
+func TestStaffScopes_SetPinAuditsTheStaffActor(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	srv := seedScopeServer(t, ctx, ti, "https://staff-pin.example.com/mcp")

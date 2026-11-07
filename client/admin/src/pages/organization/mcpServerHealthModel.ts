@@ -128,8 +128,7 @@ export const SCOPE_LABELS: Record<
   global: "Platform",
 };
 
-// Which source decides the scopes a login through a client requests, in the
-// order login resolution tries them.
+// Which source decides the scopes a login through a client requests.
 export const SCOPE_SOURCE_LABELS: Record<ScopeSource, string> = {
   client_scope: "Client's own scopes",
   challenge_scope: "Last sign-in challenge",

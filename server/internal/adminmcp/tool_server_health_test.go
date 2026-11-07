@@ -456,6 +456,9 @@ func TestDescribeMCPServerHealthOmitsResourceScopesOutsideBounds(t *testing.T) {
 		},
 		"too many pinned": func(h *gen.AdminMcpServerHealth) {
 			h.ResourceScopes.PinnedScopes = make([]string, maxHealthPinnedScopes+1)
+			for i := range h.ResourceScopes.PinnedScopes {
+				h.ResourceScopes.PinnedScopes[i] = "scope"
+			}
 		},
 	}
 	for name, alter := range cases {

@@ -742,6 +742,11 @@ describe("McpServerHealth", () => {
     });
 
     it("draws no login scopes for a server without a remote backend", async () => {
+      respond = (windowDays) => ({
+        server: { ...SERVER, source: "toolset_only", visibility: "public" },
+        correlation: { url_slug: "docs" },
+        tool_calls: enabled(windowDays),
+      });
       await open();
       await screen.findByRole("heading", { name: "crm" });
 

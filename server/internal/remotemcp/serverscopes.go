@@ -287,7 +287,7 @@ func loadPinnableServer(ctx context.Context, db *pgxpool.Pool, logger *slog.Logg
 	}
 	resourceURL, err := remotesessionsrepo.New(db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: mcpServerID, ProjectID: projectID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return pinnableServer{}, oops.E(oops.CodeNotFound, ErrNotRemoteBacked, "%s", ErrNotRemoteBacked.Error()).LogInfo(ctx, logger)
+		return pinnableServer{}, oops.E(oops.CodeNotFound, ErrNotRemoteBacked, "%s", ErrNotRemoteBacked.Error()).LogError(ctx, logger)
 	}
 	if err != nil {
 		return pinnableServer{}, oops.E(oops.CodeUnexpected, err, "get remote url for mcp server").LogError(ctx, logger)
