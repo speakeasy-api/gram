@@ -52,13 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
-	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
-	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
 	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/researchagent"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -349,17 +343,7 @@ func NewActivities(
 	// (test workers) get a nil activity and no schedule.
 	var mcpApprovalRecheck *activities.McpApprovalRecheck
 	if db != nil && guardianPolicy != nil && mcpCatalog != nil && features != nil && auditLogger != nil {
-		recheckProber := remoteprobe.New(logger, guardianPolicy)
-		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewAssembler(
-			packagemeta.NewClient(guardianPolicy.PooledClient()),
-			repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(githubEvidenceToken)),
-			mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
-			domainmeta.NewClient(guardianPolicy.PooledClient()),
-			telemetryRepo,
-			recheckProber,
-			recheckProber,
-			mcpapprovalcatalog.New(logger, db, mcpCatalog),
-		), features, auditLogger)
+		mcpApprovalRecheck = activities.NewMcpApprovalRecheck(logger, db, mcpapprovalevidence.NewProductionAssembler(logger, db, guardianPolicy, telemetryRepo, mcpCatalog, githubEvidenceToken), features, auditLogger)
 	}
 
 	var skillSuggestionSignaler efficacy.SuggestionSignaler

@@ -748,12 +748,19 @@ func (s *Service) InspectCandidate(ctx context.Context, target Target) (Candidat
 	// Both are supplementary evidence: losing either must not block the review
 	// that the health evidence already supports.
 	candidate.AccountUsage = s.accountUsage(ctx, source)
-	if endpoint, ok := reviewableEndpoint(source); ok {
-		candidate.ReviewAllowed = s.reviewer != nil
-		if s.reviewer != nil {
-			if review, err := s.reviewer.Find(ctx, endpoint); err == nil {
-				candidate.Review = review
-			}
+	endpoint, ok := reviewableEndpoint(source)
+	switch {
+	case !ok:
+		candidate.ReviewAvailability = ReviewEndpointNotAllowed
+	case s.reviewer == nil:
+		candidate.ReviewAvailability = ReviewDisabled
+	default:
+		candidate.ReviewAvailability = ReviewDisabled
+		if s.reviewer.Available(ctx) {
+			candidate.ReviewAvailability = ReviewAvailable
+		}
+		if review, err := s.reviewer.Find(ctx, endpoint); err == nil {
+			candidate.Review = review
 		}
 	}
 	return candidate, nil

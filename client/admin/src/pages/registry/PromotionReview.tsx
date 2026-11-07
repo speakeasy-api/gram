@@ -87,12 +87,13 @@ export function PromotionAccountUsage({
 /** The server's ordinary MCP review, held in Speakeasy's own organization. */
 export function PromotionReview({
   target,
-  allowed,
+  availability,
 }: {
   target: Target;
-  allowed: boolean;
-}): JSX.Element {
-  if (!allowed) {
+  availability: string | undefined;
+}): JSX.Element | null {
+  if (!availability) return null;
+  if (availability === "endpoint_not_allowed") {
     return (
       <ReviewSection>
         <p className="text-muted-foreground">
@@ -102,10 +103,21 @@ export function PromotionReview({
       </ReviewSection>
     );
   }
-  return <AllowedPromotionReview target={target} />;
+  return (
+    <AllowedPromotionReview
+      target={target}
+      canStart={availability === "available"}
+    />
+  );
 }
 
-function AllowedPromotionReview({ target }: { target: Target }): JSX.Element {
+function AllowedPromotionReview({
+  target,
+  canStart,
+}: {
+  target: Target;
+  canStart: boolean;
+}): JSX.Element {
   const queryClient = useQueryClient();
   const options = registryPromotionReviewQuery(target);
   const query = useQuery({
@@ -154,13 +166,19 @@ function AllowedPromotionReview({ target }: { target: Target }): JSX.Element {
         </p>
       )}
       {research?.report ? <ResearchFindings report={research.report} /> : null}
+      {!canStart && (
+        <p role="status">
+          MCP reviews are turned off for speakeasy-team, so a new review
+          can&apos;t start.
+        </p>
+      )}
       {failed && !running && (
         <p role="alert">The review could not be started. Try again.</p>
       )}
       <Button
         type="button"
         variant="outline"
-        disabled={running || mutation.isPending || query.isPending}
+        disabled={!canStart || running || mutation.isPending || query.isPending}
         onClick={() => void start()}
       >
         {mutation.isPending

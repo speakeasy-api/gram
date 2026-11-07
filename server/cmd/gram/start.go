@@ -97,6 +97,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
+	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -1868,7 +1869,7 @@ func newStartCommand() *cli.Command {
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, auditLogger,
-				newMCPApprovalAssembler(logger, db, guardianPolicy, telemetryrepo.New(chDB), mcpCatalog, c.String("github-evidence-token")),
+				mcpapprovalevidence.NewProductionAssembler(logger, db, guardianPolicy, telemetryrepo.New(chDB), mcpCatalog, c.String("github-evidence-token")),
 				mcpApprovalResearchStarter(temporalEnv),
 			)
 			mcpapproval.Attach(mux, mcpApprovalService)

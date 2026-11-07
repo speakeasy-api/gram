@@ -16,9 +16,9 @@ import (
 // LogMcpServerPromoteCatalogueEvent identifies the source and staff actor without
 // copying public metadata or private connection configuration into tenant feeds.
 type LogMcpServerPromoteCatalogueEvent struct {
-	// OrganizationID scopes the source tenant.
+	// OrganizationID is the Speakeasy-owned organization that holds promotion audit entries, never the source tenant.
 	OrganizationID string
-	// ProjectID scopes the source project.
+	// ProjectID is the project inside that organization.
 	ProjectID uuid.UUID
 	// Actor is the verified staff principal.
 	Actor urn.Principal

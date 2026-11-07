@@ -56,6 +56,9 @@ type MCPServerSeriesPoint struct {
 // maxMCPServerUsageTools bounds the tools one usage read returns.
 const maxMCPServerUsageTools = 25
 
+// maxMCPServerUsageClients bounds the client names one usage read returns.
+const maxMCPServerUsageClients = 25
+
 // maxMCPServerUsageUsers bounds the distinct callers one usage read counts.
 const maxMCPServerUsageUsers = 1000
 
@@ -222,6 +225,7 @@ func (h *MCPServerHealth) Usage(ctx context.Context, target MCPServerTelemetryTa
 		}
 	}
 	slices.Sort(usage.Clients)
+	usage.Clients = usage.Clients[:min(len(usage.Clients), maxMCPServerUsageClients)]
 	return usage, nil
 }
 

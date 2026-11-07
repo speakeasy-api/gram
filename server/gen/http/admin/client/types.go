@@ -2304,11 +2304,11 @@ type GetRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
-	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible           *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2368,11 +2368,11 @@ type PromoteRegistryCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
-	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible           *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2418,11 +2418,11 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
-	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible           *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2468,11 +2468,11 @@ type RetryRegistryPromotionDocsResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
-	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible           *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -24005,11 +24005,11 @@ type AdminRegistryPromotionCandidateResponseBody struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
 	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
 	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
-	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string `form:"review_availability,omitempty" json:"review_availability,omitempty" xml:"review_availability,omitempty"`
+	SourceRevision     *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible           *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -36843,7 +36843,7 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
-		ReviewAllowed:          *body.ReviewAllowed,
+		ReviewAvailability:     body.ReviewAvailability,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37381,7 +37381,7 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
-		ReviewAllowed:          *body.ReviewAllowed,
+		ReviewAvailability:     body.ReviewAvailability,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37595,7 +37595,7 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
-		ReviewAllowed:          *body.ReviewAllowed,
+		ReviewAvailability:     body.ReviewAvailability,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37809,7 +37809,7 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
-		ReviewAllowed:          *body.ReviewAllowed,
+		ReviewAvailability:     body.ReviewAvailability,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -45991,9 +45991,6 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
-	if body.ReviewAllowed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
-	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46049,6 +46046,11 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	if body.Review != nil {
 		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ReviewAvailability != nil {
+		if !(*body.ReviewAvailability == "available" || *body.ReviewAvailability == "endpoint_not_allowed" || *body.ReviewAvailability == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.review_availability", *body.ReviewAvailability, []any{"available", "endpoint_not_allowed", "disabled"}))
 		}
 	}
 	if body.CheckedAt != nil {
@@ -46124,9 +46126,6 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
-	if body.ReviewAllowed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
-	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46182,6 +46181,11 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.Review != nil {
 		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ReviewAvailability != nil {
+		if !(*body.ReviewAvailability == "available" || *body.ReviewAvailability == "endpoint_not_allowed" || *body.ReviewAvailability == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.review_availability", *body.ReviewAvailability, []any{"available", "endpoint_not_allowed", "disabled"}))
 		}
 	}
 	if body.CheckedAt != nil {
@@ -46235,9 +46239,6 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
-	if body.ReviewAllowed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
-	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46293,6 +46294,11 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 	if body.Review != nil {
 		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ReviewAvailability != nil {
+		if !(*body.ReviewAvailability == "available" || *body.ReviewAvailability == "endpoint_not_allowed" || *body.ReviewAvailability == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.review_availability", *body.ReviewAvailability, []any{"available", "endpoint_not_allowed", "disabled"}))
 		}
 	}
 	if body.CheckedAt != nil {
@@ -46346,9 +46352,6 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
-	if body.ReviewAllowed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
-	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46404,6 +46407,11 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	if body.Review != nil {
 		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ReviewAvailability != nil {
+		if !(*body.ReviewAvailability == "available" || *body.ReviewAvailability == "endpoint_not_allowed" || *body.ReviewAvailability == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.review_availability", *body.ReviewAvailability, []any{"available", "endpoint_not_allowed", "disabled"}))
 		}
 	}
 	if body.CheckedAt != nil {
@@ -74887,9 +74895,6 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
-	if body.ReviewAllowed == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
-	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -74945,6 +74950,11 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	if body.Review != nil {
 		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.ReviewAvailability != nil {
+		if !(*body.ReviewAvailability == "available" || *body.ReviewAvailability == "endpoint_not_allowed" || *body.ReviewAvailability == "disabled") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.review_availability", *body.ReviewAvailability, []any{"available", "endpoint_not_allowed", "disabled"}))
 		}
 	}
 	if body.CheckedAt != nil {

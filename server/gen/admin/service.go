@@ -1447,11 +1447,11 @@ type AdminRegistryPromotionCandidate struct {
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
 	AccountUsage      *AdminRegistryPromotionAccountUsage
 	Review            *AdminRegistryPromotionReview
-	// Whether this endpoint can be reviewed. URLs that may carry tenant data
-	// cannot.
-	ReviewAllowed  bool
-	SourceRevision string
-	Eligible       bool
+	// Whether a review can start. Set when one candidate is inspected. URLs that
+	// may carry tenant data cannot be reviewed.
+	ReviewAvailability *string
+	SourceRevision     string
+	Eligible           bool
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool
 	Reason                 string

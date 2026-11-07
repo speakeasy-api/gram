@@ -25,10 +25,10 @@ const target = {
   mcpServerId: "server-synthetic",
 };
 
-function renderReview(allowed = true): void {
+function renderReview(availability = "available"): void {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <PromotionReview target={target} allowed={allowed} />
+      <PromotionReview target={target} availability={availability} />
     </QueryClientProvider>,
   );
 }
@@ -49,10 +49,27 @@ beforeEach(() => {
 });
 
 test("explains why a customer-shaped endpoint cannot be reviewed", () => {
-  renderReview(false);
+  renderReview("endpoint_not_allowed");
   expect(screen.getByText(/may identify a customer/)).toBeTruthy();
   expect(screen.queryByRole("button")).toBeNull();
   expect(mocks.review).not.toHaveBeenCalled();
+});
+
+test("explains when reviews are turned off but keeps existing findings", async () => {
+  mocks.review.mockResolvedValue({
+    review: {
+      requestId: "review",
+      research: { status: "completed", report: { summary: "Prior findings." } },
+    },
+  });
+  renderReview("disabled");
+  expect(await screen.findByText("Prior findings.")).toBeTruthy();
+  expect(screen.getByRole("status").textContent).toContain("turned off");
+  expect(
+    screen
+      .getByRole("button", { name: "Run review again" })
+      .hasAttribute("disabled"),
+  ).toBe(true);
 });
 
 test("starts a review and shows the run", async () => {

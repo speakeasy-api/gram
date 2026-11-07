@@ -124,9 +124,8 @@ type Candidate struct {
 	AccountUsage *AccountUsage `json:"account_usage,omitempty"`
 	// Review is the MCP review for this server's endpoint, when one exists.
 	Review *mcpapproval.StaffReview `json:"review,omitempty"`
-	// ReviewAllowed reports whether this endpoint can be reviewed. A URL that may
-	// carry tenant data is never sent to research.
-	ReviewAllowed bool `json:"review_allowed"`
+	// ReviewAvailability says whether a review can start, set only by InspectCandidate.
+	ReviewAvailability string `json:"review_availability,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -188,9 +187,20 @@ type HealthReader interface {
 	Usage(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerUsage, error)
 }
 
+// Review availability states. A URL that may carry tenant data is never sent to research.
+const (
+	// ReviewAvailable means a review can start.
+	ReviewAvailable = "available"
+	// ReviewEndpointNotAllowed means the endpoint's URL may identify a customer.
+	ReviewEndpointNotAllowed = "endpoint_not_allowed"
+	// ReviewDisabled means reviews are unconfigured or off in the home organization.
+	ReviewDisabled = "disabled"
+)
+
 // Reviewer runs ordinary MCP reviews in Speakeasy's own organization, so
 // promotion has no research or evidence system of its own.
 type Reviewer interface {
+	Available(ctx context.Context) bool
 	Find(ctx context.Context, serverURL string) (*mcpapproval.StaffReview, error)
 	Start(ctx context.Context, serverURL, actor string, actorEmail *string) (*mcpapproval.StaffReview, error)
 }
@@ -217,7 +227,7 @@ type ToolUsage struct {
 type AccountUsage struct {
 	// WindowDays is the observation window.
 	WindowDays int `json:"window_days"`
-	// DistinctUsers counts callers in the window.
+	// DistinctUsers counts callers in the window, capped at 1000.
 	DistinctUsers int64 `json:"distinct_users"`
 	// Clients names the client applications that called the server.
 	Clients []string `json:"clients"`

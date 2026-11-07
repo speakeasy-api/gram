@@ -294,7 +294,7 @@ export function RegistryPromotionSheet({
               <PromotionAccountUsage usage={candidate.accountUsage} />
               <PromotionReview
                 target={target}
-                allowed={candidate.reviewAllowed}
+                availability={candidate.reviewAvailability}
               />
             </>
           )}
