@@ -107,8 +107,8 @@ type Action string
 // organization's members or by the Speakeasy team. This package records them
 // in audit_logs, and the audit log page shows them by default. Security entries
 // record machine access and other security-relevant activity that is not a
-// configuration decision, such as a runtime admitting its own workload identity
-// on every start. The securityevent package records them in
+// configuration decision. A runtime's own start and teardown are neither and
+// are not recorded. The securityevent package records them in
 // security_audit_logs. Both are delivered as webhooks, carrying their category,
 // and both are visible to staff.
 type Category string

@@ -5,10 +5,13 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 )
 
 // agentAdmissionRejection tells a refused agent from an admission check that could not run.
@@ -28,6 +31,21 @@ func agentAdmissionRejection(err error) string {
 		}
 	}
 	return "agent_admission_unavailable"
+}
+
+// signInRevokedByAdmin: an admin or the directory revoked the sign-in behind a refresh.
+const signInRevokedByAdmin = "sign_in_revoked_by_admin"
+
+// signInRevokedReason names a refused sign-in by who revoked it; a bare fence does not say who.
+func signInRevokedReason(revokeReason pgtype.Text) string {
+	switch signins.RevokeReason(revokeReason.String) {
+	case signins.RevokeReasonAdmin, signins.RevokeReasonDeprovisioned:
+		return signInRevokedByAdmin
+	case signins.RevokeReasonSignOut, signins.RevokeReasonSignOutEverywhere:
+		return "sign_in_revoked"
+	default:
+		return "sign_in_revoked"
+	}
 }
 
 // upstreamRefreshCheck is what refresh learned about a session's upstream; values name the row's reason.
@@ -93,14 +111,22 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
 	case "refresh_token_resource_mismatch", "resource_mismatch":
 		return mcpconnectionattempts.CodeResourceMismatch, true
-	case "refresh_token_unknown_or_already_used", "refresh_token_client_mismatch":
+	case "refresh_token_unknown_or_already_used":
 		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
+	case "refresh_token_client_mismatch":
+		return mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp, true
 	case "refresh_token_expired":
 		return mcpconnectionattempts.CodeRefreshTokenExpired, true
 	case "sign_in_revoked":
 		return mcpconnectionattempts.CodeSignInRevoked, true
-	case "agent_credential_invalid", "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
+	case signInRevokedByAdmin:
+		return mcpconnectionattempts.CodeSignInRevokedByAdmin, true
+	case "refresh_token_revoked", "refresh_token_replay_rejected", "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
+	case "agent_credential_invalid":
+		return mcpconnectionattempts.CodeConnectionChanged, true
+	case "tool_selection_malformed", "refresh_token_replay_session_mismatch":
+		return mcpconnectionattempts.CodeStoredSessionInvalid, true
 	case "agent_not_admitted":
 		return mcpconnectionattempts.CodeSubjectNotAdmitted, true
 	case "agent_admission_misconfigured":

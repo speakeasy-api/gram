@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // upstreamCancelTimeout bounds the best-effort notifications/cancelled sent
@@ -27,33 +27,6 @@ import (
 // notification this quickly would not act on it in time anyway.
 const upstreamCancelTimeout = 2 * time.Second
 
-// errShutdownInterrupt is the cause given to the upstream call of a request
-// the drain interrupted because the remote MCP server had not responded.
-var errShutdownInterrupt = errors.New("interrupted by server shutdown")
-
-// IsShutdownInterrupt reports an upstream call the shutdown drain interrupted.
-func IsShutdownInterrupt(err error) bool {
-	return errors.Is(err, errShutdownInterrupt)
-}
-
-// forwardInterrupted reports whether the drain interrupted the upstream call
-// running under forwardCtx.
-func forwardInterrupted(forwardCtx context.Context) bool {
-	return errors.Is(context.Cause(forwardCtx), errShutdownInterrupt)
-}
-
-// interruptedErrorData is the data of the JSON-RPC error that answers a
-// request interrupted by shutdown.
-type interruptedErrorData struct {
-	// Reason is always "server_shutdown".
-	Reason string `json:"reason"`
-
-	// Retryable reports whether the request can safely be sent again. Only
-	// tools/call can have side effects the remote MCP server may already have
-	// carried out, so it is never marked retryable.
-	Retryable bool `json:"retryable"`
-}
-
 // interruptedRejection is the JSON-RPC error that answers a request the drain
 // interrupted. -32603 (internal error) is the one code valid under every
 // supported MCP revision for a server-side failure: 2026-07-28 deprecates the
@@ -61,8 +34,10 @@ type interruptedErrorData struct {
 func interruptedRejection(method string) *RejectError {
 	return &RejectError{
 		Code:    RejectCodeInternalError,
-		Message: "Speakeasy is restarting and stopped waiting for the MCP server's response. The request may still complete on the MCP server.",
-		Data:    interruptedErrorData{Reason: "server_shutdown", Retryable: method != methodToolsCall},
+		Message: "The gateway is restarting and stopped waiting for the MCP server's response. The request may still complete on the MCP server.",
+		// Only tools/call can have side effects the remote MCP server may
+		// already have carried out, so it is never marked retryable.
+		Data: oops.NewServerShutdownErrorData(method != methodToolsCall),
 	}
 }
 
@@ -175,7 +150,7 @@ func (p *Proxy) sendUpstreamCancel(ctx context.Context, userReq *http.Request, i
 	body, err := json.Marshal(cancelledNotification{
 		JSONRPC: "2.0",
 		Method:  mcpversions.MethodNotificationsCancelled,
-		Params:  cancelledParams{RequestID: id.Raw(), Reason: "Speakeasy is restarting and stopped waiting for the response."},
+		Params:  cancelledParams{RequestID: id.Raw(), Reason: "The gateway is restarting and stopped waiting for the response."},
 	})
 	if err != nil {
 		return fmt.Errorf("marshal notifications/cancelled: %w", err)

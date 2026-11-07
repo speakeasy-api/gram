@@ -1528,6 +1528,38 @@ func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFuncti
 	return items, nil
 }
 
+const getInFlightDeploymentAfter = `-- name: GetInFlightDeploymentAfter :one
+SELECT d.id
+FROM deployments d
+INNER JOIN LATERAL (
+  SELECT ds.status
+  FROM deployment_statuses ds
+  WHERE ds.deployment_id = d.id
+  ORDER BY ds.seq DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE d.project_id = $1
+  AND d.seq > (SELECT a.seq FROM deployments a WHERE a.id = $2)
+  AND d.created_at > $3::timestamptz
+  AND latest.status IN ('created', 'pending')
+ORDER BY d.seq DESC
+LIMIT 1
+`
+
+type GetInFlightDeploymentAfterParams struct {
+	ProjectID         uuid.UUID
+	AfterDeploymentID uuid.UUID
+	CreatedAfter      pgtype.Timestamptz
+}
+
+// A newer deployment of the project that has not finished processing.
+func (q *Queries) GetInFlightDeploymentAfter(ctx context.Context, arg GetInFlightDeploymentAfterParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getInFlightDeploymentAfter, arg.ProjectID, arg.AfterDeploymentID, arg.CreatedAfter)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLatestDeploymentID = `-- name: GetLatestDeploymentID :one
 SELECT id
 FROM deployments

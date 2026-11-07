@@ -337,20 +337,22 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return fmt.Errorf("insert demo killswitch expired audit log: %w", err)
 	}
 
-	// Security activity: managed-agent-4's runtime admits and withdraws its
-	// workload identity on each start and teardown, with one admission by
-	// another agent in between, so the feed shows both a grouped run and a
-	// lone entry. Inserted oldest first, since the feed orders by insertion.
+	// Legacy security activity: Kit runtimes used to log admitting and
+	// withdrawing their own workload identity on each start and teardown, and
+	// no longer do. Kept days old so the security log shows historical entries
+	// rather than fresh ones from a producer that no longer writes them. One
+	// admission by another agent in between gives the feed both a grouped run
+	// and a lone entry. Inserted oldest first, since the feed orders by insertion.
 	securityRows := []struct {
 		key, agent, runtime, action string
 		age                         pgtype.Interval
 	}{
-		{"runtime-1-admit", "managed-agent-4", "runtime-1", "workload-admission:admit", activityHours(9)},
-		{"runtime-1-withdraw", "managed-agent-4", "runtime-1", "workload-admission:withdraw", activityHours(7)},
-		{"runtime-2-admit", "managed-agent-1", "runtime-2", "workload-admission:admit", activityHours(6)},
-		{"runtime-3-admit", "managed-agent-4", "runtime-3", "workload-admission:admit", activityHours(5)},
-		{"runtime-3-withdraw", "managed-agent-4", "runtime-3", "workload-admission:withdraw", activityHours(3)},
-		{"runtime-4-admit", "managed-agent-4", "runtime-4", "workload-admission:admit", activityHours(2)},
+		{"runtime-1-admit", "managed-agent-4", "runtime-1", "workload-admission:admit", activityDays(14)},
+		{"runtime-1-withdraw", "managed-agent-4", "runtime-1", "workload-admission:withdraw", activityDays(13)},
+		{"runtime-2-admit", "managed-agent-1", "runtime-2", "workload-admission:admit", activityDays(12)},
+		{"runtime-3-admit", "managed-agent-4", "runtime-3", "workload-admission:admit", activityDays(11)},
+		{"runtime-3-withdraw", "managed-agent-4", "runtime-3", "workload-admission:withdraw", activityDays(10)},
+		{"runtime-4-admit", "managed-agent-4", "runtime-4", "workload-admission:admit", activityDays(9)},
 	}
 	for _, r := range securityRows {
 		account := s.det("security-" + r.runtime + "-account")
