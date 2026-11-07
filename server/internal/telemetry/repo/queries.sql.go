@@ -5990,8 +5990,8 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		// its rows (OpenClaw reports it on the post-call result alone), so
 		// across a trace's unmerged summary rows the populated value must win
 		// over the unattributed sibling's empty string. The table column and
-		// its MV still aggregate tool_source with any(), so once the rows
-		// collapse into one the empty string can already have won.
+		// its MV aggregate tool_source with max() too, so the server also
+		// survives once the rows merge into one.
 		"max(tool_source) AS g_tool_source",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
