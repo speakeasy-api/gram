@@ -1,0 +1,164 @@
+{
+  "description": "Grant write expansion (nil versus empty selectors), malformed stored selectors and Assistant system-role defaults.",
+  "cases": [
+    {
+      "name": "nil_selectors_write_one_wildcard_row",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [{ "scope": "project:read", "selectors": null }],
+      "want_rows": [
+        {
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "empty_selectors_write_no_rows",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [{ "scope": "project:read", "selectors": [] }],
+      "want_rows": []
+    },
+    {
+      "name": "duplicate_selectors_write_once",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "allow",
+      "writes": [
+        {
+          "scope": "mcp:connect",
+          "selectors": [
+            { "resource_kind": "mcp", "resource_id": "srv_1" },
+            { "resource_kind": "mcp", "resource_id": "srv_1" }
+          ]
+        }
+      ],
+      "want_rows": [
+        {
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "invalid_selector_write_is_rejected",
+      "contract": "nil_empty_writes",
+      "caller": "human",
+      "operation": "role_grant_rows",
+      "checks": [],
+      "want": "error",
+      "writes": [
+        {
+          "scope": "project:read",
+          "selectors": [
+            { "resource_kind": "project", "resource_id": "proj_1", "tool": "x" }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "stored_selector_object_parses",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "allow",
+      "raw": { "resource_kind": "mcp", "resource_id": "srv_1" }
+    },
+    {
+      "name": "stored_selector_string_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": "not an object"
+    },
+    {
+      "name": "stored_selector_array_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": [1]
+    },
+    {
+      "name": "stored_selector_non_string_value_is_malformed",
+      "contract": "malformed_grants",
+      "caller": "human",
+      "operation": "selector_from_row",
+      "checks": [],
+      "want": "deny",
+      "raw": { "resource_kind": "mcp", "resource_id": 1 }
+    },
+    {
+      "name": "assistant_defaults_grant_system_roles_assistant_access",
+      "contract": "assistant_defaults",
+      "caller": "human",
+      "operation": "assistant_defaults",
+      "checks": [
+        {
+          "scope": "assistant:write",
+          "resource_id": "asst_1",
+          "dimensions": { "project_id": "proj_1" }
+        },
+        {
+          "scope": "assistant:read",
+          "resource_id": "asst_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "allow",
+      "defaults": {
+        "role:global:admin_fixture": ["assistant:read", "assistant:write"]
+      }
+    },
+    {
+      "name": "assistant_defaults_absent_without_system_role",
+      "contract": "assistant_defaults",
+      "caller": "human",
+      "operation": "assistant_defaults",
+      "checks": [
+        {
+          "scope": "assistant:read",
+          "resource_id": "asst_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "deny",
+      "defaults": {}
+    },
+    {
+      "name": "assistant_defaults_are_still_blocked",
+      "contract": "assistant_defaults",
+      "caller": "human",
+      "operation": "assistant_defaults",
+      "checks": [
+        {
+          "scope": "assistant:read",
+          "resource_id": "asst_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "assistant:blocked_read",
+          "selector": { "resource_kind": "assistant", "resource_id": "asst_1" }
+        }
+      ],
+      "defaults": { "role:global:member_fixture": ["assistant:read"] }
+    }
+  ]
+}
