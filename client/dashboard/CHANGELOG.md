@@ -1,5 +1,27 @@
 # dashboard
 
+## 0.146.0
+
+### Minor Changes
+
+- 9f7b0f5: On a server's Team Access tab, each Connect, View, and Manage line offers Clear, which removes that role's or person's own grant or block for the line on this server without writing anything in its place. A line no rule decides reads "Not set".
+- 9f7b0f5: On a server's Team Access tab, Clear and Remove also work on a role whose rule covers every server. After a confirmation, the role names this project's other servers individually instead, and other projects keep access to every server.
+
+### Patch Changes
+
+- 954c4a9: Staff can now view and set an MCP server's pinned login scopes from the admin dashboard's MCP server page, and `describe_mcp_server_health` reports them. Customer Identity settings no longer show pinned or requested scopes.
+- 813c8c3: `listChallenges` takes `exclude_scopes`, applied before the total and the page. An agent's authorization checks leave out its org:hooks_ingest checks, one per hook event, so the checks that say what the agent may reach are no longer buried. The org Roles & Permissions checks page is unchanged.
+- 7f085b9: An agent's Permissions tab now lists the MCP servers it may connect to first, in a section of their own with an Edit servers button that opens the agent's MCP server step. The Edit permissions dialog no longer shows or rewrites mcp:connect.
+- 916b5a0: Opening a session from an agent's Overview or Sessions tab now opens it in a drawer over the identity page, so the sidebar, the tab and the agent's session list stay in place. The open session is kept in the URL as `?chatId=`, so it can be linked and back and forward work.
+- 57647ea: Grants on a hosted MCP server now link to the server's /mcp page instead of the old /toolsets/ redirect, on an agent's Permissions tab and in its authorization checks.
+- b99f89f: Returning to the tab no longer clears what you typed into an MCP server's client ID, client secret or shared credential fields. The issuer URL correction form now appears only when OAuth discovery fails.
+- 13ffe5d: The plugin banner on an MCP server's overview now lists each plugin the server is published to and why it's there. The Default plugin takes every enabled server, and a plugin assigned to a role takes the servers that role can use, including servers added later when the role can use all servers. Role reasons are shown to organization admins.
+- 017d978: Assistant runtimes no longer record a security event each time they start or stop. Every sandbox admits and withdraws its own workload identity, so a busy assistant filled the security log with hundreds of entries that no one had to act on. Creating the runtime's shared issuer, and any person withdrawing it, are still recorded as configuration changes. An agent's Credentials page now shows its running sandboxes as one "Assistant runtime" row with a count, instead of a row per sandbox.
+- 3601c74: Every checkbox in the resource picker now has its own accessible name, "<name> in <project>", so a screen reader can tell rows apart, including a pinned selected row.
+- 9f7b0f5: On a server's Team Access tab, the Admin role row is locked and links to Role Manager, where Admin access is changed.
+- 2f2e8c2: Agent sessions of a day or more now show their duration in days and hours, such as "3d 20h", in session lists, the Costs session table, the session CSV and turn cost badges. Shorter durations keep their format.
+- f060d28: Tool logs now open every day in the list with its own date header, in local time, so rows from earlier days no longer sit under the first day's date. This applies to project Tool logs and to an identity's Tool logs.
+
 ## 0.145.0
 
 ### Minor Changes
