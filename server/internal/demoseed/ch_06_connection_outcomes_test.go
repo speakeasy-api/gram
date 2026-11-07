@@ -13,7 +13,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 	s := &seeder{spec: DefaultSpec(), now: time.Now()}
 	rows, err := s.connectionRequestRows()
 	require.NoError(t, err)
-	require.Len(t, rows, connectionAttemptDays*len(connectionRequestEndings))
+	require.Len(t, rows, ConnectionAttemptDays*len(connectionRequestEndings))
 	steps := make(map[string]bool)
 	outcomes := make(map[string]bool)
 	attempts := make(map[string]bool)

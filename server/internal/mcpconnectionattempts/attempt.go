@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,6 +65,9 @@ var (
 	AppOtherMetadataURL = App{"other_metadata_url"}
 )
 
+// appKinds are the app_key values that name a kind of app rather than an app.
+var appKinds = []App{AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground, AppOtherMetadataURL}
+
 // AppOf returns the App of a validated client_id: the host of a catalog app's client
 // metadata URL (or AppUnverified if that host matches a reserved app kind),
 // AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
@@ -79,9 +83,8 @@ func AppOf(clientID string) App {
 		return AppOtherMetadataURL
 	}
 	host := NormalizeProviderHost(clientID)
-	switch (App{host}) {
-	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground, AppOtherMetadataURL:
-		// A host spelled like a kind must not count as that kind.
+	// A host spelled like a kind must not count as that kind.
+	if host == "" || slices.Contains(appKinds, App{host}) {
 		return AppUnverified
 	}
 	return App{host}
