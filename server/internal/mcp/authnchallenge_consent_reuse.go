@@ -273,9 +273,8 @@ func renderConsentReuse(w http.ResponseWriter, endpoint *ResolvedMcpEndpoint, st
 }
 
 func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, rawAttempt string) (*consentToolInventory, error) {
-	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
-	if err != nil || !eligible {
-		return nil, err
+	if !consentToolPickerEligible(endpoint) {
+		return nil, nil
 	}
 	lockedDown, err := s.customDomainLockdownApplies(ctx, s.logger, endpoint.ProjectID)
 	if err != nil || lockedDown {
