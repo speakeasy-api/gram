@@ -97,13 +97,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/marketplace"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
-	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
-	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
-	mcpapprovalevidence "github.com/speakeasy-api/gram/server/internal/mcpapproval/evidence"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/packagemeta"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
-	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -1874,32 +1867,10 @@ func newStartCommand() *cli.Command {
 			triggers.Attach(mux, triggers.NewService(logger, tracerProvider, db, sessionManager, authzEngine, triggerApp, auditLogger))
 			tools.Attach(mux, tools.NewService(logger, tracerProvider, db, sessionManager, authzEngine, platformFeatureChecker, assistantPlatformExtras))
 			resources.Attach(mux, resources.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
-			// One probe serves both the authority and tool-declarations slots:
-			// they are two views of the same remote prober.
-			remoteProber := remoteprobe.New(logger, guardianPolicy)
 			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, auditLogger,
-				mcpapprovalevidence.NewAssembler(
-					packagemeta.NewClient(guardianPolicy.PooledClient()),
-					repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(c.String("github-evidence-token"))),
-					mcpapprovaladvisories.NewClient(guardianPolicy.PooledClient()),
-					domainmeta.NewClient(guardianPolicy.PooledClient()),
-					telemetryrepo.New(chDB),
-					remoteProber,
-					remoteProber,
-					mcpapprovalcatalog.New(logger, db, mcpCatalog),
-				),
-				func(ctx context.Context, run mcpapproval.ResearchRun) error {
-					_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
-						ReportID:  run.ReportID,
-						RequestID: run.RequestID,
-						ProjectID: run.ProjectID,
-						OrgID:     run.OrgID,
-					})
-					if err != nil {
-						return fmt.Errorf("execute research workflow: %w", err)
-					}
-					return nil
-				})
+				newMCPApprovalAssembler(logger, db, guardianPolicy, telemetryrepo.New(chDB), mcpCatalog, c.String("github-evidence-token")),
+				mcpApprovalResearchStarter(temporalEnv),
+			)
 			mcpapproval.Attach(mux, mcpApprovalService)
 			instances.Attach(mux, instances.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, env, encryptionClient, cache.NewRedisCacheAdapter(redisClient), guardianPolicy, functionsOrchestrator, platformSvc, billingTracker, telemLogger, productFeatures, serverURL, authzEngine, mcpPolicyEvaluator))
 			mcpmetadata.Attach(mux, mcpMetadataService)

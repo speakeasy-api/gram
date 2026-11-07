@@ -1,10 +1,12 @@
 package admin
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/stretchr/testify/require"
@@ -60,4 +62,25 @@ func TestPromotionLengthErrorsGiveSafeFieldGuidance(t *testing.T) {
 			require.NotContains(t, err.Error(), "private rejected value")
 		})
 	}
+}
+
+func TestPromotionReviewViewOmitsAbsentReview(t *testing.T) {
+	t.Parallel()
+	require.Nil(t, promotionReviewView(nil))
+}
+
+func TestPromotionReviewViewCarriesResearch(t *testing.T) {
+	t.Parallel()
+	view := promotionReviewView(&mcpapproval.StaffReview{RequestID: "review", Evidence: json.RawMessage(`{"gaps":[]}`), EvidenceCollectedAt: "2026-11-06T00:00:00Z", Research: &mcpapproval.StaffResearch{Status: "failed", Report: nil, Error: "synthetic", StartedAt: "", CompletedAt: ""}})
+	require.Equal(t, "review", view.RequestID)
+	require.NotNil(t, view.Evidence)
+	require.Equal(t, "failed", view.Research.Status)
+	require.Nil(t, view.Research.Report)
+	require.Equal(t, "synthetic", *view.Research.Error)
+}
+
+func TestPromotionErrorExplainsRefusedReviews(t *testing.T) {
+	t.Parallel()
+	require.ErrorContains(t, promotionError(catalogpromotion.ErrReviewNotAllowed), "may identify a customer")
+	require.ErrorContains(t, promotionError(catalogpromotion.ErrReviewDisabled), "not enabled")
 }

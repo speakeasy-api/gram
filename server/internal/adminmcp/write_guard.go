@@ -35,6 +35,8 @@ const (
 	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
 	OperationRedeployProject                      WriteOperation = "redeploy_project"
+	// OperationStartRegistryPromotionReview starts an MCP review in Speakeasy's own organization.
+	OperationStartRegistryPromotionReview WriteOperation = "start_registry_promotion_review"
 )
 
 // AllWriteOperations lists every write operation, in a stable order.
@@ -54,6 +56,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
 	OperationRedeployProject,
+	OperationStartRegistryPromotionReview,
 }
 
 func (op WriteOperation) known() bool {

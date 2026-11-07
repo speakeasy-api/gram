@@ -280,6 +280,14 @@ type Client struct {
 	// to the getRegistryPromotionCandidate endpoint.
 	GetRegistryPromotionCandidateDoer goahttp.Doer
 
+	// GetRegistryPromotionReview Doer is the HTTP client used to make requests to
+	// the getRegistryPromotionReview endpoint.
+	GetRegistryPromotionReviewDoer goahttp.Doer
+
+	// StartRegistryPromotionReview Doer is the HTTP client used to make requests
+	// to the startRegistryPromotionReview endpoint.
+	StartRegistryPromotionReviewDoer goahttp.Doer
+
 	// PromoteRegistryCandidate Doer is the HTTP client used to make requests to
 	// the promoteRegistryCandidate endpoint.
 	PromoteRegistryCandidateDoer goahttp.Doer
@@ -526,6 +534,8 @@ func NewClient(
 		GetHookClientsDoer:                          doer,
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
+		GetRegistryPromotionReviewDoer:              doer,
+		StartRegistryPromotionReviewDoer:            doer,
 		PromoteRegistryCandidateDoer:                doer,
 		CurateRegistryPromotionCandidateDoer:        doer,
 		RetryRegistryPromotionDocsDoer:              doer,
@@ -2158,6 +2168,54 @@ func (c *Client) GetRegistryPromotionCandidate() goa.Endpoint {
 		resp, err := c.GetRegistryPromotionCandidateDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getRegistryPromotionCandidate", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetRegistryPromotionReview returns an endpoint that makes HTTP requests to
+// the admin service getRegistryPromotionReview server.
+func (c *Client) GetRegistryPromotionReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetRegistryPromotionReviewRequest(c.encoder)
+		decodeResponse = DecodeGetRegistryPromotionReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetRegistryPromotionReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetRegistryPromotionReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getRegistryPromotionReview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// StartRegistryPromotionReview returns an endpoint that makes HTTP requests to
+// the admin service startRegistryPromotionReview server.
+func (c *Client) StartRegistryPromotionReview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeStartRegistryPromotionReviewRequest(c.encoder)
+		decodeResponse = DecodeStartRegistryPromotionReviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildStartRegistryPromotionReviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.StartRegistryPromotionReviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "startRegistryPromotionReview", err)
 		}
 		return decodeResponse(resp)
 	}

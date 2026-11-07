@@ -1,6 +1,13 @@
 import { startLoginRedirect, redirectOnUnauthorized } from "@/lib/adminAuth";
 export { isRedirectingToLogin, redirectOnUnauthorized } from "@/lib/adminAuth";
 
+import { buildAdminGetRegistryPromotionReviewMutation } from "@gram/admin-client/react-query/adminGetRegistryPromotionReview";
+import {
+  buildAdminStartRegistryPromotionReviewMutation,
+  type AdminStartRegistryPromotionReviewMutationData,
+  type AdminStartRegistryPromotionReviewMutationError,
+  type AdminStartRegistryPromotionReviewMutationVariables,
+} from "@gram/admin-client/react-query/adminStartRegistryPromotionReview";
 import {
   buildAdminCurateRegistryPromotionCandidateMutation,
   type AdminCurateRegistryPromotionCandidateMutationData,
@@ -1247,6 +1254,46 @@ export function registryPromotionCandidateQuery(
   params: GetRegistryPromotionCandidateRequestBody,
 ): ReturnType<typeof createRegistryPromotionCandidateQuery> {
   return createRegistryPromotionCandidateQuery(params);
+}
+
+function createRegistryPromotionReviewQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+) {
+  const generated = buildAdminGetRegistryPromotionReviewMutation(
+    redirectingClient,
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    queryKey: ["registryPromotionReview", params],
+    queryFn: ({ signal }) =>
+      redirecting(
+        generated.mutationFn({
+          request: params,
+          options: { fetchOptions: { signal } },
+        }),
+      ),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function registryPromotionReviewQuery(
+  params: GetRegistryPromotionCandidateRequestBody,
+): ReturnType<typeof createRegistryPromotionReviewQuery> {
+  return createRegistryPromotionReviewQuery(params);
+}
+
+export function useStartRegistryPromotionReviewMutation(): UseMutationResult<
+  AdminStartRegistryPromotionReviewMutationData,
+  AdminStartRegistryPromotionReviewMutationError,
+  AdminStartRegistryPromotionReviewMutationVariables
+> {
+  return useMutation({
+    ...buildAdminStartRegistryPromotionReviewMutation(redirectingClient, {
+      retries: { strategy: "none" },
+    }),
+    retry: false,
+  });
 }
 
 export function useRetryRegistryPromotionDocsMutation(): UseMutationResult<

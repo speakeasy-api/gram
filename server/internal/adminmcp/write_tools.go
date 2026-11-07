@@ -300,6 +300,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
+		tools.writers[OperationStartRegistryPromotionReview] = &catalogReviewWriter{runner: runner, writes: writes, starter: runtime.catalogPromotions}
 	}
 	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)

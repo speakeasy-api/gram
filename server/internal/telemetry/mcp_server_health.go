@@ -1,9 +1,11 @@
 package telemetry
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
@@ -49,6 +51,29 @@ type MCPServerSeriesPoint struct {
 	BucketStart time.Time
 	Total       int64
 	Failed      int64
+}
+
+// maxMCPServerUsageTools bounds the tools one usage read returns.
+const maxMCPServerUsageTools = 25
+
+// maxMCPServerUsageUsers bounds the distinct callers one usage read counts.
+const maxMCPServerUsageUsers = 1000
+
+// MCPServerToolUsage is one tool's aggregate calls on a server.
+type MCPServerToolUsage struct {
+	Name      string
+	Calls     int64
+	Successes int64
+}
+
+// MCPServerUsage aggregates how a server was used, with no caller identity.
+type MCPServerUsage struct {
+	// DistinctUsers counts callers, capped at maxMCPServerUsageUsers.
+	DistinctUsers int64
+	// Clients lists the client names that called the server.
+	Clients []string
+	// Tools lists the most-called tools.
+	Tools []MCPServerToolUsage
 }
 
 // MCPServerHealth reads one server's tool call telemetry for the admin health
@@ -145,6 +170,59 @@ func (h *MCPServerHealth) Outcomes(ctx context.Context, target MCPServerTelemetr
 	}
 
 	return out, nil
+}
+
+// Usage aggregates tools, clients, and distinct callers in [from, to] across
+// both lanes. It returns counts and names only, never who the callers are.
+func (h *MCPServerHealth) Usage(ctx context.Context, target MCPServerTelemetryTarget, from, to time.Time) (*MCPServerUsage, error) {
+	if target.ProjectID == "" {
+		return nil, fmt.Errorf("mcp server usage: project id is required")
+	}
+	params := repo.GetMCPOutcomeBreakdownParams{
+		GramProjectIDs:       []string{target.ProjectID},
+		ToolsetSlugs:         nonEmpty(target.ToolsetSlug),
+		MCPServerURLSuffixes: nil,
+		MCPServerIDs:         nonEmpty(target.MCPServerID),
+		ToolSources:          nil,
+		CanonicalIdentityOrg: "",
+		TimeStart:            from.UnixNano(),
+		TimeEnd:              to.UnixNano(),
+		Limit:                0,
+	}
+	if target.URLSlug != "" {
+		params.MCPServerURLSuffixes = []string{"/mcp/" + target.URLSlug}
+	}
+	if len(params.ToolsetSlugs) == 0 && len(params.MCPServerIDs) == 0 && len(params.MCPServerURLSuffixes) == 0 {
+		return nil, fmt.Errorf("mcp server usage: target names no server identity")
+	}
+
+	toolRows, err := h.chRepo.GetMCPToolOutcomeBreakdown(ctx, repo.GetMCPToolOutcomeBreakdownParams{GetMCPOutcomeBreakdownParams: params})
+	if err != nil {
+		return nil, fmt.Errorf("read mcp server tools: %w", err)
+	}
+	usage := &MCPServerUsage{DistinctUsers: 0, Clients: []string{}, Tools: aggregateToolUsage(toolRows)}
+
+	params.Limit = maxMCPServerUsageUsers
+	users, err := h.chRepo.ListMCPUsageUsers(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("read mcp server users: %w", err)
+	}
+	usage.DistinctUsers = int64(len(users))
+
+	params.Limit = 0
+	breakdown, err := h.chRepo.GetMCPOutcomeBreakdown(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("read mcp server clients: %w", err)
+	}
+	seen := make(map[string]bool, len(breakdown))
+	for _, row := range breakdown {
+		if row.Client != "" && row.Client != repo.MCPClientUnattributed && !seen[row.Client] {
+			seen[row.Client] = true
+			usage.Clients = append(usage.Clients, row.Client)
+		}
+	}
+	slices.Sort(usage.Clients)
+	return usage, nil
 }
 
 // Series buckets the server's tool calls in [from, to] from the direct lane,
@@ -272,4 +350,41 @@ func toCount(value uint64) (int64, error) {
 		return 0, fmt.Errorf("mcp server health: count %d overflows", value)
 	}
 	return int64(value), nil
+}
+
+// aggregateToolUsage folds per-outcome rows into the most-called tools.
+func aggregateToolUsage(rows []repo.MCPToolOutcomeBreakdownRow) []MCPServerToolUsage {
+	byName := make(map[string]*MCPServerToolUsage, len(rows))
+	for _, row := range rows {
+		if row.ToolName == "" {
+			continue
+		}
+		tool := byName[row.ToolName]
+		if tool == nil {
+			tool = &MCPServerToolUsage{Name: row.ToolName, Calls: 0, Successes: 0}
+			byName[row.ToolName] = tool
+		}
+		tool.Calls += clampInt64(row.CallCount)
+		if row.Outcome == repo.MCPOutcomeSuccess {
+			tool.Successes += clampInt64(row.CallCount)
+		}
+	}
+	tools := make([]MCPServerToolUsage, 0, len(byName))
+	for _, tool := range byName {
+		tools = append(tools, *tool)
+	}
+	slices.SortFunc(tools, func(a, b MCPServerToolUsage) int {
+		if a.Calls != b.Calls {
+			return cmp.Compare(b.Calls, a.Calls)
+		}
+		return cmp.Compare(a.Name, b.Name)
+	})
+	return tools[:min(len(tools), maxMCPServerUsageTools)]
+}
+
+func clampInt64(value uint64) int64 {
+	if value > math.MaxInt64 {
+		return math.MaxInt64
+	}
+	return int64(value)
 }

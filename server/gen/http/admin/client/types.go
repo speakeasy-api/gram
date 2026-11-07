@@ -443,6 +443,22 @@ type GetRegistryPromotionCandidateRequestBody struct {
 	McpServerID    string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
 }
 
+// GetRegistryPromotionReviewRequestBody is the type of the "admin" service
+// "getRegistryPromotionReview" endpoint HTTP request body.
+type GetRegistryPromotionReviewRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID    string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
+// StartRegistryPromotionReviewRequestBody is the type of the "admin" service
+// "startRegistryPromotionReview" endpoint HTTP request body.
+type StartRegistryPromotionReviewRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID      string `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID    string `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+}
+
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
@@ -2337,8 +2353,13 @@ type GetRegistryPromotionCandidateResponseBody struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
-	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
+	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
+	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2359,6 +2380,20 @@ type GetRegistryPromotionCandidateResponseBody struct {
 	PromotedAt             *string `form:"promoted_at,omitempty" json:"promoted_at,omitempty" xml:"promoted_at,omitempty"`
 	PublicTitle            *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
 	DeliveryError          *string `form:"delivery_error,omitempty" json:"delivery_error,omitempty" xml:"delivery_error,omitempty"`
+}
+
+// GetRegistryPromotionReviewResponseBody is the type of the "admin" service
+// "getRegistryPromotionReview" endpoint HTTP response body.
+type GetRegistryPromotionReviewResponseBody struct {
+	// Absent until a review has been started for this endpoint.
+	Review *AdminRegistryPromotionReviewResponseBody `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+}
+
+// StartRegistryPromotionReviewResponseBody is the type of the "admin" service
+// "startRegistryPromotionReview" endpoint HTTP response body.
+type StartRegistryPromotionReviewResponseBody struct {
+	// Absent until a review has been started for this endpoint.
+	Review *AdminRegistryPromotionReviewResponseBody `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
 }
 
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
@@ -2382,8 +2417,13 @@ type PromoteRegistryCandidateResponseBody struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
-	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
+	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
+	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2427,8 +2467,13 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
-	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
+	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
+	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -2472,8 +2517,13 @@ type RetryRegistryPromotionDocsResponseBody struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
-	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
+	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
+	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -15702,6 +15752,386 @@ type GetRegistryPromotionCandidateGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetRegistryPromotionReviewUnauthorizedResponseBody is the type of the
+// "admin" service "getRegistryPromotionReview" endpoint HTTP response body for
+// the "unauthorized" error.
+type GetRegistryPromotionReviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewForbiddenResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "forbidden" error.
+type GetRegistryPromotionReviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewBadRequestResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "bad_request" error.
+type GetRegistryPromotionReviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewNotFoundResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "not_found" error.
+type GetRegistryPromotionReviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewConflictResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "conflict" error.
+type GetRegistryPromotionReviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewUnsupportedMediaResponseBody is the type of the
+// "admin" service "getRegistryPromotionReview" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetRegistryPromotionReviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewInvalidResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "invalid" error.
+type GetRegistryPromotionReviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewInvariantViolationResponseBody is the type of the
+// "admin" service "getRegistryPromotionReview" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetRegistryPromotionReviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewUnexpectedResponseBody is the type of the "admin"
+// service "getRegistryPromotionReview" endpoint HTTP response body for the
+// "unexpected" error.
+type GetRegistryPromotionReviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetRegistryPromotionReviewGatewayErrorResponseBody is the type of the
+// "admin" service "getRegistryPromotionReview" endpoint HTTP response body for
+// the "gateway_error" error.
+type GetRegistryPromotionReviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewUnauthorizedResponseBody is the type of the
+// "admin" service "startRegistryPromotionReview" endpoint HTTP response body
+// for the "unauthorized" error.
+type StartRegistryPromotionReviewUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewForbiddenResponseBody is the type of the "admin"
+// service "startRegistryPromotionReview" endpoint HTTP response body for the
+// "forbidden" error.
+type StartRegistryPromotionReviewForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewBadRequestResponseBody is the type of the
+// "admin" service "startRegistryPromotionReview" endpoint HTTP response body
+// for the "bad_request" error.
+type StartRegistryPromotionReviewBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewNotFoundResponseBody is the type of the "admin"
+// service "startRegistryPromotionReview" endpoint HTTP response body for the
+// "not_found" error.
+type StartRegistryPromotionReviewNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewConflictResponseBody is the type of the "admin"
+// service "startRegistryPromotionReview" endpoint HTTP response body for the
+// "conflict" error.
+type StartRegistryPromotionReviewConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewUnsupportedMediaResponseBody is the type of the
+// "admin" service "startRegistryPromotionReview" endpoint HTTP response body
+// for the "unsupported_media" error.
+type StartRegistryPromotionReviewUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewInvalidResponseBody is the type of the "admin"
+// service "startRegistryPromotionReview" endpoint HTTP response body for the
+// "invalid" error.
+type StartRegistryPromotionReviewInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewInvariantViolationResponseBody is the type of
+// the "admin" service "startRegistryPromotionReview" endpoint HTTP response
+// body for the "invariant_violation" error.
+type StartRegistryPromotionReviewInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewUnexpectedResponseBody is the type of the
+// "admin" service "startRegistryPromotionReview" endpoint HTTP response body
+// for the "unexpected" error.
+type StartRegistryPromotionReviewUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// StartRegistryPromotionReviewGatewayErrorResponseBody is the type of the
+// "admin" service "startRegistryPromotionReview" endpoint HTTP response body
+// for the "gateway_error" error.
+type StartRegistryPromotionReviewGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // PromoteRegistryCandidateUnauthorizedResponseBody is the type of the "admin"
 // service "promoteRegistryCandidate" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -24252,8 +24682,13 @@ type AdminRegistryPromotionCandidateResponseBody struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string                                          `form:"endpoint_guide_slug,omitempty" json:"endpoint_guide_slug,omitempty" xml:"endpoint_guide_slug,omitempty"`
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
-	SourceRevision    *string                                          `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	Eligible          *bool                                            `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
+	AccountUsage      *AdminRegistryPromotionAccountUsageResponseBody  `form:"account_usage,omitempty" json:"account_usage,omitempty" xml:"account_usage,omitempty"`
+	Review            *AdminRegistryPromotionReviewResponseBody        `form:"review,omitempty" json:"review,omitempty" xml:"review,omitempty"`
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  *bool   `form:"review_allowed,omitempty" json:"review_allowed,omitempty" xml:"review_allowed,omitempty"`
+	SourceRevision *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	Eligible       *bool   `form:"eligible,omitempty" json:"eligible,omitempty" xml:"eligible,omitempty"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility *bool   `form:"can_override_eligibility,omitempty" json:"can_override_eligibility,omitempty" xml:"can_override_eligibility,omitempty"`
 	Reason                 *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -24302,6 +24737,45 @@ type AdminRegistryPromotionAuthDiscoveryResponseBody struct {
 	SupportsCimd *bool   `form:"supports_cimd,omitempty" json:"supports_cimd,omitempty" xml:"supports_cimd,omitempty"`
 	AuthSetup    *string `form:"auth_setup,omitempty" json:"auth_setup,omitempty" xml:"auth_setup,omitempty"`
 	Status       *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+}
+
+// AdminRegistryPromotionAccountUsageResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionAccountUsageResponseBody struct {
+	WindowDays       *int                                           `form:"window_days,omitempty" json:"window_days,omitempty" xml:"window_days,omitempty"`
+	DistinctUsers    *int64                                         `form:"distinct_users,omitempty" json:"distinct_users,omitempty" xml:"distinct_users,omitempty"`
+	Clients          []string                                       `form:"clients,omitempty" json:"clients,omitempty" xml:"clients,omitempty"`
+	Tools            []*AdminRegistryPromotionToolUsageResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	Transport        *string                                        `form:"transport,omitempty" json:"transport,omitempty" xml:"transport,omitempty"`
+	ResourceName     *string                                        `form:"resource_name,omitempty" json:"resource_name,omitempty" xml:"resource_name,omitempty"`
+	DocumentationURL *string                                        `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
+}
+
+// AdminRegistryPromotionToolUsageResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionToolUsageResponseBody struct {
+	Name      *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Calls     *int64  `form:"calls,omitempty" json:"calls,omitempty" xml:"calls,omitempty"`
+	Successes *int64  `form:"successes,omitempty" json:"successes,omitempty" xml:"successes,omitempty"`
+}
+
+// AdminRegistryPromotionReviewResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionReviewResponseBody struct {
+	RequestID           *string                                     `form:"request_id,omitempty" json:"request_id,omitempty" xml:"request_id,omitempty"`
+	Evidence            any                                         `form:"evidence,omitempty" json:"evidence,omitempty" xml:"evidence,omitempty"`
+	EvidenceCollectedAt *string                                     `form:"evidence_collected_at,omitempty" json:"evidence_collected_at,omitempty" xml:"evidence_collected_at,omitempty"`
+	Research            *AdminRegistryPromotionResearchResponseBody `form:"research,omitempty" json:"research,omitempty" xml:"research,omitempty"`
+}
+
+// AdminRegistryPromotionResearchResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionResearchResponseBody struct {
+	Status      *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	Report      any     `form:"report,omitempty" json:"report,omitempty" xml:"report,omitempty"`
+	Error       *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	StartedAt   *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	CompletedAt *string `form:"completed_at,omitempty" json:"completed_at,omitempty" xml:"completed_at,omitempty"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -25250,6 +25724,30 @@ func NewSetMcpServerScopePinRequestBody(p *admin.SetMcpServerScopePinPayload) *S
 // "admin" service.
 func NewGetRegistryPromotionCandidateRequestBody(p *admin.GetRegistryPromotionCandidatePayload) *GetRegistryPromotionCandidateRequestBody {
 	body := &GetRegistryPromotionCandidateRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	return body
+}
+
+// NewGetRegistryPromotionReviewRequestBody builds the HTTP request body from
+// the payload of the "getRegistryPromotionReview" endpoint of the "admin"
+// service.
+func NewGetRegistryPromotionReviewRequestBody(p *admin.GetRegistryPromotionReviewPayload) *GetRegistryPromotionReviewRequestBody {
+	body := &GetRegistryPromotionReviewRequestBody{
+		OrganizationID: p.OrganizationID,
+		ProjectID:      p.ProjectID,
+		McpServerID:    p.McpServerID,
+	}
+	return body
+}
+
+// NewStartRegistryPromotionReviewRequestBody builds the HTTP request body from
+// the payload of the "startRegistryPromotionReview" endpoint of the "admin"
+// service.
+func NewStartRegistryPromotionReviewRequestBody(p *admin.StartRegistryPromotionReviewPayload) *StartRegistryPromotionReviewRequestBody {
+	body := &StartRegistryPromotionReviewRequestBody{
 		OrganizationID: p.OrganizationID,
 		ProjectID:      p.ProjectID,
 		McpServerID:    p.McpServerID,
@@ -37242,6 +37740,7 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
+		ReviewAllowed:          *body.ReviewAllowed,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37279,6 +37778,12 @@ func NewGetRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *Get
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
+	}
+	if body.AccountUsage != nil {
+		v.AccountUsage = unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(body.AccountUsage)
+	}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
 	}
 
 	return v
@@ -37434,6 +37939,330 @@ func NewGetRegistryPromotionCandidateGatewayError(body *GetRegistryPromotionCand
 	return v
 }
 
+// NewGetRegistryPromotionReviewAdminRegistryPromotionReviewResultOK builds a
+// "admin" service "getRegistryPromotionReview" endpoint result from a HTTP
+// "OK" response.
+func NewGetRegistryPromotionReviewAdminRegistryPromotionReviewResultOK(body *GetRegistryPromotionReviewResponseBody) *admin.AdminRegistryPromotionReviewResult {
+	v := &admin.AdminRegistryPromotionReviewResult{}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewUnauthorized builds a admin service
+// getRegistryPromotionReview endpoint unauthorized error.
+func NewGetRegistryPromotionReviewUnauthorized(body *GetRegistryPromotionReviewUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewForbidden builds a admin service
+// getRegistryPromotionReview endpoint forbidden error.
+func NewGetRegistryPromotionReviewForbidden(body *GetRegistryPromotionReviewForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewBadRequest builds a admin service
+// getRegistryPromotionReview endpoint bad_request error.
+func NewGetRegistryPromotionReviewBadRequest(body *GetRegistryPromotionReviewBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewNotFound builds a admin service
+// getRegistryPromotionReview endpoint not_found error.
+func NewGetRegistryPromotionReviewNotFound(body *GetRegistryPromotionReviewNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewConflict builds a admin service
+// getRegistryPromotionReview endpoint conflict error.
+func NewGetRegistryPromotionReviewConflict(body *GetRegistryPromotionReviewConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewUnsupportedMedia builds a admin service
+// getRegistryPromotionReview endpoint unsupported_media error.
+func NewGetRegistryPromotionReviewUnsupportedMedia(body *GetRegistryPromotionReviewUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewInvalid builds a admin service
+// getRegistryPromotionReview endpoint invalid error.
+func NewGetRegistryPromotionReviewInvalid(body *GetRegistryPromotionReviewInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewInvariantViolation builds a admin service
+// getRegistryPromotionReview endpoint invariant_violation error.
+func NewGetRegistryPromotionReviewInvariantViolation(body *GetRegistryPromotionReviewInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewUnexpected builds a admin service
+// getRegistryPromotionReview endpoint unexpected error.
+func NewGetRegistryPromotionReviewUnexpected(body *GetRegistryPromotionReviewUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetRegistryPromotionReviewGatewayError builds a admin service
+// getRegistryPromotionReview endpoint gateway_error error.
+func NewGetRegistryPromotionReviewGatewayError(body *GetRegistryPromotionReviewGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewAdminRegistryPromotionReviewResultOK builds a
+// "admin" service "startRegistryPromotionReview" endpoint result from a HTTP
+// "OK" response.
+func NewStartRegistryPromotionReviewAdminRegistryPromotionReviewResultOK(body *StartRegistryPromotionReviewResponseBody) *admin.AdminRegistryPromotionReviewResult {
+	v := &admin.AdminRegistryPromotionReviewResult{}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewUnauthorized builds a admin service
+// startRegistryPromotionReview endpoint unauthorized error.
+func NewStartRegistryPromotionReviewUnauthorized(body *StartRegistryPromotionReviewUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewForbidden builds a admin service
+// startRegistryPromotionReview endpoint forbidden error.
+func NewStartRegistryPromotionReviewForbidden(body *StartRegistryPromotionReviewForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewBadRequest builds a admin service
+// startRegistryPromotionReview endpoint bad_request error.
+func NewStartRegistryPromotionReviewBadRequest(body *StartRegistryPromotionReviewBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewNotFound builds a admin service
+// startRegistryPromotionReview endpoint not_found error.
+func NewStartRegistryPromotionReviewNotFound(body *StartRegistryPromotionReviewNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewConflict builds a admin service
+// startRegistryPromotionReview endpoint conflict error.
+func NewStartRegistryPromotionReviewConflict(body *StartRegistryPromotionReviewConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewUnsupportedMedia builds a admin service
+// startRegistryPromotionReview endpoint unsupported_media error.
+func NewStartRegistryPromotionReviewUnsupportedMedia(body *StartRegistryPromotionReviewUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewInvalid builds a admin service
+// startRegistryPromotionReview endpoint invalid error.
+func NewStartRegistryPromotionReviewInvalid(body *StartRegistryPromotionReviewInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewInvariantViolation builds a admin service
+// startRegistryPromotionReview endpoint invariant_violation error.
+func NewStartRegistryPromotionReviewInvariantViolation(body *StartRegistryPromotionReviewInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewUnexpected builds a admin service
+// startRegistryPromotionReview endpoint unexpected error.
+func NewStartRegistryPromotionReviewUnexpected(body *StartRegistryPromotionReviewUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewStartRegistryPromotionReviewGatewayError builds a admin service
+// startRegistryPromotionReview endpoint gateway_error error.
+func NewStartRegistryPromotionReviewGatewayError(body *StartRegistryPromotionReviewGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK builds a
 // "admin" service "promoteRegistryCandidate" endpoint result from a HTTP "OK"
 // response.
@@ -37449,6 +38278,7 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
+		ReviewAllowed:          *body.ReviewAllowed,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37486,6 +38316,12 @@ func NewPromoteRegistryCandidateAdminRegistryPromotionCandidateOK(body *PromoteR
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
+	}
+	if body.AccountUsage != nil {
+		v.AccountUsage = unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(body.AccountUsage)
+	}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
 	}
 
 	return v
@@ -37656,6 +38492,7 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
+		ReviewAllowed:          *body.ReviewAllowed,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37693,6 +38530,12 @@ func NewCurateRegistryPromotionCandidateAdminRegistryPromotionCandidateOK(body *
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
+	}
+	if body.AccountUsage != nil {
+		v.AccountUsage = unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(body.AccountUsage)
+	}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
 	}
 
 	return v
@@ -37863,6 +38706,7 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 		CurationRevision:       *body.CurationRevision,
 		SetupGuidesVersion:     body.SetupGuidesVersion,
 		EndpointGuideSlug:      body.EndpointGuideSlug,
+		ReviewAllowed:          *body.ReviewAllowed,
 		SourceRevision:         *body.SourceRevision,
 		Eligible:               *body.Eligible,
 		CanOverrideEligibility: *body.CanOverrideEligibility,
@@ -37900,6 +38744,12 @@ func NewRetryRegistryPromotionDocsAdminRegistryPromotionCandidateOK(body *RetryR
 	}
 	if body.AuthDiscovery != nil {
 		v.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(body.AuthDiscovery)
+	}
+	if body.AccountUsage != nil {
+		v.AccountUsage = unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(body.AccountUsage)
+	}
+	if body.Review != nil {
+		v.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(body.Review)
 	}
 
 	return v
@@ -46407,6 +47257,9 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
+	if body.ReviewAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46454,6 +47307,16 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 			err = goa.MergeErrors(err, err2)
 		}
 	}
+	if body.AccountUsage != nil {
+		if err2 := ValidateAdminRegistryPromotionAccountUsageResponseBody(body.AccountUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
 	if body.CheckedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.checked_at", *body.CheckedAt, goa.FormatDateTime))
 	}
@@ -46468,6 +47331,28 @@ func ValidateGetRegistryPromotionCandidateResponseBody(body *GetRegistryPromotio
 	}
 	if body.PromotedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.promoted_at", *body.PromotedAt, goa.FormatDateTime))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewResponseBody runs the validations defined
+// on GetRegistryPromotionReviewResponseBody
+func ValidateGetRegistryPromotionReviewResponseBody(body *GetRegistryPromotionReviewResponseBody) (err error) {
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewResponseBody runs the validations
+// defined on StartRegistryPromotionReviewResponseBody
+func ValidateStartRegistryPromotionReviewResponseBody(body *StartRegistryPromotionReviewResponseBody) (err error) {
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
 	}
 	return
 }
@@ -46505,6 +47390,9 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
+	if body.ReviewAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46549,6 +47437,16 @@ func ValidatePromoteRegistryCandidateResponseBody(body *PromoteRegistryCandidate
 	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AccountUsage != nil {
+		if err2 := ValidateAdminRegistryPromotionAccountUsageResponseBody(body.AccountUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -46603,6 +47501,9 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
+	if body.ReviewAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46647,6 +47548,16 @@ func ValidateCurateRegistryPromotionCandidateResponseBody(body *CurateRegistryPr
 	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AccountUsage != nil {
+		if err2 := ValidateAdminRegistryPromotionAccountUsageResponseBody(body.AccountUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -46701,6 +47612,9 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
+	if body.ReviewAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -46745,6 +47659,16 @@ func ValidateRetryRegistryPromotionDocsResponseBody(body *RetryRegistryPromotion
 	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AccountUsage != nil {
+		if err2 := ValidateAdminRegistryPromotionAccountUsageResponseBody(body.AccountUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -64199,6 +65123,492 @@ func ValidateGetRegistryPromotionCandidateGatewayErrorResponseBody(body *GetRegi
 	return
 }
 
+// ValidateGetRegistryPromotionReviewUnauthorizedResponseBody runs the
+// validations defined on getRegistryPromotionReview_unauthorized_response_body
+func ValidateGetRegistryPromotionReviewUnauthorizedResponseBody(body *GetRegistryPromotionReviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewForbiddenResponseBody runs the validations
+// defined on getRegistryPromotionReview_forbidden_response_body
+func ValidateGetRegistryPromotionReviewForbiddenResponseBody(body *GetRegistryPromotionReviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewBadRequestResponseBody runs the
+// validations defined on getRegistryPromotionReview_bad_request_response_body
+func ValidateGetRegistryPromotionReviewBadRequestResponseBody(body *GetRegistryPromotionReviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewNotFoundResponseBody runs the validations
+// defined on getRegistryPromotionReview_not_found_response_body
+func ValidateGetRegistryPromotionReviewNotFoundResponseBody(body *GetRegistryPromotionReviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewConflictResponseBody runs the validations
+// defined on getRegistryPromotionReview_conflict_response_body
+func ValidateGetRegistryPromotionReviewConflictResponseBody(body *GetRegistryPromotionReviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewUnsupportedMediaResponseBody runs the
+// validations defined on
+// getRegistryPromotionReview_unsupported_media_response_body
+func ValidateGetRegistryPromotionReviewUnsupportedMediaResponseBody(body *GetRegistryPromotionReviewUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewInvalidResponseBody runs the validations
+// defined on getRegistryPromotionReview_invalid_response_body
+func ValidateGetRegistryPromotionReviewInvalidResponseBody(body *GetRegistryPromotionReviewInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewInvariantViolationResponseBody runs the
+// validations defined on
+// getRegistryPromotionReview_invariant_violation_response_body
+func ValidateGetRegistryPromotionReviewInvariantViolationResponseBody(body *GetRegistryPromotionReviewInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewUnexpectedResponseBody runs the
+// validations defined on getRegistryPromotionReview_unexpected_response_body
+func ValidateGetRegistryPromotionReviewUnexpectedResponseBody(body *GetRegistryPromotionReviewUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetRegistryPromotionReviewGatewayErrorResponseBody runs the
+// validations defined on getRegistryPromotionReview_gateway_error_response_body
+func ValidateGetRegistryPromotionReviewGatewayErrorResponseBody(body *GetRegistryPromotionReviewGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewUnauthorizedResponseBody runs the
+// validations defined on
+// startRegistryPromotionReview_unauthorized_response_body
+func ValidateStartRegistryPromotionReviewUnauthorizedResponseBody(body *StartRegistryPromotionReviewUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewForbiddenResponseBody runs the
+// validations defined on startRegistryPromotionReview_forbidden_response_body
+func ValidateStartRegistryPromotionReviewForbiddenResponseBody(body *StartRegistryPromotionReviewForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewBadRequestResponseBody runs the
+// validations defined on startRegistryPromotionReview_bad_request_response_body
+func ValidateStartRegistryPromotionReviewBadRequestResponseBody(body *StartRegistryPromotionReviewBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewNotFoundResponseBody runs the
+// validations defined on startRegistryPromotionReview_not_found_response_body
+func ValidateStartRegistryPromotionReviewNotFoundResponseBody(body *StartRegistryPromotionReviewNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewConflictResponseBody runs the
+// validations defined on startRegistryPromotionReview_conflict_response_body
+func ValidateStartRegistryPromotionReviewConflictResponseBody(body *StartRegistryPromotionReviewConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewUnsupportedMediaResponseBody runs the
+// validations defined on
+// startRegistryPromotionReview_unsupported_media_response_body
+func ValidateStartRegistryPromotionReviewUnsupportedMediaResponseBody(body *StartRegistryPromotionReviewUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewInvalidResponseBody runs the validations
+// defined on startRegistryPromotionReview_invalid_response_body
+func ValidateStartRegistryPromotionReviewInvalidResponseBody(body *StartRegistryPromotionReviewInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewInvariantViolationResponseBody runs the
+// validations defined on
+// startRegistryPromotionReview_invariant_violation_response_body
+func ValidateStartRegistryPromotionReviewInvariantViolationResponseBody(body *StartRegistryPromotionReviewInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewUnexpectedResponseBody runs the
+// validations defined on startRegistryPromotionReview_unexpected_response_body
+func ValidateStartRegistryPromotionReviewUnexpectedResponseBody(body *StartRegistryPromotionReviewUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateStartRegistryPromotionReviewGatewayErrorResponseBody runs the
+// validations defined on
+// startRegistryPromotionReview_gateway_error_response_body
+func ValidateStartRegistryPromotionReviewGatewayErrorResponseBody(body *StartRegistryPromotionReviewGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidatePromoteRegistryCandidateUnauthorizedResponseBody runs the
 // validations defined on promoteRegistryCandidate_unauthorized_response_body
 func ValidatePromoteRegistryCandidateUnauthorizedResponseBody(body *PromoteRegistryCandidateUnauthorizedResponseBody) (err error) {
@@ -75570,6 +76980,9 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	if body.CanOverrideEligibility == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("can_override_eligibility", "body"))
 	}
+	if body.ReviewAllowed == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("review_allowed", "body"))
+	}
 	if body.Reason == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("reason", "body"))
 	}
@@ -75614,6 +77027,16 @@ func ValidateAdminRegistryPromotionCandidateResponseBody(body *AdminRegistryProm
 	}
 	if body.AuthDiscovery != nil {
 		if err2 := ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body.AuthDiscovery); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.AccountUsage != nil {
+		if err2 := ValidateAdminRegistryPromotionAccountUsageResponseBody(body.AccountUsage); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	if body.Review != nil {
+		if err2 := ValidateAdminRegistryPromotionReviewResponseBody(body.Review); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
 	}
@@ -75682,6 +77105,81 @@ func ValidateAdminRegistryPromotionAuthDiscoveryResponseBody(body *AdminRegistry
 		if !(*body.Status == "complete" || *body.Status == "partial" || *body.Status == "unavailable" || *body.Status == "not_required") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"complete", "partial", "unavailable", "not_required"}))
 		}
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionAccountUsageResponseBody runs the validations
+// defined on AdminRegistryPromotionAccountUsageResponseBody
+func ValidateAdminRegistryPromotionAccountUsageResponseBody(body *AdminRegistryPromotionAccountUsageResponseBody) (err error) {
+	if body.WindowDays == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("window_days", "body"))
+	}
+	if body.DistinctUsers == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("distinct_users", "body"))
+	}
+	if body.Clients == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("clients", "body"))
+	}
+	if body.Tools == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+	}
+	if body.Transport == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("transport", "body"))
+	}
+	for _, e := range body.Tools {
+		if e != nil {
+			if err2 := ValidateAdminRegistryPromotionToolUsageResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionToolUsageResponseBody runs the validations
+// defined on AdminRegistryPromotionToolUsageResponseBody
+func ValidateAdminRegistryPromotionToolUsageResponseBody(body *AdminRegistryPromotionToolUsageResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.Calls == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("calls", "body"))
+	}
+	if body.Successes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("successes", "body"))
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionReviewResponseBody runs the validations
+// defined on AdminRegistryPromotionReviewResponseBody
+func ValidateAdminRegistryPromotionReviewResponseBody(body *AdminRegistryPromotionReviewResponseBody) (err error) {
+	if body.RequestID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("request_id", "body"))
+	}
+	if body.EvidenceCollectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.evidence_collected_at", *body.EvidenceCollectedAt, goa.FormatDateTime))
+	}
+	if body.Research != nil {
+		if err2 := ValidateAdminRegistryPromotionResearchResponseBody(body.Research); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
+// ValidateAdminRegistryPromotionResearchResponseBody runs the validations
+// defined on AdminRegistryPromotionResearchResponseBody
+func ValidateAdminRegistryPromotionResearchResponseBody(body *AdminRegistryPromotionResearchResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.StartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.started_at", *body.StartedAt, goa.FormatDateTime))
+	}
+	if body.CompletedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.completed_at", *body.CompletedAt, goa.FormatDateTime))
 	}
 	return
 }
