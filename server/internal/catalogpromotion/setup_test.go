@@ -28,6 +28,9 @@ import (
 
 var promotionInfra *testenv.Environment
 
+// syntheticHome stands in for Speakeasy's own organization, apart from every source tenant.
+var syntheticHome = Home{OrganizationID: "org_synthetic_home", ProjectID: uuid.MustParse("00000000-0000-7000-8000-00000000f00d")}
+
 func TestMain(m *testing.M) {
 	env, cleanup, err := testenv.Launch(context.Background(), testenv.LaunchOptions{Postgres: true})
 	if err != nil {
@@ -60,6 +63,10 @@ func (f *fakePromotionHealth) Series(context.Context, telemetry.MCPServerTelemet
 	return []telemetry.MCPServerSeriesPoint{{BucketStart: f.now.Add(-24 * time.Hour).Truncate(24 * time.Hour), Total: 10}, {BucketStart: f.now.Truncate(24 * time.Hour), Total: 10}}, f.err
 }
 
+func (f *fakePromotionHealth) Usage(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerUsage, error) {
+	return &telemetry.MCPServerUsage{DistinctUsers: 3, Clients: []string{"synthetic-client"}, Tools: []telemetry.MCPServerToolUsage{{Name: "search", Calls: 20, Successes: 20}}}, f.err
+}
+
 type promotionFixture struct {
 	service *Service
 	db      *pgxpool.Pool
@@ -86,6 +93,7 @@ func newPromotionFixture(t *testing.T) promotionFixture {
 	svc := New(db, mcpregistry.New(db, validator), nil, health, delivery.New(policy, delivery.Config{}), policy)
 	svc.features = fakePromotionFeatures{enabled: true}
 	svc.now = func() time.Time { return now }
+	svc.SetHome(syntheticHome)
 	target := Target{OrganizationID: orgID, ProjectID: project.ID, MCPServerID: source}
 	candidate, err := svc.GetCandidate(t.Context(), target)
 	require.NoError(t, err)

@@ -15752,6 +15752,476 @@ func DecodeGetRegistryPromotionCandidateResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildGetRegistryPromotionReviewRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getRegistryPromotionReview" endpoint
+func (c *Client) BuildGetRegistryPromotionReviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetRegistryPromotionReviewAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getRegistryPromotionReview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetRegistryPromotionReviewRequest returns an encoder for requests sent
+// to the admin getRegistryPromotionReview server.
+func EncodeGetRegistryPromotionReviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetRegistryPromotionReviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getRegistryPromotionReview", "*admin.GetRegistryPromotionReviewPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewGetRegistryPromotionReviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "getRegistryPromotionReview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetRegistryPromotionReviewResponse returns a decoder for responses
+// returned by the admin getRegistryPromotionReview endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetRegistryPromotionReviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetRegistryPromotionReviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetRegistryPromotionReviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			res := NewGetRegistryPromotionReviewAdminRegistryPromotionReviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetRegistryPromotionReviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetRegistryPromotionReviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetRegistryPromotionReviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetRegistryPromotionReviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetRegistryPromotionReviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetRegistryPromotionReviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetRegistryPromotionReviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetRegistryPromotionReviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+				}
+				err = ValidateGetRegistryPromotionReviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+				}
+				return nil, NewGetRegistryPromotionReviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetRegistryPromotionReviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+				}
+				err = ValidateGetRegistryPromotionReviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+				}
+				return nil, NewGetRegistryPromotionReviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getRegistryPromotionReview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetRegistryPromotionReviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getRegistryPromotionReview", err)
+			}
+			err = ValidateGetRegistryPromotionReviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getRegistryPromotionReview", err)
+			}
+			return nil, NewGetRegistryPromotionReviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getRegistryPromotionReview", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildStartRegistryPromotionReviewRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "startRegistryPromotionReview" endpoint
+func (c *Client) BuildStartRegistryPromotionReviewRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: StartRegistryPromotionReviewAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "startRegistryPromotionReview", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeStartRegistryPromotionReviewRequest returns an encoder for requests
+// sent to the admin startRegistryPromotionReview server.
+func EncodeStartRegistryPromotionReviewRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.StartRegistryPromotionReviewPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "startRegistryPromotionReview", "*admin.StartRegistryPromotionReviewPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewStartRegistryPromotionReviewRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "startRegistryPromotionReview", err)
+		}
+		return nil
+	}
+}
+
+// DecodeStartRegistryPromotionReviewResponse returns a decoder for responses
+// returned by the admin startRegistryPromotionReview endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeStartRegistryPromotionReviewResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeStartRegistryPromotionReviewResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body StartRegistryPromotionReviewResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			res := NewStartRegistryPromotionReviewAdminRegistryPromotionReviewResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body StartRegistryPromotionReviewUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body StartRegistryPromotionReviewForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body StartRegistryPromotionReviewBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body StartRegistryPromotionReviewNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body StartRegistryPromotionReviewConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body StartRegistryPromotionReviewUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body StartRegistryPromotionReviewInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body StartRegistryPromotionReviewInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+				}
+				err = ValidateStartRegistryPromotionReviewInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+				}
+				return nil, NewStartRegistryPromotionReviewInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body StartRegistryPromotionReviewUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+				}
+				err = ValidateStartRegistryPromotionReviewUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+				}
+				return nil, NewStartRegistryPromotionReviewUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "startRegistryPromotionReview", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body StartRegistryPromotionReviewGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startRegistryPromotionReview", err)
+			}
+			err = ValidateStartRegistryPromotionReviewGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startRegistryPromotionReview", err)
+			}
+			return nil, NewStartRegistryPromotionReviewGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "startRegistryPromotionReview", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildPromoteRegistryCandidateRequest instantiates a HTTP request object with
 // method and path set to call the "admin" service "promoteRegistryCandidate"
 // endpoint
@@ -25882,6 +26352,7 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 		CurationRevision:       *v.CurationRevision,
 		SetupGuidesVersion:     v.SetupGuidesVersion,
 		EndpointGuideSlug:      v.EndpointGuideSlug,
+		ReviewAvailability:     v.ReviewAvailability,
 		SourceRevision:         *v.SourceRevision,
 		Eligible:               *v.Eligible,
 		CanOverrideEligibility: *v.CanOverrideEligibility,
@@ -25919,6 +26390,12 @@ func unmarshalAdminRegistryPromotionCandidateResponseBodyToAdminAdminRegistryPro
 	}
 	if v.AuthDiscovery != nil {
 		res.AuthDiscovery = unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistryPromotionAuthDiscovery(v.AuthDiscovery)
+	}
+	if v.AccountUsage != nil {
+		res.AccountUsage = unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(v.AccountUsage)
+	}
+	if v.Review != nil {
+		res.Review = unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(v.Review)
 	}
 
 	return res
@@ -25971,6 +26448,86 @@ func unmarshalAdminRegistryPromotionAuthDiscoveryResponseBodyToAdminAdminRegistr
 		SupportsCimd: *v.SupportsCimd,
 		AuthSetup:    *v.AuthSetup,
 		Status:       *v.Status,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage
+// builds a value of type *admin.AdminRegistryPromotionAccountUsage from a
+// value of type *AdminRegistryPromotionAccountUsageResponseBody.
+func unmarshalAdminRegistryPromotionAccountUsageResponseBodyToAdminAdminRegistryPromotionAccountUsage(v *AdminRegistryPromotionAccountUsageResponseBody) *admin.AdminRegistryPromotionAccountUsage {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionAccountUsage{
+		WindowDays:       *v.WindowDays,
+		DistinctUsers:    *v.DistinctUsers,
+		Transport:        *v.Transport,
+		ResourceName:     v.ResourceName,
+		DocumentationURL: v.DocumentationURL,
+	}
+	res.Clients = make([]string, len(v.Clients))
+	for i, val := range v.Clients {
+		res.Clients[i] = val
+	}
+	res.Tools = make([]*admin.AdminRegistryPromotionToolUsage, len(v.Tools))
+	for i, val := range v.Tools {
+		if val == nil {
+			res.Tools[i] = nil
+			continue
+		}
+		res.Tools[i] = unmarshalAdminRegistryPromotionToolUsageResponseBodyToAdminAdminRegistryPromotionToolUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionToolUsageResponseBodyToAdminAdminRegistryPromotionToolUsage
+// builds a value of type *admin.AdminRegistryPromotionToolUsage from a value
+// of type *AdminRegistryPromotionToolUsageResponseBody.
+func unmarshalAdminRegistryPromotionToolUsageResponseBodyToAdminAdminRegistryPromotionToolUsage(v *AdminRegistryPromotionToolUsageResponseBody) *admin.AdminRegistryPromotionToolUsage {
+	res := &admin.AdminRegistryPromotionToolUsage{
+		Name:      *v.Name,
+		Calls:     *v.Calls,
+		Successes: *v.Successes,
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview
+// builds a value of type *admin.AdminRegistryPromotionReview from a value of
+// type *AdminRegistryPromotionReviewResponseBody.
+func unmarshalAdminRegistryPromotionReviewResponseBodyToAdminAdminRegistryPromotionReview(v *AdminRegistryPromotionReviewResponseBody) *admin.AdminRegistryPromotionReview {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionReview{
+		RequestID:           *v.RequestID,
+		Evidence:            v.Evidence,
+		EvidenceCollectedAt: v.EvidenceCollectedAt,
+	}
+	if v.Research != nil {
+		res.Research = unmarshalAdminRegistryPromotionResearchResponseBodyToAdminAdminRegistryPromotionResearch(v.Research)
+	}
+
+	return res
+}
+
+// unmarshalAdminRegistryPromotionResearchResponseBodyToAdminAdminRegistryPromotionResearch
+// builds a value of type *admin.AdminRegistryPromotionResearch from a value of
+// type *AdminRegistryPromotionResearchResponseBody.
+func unmarshalAdminRegistryPromotionResearchResponseBodyToAdminAdminRegistryPromotionResearch(v *AdminRegistryPromotionResearchResponseBody) *admin.AdminRegistryPromotionResearch {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminRegistryPromotionResearch{
+		Status:      *v.Status,
+		Report:      v.Report,
+		Error:       v.Error,
+		StartedAt:   v.StartedAt,
+		CompletedAt: v.CompletedAt,
 	}
 
 	return res

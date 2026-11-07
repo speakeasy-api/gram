@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -75,6 +76,10 @@ type Service struct {
 	now func() time.Time
 	// effectTimeout bounds a documentation request and supports deterministic deadline tests.
 	effectTimeout time.Duration
+	// home receives promotion audit entries instead of the source account.
+	home Home
+	// reviewer runs MCP reviews in the home organization; nil disables them.
+	reviewer Reviewer
 }
 
 type featureReader interface {
@@ -84,8 +89,20 @@ type featureReader interface {
 // New wires independently retryable delivery behind the authoritative Postgres record.
 // A nil delivery permits qualification-only use; Dispatch rejects it before claiming jobs.
 func New(db *pgxpool.Pool, registry *mcpregistry.Service, features *productfeatures.Client, health HealthReader, delivery DeliveryClient, policy *guardian.Policy) *Service {
-	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout}
+	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout, home: speakeasyTeamHome(), reviewer: nil}
 }
+
+// speakeasyTeamHome is the default audit home, so no configuration path can
+// fall back to writing staff activity into a customer's account.
+func speakeasyTeamHome() Home {
+	return Home{OrganizationID: constants.SpeakeasyTeamOrganizationID, ProjectID: uuid.MustParse(constants.SpeakeasyTeamDefaultProjectID)}
+}
+
+// SetHome overrides the Speakeasy-owned project in environments with their own.
+func (s *Service) SetHome(home Home) { s.home = home }
+
+// SetReviewer enables MCP reviews through the shared review system.
+func (s *Service) SetReviewer(reviewer Reviewer) { s.reviewer = reviewer }
 
 // GetCandidate refreshes a canonical source and supplies editable staff-only drafts.
 // Suggestions exclude credentials and unsafe endpoints.
@@ -528,7 +545,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		return Candidate{}, fmt.Errorf("record catalogue promotion: %w", err)
 	}
 	if err := audit.NewLogger().LogMcpServerPromoteCatalogue(ctx, tx, audit.LogMcpServerPromoteCatalogueEvent{
-		OrganizationID: request.Target.OrganizationID, ProjectID: request.Target.ProjectID, Actor: principal, McpServerURN: urn.NewMcpServer(request.Target.MCPServerID),
+		OrganizationID: s.home.OrganizationID, ProjectID: s.home.ProjectID, Actor: principal, McpServerURN: urn.NewMcpServer(request.Target.MCPServerID),
 		EligibilityOverridden: request.OverrideEligibility && !prior.Eligible, EligibilityReason: prior.Reason,
 	}); err != nil {
 		return Candidate{}, fmt.Errorf("audit catalogue promotion: %w", err)
@@ -709,15 +726,122 @@ func (s *Service) DiscoverAuth(ctx context.Context, endpoint, authMode string) c
 	return catalogauth.Discover(ctx, s.policy, endpoint, authMode)
 }
 
-// InspectCandidate adds public OAuth evidence only for interactive staff review, never background sweeps.
+// InspectCandidate adds public OAuth evidence, source-account usage, and the
+// server's MCP review for interactive staff review, never background sweeps.
 func (s *Service) InspectCandidate(ctx context.Context, target Target) (Candidate, error) {
 	candidate, err := s.GetCandidate(ctx, target)
-	if err == nil && candidate.SuggestedMetadata != nil {
+	if err != nil {
+		return candidate, err
+	}
+	if candidate.SuggestedMetadata != nil {
 		public := candidate.SuggestedMetadata
 		evidence := s.DiscoverAuth(ctx, public.URL, public.AuthMode)
 		candidate.AuthDiscovery = &evidence
 	}
-	return candidate, err
+	source, err := repo.New(s.db).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return candidate, nil
+	}
+	if err != nil {
+		return Candidate{}, fmt.Errorf("read promotion source: %w", err)
+	}
+	// Both are supplementary evidence: losing either must not block the review
+	// that the health evidence already supports.
+	candidate.AccountUsage = s.accountUsage(ctx, source)
+	endpoint, ok := reviewableEndpoint(source)
+	switch {
+	case !ok:
+		candidate.ReviewAvailability = ReviewEndpointNotAllowed
+	case s.reviewer == nil:
+		candidate.ReviewAvailability = ReviewDisabled
+	default:
+		candidate.ReviewAvailability = ReviewDisabled
+		if s.reviewer.Available(ctx) {
+			candidate.ReviewAvailability = ReviewAvailable
+		}
+		if review, err := s.reviewer.Find(ctx, endpoint); err == nil {
+			candidate.Review = review
+		}
+	}
+	return candidate, nil
+}
+
+// accountUsage reads aggregate usage from the source account, honouring its
+// telemetry consent. It returns nil when usage cannot be read.
+func (s *Service) accountUsage(ctx context.Context, source repo.GetSourceRow) *AccountUsage {
+	if s.features == nil || s.health == nil {
+		return nil
+	}
+	features, err := s.features.SnapshotStrict(ctx, source.OrganizationID)
+	if err != nil || !features.LogsEnabled {
+		return nil
+	}
+	now := s.now().UTC()
+	target := telemetry.MCPServerTelemetryTarget{ProjectID: source.ProjectID.String(), MCPServerID: source.McpServerID.String(), ToolsetSlug: "", URLSlug: ""}
+	usage, err := s.health.Usage(ctx, target, now.Add(-evidenceWindow), now)
+	if err != nil || usage == nil {
+		return nil
+	}
+	tools := make([]ToolUsage, 0, len(usage.Tools))
+	for _, tool := range usage.Tools {
+		tools = append(tools, ToolUsage{Name: tool.Name, Calls: tool.Calls, Successes: tool.Successes})
+	}
+	return &AccountUsage{WindowDays: int(evidenceWindow / (24 * time.Hour)), DistinctUsers: usage.DistinctUsers, Clients: usage.Clients, Tools: tools, Transport: source.TransportType, ResourceName: source.ResourceName, DocumentationURL: source.ResourceDocumentation}
+}
+
+// reviewableEndpoint returns the source URL when it may leave the account: only
+// the same conventional shared endpoints suggested for public listing qualify.
+func reviewableEndpoint(source repo.GetSourceRow) (string, bool) {
+	endpoint := suggestedMetadata(source).URL
+	return endpoint, endpoint != ""
+}
+
+// GetReview reads the current MCP review for a source without gathering evidence.
+func (s *Service) GetReview(ctx context.Context, target Target) (*mcpapproval.StaffReview, error) {
+	endpoint, err := s.reviewEndpoint(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	review, err := s.reviewer.Find(ctx, endpoint)
+	if err != nil {
+		return nil, fmt.Errorf("read promotion review: %w", err)
+	}
+	return review, nil
+}
+
+// StartReview opens or re-runs the server's MCP review in the home organization.
+// Nothing is written to the source account.
+func (s *Service) StartReview(ctx context.Context, target Target, actor string, actorEmail *string) (*mcpapproval.StaffReview, error) {
+	endpoint, err := s.reviewEndpoint(ctx, target)
+	if err != nil {
+		return nil, err
+	}
+	review, err := s.reviewer.Start(ctx, endpoint, actor, actorEmail)
+	if errors.Is(err, mcpapproval.ErrStaffReviewDisabled) {
+		return nil, ErrReviewDisabled
+	}
+	if err != nil {
+		return nil, fmt.Errorf("start promotion review: %w", err)
+	}
+	return review, nil
+}
+
+func (s *Service) reviewEndpoint(ctx context.Context, target Target) (string, error) {
+	if s.reviewer == nil {
+		return "", ErrUnavailable
+	}
+	source, err := repo.New(s.db).GetSource(ctx, repo.GetSourceParams{OrganizationID: target.OrganizationID, ProjectID: target.ProjectID, McpServerID: target.MCPServerID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", ErrNotFound
+	}
+	if err != nil {
+		return "", fmt.Errorf("read promotion source: %w", err)
+	}
+	endpoint, ok := reviewableEndpoint(source)
+	if !ok {
+		return "", ErrReviewNotAllowed
+	}
+	return endpoint, nil
 }
 
 func withAuthDiscovery(record json.RawMessage, discovery catalogauth.Discovery) (json.RawMessage, error) {

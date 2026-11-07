@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -366,4 +367,41 @@ func TestMCPDrilldownTraceIDsAreStable(t *testing.T) {
 	require.Len(t, first, 1)
 	require.Equal(t, first[0].TraceID, second[0].TraceID)
 	require.Equal(t, telemetryRepo.MCPOutcomeUnauthorized, first[0].Outcome)
+}
+
+func TestMCPServerHealthUsage_AggregatesWithoutIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for _, call := range []struct {
+		tool, email string
+		status      int
+	}{
+		{"search", "alice@example.com", 200},
+		{"search", "bob@example.com", 200},
+		{"search", "bob@example.com", 500},
+		{"fetch", "alice@example.com", 200},
+	} {
+		insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+			projectID:   projectID,
+			timestamp:   now.Add(-10 * time.Minute),
+			toolsetSlug: "research",
+			toolName:    call.tool,
+			userEmail:   call.email,
+			statusCode:  call.status,
+		})
+	}
+
+	usage, err := telemetry.NewMCPServerHealth(nil, ti.chConn).Usage(ctx, telemetry.MCPServerTelemetryTarget{ProjectID: projectID, MCPServerID: "", ToolsetSlug: "research", URLSlug: ""}, now.Add(-time.Hour), now)
+
+	require.NoError(t, err)
+	require.Equal(t, int64(2), usage.DistinctUsers)
+	require.Equal(t, []telemetry.MCPServerToolUsage{
+		{Name: "search", Calls: 3, Successes: 2},
+		{Name: "fetch", Calls: 1, Successes: 1},
+	}, usage.Tools)
 }

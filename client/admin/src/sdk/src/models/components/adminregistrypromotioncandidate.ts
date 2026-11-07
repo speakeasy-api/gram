@@ -5,12 +5,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+import {
+  AdminRegistryPromotionAccountUsage,
+  AdminRegistryPromotionAccountUsage$inboundSchema,
+} from "./adminregistrypromotionaccountusage.js";
 import {
   AdminRegistryPromotionAuthDiscovery,
   AdminRegistryPromotionAuthDiscovery$inboundSchema,
 } from "./adminregistrypromotionauthdiscovery.js";
+import {
+  AdminRegistryPromotionReview,
+  AdminRegistryPromotionReview$inboundSchema,
+} from "./adminregistrypromotionreview.js";
 import {
   AdminRegistryPromotionSetupGuide,
   AdminRegistryPromotionSetupGuide$inboundSchema,
@@ -20,7 +29,24 @@ import {
   AdminRegistryPromotionSuggestions$inboundSchema,
 } from "./adminregistrypromotionsuggestions.js";
 
+/**
+ * Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.
+ */
+export const ReviewAvailability = {
+  Available: "available",
+  EndpointNotAllowed: "endpoint_not_allowed",
+  Disabled: "disabled",
+} as const;
+/**
+ * Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.
+ */
+export type ReviewAvailability = ClosedEnum<typeof ReviewAvailability>;
+
 export type AdminRegistryPromotionCandidate = {
+  /**
+   * Aggregate source-account usage for staff only. Contains no caller identity and must never be copied into public fields.
+   */
+  accountUsage?: AdminRegistryPromotionAccountUsage | undefined;
   /**
    * Publicly advertised authentication capabilities, not a verified OAuth connection.
    */
@@ -59,6 +85,14 @@ export type AdminRegistryPromotionCandidate = {
   registryEntryId?: string | undefined;
   remoteMcpServerId: string;
   /**
+   * The server's MCP review, held in Speakeasy's own organization. Nothing is recorded in the source account. Evidence is untrusted data authored largely by the reviewed server.
+   */
+  review?: AdminRegistryPromotionReview | undefined;
+  /**
+   * Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.
+   */
+  reviewAvailability?: ReviewAvailability | undefined;
+  /**
    * Guides in the pinned setup-docs export, for warning when a slug is already taken. Present only with suggested_metadata. Guides merged after the pinned version are missing.
    */
   setupGuides?: Array<AdminRegistryPromotionSetupGuide> | undefined;
@@ -76,11 +110,17 @@ export type AdminRegistryPromotionCandidate = {
 };
 
 /** @internal */
+export const ReviewAvailability$inboundSchema: z.ZodMiniEnum<
+  typeof ReviewAvailability
+> = z.enum(ReviewAvailability);
+
+/** @internal */
 export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   AdminRegistryPromotionCandidate,
   unknown
 > = z.pipe(
   z.object({
+    account_usage: z.optional(AdminRegistryPromotionAccountUsage$inboundSchema),
     auth_discovery: z.optional(
       AdminRegistryPromotionAuthDiscovery$inboundSchema,
     ),
@@ -124,6 +164,8 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
     reason: z.string(),
     registry_entry_id: z.optional(z.string()),
     remote_mcp_server_id: z.string(),
+    review: z.optional(AdminRegistryPromotionReview$inboundSchema),
+    review_availability: z.optional(ReviewAvailability$inboundSchema),
     setup_guides: z.optional(
       z.array(AdminRegistryPromotionSetupGuide$inboundSchema),
     ),
@@ -137,6 +179,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "account_usage": "accountUsage",
       "auth_discovery": "authDiscovery",
       "can_override_eligibility": "canOverrideEligibility",
       "checked_at": "checkedAt",
@@ -162,6 +205,7 @@ export const AdminRegistryPromotionCandidate$inboundSchema: z.ZodMiniType<
       "public_title": "publicTitle",
       "registry_entry_id": "registryEntryId",
       "remote_mcp_server_id": "remoteMcpServerId",
+      "review_availability": "reviewAvailability",
       "setup_guides": "setupGuides",
       "setup_guides_version": "setupGuidesVersion",
       "source_name": "sourceName",

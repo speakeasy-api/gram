@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/catalogauth"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"github.com/speakeasy-api/gram/server/internal/setupguides"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	delivery "github.com/speakeasy-api/gram/server/internal/thirdparty/catalogpromotion"
@@ -27,6 +28,12 @@ var (
 	ErrPublicDescriptionTooLong = errors.New("public description must be 100 characters or fewer")
 
 	ErrUnavailable = errors.New("catalogue promotion validation temporarily unavailable")
+
+	// ErrReviewNotAllowed marks an endpoint whose URL may carry tenant data.
+	ErrReviewNotAllowed = errors.New("this endpoint cannot be reviewed because its URL may identify a customer")
+
+	// ErrReviewDisabled marks reviews refused by the home organization's rollout gates.
+	ErrReviewDisabled = errors.New("MCP reviews are not enabled for the Speakeasy organization")
 )
 
 // Target pins the source to its canonical tenant and project.
@@ -112,6 +119,13 @@ type Candidate struct {
 
 	// AuthDiscovery is public metadata evidence from the reviewed source endpoint.
 	AuthDiscovery *catalogauth.Discovery `json:"auth_discovery,omitempty"`
+	// AccountUsage is how the source account used this server, for staff only.
+	// It never enters the research briefing or a public field.
+	AccountUsage *AccountUsage `json:"account_usage,omitempty"`
+	// Review is the MCP review for this server's endpoint, when one exists.
+	Review *mcpapproval.StaffReview `json:"review,omitempty"`
+	// ReviewAvailability says whether a review can start, set only by InspectCandidate.
+	ReviewAvailability string `json:"review_availability,omitempty"`
 	// SourceName is a bounded private label for the staff UI only.
 	SourceName string `json:"source_name,omitempty"`
 	// SourceRevision binds the change to the observed source configuration.
@@ -170,6 +184,61 @@ func (c Candidate) CanOverrideEligibility() bool {
 type HealthReader interface {
 	Outcomes(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerOutcomes, error)
 	Series(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time, time.Duration) ([]telemetry.MCPServerSeriesPoint, error)
+	Usage(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerUsage, error)
+}
+
+// Review availability states. A URL that may carry tenant data is never sent to research.
+const (
+	// ReviewAvailable means a review can start.
+	ReviewAvailable = "available"
+	// ReviewEndpointNotAllowed means the endpoint's URL may identify a customer.
+	ReviewEndpointNotAllowed = "endpoint_not_allowed"
+	// ReviewDisabled means reviews are unconfigured or off in the home organization.
+	ReviewDisabled = "disabled"
+)
+
+// Reviewer runs ordinary MCP reviews in Speakeasy's own organization, so
+// promotion has no research or evidence system of its own.
+type Reviewer interface {
+	Available(ctx context.Context) bool
+	Find(ctx context.Context, serverURL string) (*mcpapproval.StaffReview, error)
+	Start(ctx context.Context, serverURL, actor string, actorEmail *string) (*mcpapproval.StaffReview, error)
+}
+
+// Home is the Speakeasy-owned project that receives promotion audit entries.
+type Home struct {
+	// OrganizationID is Speakeasy's own organization.
+	OrganizationID string
+	// ProjectID is the project inside it.
+	ProjectID uuid.UUID
+}
+
+// ToolUsage is one tool's aggregate calls in the source account.
+type ToolUsage struct {
+	// Name is the tool name as the source account's callers invoked it.
+	Name string `json:"name"`
+	// Calls counts all calls in the window.
+	Calls int64 `json:"calls"`
+	// Successes counts successful calls in the window.
+	Successes int64 `json:"successes"`
+}
+
+// AccountUsage aggregates source-account usage without caller identity.
+type AccountUsage struct {
+	// WindowDays is the observation window.
+	WindowDays int `json:"window_days"`
+	// DistinctUsers counts callers in the window, capped at 1000.
+	DistinctUsers int64 `json:"distinct_users"`
+	// Clients names the client applications that called the server.
+	Clients []string `json:"clients"`
+	// Tools lists the most-called tools.
+	Tools []ToolUsage `json:"tools"`
+	// Transport is the source's configured MCP transport.
+	Transport string `json:"transport"`
+	// ResourceName is the name the server's protected resource declares.
+	ResourceName string `json:"resource_name,omitempty"`
+	// DocumentationURL is the documentation the protected resource declares.
+	DocumentationURL string `json:"documentation_url,omitempty"`
 }
 
 // DeliveryClient submits idempotent documentation jobs.

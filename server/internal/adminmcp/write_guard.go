@@ -37,6 +37,8 @@ const (
 	OperationCreateRegistryEntry                  WriteOperation = "create_registry_entry"
 	OperationSetRegistryIcons                     WriteOperation = "set_registry_icons"
 	OperationUploadPlatformImage                  WriteOperation = "upload_platform_image"
+	// OperationStartRegistryPromotionReview starts an MCP review in Speakeasy's own organization.
+	OperationStartRegistryPromotionReview WriteOperation = "start_registry_promotion_review"
 )
 
 // AllWriteOperations is the complete allowlist, in a stable order.
@@ -57,6 +59,7 @@ var AllWriteOperations = []WriteOperation{
 	OperationCreateRegistryEntry,
 	OperationSetRegistryIcons,
 	OperationUploadPlatformImage,
+	OperationStartRegistryPromotionReview,
 }
 
 func (op WriteOperation) known() bool {
@@ -95,7 +98,7 @@ func (op WriteOperation) implemented() bool {
 	switch op {
 	case OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate, OperationSetOrganizationFeature, OperationSetOrganizationWhitelist, OperationAssignOrganizationOnboardingPlaybook,
 		OperationSetChatAnalysisSettings, OperationExtendOrganizationTrial,
-		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage:
+		OperationEnableOrganization, OperationDisableOrganization, OperationUpdateSupportMatrix, OperationCreateRegistryEntry, OperationSetRegistryIcons, OperationUploadPlatformImage, OperationStartRegistryPromotionReview:
 		return true
 	case OperationCreateGlobalIssuer, OperationUpdateGlobalIssuer:
 		return false

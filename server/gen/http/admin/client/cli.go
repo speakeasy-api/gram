@@ -2438,6 +2438,70 @@ func BuildGetRegistryPromotionCandidatePayload(adminGetRegistryPromotionCandidat
 	return v, nil
 }
 
+// BuildGetRegistryPromotionReviewPayload builds the payload for the admin
+// getRegistryPromotionReview endpoint from CLI flags.
+func BuildGetRegistryPromotionReviewPayload(adminGetRegistryPromotionReviewBody string, adminGetRegistryPromotionReviewAdminSessionToken string) (*admin.GetRegistryPromotionReviewPayload, error) {
+	var err error
+	var body GetRegistryPromotionReviewRequestBody
+	{
+		err = json.Unmarshal([]byte(adminGetRegistryPromotionReviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetRegistryPromotionReviewAdminSessionToken != "" {
+			adminSessionToken = &adminGetRegistryPromotionReviewAdminSessionToken
+		}
+	}
+	v := &admin.GetRegistryPromotionReviewPayload{
+		OrganizationID: body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		McpServerID:    body.McpServerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildStartRegistryPromotionReviewPayload builds the payload for the admin
+// startRegistryPromotionReview endpoint from CLI flags.
+func BuildStartRegistryPromotionReviewPayload(adminStartRegistryPromotionReviewBody string, adminStartRegistryPromotionReviewAdminSessionToken string) (*admin.StartRegistryPromotionReviewPayload, error) {
+	var err error
+	var body StartRegistryPromotionReviewRequestBody
+	{
+		err = json.Unmarshal([]byte(adminStartRegistryPromotionReviewBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.project_id", body.ProjectID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminStartRegistryPromotionReviewAdminSessionToken != "" {
+			adminSessionToken = &adminStartRegistryPromotionReviewAdminSessionToken
+		}
+	}
+	v := &admin.StartRegistryPromotionReviewPayload{
+		OrganizationID: body.OrganizationID,
+		ProjectID:      body.ProjectID,
+		McpServerID:    body.McpServerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildPromoteRegistryCandidatePayload builds the payload for the admin
 // promoteRegistryCandidate endpoint from CLI flags.
 func BuildPromoteRegistryCandidatePayload(adminPromoteRegistryCandidateBody string, adminPromoteRegistryCandidateAdminSessionToken string) (*admin.PromoteRegistryCandidatePayload, error) {
