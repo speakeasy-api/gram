@@ -337,7 +337,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	// The authoritative route fronts a meta MCP, not the hosted member's
 	// mcp_server. Meta resources are outside the mcp_tool_execution contract,
 	// so do not report the synthetic member dispatch as hosted coverage.
-	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.guardianPolicy, s.db, s.env,
+	body, err := handleToolsCall(ctx, logger, s.metrics, nil, s.authz, s.db, s.env,
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
@@ -412,12 +412,6 @@ func (s *Service) describeMemberToolset(
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
 	duplicates := map[string]bool{}
 	for _, tool := range described.Tools {
-		// External-MCP passthrough tools are excluded from the meta MCP
-		// catalog (toolToListEntry returns nil); they belong to the
-		// proxied-member runtime.
-		if tool != nil && conv.IsProxyTool(tool) {
-			continue
-		}
 		entry := toolToListEntry(tool)
 		if entry == nil || entry.Name == "" {
 			catalog.incomplete = true
@@ -573,7 +567,6 @@ func (s *Service) buildMemberDispatch(
 		wrapperIsPublic:          new(hosting.Public),
 		metaMcpServerID:          gate.metaServerID.String(),
 		clientInfoScope:          metaClientInfoScope(gate.metaServerID),
-		skipProxyTools:           true,
 		toolsetID:                uuid.NullUUID{UUID: toolset.ID, Valid: true},
 		toolsetIsPublic:          new(hosting.Public),
 		tags:                     nil,

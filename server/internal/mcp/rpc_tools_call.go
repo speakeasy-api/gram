@@ -27,10 +27,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contenttypes"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -55,7 +53,6 @@ import (
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type toolsCallParams struct {
@@ -95,7 +92,6 @@ func handleToolsCall(
 	metrics *mcpmetrics.Metrics,
 	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint,
 	authzEngine *authz.Engine,
-	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
@@ -213,72 +209,35 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, attributionErr, "resolve MCP server for toolset").LogError(ctx, logger)
 	}
 
-	executor := externalmcp.BuildProxyToolExecutor(logger, guardianPolicy, toolset.Tools)
-
-	var plan *gateway.ToolCallPlan
-	var toolURN urn.Tool
-
-	// Try proxy tool match first - captures full plan via closure
-	var matchedPlan *gateway.ToolCallPlan
-	resolve := func(ctx context.Context, u urn.Tool, pid uuid.UUID) (*externalmcp.ToolCallPlan, error) {
-		fullPlan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, u, pid)
-		if err != nil {
-			return nil, fmt.Errorf("get tool call plan by URN: %w", err)
-		}
-		matchedPlan = fullPlan
-		return fullPlan.ExternalMCP, nil
-	}
-
-	var planInputs *externalmcp.ToolCallPlan
-	if !payload.skipProxyTools {
-		planInputs, err = executor.MatchPlanInputs(ctx, params.Name, uuid.UUID(projectID), resolve)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to match proxy tool").LogError(ctx, logger)
-		}
-	}
-
+	// Tool variations can rename two tools onto one name, so the whole slice is
+	// scanned: picking the first match would dispatch an arbitrary one of them.
 	var tool *types.Tool
-
-	if planInputs != nil {
-		// Use the resolved upstream name and discard the proxy placeholder schema.
-		matchedPlan.ExternalMCP = planInputs
-		plan = matchedPlan
-		toolURN = plan.Descriptor.URN
-	} else {
-		// Fall through to materialized tool handling. Tool variations can
-		// rename two tools onto one name, so the whole slice is scanned:
-		// picking the first match would dispatch an arbitrary one of them.
-		for _, t := range toolset.Tools {
-			if conv.IsProxyTool(t) {
-				continue
-			}
-
-			baseTool, err := conv.ToBaseTool(t)
-			if err != nil {
-				continue
-			}
-			if baseTool.Name == params.Name {
-				if tool != nil {
-					return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
-				}
-				tool = t
-			}
-		}
-
-		if tool == nil {
-			return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
-		}
-
-		urn, err := conv.GetToolURN(*tool)
+	for _, t := range toolset.Tools {
+		baseTool, err := conv.ToBaseTool(t)
 		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
+			continue
 		}
-		toolURN = *urn
+		if baseTool.Name == params.Name {
+			if tool != nil {
+				return nil, oops.E(oops.CodeInvalid, nil, "ambiguous tool name: %q matches more than one tool in this toolset", params.Name).LogError(ctx, logger)
+			}
+			tool = t
+		}
+	}
 
-		plan, err = toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
-		}
+	if tool == nil {
+		return nil, oops.E(oops.CodeNotFound, errors.New("tool not found"), "tool not found").LogError(ctx, logger)
+	}
+
+	parsedURN, err := conv.GetToolURN(*tool)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed to get tool urn").LogError(ctx, logger)
+	}
+	toolURN := *parsedURN
+
+	plan, err := toolsetHelpers.GetToolCallPlanByURN(ctx, toolURN, uuid.UUID(projectID))
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
 	}
 
 	// A gateway dispatch that fails before the telemetry row below is
@@ -297,11 +256,9 @@ func handleToolsCall(
 	// the request.
 	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		var disposition string
-		if tool != nil {
-			baseTool, err := conv.ToBaseTool(tool)
-			if err == nil {
-				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
-			}
+		baseTool, err := conv.ToBaseTool(tool)
+		if err == nil {
+			disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
 		}
 		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
 			Tool:        params.Name,
@@ -343,7 +300,6 @@ func handleToolsCall(
 	toolCallEnv := toolconfig.ToolCallEnv{
 		UserConfig: userConfig,
 		SystemEnv:  systemConfig,
-		OAuthToken: oauthToken,
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
 		MCPClient:  clientIdentity,
@@ -412,10 +368,6 @@ func handleToolsCall(
 	if attributedMCPServerID != nil {
 		serverID = attributedMCPServerID.String()
 	}
-	toolName := descriptor.Name
-	if plan.Kind == gateway.ToolKindExternalMCP {
-		toolName = descriptor.URN.Name
-	}
 	externalUserID := payload.externalUserID
 	if externalUserID == "" && oauthToken != "" {
 		externalUserID = jwtclaims.UnsafeExtractSubject(oauthToken)
@@ -431,7 +383,7 @@ func handleToolsCall(
 		projectID:       descriptor.ProjectID,
 		sessionID:       payload.sessionID,
 		chatID:          toolCallEnv.GramChatID,
-		toolName:        toolName,
+		toolName:        descriptor.Name,
 		toolURN:         toolURN.String(),
 		toolsetSlug:     payload.toolset,
 		mcpServerID:     serverID,
@@ -534,7 +486,7 @@ func handleToolsCall(
 		ServerID:        serverID,
 		MetaServerID:    payload.metaMcpServerID,
 		ToolsetID:       toolset.ID,
-		ToolName:        toolName,
+		ToolName:        descriptor.Name,
 		ResourceURI:     "",
 		PromptName:      "",
 		ChatID:          toolCallEnv.GramChatID,
@@ -624,12 +576,12 @@ func handleToolsCall(
 	}
 
 	var meta map[string]any
-	if tool != nil && tool.FunctionToolDefinition != nil {
+	if tool.FunctionToolDefinition != nil {
 		meta = tool.FunctionToolDefinition.Meta
 	}
 
-	// External MCP tools and MCP passthrough tools already return properly formatted responses
-	if plan.Kind == gateway.ToolKindExternalMCP || isMCPPassthrough(meta) {
+	// MCP passthrough tools already return properly formatted responses
+	if isMCPPassthrough(meta) {
 		responsePayload, parseErr := mcpriskscan.ParseToolResultPayload(rw.body.Bytes())
 		if parseErr != nil {
 			responsePayload = mcpriskscan.Payload{}
