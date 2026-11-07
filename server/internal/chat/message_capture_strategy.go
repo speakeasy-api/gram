@@ -12,6 +12,7 @@ import (
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/metric"
 
@@ -75,8 +76,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "parse project ID").LogError(ctx, s.logger)
 	}
 	orgID := request.OrgID
-	userID := request.UserID
-	externalUserID := request.ExternalUserID
+
+	identity := captureIdentity(ctx, request)
 
 	// Create chat with placeholder title - title generation happens via the generateTitle RPC.
 	//
@@ -89,8 +90,9 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		ID:             chatID,
 		ProjectID:      projectID,
 		OrganizationID: orgID,
-		UserID:         conv.ToPGText(userID),
-		ExternalUserID: conv.ToPGText(externalUserID),
+		UserID:         identity.userID,
+		ExternalUserID: identity.externalUserID,
+		AgentID:        identity.agentID,
 		Title:          conv.ToPGText(DefaultChatTitle),
 	})
 	switch {
@@ -129,7 +131,7 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		}, nil
 	}
 
-	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, generation)
+	rows := buildPendingRows(request, projectID, request.UserID, request.ExternalUserID, newMessages, generation)
 	if matchResult.diverged {
 		slots := make([]messageSlot, len(newMessages))
 		for i, message := range newMessages {
@@ -607,4 +609,39 @@ func (s *NoOpCaptureStrategy) CaptureMessage(
 	_ openrouter.CompletionResponse,
 ) error {
 	return nil
+}
+
+// captureIdentityColumns is who a captured session is attributed to, as written
+// on the chat row.
+type captureIdentityColumns struct {
+	userID         pgtype.Text
+	externalUserID pgtype.Text
+	agentID        uuid.NullUUID
+}
+
+// captureIdentity resolves the identity columns for one completion.
+//
+// A completion made with an agent credential, or by a workload admitted for an
+// agent, is the agent's activity. Its auth context carries no human identity
+// (the authorizer is who the agent acts for, not who performed the turn), so
+// the identity columns must stay NULL rather than hold an empty string: an
+// empty user_id is not an author, but it still disqualifies the session from
+// the agent-only shape that lets the agent's owner open it. If an agent-actor
+// turn ever carries a human identity, that identity is kept and the agent is
+// attribution only. Human turns keep writing the request identity as before,
+// empty strings included.
+func captureIdentity(ctx context.Context, request openrouter.CompletionRequest) captureIdentityColumns {
+	agentID, actsAsAgent := contextvalues.EffectiveAgentID(ctx)
+	if !actsAsAgent {
+		return captureIdentityColumns{
+			userID:         conv.ToPGText(request.UserID),
+			externalUserID: conv.ToPGText(request.ExternalUserID),
+			agentID:        conv.NilableToNullUUID(uuid.Nil),
+		}
+	}
+	return captureIdentityColumns{
+		userID:         conv.ToPGTextEmpty(request.UserID),
+		externalUserID: conv.ToPGTextEmpty(request.ExternalUserID),
+		agentID:        conv.ToNullUUID(agentID),
+	}
 }
