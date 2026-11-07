@@ -1907,44 +1907,15 @@ func (s *Service) prepareTelemetrySearch(ctx context.Context, requiredScope auth
 	}, nil
 }
 
-// resolveSearchScope returns nil when the caller may read the whole project. A member
-// without log:read or chat:read gets an OwnScope instead of a refusal: their own sessions
-// plus agents they currently own. Non-human callers keep plain Require.
+// resolveSearchScope returns nil when the caller may read the whole project.
+// log:read and chat:read fall back to the caller's own scope; see LogReadScopeResolver.
 func (s *Service) resolveSearchScope(ctx context.Context, authCtx *contextvalues.AuthContext, requiredScope authz.Scope) (*repo.OwnScope, error) {
-	check := authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}
-	// Only a member reading as themselves falls back. API keys, assistant
-	// runtime and embedded chat-session callers keep the plain check.
-	_, isAssistantCall := contextvalues.GetAssistantPrincipal(ctx)
-	fallsBack := requiredScope == authz.ScopeLogRead || requiredScope == authz.ScopeChatRead
-	if !fallsBack || authCtx.UserID == "" || authCtx.ExternalUserID != "" || authCtx.APIKeyID != "" || isAssistantCall {
-		return nil, s.authz.Require(ctx, check)
+	projectID := authCtx.ProjectID.String()
+	if requiredScope != authz.ScopeLogRead && requiredScope != authz.ScopeChatRead {
+		return nil, s.authz.Require(ctx, authz.Check{Scope: requiredScope, ResourceKind: "", ResourceID: projectID, Dimensions: nil})
 	}
-	// Evaluate, not Require: a member without the grant is expected, not a
-	// denial to record. It also keeps project-wide reads where RBAC is off.
-	allowed, err := s.authz.Evaluate(ctx, check)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "evaluate telemetry read access")
-	}
-	if allowed {
-		return nil, nil
-	}
-	ownedAgents, err := s.chatRepo.ListOwnedAgentIDs(ctx, chatRepo.ListOwnedAgentIDsParams{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		OwnerUserID:    authCtx.UserID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "resolve owned agents").LogError(ctx, s.logger)
-	}
-	agentIDs := make([]string, 0, len(ownedAgents))
-	for _, id := range ownedAgents {
-		agentIDs = append(agentIDs, id.String())
-	}
-	return &repo.OwnScope{
-		UserID:      authCtx.UserID,
-		UserEmail:   conv.PtrValOr(authCtx.Email, ""),
-		AgentIDs:    agentIDs,
-		IdentityOrg: s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID),
-	}, nil
+	resolver := LogReadScopeResolver{Authz: s.authz, Agents: s.chatRepo, Logger: s.logger}
+	return resolver.ResolveScope(ctx, requiredScope, projectID, func() string { return s.canonicalOrgFor(ctx, authCtx.ActiveOrganizationID) })
 }
 
 // parseTimeRange extracts and parses the time range from a telemetry filter.
