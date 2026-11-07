@@ -213,6 +213,11 @@ function projectColumns(idOrSlug: string, organizationId: string) {
     projectColumn.display({
       id: "actions",
       header: "Actions",
+      enableHiding: false,
+      meta: {
+        headClassName: "sticky right-0 z-1 w-px bg-muted",
+        cellClassName: "sticky right-0 z-1 w-px bg-inherit",
+      },
       cell: ({ row }) => (
         <RedeployProjectButton
           organizationId={organizationId}
