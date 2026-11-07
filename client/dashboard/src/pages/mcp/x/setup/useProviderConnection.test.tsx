@@ -2003,7 +2003,12 @@ describe("Snowflake shared actions", () => {
         onConfigured.mock.invocationCallOrder[0]!,
       );
       if (fails) {
-        await waitFor(() => expect(result.current.error).toBeTruthy());
+        await waitFor(() =>
+          expect(result.current.error).toContain(
+            "credentials were saved, but the connection handoff",
+          ),
+        );
+        expect(result.current.error).not.toContain("Check the app details");
         expect(result.current.state.saved).toBe(false);
       } else await waitFor(() => expect(result.current.state.saved).toBe(true));
     },

@@ -47,8 +47,10 @@ vi.mock("@gram/client/react-query/riskListPolicies", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
+    policyCenter: { new: { href: () => "/policy/new" } },
     mcp: {
       catalog: { detail: { href: () => "/catalog/snowflake" } },
+      gateway: { overview: { href: (id: string) => `/gateway/${id}` } },
       details: {
         overview: { href: () => "/overview" },
         settings: { href: () => "/settings" },
@@ -178,6 +180,8 @@ function show(entry = "/") {
         <Routes>
           <Route path="/" element={<SnowflakeCatalogFlow />} />
           <Route path="/overview" element={<div>Server overview</div>} />
+          <Route path="/gateway/:id" element={<div>Gateway overview</div>} />
+          <Route path="/policy/new" element={<div>Policy editor</div>} />
           <Route path="/catalog/snowflake" element={<div>Catalog entry</div>} />
         </Routes>
         <Location />
@@ -490,4 +494,24 @@ describe("Snowflake catalog draft lifecycle (mocked API)", () => {
       }),
     );
   });
+  it.each([false, true])(
+    "returns to the originating gateway unless customize was explicitly selected (customize=%s)",
+    async (customize) => {
+      writeSnowflakeHandoff(key, {
+        name: "Snowflake",
+        guardrail: customize ? catalogPresetState([]) : undefined,
+        customize,
+      });
+      seedCredentials();
+      show("/?attachToGateway=gateway-id");
+      const user = await credentials();
+      await user.click(screen.getByText("Continue"));
+      await waitFor(() => expect(api.member).toHaveBeenCalled());
+      await user.click(screen.getByText("Complete mocked connection"));
+      await screen.findByText(customize ? "Policy editor" : "Gateway overview");
+      expect(screen.getByLabelText("Location").textContent).toBe(
+        customize ? "/policy/new" : "/gateway/gateway-id",
+      );
+    },
+  );
 });
