@@ -1097,6 +1097,7 @@ export function RemoteMcpIdentitySectionBody({
               variant="destructive-primary"
               disabled={
                 savePending ||
+                clientsRefreshing ||
                 !canWrite ||
                 rbacLoading ||
                 repointLookupPending ||

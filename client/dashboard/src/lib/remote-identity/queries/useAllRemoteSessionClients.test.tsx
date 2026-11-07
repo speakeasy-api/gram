@@ -1,37 +1,71 @@
-// @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { cleanup, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
 
-const mocks = vi.hoisted(() => ({ query: vi.fn() }));
+const mocks = vi.hoisted(() => ({ query: vi.fn(), fetchNextPage: vi.fn() }));
 
 vi.mock("@gram/client/react-query/remoteSessionClients.js", () => ({
   useRemoteSessionClientsInfinite: () => mocks.query(),
 }));
-vi.mock("react", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("react")>()),
-  useEffect: vi.fn(),
-  useMemo: (build: () => unknown) => build(),
-}));
 
-import { useAllRemoteSessionClients } from "./useAllRemoteSessionClients";
+const first = { id: "client-1" };
+const second = { id: "client-2" };
+const page = (...items: unknown[]) => ({ result: { items } });
 
-const page = { pages: [{ result: { items: [] } }] };
+function renderClients(query: Record<string, unknown>) {
+  mocks.query.mockReturnValue({
+    hasNextPage: false,
+    isFetchingNextPage: false,
+    fetchNextPage: mocks.fetchNextPage,
+    ...query,
+  });
+  return renderHook(() => useAllRemoteSessionClients({})).result.current;
+}
+
+afterEach(() => {
+  cleanup();
+  vi.clearAllMocks();
+});
 
 describe("useAllRemoteSessionClients", () => {
-  it.each([
-    ["the first page", { isFetching: true }, true, false],
-    [
-      "a later page",
-      { isFetching: true, data: page, hasNextPage: true },
-      true,
-      false,
-    ],
-    ["a loaded list", { isFetching: false, data: page }, false, false],
-    ["a loaded list refetching", { isFetching: true, data: page }, true, true],
-  ])("reports %s", (_, query, isLoading, isRefreshing) => {
-    mocks.query.mockReturnValue({ hasNextPage: false, ...query });
-    expect(useAllRemoteSessionClients({})).toMatchObject({
-      isLoading,
-      isRefreshing,
+  it("is loading, not refreshing, on the first page", () => {
+    expect(renderClients({ isFetching: true })).toMatchObject({
+      items: [],
+      isLoading: true,
+      isRefreshing: false,
+    });
+  });
+
+  it("walks later pages without calling that a refresh", () => {
+    const clients = renderClients({
+      isFetching: false,
+      hasNextPage: true,
+      data: { pages: [page(first)] },
+    });
+    expect(clients).toMatchObject({ isLoading: true, isRefreshing: false });
+    expect(mocks.fetchNextPage).toHaveBeenCalledOnce();
+  });
+
+  it("flattens every page once the list has loaded", () => {
+    expect(
+      renderClients({
+        isFetching: false,
+        data: { pages: [page(first), page(second)] },
+      }),
+    ).toMatchObject({
+      items: [first, second],
+      isLoading: false,
+      isRefreshing: false,
+    });
+  });
+
+  it("reports a refetch of a loaded list as a refresh", () => {
+    expect(
+      renderClients({ isFetching: true, data: { pages: [page(first)] } }),
+    ).toMatchObject({
+      items: [first],
+      isLoading: true,
+      isRefreshing: true,
     });
   });
 });

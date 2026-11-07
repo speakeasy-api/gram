@@ -303,13 +303,33 @@ describe("unsaved issuer correction", () => {
     },
   );
 
-  it("drops credentials when the upstream stops advertising the provider", async () => {
+  it("keeps credentials when a probe fails and the same issuer returns", async () => {
     const { result, rerender, props } = renderDraft();
     await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
     act(() => result.current.setClientId("EXAMPLE-CLIENT"));
     mocks.resource.mockReturnValue({ status: "unavailable", metadata: null });
     rerender({ ...props });
-    expect(result.current.clientId).toBe("");
+    mocks.resource.mockReturnValue({
+      status: "available",
+      metadata: { authorizationServers: [advertised] },
+    });
+    rerender({ ...props });
+    expect(result.current.clientId).toBe("EXAMPLE-CLIENT");
+  });
+
+  it("keeps the form open through a recheck after discovery fails", async () => {
+    mocks.fetchMetadata.mockRejectedValueOnce(new Error("Discovery failed"));
+    const { result } = renderDraft();
+    await waitFor(() => expect(result.current.discoveryStatus).toBe("error"));
+    expect(result.current.issuerEditorOpen).toBe(true);
+    const recheck = deferred<ReturnType<typeof metadata>>();
+    mocks.fetchMetadata.mockImplementationOnce(() => recheck.promise);
+    act(() => result.current.retryDiscovery());
+    await waitFor(() => expect(result.current.discoveryStatus).toBe("loading"));
+    expect(result.current.issuerEditorOpen).toBe(true);
+    await act(async () => recheck.resolve(metadata(advertised)));
+    await waitFor(() => expect(result.current.discoveryStatus).toBe("ready"));
+    expect(result.current.issuerEditorOpen).toBe(true);
   });
 
   it.each(["source", "upstream", "advertisement"])(

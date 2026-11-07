@@ -511,7 +511,7 @@ function confirmSave(): void {
 function swapClientWithImpact(
   servers: Array<Record<string, unknown>> | null,
   hiddenServerCount = 0,
-): void {
+): () => void {
   if (servers) {
     mocks.impact.mockReturnValue({
       data: { servers, hiddenServerCount },
@@ -552,10 +552,11 @@ function swapClientWithImpact(
     },
   });
 
-  renderIdentity();
+  const { rerenderIdentity } = renderIdentity();
   fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
   fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  return rerenderIdentity;
 }
 
 const target: AuthTarget = {
@@ -2666,6 +2667,28 @@ describe("RemoteMcpIdentitySectionBody", () => {
     ).toBeNull();
     const confirm = screen.getByRole("button", { name: "Save changes" });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("holds the confirm while the clients are refreshed", () => {
+    const rerenderIdentity = swapClientWithImpact([
+      {
+        id: "mcp-server-2",
+        name: "Other server",
+        projectId: "project-1",
+        projectName: "Project",
+        impact: "resignin",
+      },
+    ]);
+    const confirm = () =>
+      screen.getByRole("button", { name: "Save changes" }) as HTMLButtonElement;
+    expect(confirm().disabled).toBe(false);
+    mocks.clients.mockReturnValue({
+      ...mocks.clients(),
+      isLoading: true,
+      isRefreshing: true,
+    });
+    rerenderIdentity();
+    expect(confirm().disabled).toBe(true);
   });
 
   it("holds the confirm while a cached preview is refetched", async () => {
