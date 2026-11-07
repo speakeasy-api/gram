@@ -89,8 +89,10 @@ export interface AddServerDialogProps {
   projectSlug?: string;
   /** When true, shows a summary view instead of individual name inputs in the configure phase. */
   bulk?: boolean;
-  /** Catalog-only handoff; headless, gateway and plugin callers retain their workflow. */
+  /** Catalog-only handoff; headless and plugin callers retain their workflow. */
   openProviderSetup?: boolean;
+  /** Keep the selected gateway when native Snowflake needs guided setup first. */
+  attachToGatewayId?: string;
   /** When true, starts the install as soon as the default configuration is ready. */
   autoStartInstall?: boolean;
   /** When true, runs the workflow without rendering the dialog UI. */
@@ -192,6 +194,7 @@ export function AddServerDialog({
   projectSlug,
   bulk,
   openProviderSetup = false,
+  attachToGatewayId,
   autoStartInstall,
   headless,
 }: AddServerDialogProps): JSX.Element | null {
@@ -226,7 +229,7 @@ export function AddServerDialog({
       const config = configs[0];
       if (
         providerSetupRollout === "disabled" ||
-        !openProviderSetup ||
+        (!openProviderSetup && !attachToGatewayId) ||
         !open ||
         headless ||
         autoStartInstall ||
@@ -236,7 +239,10 @@ export function AddServerDialog({
         !isSnowflakeCatalogServer(config.server)
       )
         return false;
-      if (providerSetupRollout === "loading") return true;
+      if (providerSetupRollout === "loading") {
+        toast.info("Snowflake setup is loading. Try again in a moment.");
+        return true;
+      }
       const key = providerProgressKey(
         "snowflake",
         session.user.id,
@@ -261,7 +267,10 @@ export function AddServerDialog({
       void navigate(
         routes.mcp.catalog.detail.setup.href(
           encodeURIComponent(config.server.registrySpecifier),
-        ),
+        ) +
+          (attachToGatewayId
+            ? `?attachToGateway=${encodeURIComponent(attachToGatewayId)}`
+            : ""),
       );
       return true;
     },
