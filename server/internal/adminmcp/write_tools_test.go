@@ -202,7 +202,9 @@ func TestWriteContextReportsOnlyExecutableOperations(t *testing.T) {
 			if tc.granted && tc.enabled && tc.attached {
 				require.Contains(t, body, `"available_write_operations":["set_organization_feature",`)
 				require.Contains(t, body, "set_organization_chat_analysis_settings")
-				require.NotContains(t, body, "upload_platform_image", "a write missing its dependency is not reported")
+				for _, op := range []WriteOperation{OperationUploadPlatformImage, OperationCurateRegistryPromotionCandidate, OperationRetryRegistryPromotionDocs, OperationPromoteRegistryCandidate} {
+					require.NotContains(t, body, string(op), "a write missing its dependency is not reported")
+				}
 				require.Contains(t, body, `"read_only":false`)
 			} else {
 				require.Contains(t, body, `"available_write_operations":[]`)

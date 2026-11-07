@@ -89,7 +89,8 @@ user before promoting.
 
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`,
-which exposes every write the server implements.
+which exposes every write the server implements whose optional dependencies are
+available.
 Write tools apply immediately. There is no server-side preview or approval, so
 the agent must show the exact change and get your explicit confirmation before
 calling one.
