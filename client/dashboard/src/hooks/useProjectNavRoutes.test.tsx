@@ -140,6 +140,17 @@ describe("useProjectNavRoutes", () => {
     expect(sessions?.scope).toEqual(["project:read"]);
   });
 
+  it("keeps Tool Logs reachable for members who can read their own logs", () => {
+    const { result } = renderNav();
+    const logs = result.current.find(
+      (entry) => entry.route.href() === routes.logs.href(),
+    );
+    // Without log:read the page shows the member's own sessions and agents,
+    // so neither the sidebar nor Command K may hide it behind that scope.
+    expect(logs?.scope).toEqual(["project:read"]);
+    expect(logs?.resourceId).toBe("project_a");
+  });
+
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderNav();
     const navRoutes = result.current.map((entry) => entry.route.href());

@@ -1,10 +1,10 @@
-import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
 import {
   StatTile,
   StatTileGroup,
   StatTileSkeleton,
 } from "@/components/chart/stat-tile";
 import { useLocation, useSearchParams } from "react-router";
+import { useToolLogsAccess } from "@/components/observe/toolLogsAccess";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrgRoutes, useRoutes } from "@/routes";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
@@ -21,6 +21,7 @@ import {
   useIdentityMetrics,
   useIdentityPeers,
   useIdentityWindow,
+  useIsSelf,
 } from "./useIdentityQueries";
 
 // Enough to show the shape of someone's usage; the handoff owns the long tail.
@@ -50,8 +51,12 @@ export default function IdentityUsage(): JSX.Element {
   const { from, to } = useIdentityWindow();
   const location = useLocation();
   const routes = useRoutes();
-  const canViewToolLogs = useCanViewToolLogs();
   const orgRoutes = useOrgRoutes();
+  // Tool Logs filters by this identity's address. Without log:read the server
+  // answers with the viewer's own rows, so for anyone else the handoff would
+  // open a page that says "no calls" about calls that exist.
+  const isSelf = useIsSelf(identity);
+  const canHandOffToolLogs = useToolLogsAccess().projectWide || isSelf;
   // No handoff on this page filters by principal, so the member list this
   // would otherwise fetch is not worth the request.
   const handoffs = identityHandoffs(
@@ -239,7 +244,7 @@ export default function IdentityUsage(): JSX.Element {
         <IdentityPanel
           title="Tools"
           handoffLabel="Tool Logs"
-          handoffHref={canViewToolLogs ? handoffs.toolLogs : undefined}
+          handoffHref={canHandOffToolLogs ? handoffs.toolLogs : undefined}
           loading={metricsQuery.isLoading}
           loadingVariant="block"
           error={metricsQuery.isError && tools.length === 0}

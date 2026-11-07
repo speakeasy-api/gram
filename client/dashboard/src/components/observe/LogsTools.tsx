@@ -48,6 +48,12 @@ import {
 import { ACCOUNT_TYPE_OPTIONS } from "@/components/observe/observeFilterConstants";
 import { LogsTimelineStrip } from "@/components/observe/LogsTimelineStrip";
 import { ScopedToolLogsEmptyState } from "@/components/observe/ScopedToolLogsEmptyState";
+import { OwnScopeToolLogsNotice } from "@/components/observe/OwnScopeToolLogsNotice";
+import {
+  isOwnedAgent,
+  ownScopeFacetGroups,
+  useToolLogsAccess,
+} from "@/components/observe/toolLogsAccess";
 import {
   SKILL_LOAD_CHANNEL_LABELS,
   selectedLoadedVia,
@@ -58,6 +64,7 @@ import {
 import { useSkillsOverMcpEnabled } from "@/pages/skills/use-skills-over-mcp";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/Sheet";
 import { useToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import { useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { useObservabilityMcpConfig } from "@/hooks/useObservabilityMcpConfig";
@@ -164,6 +171,14 @@ export function LogsTools({
   const { projectSlug } = useSlugs();
   const queryClient = useQueryClient();
   const client = useGramContext();
+  const { user } = useSession();
+  const toolLogsAccess = useToolLogsAccess();
+  // Without log:read the server returns only the viewer's own rows, while the
+  // summary and facet options stay project-wide aggregates: asked for only
+  // once log:read is known, so grants still loading count as own scope.
+  const accessLoading = !scope && toolLogsAccess.isLoading;
+  // Embedded views gate themselves before rendering this.
+  const ownScope = !scope && !toolLogsAccess.projectWide;
 
   const mcpConfig = useObservabilityMcpConfig({
     toolsToInclude: ({ toolName }) =>
@@ -357,7 +372,7 @@ export function LogsTools({
   // The server counts each facet under every applied filter but its own, so
   // picking an agent narrows the users and servers on offer while the other
   // agents stay selectable beside it.
-  const { data: filterOptionsData } = useQuery({
+  const { data: fetchedFilterOptions } = useQuery({
     queryKey: ["tool-usage-filter-options", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -365,17 +380,20 @@ export function LogsTools({
           getToolUsageFilterOptionsPayload: narrowedPayload,
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
     // Holds the rail in place while the narrowed counts load, rather than
     // emptying every group under the pointer.
     placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  // Project-wide, so an own-scope viewer neither asks for them nor reads what
+  // an earlier log:read grant left in the cache under this key.
+  const filterOptionsData = ownScope ? undefined : fetchedFilterOptions;
 
   // Feeds the strip. Same key Insights uses, so crossing over from a deep link
   // paints it from cache rather than refetching the window.
   const {
-    data: timeSeriesData,
+    data: fetchedTimeSeries,
     isPending: timeSeriesPending,
     refetch: refetchTimeSeries,
   } = useQuery({
@@ -386,7 +404,7 @@ export function LogsTools({
           getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
     // Narrowing a facet asks the same question of a smaller set. Dropping the
     // shape while the new one loads collapses the panel and jumps the page
     // under the pointer; the previous one holds its place instead, and the
@@ -423,16 +441,35 @@ export function LogsTools({
   );
   // Same query the table's rows read, so the names resolve once for both.
   const readableAgents = useReadableAgents(
-    agentOptions.length > 0 || selectedAgentIds.length > 0,
+    ownScope || agentOptions.length > 0 || selectedAgentIds.length > 0,
   );
+  const agents = readableAgents.isError ? undefined : readableAgents.data;
   const agentNamesById = useMemo(
-    () =>
-      new Map(
-        (readableAgents.isError ? [] : (readableAgents.data ?? [])).map(
-          (agent) => [agent.id, agent.name],
-        ),
-      ),
-    [readableAgents.data, readableAgents.isError],
+    () => new Map((agents ?? []).map((agent) => [agent.id, agent.name])),
+    [agents],
+  );
+  // What the identity facets offer in own scope, in place of the project-wide
+  // options: the viewer themself and the agents they own.
+  const ownFacetValues = useMemo(
+    () => ({
+      user: [
+        {
+          value: user.email,
+          label: user.email,
+          icon: <IdentityAvatar label={user.email} className="size-5" />,
+          selected: selectedEmails.includes(user.email),
+        },
+      ],
+      agent: (agents ?? [])
+        .filter((agent) => isOwnedAgent(agent, user.id))
+        .map((agent) => ({
+          value: agent.id,
+          label: agent.name,
+          icon: <Bot className="text-muted-foreground size-4" />,
+          selected: selectedAgentIds.includes(agent.id),
+        })),
+    }),
+    [agents, selectedAgentIds, selectedEmails, user.email, user.id],
   );
 
   const facetGroups = useMemo<FacetGroup[]>(() => {
@@ -791,7 +828,7 @@ export function LogsTools({
   // The window's real totals, not a count of what has been scrolled into view.
   // Same query key Insights uses, so arriving from a deep link paints these
   // immediately from its cache.
-  const { data: totalsData, refetch: refetchTotals } = useQuery({
+  const { data: fetchedTotals, refetch: refetchTotals } = useQuery({
     queryKey: ["tool-usage-totals", ...narrowedQueryKey],
     queryFn: () =>
       unwrapAsync(
@@ -799,12 +836,14 @@ export function LogsTools({
           getToolUsageSummaryPayload: narrowedPayload,
         }),
       ),
-    enabled: !roleFilterPending,
+    enabled: !roleFilterPending && !ownScope,
     // Same reason as the series above: the tiles keep their numbers rather
     // than blinking to em dashes and back.
     placeholderData: keepPreviousData,
     throwOnError: false,
   });
+  const totalsData = ownScope ? undefined : fetchedTotals;
+  const timeSeriesData = ownScope ? undefined : fetchedTimeSeries;
 
   const {
     data: tracesData,
@@ -817,7 +856,14 @@ export function LogsTools({
     isLogsDisabled: isLogsLogsDisabled,
   } = useLogsEnabledErrorCheck(
     useInfiniteQuery({
-      queryKey: ["tool-usage-traces", ...narrowedQueryKey],
+      // The server narrows the rows to the caller's scope, so the scope is
+      // part of the key: losing log:read must not keep serving everyone's
+      // rows from the cache, and holding it must not serve a stale own set.
+      queryKey: [
+        "tool-usage-traces",
+        ownScope ? "own" : "project",
+        ...narrowedQueryKey,
+      ],
       queryFn: ({ pageParam }) =>
         unwrapAsync(
           telemetryListToolUsageTraces(client, {
@@ -834,7 +880,8 @@ export function LogsTools({
         ),
       initialPageParam: undefined as string | undefined,
       getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-      enabled: !roleFilterPending,
+      // Waits for the grants so the page fetches once, under the right key.
+      enabled: !roleFilterPending && !accessLoading,
       // The rows hold too: an empty table between two filter states reads as
       // "no results" for as long as the fetch takes.
       placeholderData: keepPreviousData,
@@ -958,10 +1005,13 @@ export function LogsTools({
   // stay stuck on an empty result after logging is first enabled.
   const refetch = useCallback(() => {
     void refetchLogs();
-    void refetchTotals();
-    void refetchTimeSeries();
+    // The aggregates are project-wide, so own scope leaves them alone.
+    if (!ownScope) {
+      void refetchTotals();
+      void refetchTimeSeries();
+    }
     void queryClient.invalidateQueries({ queryKey: ["trace-logs"] });
-  }, [queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
+  }, [ownScope, queryClient, refetchLogs, refetchTotals, refetchTimeSeries]);
 
   const handleAddFilterFromLog = useCallback(
     (path: string, op: Operator, value: string) => {
@@ -978,13 +1028,16 @@ export function LogsTools({
     ? new Error("Unable to load tool logs. Please try again.")
     : null;
 
-  const visibleFacetGroups = scope
-    ? facetGroups.filter(
-        (group) =>
-          !IDENTITY_FACETS.has(group.id) &&
-          !(group.id === "account_type" && scope.accountType !== undefined),
-      )
-    : facetGroups;
+  let visibleFacetGroups = facetGroups;
+  if (scope) {
+    visibleFacetGroups = facetGroups.filter(
+      (group) =>
+        !IDENTITY_FACETS.has(group.id) &&
+        !(group.id === "account_type" && scope.accountType !== undefined),
+    );
+  } else if (ownScope) {
+    visibleFacetGroups = ownScopeFacetGroups(facetGroups, ownFacetValues);
+  }
 
   return (
     <>
@@ -1036,6 +1089,8 @@ export function LogsTools({
             timeSeriesPending={timeSeriesPending}
             facetGroups={visibleFacetGroups}
             embedded={!!scope}
+            ownScope={ownScope}
+            accessLoading={accessLoading}
             defaultTypes={defaultTypes}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
@@ -1290,6 +1345,8 @@ function LogsToolsContent({
   onResetRange,
   isZoomed,
   embedded = false,
+  ownScope = false,
+  accessLoading = false,
   defaultTypes,
 }: {
   isLoading: boolean;
@@ -1349,6 +1406,10 @@ function LogsToolsContent({
   isZoomed: boolean;
   /** Inside another page: that page supplies the heading and the inset. */
   embedded?: boolean;
+  /** The viewer reads only their own activity: say so, and skip the summary. */
+  ownScope?: boolean;
+  /** Grants not in yet: still no summary, but no notice that may not apply. */
+  accessLoading?: boolean;
   /** The type selection that counts as "no filter" for this view. */
   defaultTypes: ToolUsageType[];
 }) {
@@ -1430,117 +1491,124 @@ function LogsToolsContent({
             </div>
           </div>
 
+          {ownScope && !accessLoading && <OwnScopeToolLogsNotice />}
+
           {/* Summary and the window's shape are one statement about the range,
               so they share a panel: the numbers, then beside them the
               silhouette they came from. One band rather than two stacked rows,
               because every pixel of height it takes is a row of the list. It
-              still folds for laptops. */}
-          <div className="border-border bg-card shrink-0 border">
-            <button
-              type="button"
-              aria-expanded={summaryOpen}
-              onClick={() => setSummaryOpen(!summaryOpen)}
-              className="text-eyebrow hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
-            >
-              <Icon
-                name={summaryOpen ? "chevron-down" : "chevron-right"}
-                className="text-muted-foreground size-3.5 shrink-0"
-              />
-              <span>Summary and timeline</span>
-              {/* Folded, the panel still has to answer the question it exists
+              still folds for laptops. Both are project-wide aggregates, so a
+              viewer limited to their own rows gets neither. */}
+          {!ownScope && (
+            <div className="border-border bg-card shrink-0 border">
+              <button
+                type="button"
+                aria-expanded={summaryOpen}
+                onClick={() => setSummaryOpen(!summaryOpen)}
+                className="text-eyebrow hover:bg-muted/40 flex w-full items-center gap-2 px-4 py-2 text-left transition-colors"
+              >
+                <Icon
+                  name={summaryOpen ? "chevron-down" : "chevron-right"}
+                  className="text-muted-foreground size-3.5 shrink-0"
+                />
+                <span>Summary and timeline</span>
+                {/* Folded, the panel still has to answer the question it exists
                   for, or folding it costs the reader the headline. */}
-              {!summaryOpen && totals && (
-                <span className="text-muted-foreground ml-auto normal-case">
-                  {Number(totals.eventCount).toLocaleString()} calls ·{" "}
-                  <span
-                    className={cn(
-                      Number(totals.failureCount) > 0 &&
-                        "text-destructive-default",
-                    )}
-                  >
-                    {Number(totals.failureCount).toLocaleString()} failed
+                {!summaryOpen && totals && (
+                  <span className="text-muted-foreground ml-auto normal-case">
+                    {Number(totals.eventCount).toLocaleString()} calls ·{" "}
+                    <span
+                      className={cn(
+                        Number(totals.failureCount) > 0 &&
+                          "text-destructive-default",
+                      )}
+                    >
+                      {Number(totals.failureCount).toLocaleString()} failed
+                    </span>
                   </span>
-                </span>
-              )}
-            </button>
-            {summaryOpen && (
-              <>
-                <div className="border-border flex flex-col border-t 2xl:flex-row">
-                  <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
-                    <SummaryStat
-                      label="Tool calls"
-                      value={
-                        totals
-                          ? Number(totals.eventCount).toLocaleString()
-                          : "—"
-                      }
-                    />
-                    <SummaryStat
-                      label="Failures"
-                      value={
-                        totals
-                          ? Number(totals.failureCount).toLocaleString()
-                          : "—"
-                      }
-                      tone={
-                        totals && Number(totals.failureCount) > 0
-                          ? "destructive"
-                          : "default"
-                      }
-                    />
-                    <SummaryStat
-                      label="Failure rate"
-                      value={
-                        totals
-                          ? `${(totals.failureRate * 100).toFixed(1)}%`
-                          : "—"
-                      }
-                      tone={
-                        totals && totals.failureRate > 0
-                          ? "destructive"
-                          : "default"
-                      }
-                    />
-                    <SummaryStat
-                      label="Blocked rate"
-                      value={
-                        totals
-                          ? `${(totals.blockedRate * 100).toFixed(1)}%`
-                          : "—"
-                      }
-                      tone={
-                        totals && totals.blockedRate > 0 ? "warning" : "default"
-                      }
-                    />
-                    <SummaryStat
-                      label="Tools"
-                      value={
-                        totals
-                          ? Number(totals.uniqueTools).toLocaleString()
-                          : "—"
-                      }
-                    />
-                  </div>
+                )}
+              </button>
+              {summaryOpen && (
+                <>
+                  <div className="border-border flex flex-col border-t 2xl:flex-row">
+                    <div className="divide-border border-border grid shrink-0 grid-cols-2 divide-x sm:grid-cols-5 max-2xl:border-b 2xl:border-r">
+                      <SummaryStat
+                        label="Tool calls"
+                        value={
+                          totals
+                            ? Number(totals.eventCount).toLocaleString()
+                            : "—"
+                        }
+                      />
+                      <SummaryStat
+                        label="Failures"
+                        value={
+                          totals
+                            ? Number(totals.failureCount).toLocaleString()
+                            : "—"
+                        }
+                        tone={
+                          totals && Number(totals.failureCount) > 0
+                            ? "destructive"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Failure rate"
+                        value={
+                          totals
+                            ? `${(totals.failureRate * 100).toFixed(1)}%`
+                            : "—"
+                        }
+                        tone={
+                          totals && totals.failureRate > 0
+                            ? "destructive"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Blocked rate"
+                        value={
+                          totals
+                            ? `${(totals.blockedRate * 100).toFixed(1)}%`
+                            : "—"
+                        }
+                        tone={
+                          totals && totals.blockedRate > 0
+                            ? "warning"
+                            : "default"
+                        }
+                      />
+                      <SummaryStat
+                        label="Tools"
+                        value={
+                          totals
+                            ? Number(totals.uniqueTools).toLocaleString()
+                            : "—"
+                        }
+                      />
+                    </div>
 
-                  {/* Graph paper: faint vertical rules on a grey ground, which
+                    {/* Graph paper: faint vertical rules on a grey ground, which
                     is what a time axis looks like when it is furniture. A
                     diagonal hatch reads as "unavailable" instead. */}
-                  <div className="bg-background relative isolate min-w-0 flex-1 bg-[length:24px_100%] px-4 pt-2 pb-1 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
-                    <LogsTimelineStrip
-                      height={stripHeight}
-                      loading={timeSeriesPending}
-                      timeSeries={timeSeries}
-                      from={from}
-                      to={to}
-                      onRangeSelect={onRangeSelect}
-                      onResetRange={onResetRange}
-                      isZoomed={isZoomed}
-                    />
+                    <div className="bg-background relative isolate min-w-0 flex-1 bg-[length:24px_100%] px-4 pt-2 pb-1 [background-image:repeating-linear-gradient(to_right,rgba(0,0,0,0.035)_0,rgba(0,0,0,0.035)_1px,transparent_1px,transparent_24px)]">
+                      <LogsTimelineStrip
+                        height={stripHeight}
+                        loading={timeSeriesPending}
+                        timeSeries={timeSeries}
+                        from={from}
+                        to={to}
+                        onRangeSelect={onRangeSelect}
+                        onResetRange={onResetRange}
+                        isZoomed={isZoomed}
+                      />
+                    </div>
                   </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="border-border bg-card flex min-h-0 flex-1 flex-col overflow-hidden border">
             {/* Search and the window read across both columns — they narrow
