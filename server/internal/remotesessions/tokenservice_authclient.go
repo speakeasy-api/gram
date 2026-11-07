@@ -299,7 +299,7 @@ func (m *ChallengeManager) refreshAuthClientRemoteSession(ctx context.Context, a
 	if err != nil {
 		return zero, err
 	}
-	if current.ID != result.Session.ID || !current.UpdatedAt.Time.Equal(result.Session.UpdatedAt.Time) {
+	if current.ID != session.ID || current.GrantGeneration != session.GrantGeneration || current.ID != result.Session.ID || !current.UpdatedAt.Time.Equal(result.Session.UpdatedAt.Time) {
 		return zero, remoteSessionReferenceChanged()
 	}
 	return result, nil

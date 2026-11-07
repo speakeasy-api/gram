@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -286,6 +287,70 @@ func TestAuthClientResourceLifecycle_LegacySingletonWithoutLink(t *testing.T) {
 	n, err = f.mgr.DisconnectAuthClientRemoteSession(ctx, subject, f.projectID, f.organizationID, f.clientID)
 	require.NoError(t, err)
 	require.EqualValues(t, 1, n)
+}
+
+// A refresh may adopt a concurrent rotation, but typed admission must not move
+// across a new consent generation while the old credential is in flight.
+func TestAuthClientResourceLifecycle_RefreshRefusesConcurrentReconsent(t *testing.T) {
+	t.Parallel()
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var spy upstreamSpy
+	const resource = "https://typed-reconsent-a.example/mcp"
+	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "typed-reconsent-race", conv.ToPGText(resource), func(w http.ResponseWriter, r *http.Request) {
+		close(started)
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		spyRefreshHandler(&spy)(w, r)
+	})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	expandResourceGrantIndexes(t, ctx, ti.conn)
+	q := repo.New(ti.conn)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	original, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(ti.conn).SetRemoteSessionResourceByIDFixture(ctx, testrepo.SetRemoteSessionResourceByIDFixtureParams{ID: original.ID, Resource: conv.ToPGText(resource)}))
+	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: clientID, ProjectID: conv.ToNullUUID(*auth.ProjectID)}))
+	type outcome struct {
+		result remotesessions.RefreshResult
+		err    error
+	}
+	finished := make(chan outcome, 1)
+	go func() {
+		result, err := mgr.RefreshAuthClientRemoteSessionForResource(ctx, remotesessions.RefreshAttribution{}, subject, *auth.ProjectID, auth.ActiveOrganizationID, clientID, resource)
+		finished <- outcome{result: result, err: err}
+	}()
+	select {
+	case <-started:
+	case <-time.After(10 * time.Second):
+		t.Fatal("refresh never reached the isolated provider")
+	}
+	encrypted, err := testenv.NewEncryptionClient(t).Encrypt([]byte("new-consent-access"))
+	require.NoError(t, err)
+	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, UserSessionIssuerID: original.UserSessionIssuerID, Resource: conv.ToPGText(resource), AccessTokenEncrypted: encrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	require.NoError(t, err)
+	require.Greater(t, replacement.GrantGeneration, original.GrantGeneration)
+	close(release)
+	select {
+	case done := <-finished:
+		require.Error(t, done.err, "typed refresh must not adopt a new consent generation")
+		require.Empty(t, done.result.AccessToken)
+	case <-time.After(10 * time.Second):
+		t.Fatal("typed refresh did not finish after the provider replied")
+	}
+	current, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: replacement.ID, SubjectUrn: subject, RemoteSessionClientID: clientID})
+	require.NoError(t, err)
+	require.Equal(t, replacement, current, "the old refresh response never overwrites the new consent")
 }
 
 func TestAuthClientResourceLifecycle_RefreshLegacySingletonWithoutLink(t *testing.T) {
