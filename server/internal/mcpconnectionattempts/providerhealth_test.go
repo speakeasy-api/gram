@@ -8,6 +8,9 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestProviderCounts_Status(t *testing.T) {
@@ -22,7 +25,8 @@ func TestProviderCounts_Status(t *testing.T) {
 		{"every threshold", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 3, BaselineAttempts: 100, BaselineFailures: 1}, ProviderOutage},
 		{"one organization", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 1, BaselineAttempts: 100, BaselineFailures: 1}, ProviderElevated},
 		{"too few failures", ProviderCounts{Attempts: 4, Failures: 4, Organizations: 3, BaselineAttempts: 100, BaselineFailures: 1}, ProviderElevated},
-		{"rate near its baseline", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 3, BaselineAttempts: 100, BaselineFailures: 40}, ProviderElevated},
+		{"rate near its baseline", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 3, BaselineAttempts: 100, BaselineFailures: 40}, ProviderNormal},
+		{"rate alone", ProviderCounts{Attempts: 2, Failures: 2, Organizations: 2, BaselineAttempts: 100, BaselineFailures: 1}, ProviderNormal},
 		{"no baseline", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 3, BaselineAttempts: 0, BaselineFailures: 0}, ProviderOutage},
 		{"one threshold", ProviderCounts{Attempts: 100, Failures: 5, Organizations: 1, BaselineAttempts: 100, BaselineFailures: 5}, ProviderNormal},
 		{"healthy", ProviderCounts{Attempts: 50, Failures: 0, Organizations: 0, BaselineAttempts: 300, BaselineFailures: 1}, ProviderNormal},
@@ -80,9 +84,20 @@ func (f *providerFixture) step(step Step, what Happened, final bool) func(Attemp
 	}
 }
 
+// writeDay adds attempts to the daily table, daysAgo whole days before today, and returns that day.
+func (f *providerFixture) writeDay(daysAgo int, outcome, reason, fixed string, attempts uint64) time.Time {
+	f.t.Helper()
+	day := f.now.Truncate(24*time.Hour).AddDate(0, 0, -daysAgo)
+	batch, err := f.conn.PrepareBatch(f.t.Context(), `INSERT INTO `+OutcomesDailyTable+` (day, provider, app, client_family, step, outcome, reason, fixed_by, attempts)`)
+	require.NoError(f.t, err)
+	require.NoError(f.t, batch.Append(day, f.provider, AppDCR.key, "", StepProviderRefresh.String(), outcome, reason, fixed, attempts))
+	require.NoError(f.t, batch.Send())
+	return day
+}
+
 func (f *providerFixture) read(window time.Duration, trendDays int) ProviderHealthReport {
 	f.t.Helper()
-	health := NewProviderHealth(f.conn)
+	health := NewProviderHealth(testenv.NewLogger(f.t), f.conn)
 	health.now = func() time.Time { return f.now }
 	reports, err := health.Read(f.t.Context(), ProviderHealthQuery{Provider: f.provider, Window: window, TrendDays: trendDays})
 	require.NoError(f.t, err)
@@ -94,10 +109,7 @@ func TestProviderHealth_OutageAcrossOrganizationsNamesNone(t *testing.T) {
 	t.Parallel()
 
 	f := newProviderFixture(t, "mcp.squareup.com")
-	steady := "org-" + uuid.NewString()
-	for range 20 {
-		f.write(f.attempt(steady, 3*24*time.Hour), f.step(StepProviderRefresh, ResultRefreshed, true))
-	}
+	f.writeDay(3, string(OutcomeConnected), "", "", 20)
 	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
 	for i := range 6 {
 		f.write(f.attempt(orgs[i%len(orgs)], 10*time.Minute), f.step(StepProviderRefresh, CodeProviderUnavailable, true))
@@ -109,7 +121,7 @@ func TestProviderHealth_OutageAcrossOrganizationsNamesNone(t *testing.T) {
 	require.Equal(t, []ProviderFailure{{Step: StepProviderRefresh.String(), Reason: CodeProviderUnavailable.String(), Attempts: 6}}, report.Failures)
 
 	printed := fmt.Sprintf("%+v", report)
-	for _, org := range append(orgs, steady) {
+	for _, org := range orgs {
 		require.NotContains(t, printed, org)
 	}
 }
@@ -138,36 +150,30 @@ func TestProviderHealth_CountsReconnectLoopsAndAbandons(t *testing.T) {
 		f.step(StepDiscoveryMember, CodeRejectedByMember, false))
 	f.write(f.attempt(org, 2*time.Hour), f.step(StepProviderSignIn, ResultAccepted, false))
 	f.write(f.attempt(org, 10*time.Minute), f.step(StepProviderSignIn, ResultAccepted, false))
+	f.write(f.attempt(org, 2*time.Hour),
+		f.step(StepDiscoveryMember, CodeNeedsSignIn, false),
+		f.step(StepProviderSignIn, ResultSignedIn, true))
 
 	report := f.read(24*time.Hour, 0)
-	require.Equal(t, uint64(1), report.ReconnectLoops)
+	require.Equal(t, uint64(1), report.ReconnectLoops, "a first connect that signs in after needing to is not a loop")
 	require.Equal(t, []ProviderStepCount{{Step: StepProviderSignIn.String(), Attempts: 1}}, report.Abandoned, "an attempt still in its live window is not abandoned")
 	require.Equal(t, []ProviderFailure{{Step: StepDiscoveryMember.String(), Reason: CodeRejectedByMember.String(), Attempts: 1}}, report.Failures)
-	require.Equal(t, ProviderNormal, report.Status, "nothing failed on the provider's side")
+	require.Equal(t, ProviderQuiet, report.Status, "nothing ended in the last hour")
 }
 
 func TestProviderHealth_DailyTrendFromTheLongTermTable(t *testing.T) {
 	t.Parallel()
 
 	f := newProviderFixture(t, "mcp.box.com")
-	day := f.now.Truncate(24*time.Hour).AddDate(0, 0, -2)
-	batch, err := f.conn.PrepareBatch(t.Context(), `INSERT INTO `+OutcomesDailyTable+` (day, provider, app, client_family, step, outcome, reason, fixed_by, attempts)`)
-	require.NoError(t, err)
-	for _, row := range []struct {
-		outcome, reason, fixed string
-		attempts               uint64
-	}{
-		{string(OutcomeConnected), "", "", 10},
-		{string(OutcomeFailed), CodeProviderUnavailable.String(), string(FixedByRetry), 2},
-		{string(OutcomeFailed), CodeProviderUnavailable.String(), "", 1},
-		{string(OutcomeAbandoned), "", "", 3},
-	} {
-		require.NoError(t, batch.Append(day, f.provider, AppDCR.key, "", StepProviderRefresh.String(), row.outcome, row.reason, row.fixed, row.attempts))
-	}
-	require.NoError(t, batch.Send())
+	day := f.writeDay(2, string(OutcomeConnected), "", "", 10)
+	f.writeDay(2, string(OutcomeFailed), CodeProviderUnavailable.String(), string(FixedByRetry), 2)
+	f.writeDay(2, string(OutcomeFailed), CodeProviderUnavailable.String(), "", 1)
+	f.writeDay(2, string(OutcomeAbandoned), "", "", 3)
 
 	report := f.read(time.Hour, 7)
 	require.Equal(t, ProviderQuiet, report.Status)
+	require.Equal(t, uint64(16), report.Counts.BaselineAttempts, "the baseline comes from the same table")
+	require.Equal(t, uint64(3), report.Counts.BaselineFailures)
 	require.Len(t, report.Daily, 1)
 	require.True(t, day.Equal(report.Daily[0].Day))
 	require.Equal(t, ProviderDay{Day: report.Daily[0].Day, Provider: f.provider, Attempts: 16, Failed: 3, Abandoned: 3, Fixed: 2}, report.Daily[0])
@@ -176,9 +182,36 @@ func TestProviderHealth_DailyTrendFromTheLongTermTable(t *testing.T) {
 func TestProviderHealth_RefusesUnboundedReads(t *testing.T) {
 	t.Parallel()
 
-	health := NewProviderHealth(nil)
+	health := NewProviderHealth(testenv.NewLogger(t), nil)
 	_, err := health.Read(t.Context(), ProviderHealthQuery{Provider: "", Window: OutageBaseline + time.Hour, TrendDays: 0})
 	require.Error(t, err)
 	_, err = health.Read(t.Context(), ProviderHealthQuery{Provider: "", Window: time.Hour, TrendDays: ProviderHealthMaxTrendDays + 1})
 	require.Error(t, err)
+}
+
+func TestProviderHealth_LiveAttemptIsNotCounted(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.figma.com")
+	for range 6 {
+		f.write(f.attempt("org-"+uuid.NewString(), 10*time.Minute), f.step(StepProviderRefresh, CodeProviderUnavailable, false))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderQuiet, report.Status, "a provider fault still being retried is not a failure yet")
+	require.Zero(t, report.Counts.Failures)
+}
+
+func TestProviderHealth_LeavesOutTheDemoOrganization(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.zapier.com")
+	for range 6 {
+		f.write(f.attempt(constants.DemoOrganizationID, 10*time.Minute), f.step(StepProviderRefresh, CodeProviderUnavailable, true))
+	}
+
+	health := NewProviderHealth(testenv.NewLogger(t), f.conn)
+	reports, err := health.Read(t.Context(), ProviderHealthQuery{Provider: f.provider, Window: time.Hour, TrendDays: 0})
+	require.NoError(t, err)
+	require.Empty(t, reports)
 }

@@ -113,11 +113,11 @@ func TestDescribeProviderHealth_RefusesBadInput(t *testing.T) {
 	t.Parallel()
 
 	for name, args := range map[string]string{
-		"tenant host":      `{"provider":"acme.okta.com"}`,
-		"unlisted window":  `{"window_hours":5}`,
-		"trend too long":   `{"trend_days":396}`,
-		"negative trend":   `{"trend_days":-1}`,
-		"zero-hour window": `{"window_hours":-1}`,
+		"tenant host":     `{"provider":"acme.okta.com"}`,
+		"unlisted window": `{"window_hours":5}`,
+		"trend too long":  `{"trend_days":396}`,
+		"negative trend":  `{"trend_days":-1}`,
+		"negative window": `{"window_hours":-1}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -147,4 +147,20 @@ func TestDescribeProviderHealth_NeedsVerifiedStaff(t *testing.T) {
 	_, _, isError := callProviderHealthTool(t, reads, false, `{}`)
 	require.True(t, isError)
 	require.Nil(t, reads.query)
+}
+
+func TestDescribeProviderHealth_UnavailableWithoutAReader(t *testing.T) {
+	t.Parallel()
+
+	body, _, isError := callProviderHealthTool(t, &recordingOrganizationReader{}, true, `{}`)
+	require.True(t, isError)
+	require.Contains(t, body, errProviderHealthUnavailable.Error())
+}
+
+func TestPercent_KeepsASmallRateVisible(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "0%", percent(0))
+	require.Equal(t, "0.4%", percent(0.004))
+	require.Equal(t, "25%", percent(0.25))
 }

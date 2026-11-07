@@ -4,20 +4,24 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
-	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
-// Provider health compares each known provider's recent provider-side failures,
-// across every organization, with its own recent past. It is computed when asked
-// and stored nowhere. Customer outage messages can later call Read behind a short
-// cache; until then only staff see it.
+// Provider health compares each known provider's provider-side failures in the last
+// hour, across every organization, with its own last seven closed days. It is
+// computed when asked and stored nowhere. Only ended attempts count, in the window as
+// in the baseline, so a provider fault someone is still retrying is not yet a failure.
+// The demo organization is left out of both. Customer outage messages can later
+// make a status-only read (Window: OutageWindow, TrendDays: 0) behind a short cache;
+// until then only staff see it.
 
 const (
 	// OutageWindow is the recent stretch judged: long enough to hold a few attempts
@@ -25,8 +29,13 @@ const (
 	OutageWindow = time.Hour
 
 	// OutageBaseline is the provider's own past the window is compared with, so a
-	// weekly pattern is in it.
+	// weekly pattern is in it. It is read from closed days of the daily table, so it
+	// lags by up to a day, and a provider used by fewer than three organizations on a
+	// day is counted under other that day, leaving it a smaller or no baseline.
 	OutageBaseline = 7 * 24 * time.Hour
+
+	// outageBaselineDays is OutageBaseline in whole days.
+	outageBaselineDays = 7
 
 	// OutageMinFailures is how many provider-side failed attempts the window needs.
 	// Prod sees a few a week, so fewer is noise.
@@ -49,8 +58,8 @@ const (
 	// providerHealthTopFailures bounds the failure list per provider.
 	providerHealthTopFailures = 5
 
-	// providerHealthReadSeconds lifts the connection's 60-second limit for eight days of events.
-	providerHealthReadSeconds = 300
+	// providerHealthReadSeconds bounds one read: at most seven days of events, reduced per attempt.
+	providerHealthReadSeconds = 60
 
 	// providerHealthReadMemoryBytes caps one read.
 	providerHealthReadMemoryBytes = 1 << 30 // 1 GiB
@@ -66,7 +75,7 @@ const (
 	// ProviderOutage meets every outage threshold.
 	ProviderOutage ProviderStatus = "outage"
 
-	// ProviderElevated meets all but one.
+	// ProviderElevated meets the rate threshold and one of the two count thresholds.
 	ProviderElevated ProviderStatus = "elevated"
 
 	// ProviderNormal had attempts and is not elevated.
@@ -81,7 +90,7 @@ const (
 
 // ProviderCounts are a provider's attempts, weighted by the repeats they stand for.
 type ProviderCounts struct {
-	// Attempts reached the provider in the window.
+	// Attempts reached the provider and ended in the window.
 	Attempts uint64
 
 	// Failures ended on a provider-side reason in the window.
@@ -90,10 +99,10 @@ type ProviderCounts struct {
 	// Organizations had a provider-side failure in the window.
 	Organizations int
 
-	// BaselineAttempts reached the provider in the baseline.
+	// BaselineAttempts reached the provider and ended in the baseline days.
 	BaselineAttempts uint64
 
-	// BaselineFailures ended on a provider-side reason in the baseline.
+	// BaselineFailures ended on a provider-side reason in the baseline days.
 	BaselineFailures uint64
 }
 
@@ -109,20 +118,15 @@ func (c ProviderCounts) Status() ProviderStatus {
 		return ProviderQuiet
 	}
 	baseline := c.BaselineRate()
-	met := 0
-	for _, ok := range []bool{
-		c.Failures >= OutageMinFailures,
-		c.Organizations >= OutageMinOrganizations,
-		c.Rate() >= max(OutageRateMultiple*baseline, baseline+OutageRateIncrease),
-	} {
-		if ok {
-			met++
-		}
+	if c.Rate() < max(OutageRateMultiple*baseline, baseline+OutageRateIncrease) {
+		return ProviderNormal
 	}
-	switch met {
-	case 3:
+	enoughFailures := c.Failures >= OutageMinFailures
+	enoughOrganizations := c.Organizations >= OutageMinOrganizations
+	switch {
+	case enoughFailures && enoughOrganizations:
 		return ProviderOutage
-	case 2:
+	case enoughFailures || enoughOrganizations:
 		return ProviderElevated
 	default:
 		return ProviderNormal
@@ -167,8 +171,8 @@ type ProviderHealthReport struct {
 	// Failures are the most common ways attempts ended failed in the window, any party at fault.
 	Failures []ProviderFailure
 
-	// ReconnectLoops are window attempts that signed in to the provider and still
-	// ended needing sign-in or rejected by the server.
+	// ReconnectLoops are ended window attempts that signed in at the provider, then
+	// needed sign-in again or were rejected by the server.
 	ReconnectLoops uint64
 
 	// Abandoned counts window attempts past their live window that ended with nothing, by step.
@@ -222,13 +226,14 @@ type ProviderDay struct {
 
 // ProviderHealth reads provider health across every organization.
 type ProviderHealth struct {
-	conn driver.Conn
-	now  func() time.Time
+	logger *slog.Logger
+	conn   driver.Conn
+	now    func() time.Time
 }
 
 // NewProviderHealth reads through conn, which needs SELECT on the events and daily tables.
-func NewProviderHealth(conn driver.Conn) *ProviderHealth {
-	return &ProviderHealth{conn: conn, now: time.Now}
+func NewProviderHealth(logger *slog.Logger, conn driver.Conn) *ProviderHealth {
+	return &ProviderHealth{logger: logger.With(attr.SlogComponent("provider_health")), conn: conn, now: time.Now}
 }
 
 // ValidProviderLabel reports whether label is a known vendor host or other.
@@ -245,7 +250,25 @@ type providerTally struct {
 	loops         uint64
 }
 
+func newProviderTally() *providerTally {
+	return &providerTally{counts: noProviderCounts, organizations: map[string]struct{}{}, failures: map[[2]string]uint64{}, abandoned: map[string]uint64{}, loops: 0}
+}
+
+// providerAttempt is one attempt reduced in ClickHouse to what provider health needs.
+type providerAttempt struct {
+	AttemptSummary
+
+	// ReconnectLoop says a needs-sign-in or rejected row came after a provider sign-in.
+	ReconnectLoop bool `ch:"reconnect_loop"`
+}
+
+// providerAttemptColumns adds the reconnect loop to the ending columns.
+const providerAttemptColumns = attemptEndingColumns + `,
+	toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
+		AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop`
+
 // Read returns each provider's health, busiest first. Organizations stay counts.
+// A status-only caller passes Window: OutageWindow and TrendDays: 0.
 func (h *ProviderHealth) Read(ctx context.Context, query ProviderHealthQuery) ([]ProviderHealthReport, error) {
 	if query.Window <= 0 || query.Window > OutageBaseline {
 		return nil, fmt.Errorf("provider health window must be within %s", OutageBaseline)
@@ -253,6 +276,15 @@ func (h *ProviderHealth) Read(ctx context.Context, query ProviderHealthQuery) ([
 	if query.TrendDays < 0 || query.TrendDays > ProviderHealthMaxTrendDays {
 		return nil, fmt.Errorf("provider health trend must be at most %d days", ProviderHealthMaxTrendDays)
 	}
+	reports, err := h.read(ctx, query)
+	if err != nil {
+		h.logger.ErrorContext(ctx, "read provider health", attr.SlogError(err))
+		return nil, err
+	}
+	return reports, nil
+}
+
+func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([]ProviderHealthReport, error) {
 	now := h.now().UTC()
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{
 		"max_execution_time": providerHealthReadSeconds,
@@ -260,50 +292,63 @@ func (h *ProviderHealth) Read(ctx context.Context, query ProviderHealthQuery) ([
 	}))
 
 	statusFrom := now.Add(-OutageWindow)
-	detailFrom := now.Add(-query.Window)
+	detailFrom := min(statusFrom.UnixNano(), now.Add(-query.Window).UnixNano())
 	tallies := map[string]*providerTally{}
-	filter := AttemptFilter{
-		StartedFrom:            statusFrom.Add(-OutageBaseline),
-		StartedBefore:          now,
-		OrganizationID:         "",
-		ExcludeOrganizationIDs: nil,
-		ProjectID:              uuid.Nil,
-		ServerID:               "",
-		PeopleFailingFrom:      time.Time{},
-		PeopleFailingBefore:    time.Time{},
-	}
-	err := ReadAttempts(ctx, h.conn, filter, func(a AttemptSummary) {
-		provider := ProviderLabel(a.ProviderHost)
-		if provider == "" || (query.Provider != "" && provider != query.Provider) {
-			return
-		}
-		tally, ok := tallies[provider]
+	tally := func(provider string) *providerTally {
+		t, ok := tallies[provider]
 		if !ok {
-			tally = &providerTally{counts: noProviderCounts, organizations: map[string]struct{}{}, failures: map[[2]string]uint64{}, abandoned: map[string]uint64{}, loops: 0}
-			tallies[provider] = tally
+			t = newProviderTally()
+			tallies[provider] = t
 		}
-		tally.add(a, now, statusFrom, detailFrom)
-	})
+		return t
+	}
+
+	providerFilter, args := "", []any{detailFrom, now.UnixNano(), ExcludedOrganizations()}
+	// other is every unlisted host, so only a known host is pushed down.
+	if query.Provider != "" && query.Provider != LabelOther {
+		providerFilter, args = " AND provider = ?", append(args, query.Provider)
+	}
+	rows, err := h.conn.Query(ctx, `SELECT`+providerAttemptColumns+` FROM `+eventsTable+`
+	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
+		AND NOT has(?, organization_id)
+	GROUP BY organization_id, attempt_id
+	HAVING provider != ''`+providerFilter, args...)
 	if err != nil {
+		return nil, fmt.Errorf("query provider attempts: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+	for rows.Next() {
+		var a providerAttempt
+		if err := rows.ScanStruct(&a); err != nil {
+			return nil, fmt.Errorf("scan provider attempt: %w", err)
+		}
+		provider := ProviderLabel(a.ProviderHost)
+		if query.Provider != "" && provider != query.Provider {
+			continue
+		}
+		tally(provider).add(a, now, statusFrom)
+	}
+	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read provider attempts: %w", err)
 	}
 
+	if err := h.readBaseline(ctx, now, query.Provider, tally); err != nil {
+		return nil, err
+	}
 	var daily map[string][]ProviderDay
 	if query.TrendDays > 0 {
 		daily, err = h.readDaily(ctx, now, query)
 		if err != nil {
 			return nil, err
 		}
+		for provider := range daily {
+			tally(provider)
+		}
 	}
 
 	reports := make([]ProviderHealthReport, 0, len(tallies))
-	for provider, tally := range tallies {
-		reports = append(reports, tally.report(provider, daily[provider]))
-	}
-	for provider, days := range daily {
-		if _, ok := tallies[provider]; !ok {
-			reports = append(reports, (&providerTally{counts: noProviderCounts, organizations: nil, failures: nil, abandoned: nil, loops: 0}).report(provider, days))
-		}
+	for provider, t := range tallies {
+		reports = append(reports, t.report(provider, daily[provider]))
 	}
 	slices.SortFunc(reports, func(a, b ProviderHealthReport) int {
 		return cmp.Or(cmp.Compare(b.Counts.Attempts+b.Counts.BaselineAttempts, a.Counts.Attempts+a.Counts.BaselineAttempts), cmp.Compare(a.Provider, b.Provider))
@@ -311,46 +356,30 @@ func (h *ProviderHealth) Read(ctx context.Context, query ProviderHealthQuery) ([
 	return reports, nil
 }
 
-func (t *providerTally) add(a AttemptSummary, now, statusFrom, detailFrom time.Time) {
-	weight := max(a.Weight, 1)
-	reason := a.LastReason
-	if a.HasFinal {
-		reason = a.FinalReason
+// add counts one ended attempt. A live attempt can still recover, so it is left out.
+func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
+	if !a.HasFinal && now.Before(a.StartedAt.Add(AttemptLiveWindow)) {
+		return
 	}
-	meaning, known := MeaningOf(reason)
-	providerFault := known && meaning.WhoFixes == WhoProvider
-
-	if a.StartedAt.Before(statusFrom) {
-		t.counts.BaselineAttempts += weight
-		if providerFault {
-			t.counts.BaselineFailures += weight
-		}
-	} else {
+	weight := max(a.Weight, 1)
+	ending := a.End(now)
+	if !a.StartedAt.Before(statusFrom) {
 		t.counts.Attempts += weight
-		if providerFault {
+		if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
 			t.counts.Failures += weight
 			t.organizations[a.OrganizationID] = struct{}{}
 		}
 	}
-
-	if a.StartedAt.Before(detailFrom) {
-		return
-	}
-	ending := a.End(now)
-	switch {
-	case ending.Outcome == OutcomeAbandoned && !now.Before(a.StartedAt.Add(AttemptLiveWindow)):
+	switch ending.Outcome {
+	case OutcomeAbandoned:
 		t.abandoned[ending.Step] += weight
-	case ending.Outcome == OutcomeFailed:
+	case OutcomeFailed:
 		t.failures[[2]string{ending.Step, ending.Reason}] += weight
+	case OutcomeConnected, OutcomeBlocked, OutcomeDeclined:
 	}
-	if a.SignedIn && (isReconnectReason(a.LastReason) || (a.HasFinal && isReconnectReason(a.FinalReason))) {
+	if a.ReconnectLoop {
 		t.loops += weight
 	}
-}
-
-// isReconnectReason is a reason that sends a person who just signed in back to sign in.
-func isReconnectReason(reason string) bool {
-	return reason == CodeRejectedByMember.String() || reason == CodeNeedsSignIn.String()
 }
 
 func (t *providerTally) report(provider string, daily []ProviderDay) ProviderHealthReport {
@@ -382,6 +411,38 @@ func (t *providerTally) report(provider string, daily []ProviderDay) ProviderHea
 		Abandoned:      abandoned,
 		Daily:          daily,
 	}
+}
+
+// readBaseline adds the baseline days' ended attempts and provider-side failures.
+func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provider string, tally func(string) *providerTally) error {
+	today := now.Truncate(24 * time.Hour)
+	where, args := "day >= toDate(?) AND day < toDate(?)", []any{today.AddDate(0, 0, -outageBaselineDays), today}
+	if provider != "" {
+		where, args = where+" AND provider = ?", append(args, provider)
+	}
+	rows, err := h.conn.Query(ctx, `SELECT provider, reason, sum(attempts) AS reason_attempts
+	FROM `+OutcomesDailyTable+` WHERE `+where+` AND provider != ''
+	GROUP BY provider, reason`, args...)
+	if err != nil {
+		return fmt.Errorf("query provider baseline: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+	for rows.Next() {
+		var label, reason string
+		var attempts uint64
+		if err := rows.Scan(&label, &reason, &attempts); err != nil {
+			return fmt.Errorf("scan provider baseline: %w", err)
+		}
+		t := tally(label)
+		t.counts.BaselineAttempts += attempts
+		if meaning, ok := MeaningOf(reason); ok && meaning.WhoFixes == WhoProvider {
+			t.counts.BaselineFailures += attempts
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read provider baseline: %w", err)
+	}
+	return nil
 }
 
 func (h *ProviderHealth) readDaily(ctx context.Context, now time.Time, query ProviderHealthQuery) (map[string][]ProviderDay, error) {

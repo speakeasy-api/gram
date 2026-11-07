@@ -172,9 +172,9 @@ func registerProviderHealthTools(server *mcp.Server, health ProviderHealthReader
 		Name:  "describe_provider_health",
 		Title: "Describe Provider Health",
 		Description: "Show whether known MCP sign-in providers (Google, Microsoft, Linear, Notion, ...) are failing across all organizations: is it us, the app or the provider? " +
-			"Status compares the last hour's failures the provider has to fix with the same provider's previous 7 days: outage meets every threshold in thresholds, elevated all but one, quiet had no attempts, and other (unlisted providers, many in one) is not_checked. " +
-			"failures, reconnect_loops and abandoned cover window_hours; daily comes from the 13-month table, where a provider used by fewer than 3 organizations that day is counted under other. " +
-			"Counts only: no organization, project, person or server is named or identified, and none may be inferred or shared with customers.",
+			"Status compares the last hour's ended attempts that failed on the provider's side with the same provider's last 7 closed days: outage meets the rate threshold and both count thresholds in thresholds, elevated the rate and one count, normal had ended attempts and is neither, quiet had none, and other (unlisted providers, many in one) is not_checked. Attempts still in progress are not counted yet. " +
+			"failures, reconnect_loops and abandoned cover window_hours; daily and the baseline come from the 13-month table, which lags by up to a day and counts a provider used by fewer than 3 organizations that day under other. The demo organization is left out. " +
+			"Counts only: no organization, project, person or server is named. organizations_affected can be 1 or 2, so treat every number here as staff-only and never share it, or anything worked out from it, with customers.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProviderHealthInput) (*mcp.CallToolResult, ProviderHealthOutput, error) {
 		if !verifiedStaff(ctx) || health == nil {
@@ -258,7 +258,7 @@ func providerHealthEntry(report mcpconnectionattempts.ProviderHealthReport) Prov
 
 func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) string {
 	c := report.Counts
-	usual := fmt.Sprintf("Usually %.0f%% fail.", 100*c.BaselineRate())
+	usual := fmt.Sprintf("Usually %s fail.", percent(c.BaselineRate()))
 	switch report.Status {
 	case mcpconnectionattempts.ProviderOutage:
 		return fmt.Sprintf("%s looks down: %d of %d attempts in the last hour failed on its side, in %s. %s",
@@ -273,6 +273,14 @@ func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) st
 	default:
 		return "Providers not on the known list are counted together as other and not checked for outages."
 	}
+}
+
+// percent shows a rate, with one decimal below 1% so a small rate does not read as none.
+func percent(rate float64) string {
+	if rate > 0 && rate < 0.01 {
+		return fmt.Sprintf("%.1f%%", 100*rate)
+	}
+	return fmt.Sprintf("%.0f%%", 100*rate)
 }
 
 func countOf(n int, noun string) string {

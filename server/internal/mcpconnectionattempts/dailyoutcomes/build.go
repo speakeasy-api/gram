@@ -16,7 +16,6 @@ import (
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
@@ -167,7 +166,7 @@ func (b *Builder) DaysToBuild(ctx context.Context, now time.Time) ([]time.Time, 
 		`SELECT DISTINCT toDate(attempt_started_at) AS d FROM mcp_connection_events
 		WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
 		AND NOT has(?, organization_id)`,
-		scanFrom.UnixNano(), last.Add(day24h).UnixNano(), excludedOrganizations())
+		scanFrom.UnixNano(), last.Add(day24h).UnixNano(), mcpconnectionattempts.ExcludedOrganizations())
 	if err != nil {
 		return nil, fmt.Errorf("list days with raw events: %w", err)
 	}
@@ -215,11 +214,6 @@ func (b *Builder) distinctDays(ctx context.Context, query string, args ...any) (
 	return days, nil
 }
 
-// excludedOrganizations are left out of the rollup: the demo organization's attempts are made up.
-func excludedOrganizations() []string {
-	return []string{constants.DemoOrganizationID}
-}
-
 // BuildDay replaces one day of the long-term table. It is safe to rerun and to
 // interrupt: the stored day changes only through one REPLACE PARTITION.
 func (b *Builder) BuildDay(ctx context.Context, day, now time.Time) (Result, error) {
@@ -255,7 +249,7 @@ func (b *Builder) outcomes(ctx context.Context, day, now time.Time) ([]DayRow, e
 	counts := newTally()
 	var failures []mcpconnectionattempts.AttemptSummary
 	dayFilter := mcpconnectionattempts.AttemptFilter{
-		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: excludedOrganizations(),
+		StartedFrom: day, StartedBefore: day.Add(day24h), OrganizationID: "", ExcludeOrganizationIDs: mcpconnectionattempts.ExcludedOrganizations(),
 		ProjectID: uuid.Nil, ServerID: "", PeopleFailingFrom: time.Time{}, PeopleFailingBefore: time.Time{},
 	}
 	err := mcpconnectionattempts.ReadAttempts(readContext(ctx), b.ch, dayFilter, func(a mcpconnectionattempts.AttemptSummary) {
