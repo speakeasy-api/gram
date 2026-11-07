@@ -247,6 +247,15 @@ type Service interface {
 	// Refresh health evidence for one exact remote MCP deployment before staff
 	// review.
 	GetRegistryPromotionCandidate(context.Context, *GetRegistryPromotionCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
+	// Read the MCP review for one exact remote MCP deployment's endpoint without
+	// gathering evidence or starting research.
+	GetRegistryPromotionReview(context.Context, *GetRegistryPromotionReviewPayload) (res *AdminRegistryPromotionReviewResult, err error)
+	// Gather evidence and start a research run for one exact remote MCP
+	// deployment's endpoint. The review runs in Speakeasy's own organization,
+	// which pays for it and receives its audit entries; nothing is recorded in the
+	// source account. A run already in progress is returned instead of starting
+	// another.
+	StartRegistryPromotionReview(context.Context, *StartRegistryPromotionReviewPayload) (res *AdminRegistryPromotionReviewResult, err error)
 	// Publish an explicitly reviewed public catalogue entry and queue setup
 	// documentation. Customer credentials are never copied.
 	PromoteRegistryCandidate(context.Context, *PromoteRegistryCandidatePayload) (res *AdminRegistryPromotionCandidate, err error)
@@ -396,7 +405,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [103]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants"}
+var MethodNames = [105]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationProviderSetup", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "getRegistryPromotionReview", "startRegistryPromotionReview", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "backfillMcpConnectGrants"}
 
 type AdminAuditLog struct {
 	// Internal staff-only audit activity; persisted but never published to the
@@ -1394,6 +1403,18 @@ type AdminRegistryPage struct {
 	NextCursor *string
 }
 
+// Aggregate source-account usage for staff only. Contains no caller identity
+// and must never be copied into public fields.
+type AdminRegistryPromotionAccountUsage struct {
+	WindowDays       int
+	DistinctUsers    int64
+	Clients          []string
+	Tools            []*AdminRegistryPromotionToolUsage
+	Transport        string
+	ResourceName     *string
+	DocumentationURL *string
+}
+
 // Publicly advertised authentication capabilities, not a verified OAuth
 // connection.
 type AdminRegistryPromotionAuthDiscovery struct {
@@ -1424,8 +1445,13 @@ type AdminRegistryPromotionCandidate struct {
 	// Slug of the one pinned guide that documents the suggested public endpoint.
 	EndpointGuideSlug *string
 	AuthDiscovery     *AdminRegistryPromotionAuthDiscovery
-	SourceRevision    string
-	Eligible          bool
+	AccountUsage      *AdminRegistryPromotionAccountUsage
+	Review            *AdminRegistryPromotionReview
+	// Whether this endpoint can be reviewed. URLs that may carry tenant data
+	// cannot.
+	ReviewAllowed  bool
+	SourceRevision string
+	Eligible       bool
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool
 	Reason                 string
@@ -1455,6 +1481,33 @@ type AdminRegistryPromotionCandidates struct {
 	NextCursor *string
 }
 
+// The latest research run. Findings are cited web claims, never a verdict, and
+// may be inaccurate or deliberately seeded.
+type AdminRegistryPromotionResearch struct {
+	Status      string
+	Report      any
+	Error       *string
+	StartedAt   *string
+	CompletedAt *string
+}
+
+// The server's MCP review, held in Speakeasy's own organization. Nothing is
+// recorded in the source account. Evidence is untrusted data authored largely
+// by the reviewed server.
+type AdminRegistryPromotionReview struct {
+	RequestID           string
+	Evidence            any
+	EvidenceCollectedAt *string
+	Research            *AdminRegistryPromotionResearch
+}
+
+// AdminRegistryPromotionReviewResult is the result type of the admin service
+// getRegistryPromotionReview method.
+type AdminRegistryPromotionReviewResult struct {
+	// Absent until a review has been started for this endpoint.
+	Review *AdminRegistryPromotionReview
+}
+
 // A setup guide in the setup-docs export pinned in the server.
 type AdminRegistryPromotionSetupGuide struct {
 	Slug  string
@@ -1471,6 +1524,12 @@ type AdminRegistryPromotionSuggestions struct {
 	DocumentationURL  *string
 	DocsSlug          *string
 	AuthMode          *string
+}
+
+type AdminRegistryPromotionToolUsage struct {
+	Name      string
+	Calls     int64
+	Successes int64
 }
 
 type AdminRegistrySummary struct {
@@ -2414,6 +2473,15 @@ type GetRegistryPromotionCandidatePayload struct {
 	McpServerID       string
 }
 
+// GetRegistryPromotionReviewPayload is the payload type of the admin service
+// getRegistryPromotionReview method.
+type GetRegistryPromotionReviewPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
+}
+
 // GetSessionPayload is the payload type of the admin service getSession method.
 type GetSessionPayload struct {
 	AdminSessionToken *string
@@ -3162,6 +3230,15 @@ type SpendProduct struct {
 	CostUsd string
 	// Dense UTC daily product buckets, including in-progress and future days
 	Buckets []*SpendBucket
+}
+
+// StartRegistryPromotionReviewPayload is the payload type of the admin service
+// startRegistryPromotionReview method.
+type StartRegistryPromotionReviewPayload struct {
+	AdminSessionToken *string
+	OrganizationID    string
+	ProjectID         string
+	McpServerID       string
 }
 
 // StartTrialPayload is the payload type of the admin service startTrial method.

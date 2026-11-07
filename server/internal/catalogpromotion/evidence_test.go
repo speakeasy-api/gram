@@ -235,3 +235,7 @@ func TestPromotionSourceLocksFenceRemoteHeaderDeletion(t *testing.T) {
 	_, err = remoterepo.New(probe).DeleteServerHeader(t.Context(), remoterepo.DeleteServerHeaderParams{ID: header.ID, ProjectID: f.target.ProjectID})
 	testenv.RequireLockNotAvailable(t, err)
 }
+
+func (h *timedPromotionHealth) Usage(context.Context, telemetry.MCPServerTelemetryTarget, time.Time, time.Time) (*telemetry.MCPServerUsage, error) {
+	return &telemetry.MCPServerUsage{DistinctUsers: 0, Clients: []string{}, Tools: []telemetry.MCPServerToolUsage{}}, nil
+}
