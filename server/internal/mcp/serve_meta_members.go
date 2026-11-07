@@ -440,7 +440,10 @@ func (s *Service) admitMetaMembers(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	for _, candidate := range candidates {
-		if candidate.unproxied {
+		// Gateways dispatch only hosted, remote, and tunneled backends. Builtin
+		// servers have none of these IDs and use their dedicated serving path;
+		// they must not be classified as proxied members with no resource.
+		if candidate.unproxied || (!candidate.toolsetID.Valid && !candidate.remoteServerID.Valid && !candidate.tunneledServerID.Valid) {
 			continue
 		}
 
