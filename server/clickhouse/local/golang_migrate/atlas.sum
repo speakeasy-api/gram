@@ -1,4 +1,4 @@
-h1:+vIHcnaCgEjLpLZrajHKyX9XMbJfE70k/fnXv/oNA6M=
+h1:ELmsdo1Eb2olHRT1LKBFgsFdqSFp9c2Qp2bC8Smmnm4=
 20251127155815_initial_golang_migrate.up.sql h1:fkATa14aucJEoldFi1VgW7TRT8gyC6NGe1Hq/OzXVuI=
 20251208142630_add-tool-logs-table.up.sql h1:cGJCiWBvLPFwOlpx0jYYLgdPZD21+gKSF/x4mVksBcI=
 20251209104438_add-id-col-to-tool-logs-table.up.sql h1:+Ubsl1ZKfeCZL9dBhohUnkBksKZj6nwdZSXm7WwowaE=
@@ -131,3 +131,4 @@ h1:+vIHcnaCgEjLpLZrajHKyX9XMbJfE70k/fnXv/oNA6M=
 20261023160532_trace-summaries-mcp-server-id.up.sql h1:Tg+NdAa/XxEx0vxgZ+BfujKmJeR7synV78IiSU73HRg=
 20261026212714_attribute-agent-hook-events.up.sql h1:fZZ/x6ylOBc4jaODePlndOwwSlVQhfvWlwYGgrYXM8A=
 20261104175300_connection-events.up.sql h1:2r3P07NcZ/SBAlu1/gtQIUWdgLmXxJ5moVeGyMoUajk=
+20261107010100_trace-summaries-agent-id-index.up.sql h1:YhVeXJslZJT0SjQe9nvr4PQISkJSski/nZBfERT470U=
