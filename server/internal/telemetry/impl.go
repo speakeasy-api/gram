@@ -3291,7 +3291,7 @@ func (s *Service) GetToolUsageSummary(ctx context.Context, payload *telem_gen.Ge
 
 	summary, err := s.chRepo.GetToolUsageSummary(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage summary data").LogError(ctx, s.logger)
 	}
 
 	return toToolUsageSummaryResult(summary), nil
@@ -3466,7 +3466,7 @@ func (s *Service) GetToolUsageTotals(ctx context.Context, payload *telem_gen.Get
 
 	totals, err := s.chRepo.GetToolUsageTotals(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage totals")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage totals").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageTotalsResult{Totals: toToolUsageTotals(totals)}, nil
@@ -3497,7 +3497,7 @@ func (s *Service) GetToolUsageTargets(ctx context.Context, payload *telem_gen.Ge
 
 	targets, err := s.chRepo.GetToolUsageTargets(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage targets")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage targets").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageTargetsResult{Targets: toToolUsageTargetSummaries(targets)}, nil
@@ -3528,7 +3528,7 @@ func (s *Service) GetToolUsageUsers(ctx context.Context, payload *telem_gen.GetT
 
 	users, err := s.chRepo.GetToolUsageUsers(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageUsersResult{Users: toToolUsageUserSummaries(users)}, nil
@@ -3559,7 +3559,7 @@ func (s *Service) GetToolUsageClients(ctx context.Context, payload *telem_gen.Ge
 
 	clients, err := s.chRepo.GetToolUsageClients(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage clients")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage clients").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageClientsResult{Clients: toToolUsageClientSummaries(clients)}, nil
@@ -3590,7 +3590,7 @@ func (s *Service) GetToolUsageClientToolBreakdown(ctx context.Context, payload *
 
 	rows, err := s.chRepo.GetToolUsageClientToolBreakdown(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage client tool breakdown")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage client tool breakdown").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageClientToolBreakdownResult{ClientToolBreakdown: toToolUsageClientToolBreakdownRows(rows)}, nil
@@ -3621,7 +3621,7 @@ func (s *Service) GetToolUsageTargetTimeSeries(ctx context.Context, payload *tel
 
 	series, err := s.chRepo.GetToolUsageTargetTimeSeries(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target time series")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target time series").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageTargetTimeSeriesResult{TargetTimeSeries: toToolUsageTargetTimeSeries(series)}, nil
@@ -3652,7 +3652,7 @@ func (s *Service) GetToolUsageUserTimeSeries(ctx context.Context, payload *telem
 
 	series, err := s.chRepo.GetToolUsageUserTimeSeries(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage user time series")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage user time series").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageUserTimeSeriesResult{UserTimeSeries: toToolUsageUserTimeSeries(series)}, nil
@@ -3683,7 +3683,7 @@ func (s *Service) GetToolUsageUsersByTarget(ctx context.Context, payload *telem_
 
 	rows, err := s.chRepo.GetToolUsageUsersByTarget(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users by target")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage users by target").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageUsersByTargetResult{UsersByTarget: toToolUsageUsersByTargetRows(rows)}, nil
@@ -3714,7 +3714,7 @@ func (s *Service) GetToolUsageTargetToolBreakdown(ctx context.Context, payload *
 
 	rows, err := s.chRepo.GetToolUsageTargetToolBreakdown(ctx, params)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target tool breakdown")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage target tool breakdown").LogError(ctx, s.logger)
 	}
 
 	return &telem_gen.GetToolUsageTargetToolBreakdownResult{TargetToolBreakdown: toToolUsageTargetToolBreakdownRows(rows)}, nil
@@ -3858,9 +3858,16 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 		return nil, err
 	}
 
-	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params)
+	includeHosted, includeShadow, includeGateways, includeUsers, includeClients := toolUsageFilterOptionTypeSet(payload.OptionTypes)
+	options, err := s.chRepo.GetToolUsageFilterOptions(ctx, params, repo.ToolUsageFilterOptionGroups{
+		HostedServers: includeHosted,
+		ShadowServers: includeShadow,
+		Gateways:      includeGateways,
+		Users:         includeUsers,
+		Clients:       includeClients,
+	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options")
+		return nil, oops.E(oops.CodeUnexpected, err, "error fetching tool usage filter options").LogError(ctx, s.logger)
 	}
 	gatewayIDs := make([]string, 0, len(options.Gateways))
 	for _, row := range options.Gateways {
@@ -3868,9 +3875,9 @@ func (s *Service) GetToolUsageFilterOptions(ctx context.Context, payload *telem_
 	}
 	gatewayLabels, err := loadGatewayLabels(ctx, s.db, s.authz, owners, gatewayIDs)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways")
+		return nil, oops.E(oops.CodeUnexpected, err, "error listing gateways").LogError(ctx, s.logger)
 	}
-	if _, _, _, includeUsers, _ := toolUsageFilterOptionTypeSet(payload.OptionTypes); includeUsers {
+	if includeUsers {
 		options.Users = s.authorizerUserOptions(ctx, authCtx.ActiveOrganizationID, options.Users, options.Authorizers)
 	}
 

@@ -8,6 +8,7 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { unwrapAsync } from "@gram/client/types/fp";
 import type { GetToolUsageTargetsResult } from "@gram/client/models/components/gettoolusagetargetsresult.js";
 import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { telemetryReadRetry } from "@/components/observe/telemetryReadRetry";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useScopedToolUsagePayload } from "@/components/observe/toolUsagePayload";
@@ -66,6 +67,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const targets = useQuery({
@@ -77,6 +79,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const series = useQuery({
@@ -88,6 +91,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
 

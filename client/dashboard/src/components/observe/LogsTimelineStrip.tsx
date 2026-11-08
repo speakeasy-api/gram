@@ -40,6 +40,8 @@ export function LogsTimelineStrip({
   onResetRange,
   isZoomed = false,
   loading = false,
+  failed = false,
+  onRetry,
   height = 88,
 }: {
   timeSeries: ToolUsageTargetTimeSeriesPoint[];
@@ -49,6 +51,13 @@ export function LogsTimelineStrip({
   onResetRange?: () => void;
   isZoomed?: boolean;
   loading?: boolean;
+  /**
+   * The series read failed. With nothing drawn yet the strip says so: an
+   * empty axis would read as a window with no calls in it. With a previous
+   * series still drawn, it says that series could not be refreshed.
+   */
+  failed?: boolean;
+  onRetry?: () => void;
   /** Shorter on a short viewport, where the list needs the pixels more. */
   height?: number;
 }): JSX.Element {
@@ -204,6 +213,25 @@ export function LogsTimelineStrip({
     );
   }
 
+  if (failed && timeSeries.length === 0) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div
+          role="alert"
+          className="text-muted-foreground flex items-center justify-center gap-3 text-sm"
+          style={{ height }}
+        >
+          Could not load the calls over time.
+          {onRetry && (
+            <Button variant="tertiary" size="sm" onClick={onRetry}>
+              Retry
+            </Button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-2">
@@ -211,6 +239,21 @@ export function LogsTimelineStrip({
           Drag to zoom
         </span>
         <div className="flex items-center gap-2">
+          {/* A failed refresh keeps the last series drawn, which may be for
+              another filter or window, so it says the series is stale. */}
+          {failed && (
+            <span
+              role="alert"
+              className="text-muted-foreground flex items-center gap-2 text-[11px]"
+            >
+              Could not refresh the calls over time.
+              {onRetry && (
+                <Button variant="tertiary" size="sm" onClick={onRetry}>
+                  Retry
+                </Button>
+              )}
+            </span>
+          )}
           {isZoomed && onResetRange && (
             <Button variant="tertiary" size="sm" onClick={onResetRange}>
               Reset range
