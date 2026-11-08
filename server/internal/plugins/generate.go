@@ -2617,15 +2617,16 @@ func renderVibeHooksTOML() []byte {
 	b.WriteString("# Mistral Vibe loads this file as the plugin's native hooks extension\n")
 	b.WriteString("# (ai.mistral.vibe/hooks.toml). Each hook runs the pinned speakeasy-hooks\n")
 	b.WriteString("# relay, which reports tool events to your Speakeasy dashboard.\n")
-	b.WriteString("# Vibe runs hook commands in the session shell (/bin/sh on macOS/Linux,\n")
-	b.WriteString("# Git Bash on Windows — the same shell Vibe's own bash tool requires;\n")
-	b.WriteString("# bootstrap.ps1 ships alongside for PowerShell-only hosts).\n")
+	b.WriteString("# Vibe runs hook commands in the session shell. bootstrap.sh needs bash\n")
+	b.WriteString("# (bash-only array syntax), which Vibe's own bash tool requires anyway —\n")
+	b.WriteString("# /bin/bash on macOS/Linux, Git Bash on Windows; bootstrap.ps1 ships\n")
+	b.WriteString("# alongside for PowerShell-only Windows hosts.\n")
 	for _, event := range vibeObservabilityHookEvents {
 		// Tool hooks are strict: a relay failure denies the call (pre_tool) or
 		// clears the output (post_tool) instead of failing open. post_agent has
 		// no strict mode in Vibe and stays fail-open.
 		strict := event.typ != "post_agent"
-		command := fmt.Sprintf(`sh "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=%ds`, vibeHookTimeoutSeconds)
+		command := fmt.Sprintf(`bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=%ds`, vibeHookTimeoutSeconds)
 		if strict {
 			command += " --strict"
 		}
