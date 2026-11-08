@@ -371,6 +371,14 @@ func TestResolveUserEmailReadsClaudeAccountInCowork(t *testing.T) {
 		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
 	})
 
+	t.Run("invalid env var falls back to the config file", func(t *testing.T) {
+		config := noClaudeAccount(t)
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
+		t.Setenv("CLAUDE_CODE_USER_EMAIL", "not-an-email")
+		require.NoError(t, os.WriteFile(filepath.Join(config, ".claude.json"), []byte(`{"oauthAccount":{"emailAddress":"file@example.com"}}`), 0o600))
+		require.Equal(t, "file@example.com", resolveUserEmail(t.Context(), claude))
+	})
+
 	t.Run("invalid values are ignored", func(t *testing.T) {
 		config := noClaudeAccount(t)
 		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "remote_cowork")
