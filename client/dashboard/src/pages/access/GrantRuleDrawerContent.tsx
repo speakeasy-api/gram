@@ -75,6 +75,12 @@ interface GrantRuleDrawerContentProps {
   /** When editing an exception rule, pass the allow rule's selectors here.
    *  The picker will filter projects/servers/tools to only those covered by the allow. */
   allowSelectors?: Selector[] | null;
+  /**
+   * Who the grant is for, as the copy names it. The picker is shared by the
+   * role editor and an agent's permissions, and "this role" on an agent
+   * names something that is not there.
+   */
+  subject?: "role" | "agent";
 }
 
 export function GrantRuleDrawerContent({
@@ -87,6 +93,7 @@ export function GrantRuleDrawerContent({
   isDeny: isDenyProp,
   allowedPanels,
   allowSelectors,
+  subject = "role",
 }: GrantRuleDrawerContentProps): JSX.Element {
   const organization = useOrganization();
   const inventory = useOrgMcpServers(resourceType === "mcp");
@@ -760,6 +767,7 @@ export function GrantRuleDrawerContent({
       annotations={annotations}
       onChangeAnnotations={onChangeAnnotations}
       isDeny={!!isDenyProp}
+      subject={subject}
       onChangeSelectors={(sels) => onChangeSelectors(sels)}
       onToggleTool={(serverId, toolName) => {
         const sels = selectors ?? [];
@@ -816,7 +824,8 @@ export function GrantRuleDrawerContent({
   return (
     <div className="flex flex-1 flex-col px-1.5 pb-1.5">
       {renderScopeOptions()}
-      {isMcpConnect && !isDenyProp && (
+      {/* Plugins are shared with roles, never with an agent. */}
+      {isMcpConnect && !isDenyProp && subject === "role" && (
         <p className="text-muted-foreground mt-2 text-xs">
           Plugins shared with this role receive the servers chosen here. Read
           and write access also let members connect, but never add servers to
@@ -866,12 +875,12 @@ export function GrantRuleDrawerContent({
             {isDenyProp
               ? "This exception covers everything the allow rule permits."
               : resourceType === "inference"
-                ? "This role can run inference in every project."
+                ? `This ${subject} can run inference in every project.`
                 : projectFiltered
-                  ? "This role reaches every assistant in every project."
+                  ? `This ${subject} reaches every assistant in every project.`
                   : projectSelectable
-                    ? "This role reaches every project in the organization."
-                    : "This role reaches every server in every project."}
+                    ? `This ${subject} reaches every project in the organization.`
+                    : `This ${subject} reaches every server in every project.`}
           </div>
         ) : (
           <>
@@ -999,6 +1008,7 @@ function RoleToolSelectionPanel({
   onChangeAnnotations,
   onChangeSelectors,
   isDeny,
+  subject,
   className,
 }: {
   mcpServers: ServerGroup[];
@@ -1014,6 +1024,7 @@ function RoleToolSelectionPanel({
   onChangeAnnotations?: (annotations: AnnotationHint[]) => void;
   onChangeSelectors?: (selectors: Selector[]) => void;
   isDeny?: boolean;
+  subject: "role" | "agent";
   className?: string;
 }): JSX.Element {
   const allServers = useMemo(
@@ -1227,8 +1238,8 @@ function RoleToolSelectionPanel({
         annotationsDescription="Tools can be annotated with labels that provide more context about the properties of the tool, such as if it's a destructive operation. OpenAPI sources are tagged automatically based on HTTP method. You can edit annotations on the MCP tools tab."
         toolsDescription={
           isDeny
-            ? "Select specific tools to exclude. Expand a server to choose which tools this role should not access."
-            : "Select specific tools to allow. Expand a server to choose which tools this role can access."
+            ? `Select specific tools to exclude. Expand a server to choose which tools this ${subject} should not access.`
+            : `Select specific tools to allow. Expand a server to choose which tools this ${subject} can access.`
         }
         toolCountByAnnotation={toolCountByAnnotation}
         onExpandedServersChange={handleExpandedServersChange}
