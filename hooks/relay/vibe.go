@@ -249,7 +249,11 @@ func (r *Relay) serveVibe(ctx context.Context, payload []byte, strict bool) (*vi
 	var in vibeHookInput
 	if err := json.Unmarshal(payload, &in); err != nil {
 		r.debugf("vibe: bad hook payload: %v", err)
-		return vibeFailureResponse(head.HookEventName, strict, err), fmt.Sprintf("speakeasy-hooks: vibe: bad hook payload: %v", err)
+		// The head sniff above leaves HookEventName empty on any syntax error
+		// (including a payload truncated by the stdin LimitReader), so recover
+		// the event type from the raw bytes: under strict, a payload too
+		// malformed to decode must still fail closed on the right hook type.
+		return vibeFailureResponse(sniffVibeHookEvent(payload, head.HookEventName), strict, err), fmt.Sprintf("speakeasy-hooks: vibe: bad hook payload: %v", err)
 	}
 
 	var (
@@ -360,10 +364,31 @@ func (r *Relay) vibePostAgent(ctx context.Context, in *vibeHookInput, raw json.R
 // an empty reason clears it). strict is forbidden on post_agent, so those
 // always fail open. Without strict the response is nil — exit 0 with empty
 // stdout, Vibe's pass-through.
+// sniffVibeHookEvent recovers the hook_event_name from raw payload bytes when
+// the whole object no longer parses, so strict failure handling still knows
+// which hook type failed. Unknown bytes report "".
+func sniffVibeHookEvent(payload []byte, fallback string) string {
+	if fallback != "" {
+		return fallback
+	}
+	for _, ev := range []string{vibeHookPreTool, vibeHookPostTool, vibeHookPostAgent} {
+		if bytes.Contains(payload, []byte(strconv.Quote(ev))) {
+			return ev
+		}
+	}
+	return ""
+}
+
+// vibeFailureResponse renders the structured reply for an internal failure
+// (bad payload or handler error): nil means pass through (fail open). Under
+// strict, an unrecognised payload ("") fails closed as a pre_tool-style deny:
+// for pre_tool that is the tool error, and for a truncated post_tool Vibe's
+// own failure path under strict also denies, so either way the call does not
+// proceed unanswered.
 func vibeFailureResponse(hook string, strict bool, err error) *vibeResponse {
 	switch {
-	case strict && hook == vibeHookPreTool:
-		reason := fmt.Sprintf("Speakeasy hooks failed to process this pre_tool event: %v", err)
+	case strict && (hook == vibeHookPreTool || hook == ""):
+		reason := fmt.Sprintf("Speakeasy hooks failed to process this %s event: %v", hook, err)
 		return &vibeResponse{Decision: vibeDecisionDeny, Reason: reason, SystemMessage: reason}
 	case strict && hook == vibeHookPostTool:
 		return &vibeResponse{Decision: vibeDecisionDeny, Reason: ""}

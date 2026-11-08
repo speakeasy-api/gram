@@ -236,7 +236,7 @@ func (s *PluginsService) standaloneMCPInstallInstructions(ctx context.Context, o
 	serverURL, _ := s.memberLinkBases(ctx, organizationID)
 	endpoint := serverURL.JoinPath("mcp", slug).String()
 	switch client {
-	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
+	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientVibe, OnboardingClientOther:
 		output.Supported = true
 		output.Instructions = append(clientInstallSteps(client, slug, endpoint),
 			InstallInstruction{Title: "Complete sign-in", Description: "Finish the browser authorization flow, then return to the client and retry the connection.", URL: "", Snippet: ""})
@@ -274,6 +274,10 @@ func clientInstallSteps(client OnboardingClientFamily, key, endpoint string) []I
 	case OnboardingClientOpencode:
 		return []InstallInstruction{
 			{Title: "Add it to opencode.json", Description: "Merge this into the mcp object of your OpenCode config.", URL: endpoint, Snippet: string(mustJSONIndent(map[string]any{"mcp": map[string]any{key: map[string]any{"type": "remote", "url": endpoint, "enabled": true}}}))},
+		}
+	case OnboardingClientVibe:
+		return []InstallInstruction{
+			{Title: "Add it to ~/.vibe/config.toml", Description: "Add this [[mcp_servers]] block, then restart Vibe or run /reload to connect.", URL: endpoint, Snippet: fmt.Sprintf("[[mcp_servers]]\nname = %q\ntransport = \"streamable-http\"\nurl = %q", key, endpoint)},
 		}
 	case OnboardingClientOther:
 		addEndpoint.Snippet = string(mustJSONIndent(map[string]any{"mcpServers": map[string]any{key: map[string]string{"url": endpoint}}}))

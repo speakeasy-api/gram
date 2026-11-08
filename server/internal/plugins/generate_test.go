@@ -2174,6 +2174,7 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 			Match   string  `toml:"match"`
 			Timeout float64 `toml:"timeout"`
 			Command string  `toml:"command"`
+			Strict  bool    `toml:"strict"`
 		} `toml:"hooks"`
 	}
 	_, err = toml.Decode(hooksTOML, &decoded)
@@ -2184,7 +2185,15 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 		types[hook.Type] = true
 		require.Equal(t, "*", hook.Match)
 		require.InDelta(t, vibeHookTimeoutSeconds, hook.Timeout, 1e-9)
-		require.Equal(t, `bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`, hook.Command)
+		wantCommand := `sh "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`
+		// Tool hooks are strict (relay failure denies/clears instead of
+		// failing open); post_agent has no strict mode in Vibe.
+		wantStrict := hook.Type != "post_agent"
+		if wantStrict {
+			wantCommand += " --strict"
+		}
+		require.Equal(t, wantCommand, hook.Command)
+		require.Equal(t, wantStrict, hook.Strict, "strict must match the hook type %s", hook.Type)
 	}
 	require.True(t, types["pre_tool"] && types["post_tool"] && types["post_agent"], "all three Vibe hook events must be registered, got %v", types)
 

@@ -717,8 +717,8 @@ var registry = []Product{
 	// install mistral-vibe), global configuration under ~/.vibe (config.toml,
 	// hooks.toml, plugins/, skills/), overridable via VIBE_HOME. ~/.vibe is
 	// matched rather than a deeper subdir so a fresh install counts before
-	// anything has populated it. No CIMD document published, so a decision
-	// about it is recorded but not enforceable.
+	// anything has populated it. No CIMD document published, so no access
+	// decision can be recorded or enforced for it — detection only.
 	{
 		ID:          "vibe",
 		VendorKey:   "mistral",

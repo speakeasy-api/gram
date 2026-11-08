@@ -111537,6 +111537,7 @@ components:
             - codex
             - cursor
             - opencode
+            - vibe
             - other
       required:
         - client_family

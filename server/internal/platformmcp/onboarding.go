@@ -55,6 +55,10 @@ const (
 	OnboardingClientCodex        OnboardingClientFamily = "codex"
 	OnboardingClientCursor       OnboardingClientFamily = "cursor"
 	OnboardingClientOpencode     OnboardingClientFamily = "opencode"
+	// Mistral Vibe. It consumes the portable Agent Plugins 1.0 package the
+	// device agent unpacks into ~/.vibe/plugins/<slug>/ and registers remote
+	// MCP servers as [[mcp_servers]] in ~/.vibe/config.toml.
+	OnboardingClientVibe OnboardingClientFamily = "vibe"
 	// Any agent outside the certified set. It has no plugin package, so its
 	// walkthrough offers the remote MCP configuration only.
 	OnboardingClientOther OnboardingClientFamily = "other"
@@ -655,7 +659,7 @@ func validOnboardingSource(surface OnboardingSourceSurface) bool {
 
 func validOnboardingClient(client OnboardingClientFamily) bool {
 	switch client {
-	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientOther:
+	case OnboardingClientClaudeCode, OnboardingClientClaudeCowork, OnboardingClientCodex, OnboardingClientCursor, OnboardingClientOpencode, OnboardingClientVibe, OnboardingClientOther:
 		return true
 	default:
 		return false

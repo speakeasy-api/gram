@@ -278,6 +278,33 @@ func TestVibeStrictPreToolFailureDenies(t *testing.T) {
 	require.Equal(t, 0, fs.count())
 }
 
+// TestVibeStrictTruncatedPayloadFailsClosed: a payload truncated by the stdin
+// LimitReader no longer parses, so the head sniff yields an empty event name;
+// the byte-level sniff must still recover the type, and under strict the
+// failure denies (pre_tool) rather than passing through.
+func TestVibeStrictTruncatedPayloadFailsClosed(t *testing.T) {
+	fs := newFakeServer(t, nil)
+	// Invalid JSON, but the event name survives in the raw bytes.
+	truncated := []byte(`{"hook_event_name":"pre_tool","tool_input":{"command":"rm -rf`)
+	res := vibeInvoke(t, authedConfig(t, fs.URL), truncated, "--strict")
+
+	resp := vibeReply(t, res)
+	require.Equal(t, vibeDecisionDeny, resp.Decision)
+	require.Contains(t, resp.Reason, "pre_tool")
+	require.Equal(t, 0, fs.count())
+
+	// Fully unrecognisable bytes under strict still fail closed.
+	res = vibeInvoke(t, authedConfig(t, fs.URL), []byte(`{"hook_event_name":"`), "--strict")
+	resp = vibeReply(t, res)
+	require.Equal(t, vibeDecisionDeny, resp.Decision)
+	require.NotEmpty(t, resp.Reason)
+
+	// Without strict the same truncated payload passes through.
+	res = vibeInvoke(t, authedConfig(t, fs.URL), truncated)
+	require.Equal(t, 0, res.ExitCode)
+	require.Empty(t, strings.TrimSpace(string(res.Stdout)))
+}
+
 // TestVibeStrictPostToolFailureClears: under strict, a failure on post_tool
 // is answered with a deny whose reason replaces tool_output_text — an empty
 // reason clears the output, the strict post_tool outcome.
