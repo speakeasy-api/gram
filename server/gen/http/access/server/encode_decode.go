@@ -8031,19 +8031,20 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 	return func(r *http.Request) (*access.ListChallengesPayload, error) {
 		var payload *access.ListChallengesPayload
 		var (
-			outcome      *string
-			principalUrn *string
-			scope        *string
-			projectID    *string
-			resolved     *bool
-			ids          []string
-			from         *string
-			to           *string
-			limit        int
-			offset       int
-			apikeyToken  *string
-			sessionToken *string
-			err          error
+			outcome       *string
+			principalUrn  *string
+			scope         *string
+			excludeScopes []string
+			projectID     *string
+			resolved      *bool
+			ids           []string
+			from          *string
+			to            *string
+			limit         int
+			offset        int
+			apikeyToken   *string
+			sessionToken  *string
+			err           error
 		)
 		qp := r.URL.Query()
 		outcomeRaw := qp.Get("outcome")
@@ -8062,6 +8063,10 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		scopeRaw := qp.Get("scope")
 		if scopeRaw != "" {
 			scope = &scopeRaw
+		}
+		excludeScopes = qp["exclude_scopes"]
+		if len(excludeScopes) > 20 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("exclude_scopes", excludeScopes, len(excludeScopes), 20, false))
 		}
 		projectIDRaw := qp.Get("project_id")
 		if projectIDRaw != "" {
@@ -8134,7 +8139,7 @@ func DecodeListChallengesRequest(mux goahttp.Muxer, decoder func(*http.Request) 
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListChallengesPayload(outcome, principalUrn, scope, projectID, resolved, ids, from, to, limit, offset, apikeyToken, sessionToken)
+		payload = NewListChallengesPayload(outcome, principalUrn, scope, excludeScopes, projectID, resolved, ids, from, to, limit, offset, apikeyToken, sessionToken)
 		if payload.ApikeyToken != nil {
 			if strings.Contains(*payload.ApikeyToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

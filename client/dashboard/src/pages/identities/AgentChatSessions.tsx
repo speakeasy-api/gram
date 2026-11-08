@@ -4,10 +4,8 @@ import { isValidPreset } from "@/components/observe/observeFilterUtils";
 import { DEFAULT_DATE_RANGE_PRESET } from "@/components/observe/useDateRangeFilter";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useRoutes } from "@/routes";
-import {
-  agentSessionHref,
-  agentSessionsForAgentHref,
-} from "@/pages/chatLogs/agentSessionLink";
+import { agentSessionsForAgentHref } from "@/pages/chatLogs/agentSessionLink";
+import { useChatDetailSheetInUrl } from "@/pages/chatLogs/useChatDetailSheet";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
@@ -24,8 +22,11 @@ import {
 const WINDOW_PARAMS = ["range", "from", "to"];
 
 /**
- * What the agent did: the sessions its hooks recorded under its key, each a
- * link to its transcript, with the full list a handoff away.
+ * What the agent did: the sessions its hooks recorded under its key, each
+ * opening its transcript in a drawer over this page, with the full list a
+ * handoff away. The drawer stays on the agent's page so the reader keeps the
+ * agent's sidebar, tab and list; the open session is in the URL, so it can be
+ * linked to and back closes it.
  *
  * These are the agent's work, not its connections — the MCP sessions panel
  * says who is signed in as it, which is a different question.
@@ -42,6 +43,7 @@ export function AgentChatSessionsPanel({
   const { from, to } = useIdentityWindow();
   const canRead = useCanReadAgentChats(agent);
   const query = useAgentChats(agent, from, to, limit);
+  const { chatHref, sheet } = useChatDetailSheetInUrl();
   const chats = query.data?.chats ?? [];
   const total = query.data?.total ?? chats.length;
 
@@ -59,53 +61,56 @@ export function AgentChatSessionsPanel({
   const blocked = query.isError && chats.length === 0;
 
   return (
-    <IdentityPanel
-      title="Agent sessions"
-      handoffLabel="Agent Sessions"
-      handoffHref={agentSessionsForAgentHref(
-        agentSessionsHref,
-        agent.id,
-        windowParams,
-      )}
-      loading={query.isLoading}
-      loadingRows={limit}
-      error={blocked}
-      refreshFailed={query.isError && !blocked}
-      onRetry={retryFailed(query)}
-      footer={
-        canRead && query.data
-          ? `${total} session${total === 1 ? "" : "s"} this period`
-          : undefined
-      }
-    >
-      {!canRead ? (
-        <IdentityPanelEmpty>
-          Listing this agent&rsquo;s sessions needs the chat:read permission or
-          ownership of the agent.
-        </IdentityPanelEmpty>
-      ) : chats.length === 0 ? (
-        <IdentityPanelEmpty>
-          No sessions from this agent in this window.
-        </IdentityPanelEmpty>
-      ) : (
-        chats.map((chat) => (
-          <Link
-            key={chat.id}
-            to={agentSessionHref(agentSessionsHref, chat.id)}
-            className="hover:bg-muted/50 block"
-          >
-            <IdentityPanelRow
-              title={chat.title || "Untitled chat"}
-              detail={
-                chat.lastMessageTimestamp ? (
-                  <HumanizeDateTime date={chat.lastMessageTimestamp} />
-                ) : undefined
-              }
-              trailing={`${chat.numMessages ?? 0} msgs`}
-            />
-          </Link>
-        ))
-      )}
-    </IdentityPanel>
+    <>
+      <IdentityPanel
+        title="Agent sessions"
+        handoffLabel="Agent Sessions"
+        handoffHref={agentSessionsForAgentHref(
+          agentSessionsHref,
+          agent.id,
+          windowParams,
+        )}
+        loading={query.isLoading}
+        loadingRows={limit}
+        error={blocked}
+        refreshFailed={query.isError && !blocked}
+        onRetry={retryFailed(query)}
+        footer={
+          canRead && query.data
+            ? `${total} session${total === 1 ? "" : "s"} this period`
+            : undefined
+        }
+      >
+        {!canRead ? (
+          <IdentityPanelEmpty>
+            Listing this agent&rsquo;s sessions needs the chat:read permission
+            or ownership of the agent.
+          </IdentityPanelEmpty>
+        ) : chats.length === 0 ? (
+          <IdentityPanelEmpty>
+            No sessions from this agent in this window.
+          </IdentityPanelEmpty>
+        ) : (
+          chats.map((chat) => (
+            <Link
+              key={chat.id}
+              to={chatHref(chat.id)}
+              className="hover:bg-muted/50 block"
+            >
+              <IdentityPanelRow
+                title={chat.title || "Untitled chat"}
+                detail={
+                  chat.lastMessageTimestamp ? (
+                    <HumanizeDateTime date={chat.lastMessageTimestamp} />
+                  ) : undefined
+                }
+                trailing={`${chat.numMessages ?? 0} msgs`}
+              />
+            </Link>
+          ))
+        )}
+      </IdentityPanel>
+      {sheet}
+    </>
   );
 }

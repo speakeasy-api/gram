@@ -459,9 +459,13 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	started := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleFirstPartyConnect(started, entry))
 	require.Equal(t, mock.buildAuthURLResult.String(), started.Header().Get("Location"))
+	browser := started.Result().Cookies()
+	require.Len(t, browser, 1)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
+	callback.AddCookie(browser[0])
 	identified := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+	callbackBrowser := firstPartyCallbackCookie(t, browser[0], identified)
 	landing, err := url.Parse(identified.Header().Get("Location"))
 	require.NoError(t, err)
 	stateID := landing.Query().Get("state")
@@ -473,12 +477,14 @@ func TestCodeModeReconnectEndToEnd(t *testing.T) {
 	form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
 	connect := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
 	connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	connect.AddCookie(browser[0])
 	sent := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeConsentAction(sent, connect, endpoint))
 	authorization, err := url.Parse(sent.Header().Get("Location"))
 	require.NoError(t, err)
 	require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
 	remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+	remoteCallback.AddCookie(callbackBrowser)
 	completed := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
 	require.Equal(t, http.StatusSeeOther, completed.Code)
@@ -509,8 +515,10 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		cancelAfterCommit bool
 		cancel            bool
 		cancelReadFailure bool
+		otherBrowser      bool
 	}{
 		{name: "all tools"},
+		{name: "another browser cannot review", otherBrowser: true},
 		{name: "commit failure preserves catalogue", commitFailure: true},
 		{name: "completion failure can retry", completionFailure: true},
 		{name: "cancel after a committed approval is not a cancel", completionFailure: true, cancelAfterCommit: true},
@@ -630,9 +638,16 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			started := httptest.NewRecorder()
 			require.NoError(t, ti.service.HandleFirstPartyConnect(started, entry))
 			require.Equal(t, mock.buildAuthURLResult.String(), started.Header().Get("Location"))
+			browser := started.Result().Cookies()
+			require.Len(t, browser, 1)
+			require.True(t, browser[0].HttpOnly)
+			require.True(t, browser[0].Secure)
+			require.Equal(t, http.SameSiteLaxMode, browser[0].SameSite)
 			callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
+			callback.AddCookie(browser[0])
 			identified := httptest.NewRecorder()
 			require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+			callbackBrowser := firstPartyCallbackCookie(t, browser[0], identified)
 			landing, err := url.Parse(identified.Header().Get("Location"))
 			require.NoError(t, err)
 			stateID := landing.Query().Get("state")
@@ -647,12 +662,26 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
 			connect := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
 			connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			connect.AddCookie(browser[0])
 			sent := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeConsentAction(sent, connect, endpoint))
 			authorization, err := url.Parse(sent.Header().Get("Location"))
 			require.NoError(t, err)
 			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
-			remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+			remoteCallbackURL := "/mcp/remote_login_callback?state=" + url.QueryEscape(authorization.Query().Get("state")) + "&code=synthetic-approved-code"
+			if tc.otherBrowser {
+				// Another browser completing the upstream sign-in stores nothing.
+				for _, cookie := range []*http.Cookie{nil, {Name: callbackBrowser.Name, Value: "another-browser"}} {
+					stray := httptest.NewRequest(http.MethodGet, remoteCallbackURL, nil).WithContext(ctx)
+					if cookie != nil {
+						stray.AddCookie(cookie)
+					}
+					require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), stray), "invalid remote login browser binding")
+				}
+				require.Nil(t, exchanged.Load(), "a refused callback never exchanges the upstream code")
+			}
+			remoteCallback := httptest.NewRequest(http.MethodGet, remoteCallbackURL, nil).WithContext(ctx)
+			remoteCallback.AddCookie(callbackBrowser)
 			catalogKey := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
 			var originalCatalog []byte
 			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &originalCatalog))
@@ -671,7 +700,9 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "required", redirect.Query().Get("catalog_reconnect"))
 				page := httptest.NewRecorder()
-				require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, redirect.String(), nil).WithContext(ctx), endpoint))
+				expired := httptest.NewRequest(http.MethodGet, redirect.String(), nil).WithContext(ctx)
+				expired.AddCookie(browser[0])
+				require.NoError(t, ti.service.ServeConsent(page, expired, endpoint))
 				require.Contains(t, page.Body.String(), "Session expired. Please reconnect.")
 				require.NotContains(t, page.Body.String(), "data-auto-close")
 				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
@@ -706,7 +737,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.Equal(t, originalCatalog, beforeApprovalCatalog, "OAuth does not change approved tools")
 			beforeApproval := execute(`await tools.servers()`, false)
 			require.Contains(t, string(beforeApproval.Value), `"consent":"required"`)
-			reviewPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+			reviewPage := consentGetPageWithContext(t, ctx, ti, slug, stateID, browser[0])
 			require.Contains(t, reviewPage, "data-catalog-changes")
 			require.Contains(t, reviewPage, `data-gateway="true"`)
 			require.Contains(t, reviewPage, "Review updated tools")
@@ -714,6 +745,22 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.Contains(t, reviewPage, "other-tracker--tool_002")
 			rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown)
 			rec.RequireNotEnded()
+			if tc.otherBrowser {
+				for _, cookie := range []*http.Cookie{nil, {Name: browser[0].Name, Value: "another-browser"}} {
+					review := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil).WithContext(ctx)
+					approve := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"approve"}, "tool_filtering": {"off"}, "tool_catalog_mode": {"cached"}}.Encode())).WithContext(ctx)
+					approve.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					for _, req := range []*http.Request{review, approve} {
+						if cookie != nil {
+							req.AddCookie(cookie)
+						}
+						require.ErrorContains(t, ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint), "invalid consent browser binding")
+					}
+				}
+				pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+				require.NoError(t, err)
+				require.False(t, pending.CodeReconnect.CatalogComplete, "a refused browser leaves the review to its owner")
+			}
 			if tc.cancel {
 				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
 				var before, after []byte
@@ -721,6 +768,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
 				req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				req.AddCookie(browser[0])
 				if tc.cancelReadFailure {
 					_, err := ti.conn.Exec(ctx, `UPDATE user_sessions SET tool_selection = '{"version":"unreadable"}' WHERE credential_id = $1 OR id = $1`, sessionPolicy.CredentialID)
 					require.NoError(t, err)
@@ -743,7 +791,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 				row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled)
 				require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
-				consentGetPageWithContext(t, ctx, ti, slug, stateID)
+				consentGetPageWithContext(t, ctx, ti, slug, stateID, browser[0])
 				require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 				for _, recorded := range rec.Rows() {
 					require.NotEqual(t, mcpconnectionattempts.ResultComplete.String(), recorded.StepResult, "a canceled review never reads as complete")
@@ -758,6 +806,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			}
 			approvedRequest := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
 			approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			approvedRequest.AddCookie(browser[0])
 			approved := httptest.NewRecorder()
 			if tc.revokeAtApproval {
 				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
@@ -799,6 +848,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 					form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
 					req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
 					req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+					req.AddCookie(browser[0])
 					require.NoError(t, ti.service.ServeConsent(httptest.NewRecorder(), req, endpoint))
 					require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 					row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
@@ -806,11 +856,12 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 					return
 				}
 				// Reloading and retrying must finish the committed approval, not replace it.
-				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID, browser[0])
 				require.Contains(t, retryPage, `id="consent-approve-button"`)
 				approveForm.Set("tool_inventory_id", gatewayInventoryFromPage(t, retryPage).Attempt)
 				approvedRequest = httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
 				approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				approvedRequest.AddCookie(browser[0])
 				approved = httptest.NewRecorder()
 				require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
 				afterRetry, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
@@ -850,7 +901,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 			require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 			require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
-			page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+			page := consentGetPageWithContext(t, ctx, ti, slug, stateID, browser[0])
 			require.Contains(t, page, "data-auto-close")
 			require.NotContains(t, page, ">other-tracker</span>")
 
@@ -890,4 +941,18 @@ func (c *reconnectCompletionFailureCache) CompareAndSwap(ctx context.Context, ke
 		return false, fmt.Errorf("injected completion failure")
 	}
 	return c.OwnershipStore.CompareAndSwap(ctx, key, expected, replacement, ttl)
+}
+
+// firstPartyCallbackCookie is the cookie the IdP callback host holds for a
+// first-party challenge: one the callback set, or the consent host's when the
+// two hosts are the same.
+func firstPartyCallbackCookie(t *testing.T, consent *http.Cookie, identified *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	cookies := identified.Result().Cookies()
+	if len(cookies) == 0 {
+		return consent
+	}
+	require.Len(t, cookies, 1)
+	require.Equal(t, consent.Name, cookies[0].Name)
+	return cookies[0]
 }

@@ -128,6 +128,7 @@ func newMCPService(c *cli.Context, d mcpServiceDependencies) (service *mcp.Servi
 		mcpservers.NewToolDispositionCache(d.Logger, d.DB, cacheImpl), platformmcp.NewSelectedUseRecorder(d.DB), toolfilter.NewSessionToolWitnessStore(d.Logger, cacheImpl), checkpoint, d.MCPRisk, d.ProtectedResources)
 	proxy.TunnelMetrics = d.TunnelMetrics
 	proxy.Connections = d.Connections
+	proxy.MaxStreamAge = c.Duration("stream-max-age")
 	cidrs := c.StringSlice("tunnel-gateway-cidr-blocks")
 	for _, cidr := range cidrs {
 		if _, _, err := net.ParseCIDR(cidr); err != nil {

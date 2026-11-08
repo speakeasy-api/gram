@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,22 +40,37 @@ func TestUnconfirmedRefreshCheck(t *testing.T) {
 	}
 }
 
+func TestSignInRevokedReason(t *testing.T) {
+	t.Parallel()
+
+	for revokeReason, want := range map[string]string{
+		"":                                  "sign_in_revoked",
+		string(signins.RevokeReasonSignOut): "sign_in_revoked",
+		string(signins.RevokeReasonSignOutEverywhere): "sign_in_revoked",
+		string(signins.RevokeReasonAdmin):             "sign_in_revoked_by_admin",
+		string(signins.RevokeReasonDeprovisioned):     "sign_in_revoked_by_admin",
+	} {
+		require.Equal(t, want, signInRevokedReason(pgtype.Text{String: revokeReason, Valid: revokeReason != ""}), revokeReason)
+	}
+}
+
 func TestInboundRefreshHappened(t *testing.T) {
 	t.Parallel()
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
 		"resource_mismatch":                     mcpconnectionattempts.CodeResourceMismatch,
 		"agent_admission_misconfigured":         mcpconnectionattempts.CodeCredentialMisconfigured,
-		"agent_credential_invalid":              mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"agent_credential_invalid":              mcpconnectionattempts.CodeConnectionChanged,
 		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
 		"refresh_token_unknown_or_already_used": mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
-		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
+		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp,
 		"refresh_token_expired":                 mcpconnectionattempts.CodeRefreshTokenExpired,
 		"sign_in_revoked":                       mcpconnectionattempts.CodeSignInRevoked,
+		"sign_in_revoked_by_admin":              mcpconnectionattempts.CodeSignInRevokedByAdmin,
 		"refresh_token_revoked":                 mcpconnectionattempts.CodeRefreshTokenRevoked,
-		"refresh_token_replay_session_mismatch": mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"refresh_token_replay_session_mismatch": mcpconnectionattempts.CodeStoredSessionInvalid,
 		"refresh_token_replay_rejected":         mcpconnectionattempts.CodeRefreshTokenRevoked,
-		"tool_selection_malformed":              mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"tool_selection_malformed":              mcpconnectionattempts.CodeStoredSessionInvalid,
 		"tool_selection_resource_mismatch":      mcpconnectionattempts.CodeRefreshTokenRevoked,
 		"agent_admission_denied":                mcpconnectionattempts.CodeNoServerAccess,
 		"agent_not_admitted":                    mcpconnectionattempts.CodeSubjectNotAdmitted,

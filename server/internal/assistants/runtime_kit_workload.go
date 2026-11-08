@@ -233,11 +233,11 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 			return nil, errors.New("kit workload subject is assigned to another agent")
 		}
 	}
-	admission, err := q.CreateWorkloadAdmission(ctx, workloadrepo.CreateWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact", Name: pgtype.Text{String: admissionName, Valid: true}, Tags: []string{"kit-runtime"}})
+	// Not audited: every runtime start and teardown admits and withdraws its own
+	// subject, so the entries would track runtime churn rather than anything a
+	// person decided. Creating the shared issuer and withdrawing it are audited.
+	_, err = q.CreateWorkloadAdmission(ctx, workloadrepo.CreateWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, WorkloadIssuerID: issuer.ID, Subject: subject, MatchKind: "exact", Name: pgtype.Text{String: admissionName, Valid: true}, Tags: []string{"kit-runtime"}})
 	if err != nil {
-		return nil, fmt.Errorf("provision kit workload: %w", err)
-	}
-	if err := securityevent.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: conv.PtrEmpty(agent.Name), ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String())}); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 
@@ -319,7 +319,7 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 	if err != nil {
 		return fmt.Errorf("revoke kit workload: %w", err)
 	}
-	owned := false
+	var owned []uuid.UUID
 	for _, a := range admissions {
 		if a.WorkloadIssuerID != b.IssuerID || a.Subject != b.Subject || a.MatchKind != "exact" {
 			continue
@@ -327,24 +327,27 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 		if a.ProjectID != project || a.Name.String != "kit-runtime-"+r.ID.String()+"-"+b.Generation {
 			return ErrKitRuntimeBinding
 		}
-		owned = true
-		admission, err := q.GetWorkloadAdmission(ctx, workloadrepo.GetWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID})
-		if err != nil {
-			return fmt.Errorf("revoke kit workload: %w", err)
-		}
-		agentName, err := kitAgentDisplayName(ctx, db, b.Identity.OrganizationID, b.Identity.AgentID)
-		if err != nil {
-			return fmt.Errorf("revoke kit workload: %w", err)
-		}
-		if err := securityevent.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{ActorDisplayName: agentName, ActorSlug: nil, OrganizationID: b.Identity.OrganizationID, ProjectID: project, Actor: urn.NewPrincipal(urn.PrincipalTypeAgent, b.Identity.AgentID.String()), AdmissionURN: urn.NewWorkloadAdmission(a.ID), AdmissionDisplayName: a.Subject, AdmissionSnapshotBefore: kitWorkloadAdmissionSnapshot(admission, issuer, b.Identity.AgentID.String())}); err != nil {
-			return fmt.Errorf("revoke kit workload: %w", err)
-		}
-		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID}); err != nil {
-			return fmt.Errorf("revoke kit workload: %w", err)
-		}
+		owned = append(owned, a.ID)
 	}
-	if !owned {
+	if len(owned) == 0 {
 		return nil
+	}
+	// Runtimes started before admits stopped being audited have an admit in the
+	// security log. Close those with a withdraw so the log does not show them as
+	// still admitted.
+	logged, err := securityevent.RuntimeAdmittedSubjects(ctx, db, b.Identity.OrganizationID, owned)
+	if err != nil {
+		return fmt.Errorf("revoke kit workload: %w", err)
+	}
+	for _, id := range owned {
+		if logged[id] {
+			if err := logLegacyKitWithdraw(ctx, db, b, issuer, id); err != nil {
+				return fmt.Errorf("revoke kit workload: %w", err)
+			}
+		}
+		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: id}); err != nil {
+			return fmt.Errorf("revoke kit workload: %w", err)
+		}
 	}
 	remaining, err := q.CountLiveAdmissionsForSubject(ctx, workloadrepo.CountLiveAdmissionsForSubjectParams{OrganizationID: b.Identity.OrganizationID, WorkloadIssuerID: b.IssuerID, Subject: b.Subject, MatchKind: "exact"})
 	if err != nil {
@@ -360,19 +363,45 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 	return nil
 }
 
-// kitAgentDisplayName names the agent on its audit entries, so the entry stays
-// readable after the agent is deleted. A runtime is withdrawn after its agent
-// is deleted too, so deleted agents are read. Nil only when there is no such
-// agent, which leaves the entry naming it by id.
-func kitAgentDisplayName(ctx context.Context, db assistantrepo.DBTX, organizationID string, agentID uuid.UUID) (*string, error) {
-	name, err := agentrepo.New(db).GetAgentNameIncludingDeleted(ctx, agentrepo.GetAgentNameIncludingDeletedParams{OrganizationID: organizationID, ID: agentID})
+func logLegacyKitWithdraw(ctx context.Context, db assistantrepo.DBTX, b *KitWorkloadBinding, issuer workloadrepo.WorkloadIssuer, admissionID uuid.UUID) error {
+	admission, err := workloadrepo.New(db).GetWorkloadAdmission(ctx, workloadrepo.GetWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: issuer.ProjectID, ID: admissionID})
+	if err != nil {
+		return fmt.Errorf("read admission: %w", err)
+	}
+	// Read deleted agents too: a runtime is withdrawn after its agent is deleted.
+	var agentName *string
+	name, err := agentrepo.New(db).GetAgentNameIncludingDeleted(ctx, agentrepo.GetAgentNameIncludingDeletedParams{OrganizationID: b.Identity.OrganizationID, ID: b.Identity.AgentID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return nil, nil
 	case err != nil:
-		return nil, fmt.Errorf("read agent name: %w", err)
+		return fmt.Errorf("read agent name: %w", err)
+	default:
+		agentName = conv.PtrEmpty(name)
 	}
-	return conv.PtrEmpty(name), nil
+	agentID := b.Identity.AgentID.String()
+	err = securityevent.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{
+		OrganizationID:       b.Identity.OrganizationID,
+		ProjectID:            issuer.ProjectID,
+		Actor:                urn.NewPrincipal(urn.PrincipalTypeAgent, agentID),
+		ActorDisplayName:     agentName,
+		ActorSlug:            nil,
+		AdmissionURN:         urn.NewWorkloadAdmission(admission.ID),
+		AdmissionDisplayName: admission.Subject,
+		AdmissionSnapshotBefore: &audit.WorkloadAdmissionSnapshot{
+			Issuer:          issuer.Issuer,
+			IssuerName:      issuer.Name,
+			Subject:         admission.Subject,
+			MatchKind:       admission.MatchKind,
+			Name:            admission.Name.String,
+			Tags:            admission.Tags,
+			AssignedAgentID: agentID,
+			Tier:            "project",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("log withdraw: %w", err)
+	}
+	return nil
 }
 
 func kitWorkloadInferenceAllowed(project uuid.UUID, policies ...[]authz.Grant) error {
@@ -393,9 +422,6 @@ func kitWorkloadInferenceAllowed(project uuid.UUID, policies ...[]authz.Grant) e
 
 func kitWorkloadIssuerSnapshot(row workloadrepo.WorkloadIssuer) *audit.WorkloadIssuerSnapshot {
 	return &audit.WorkloadIssuerSnapshot{Name: row.Name, Issuer: row.Issuer, JwksURI: row.JwksUri, Description: row.Description.String, Tags: row.Tags, AllowWildcardAdmission: row.AllowWildcardAdmission, AllowAssertionReuse: row.AllowAssertionReuse.Valid && row.AllowAssertionReuse.Bool, Tier: "project"}
-}
-func kitWorkloadAdmissionSnapshot(row workloadrepo.WorkloadIdentityAdmission, issuer workloadrepo.WorkloadIssuer, agentID string) *audit.WorkloadAdmissionSnapshot {
-	return &audit.WorkloadAdmissionSnapshot{Issuer: issuer.Issuer, IssuerName: issuer.Name, Subject: row.Subject, MatchKind: row.MatchKind, Name: row.Name.String, Tags: row.Tags, AssignedAgentID: agentID, Tier: "project"}
 }
 
 // Existing policy must retain the dedicated runtime ownership markers and exact

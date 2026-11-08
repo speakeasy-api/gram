@@ -92,6 +92,7 @@ func newMetricToolProxy(t *testing.T, reader sdkmetric.Reader) *ToolProxy {
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 }
 

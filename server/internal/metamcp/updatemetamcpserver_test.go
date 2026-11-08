@@ -384,10 +384,11 @@ func TestUpdateMetaMcpServer_RewiresProviderClientsOnIssuerChange(t *testing.T) 
 		RemoteSessionClientID: client.ID,
 		UserSessionIssuerID:   memberServer.UserSessionIssuerID.UUID,
 	}))
-	stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuer.ID),
-		ID:                    serverID,
+	stamped, err := testrepo.New(ti.conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 		ProjectID:             projectID,
+		OrganizationID:        authCtx.ActiveOrganizationID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: client.ID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
