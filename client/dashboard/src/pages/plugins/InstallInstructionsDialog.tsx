@@ -1035,14 +1035,27 @@ speakeasy-hooks install --provider=pi --dir=. --project=your-project-slug`;
 function VibeInstallContent({
   repoOwner,
   repoName,
-}: Pick<ContentProps, "repoOwner" | "repoName">): JSX.Element {
+  pluginSlug,
+}: Pick<ContentProps, "repoOwner" | "repoName" | "pluginSlug">): JSX.Element {
   const { isDownloading, download: handleDownloadPlugin } =
     useObservabilityPluginDownload("vibe", "observability-vibe.zip");
 
+  // The dialog installs either the org's observability plugin (no specific
+  // plugin selected, or the <org>-observability slug) or one feature plugin.
+  // Feature plugins publish as <slug>-vibe/ in the marketplace repo and
+  // install under their bare slug; only the observability package has the
+  // server-generated ZIP.
+  const isObservability = !pluginSlug || pluginSlug.endsWith("-observability");
+  const installSlug = pluginSlug ?? "<org>-observability";
+  const packageDir = `${installSlug}-vibe`;
+
   const repoUrl = `https://github.com/${repoOwner}/${repoName}`;
+  // Clear the destination first: cp -R into an existing directory nests the
+  // new files one level deeper and Vibe keeps loading the old plugin.
   const manualCopy = `git clone ${repoUrl} marketplace
 mkdir -p ~/.vibe/plugins
-cp -R marketplace/<org>-observability-vibe ~/.vibe/plugins/<org>-observability`;
+rm -rf ~/.vibe/plugins/${installSlug}
+cp -R marketplace/${packageDir} ~/.vibe/plugins/${installSlug}`;
 
   const mcpConfig = `[[mcp_servers]]
 name = "<server-name>"
@@ -1052,50 +1065,57 @@ url = "<mcp-server-url>"`;
   return (
     <div className="min-w-0 space-y-6">
       {/* ── Quick install ─────────────────────────────────────────────────── */}
-      <div>
-        <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Download the Speakeasy observability plugin as a ZIP — a portable
-          Agent Plugins 1.0 package with a hooks-scoped API key already embedded
-          (no CLI, no key to export). Extract it into{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            ~/.vibe/plugins/&lt;org&gt;-observability
-          </code>{" "}
-          and Vibe loads it on next start.
-        </p>
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={isDownloading}
-          onClick={() => void handleDownloadPlugin()}
-          className="inline-flex items-center gap-2"
-        >
-          <Download className="size-4" />
-          {isDownloading ? "Downloading…" : "Download Plugin"}
-        </Button>
-        <p className="text-muted-foreground mt-2 text-xs">
-          Then extract:{" "}
-          <code className="bg-muted px-1 py-0.5">
-            mkdir -p ~/.vibe/plugins/&lt;org&gt;-observability &amp;&amp; unzip
-            observability-vibe.zip -d ~/.vibe/plugins/&lt;org&gt;-observability
-          </code>
-        </p>
-        <p className="text-muted-foreground mt-2 text-xs">
-          &lt;org&gt; is your organization&apos;s slug — the prefix of the{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            &lt;org&gt;-observability
-          </code>{" "}
-          plugin name. Restart Vibe or run{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">/reload-plugins</code>{" "}
-          to pick the plugin up; its{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            ai.mistral.vibe/hooks.toml
-          </code>{" "}
-          runs automatically.
-        </p>
-      </div>
+      {isObservability && (
+        <>
+          <div>
+            <h3 className="mb-2 text-sm font-semibold">Quick install</h3>
+            <p className="text-muted-foreground mb-3 text-sm">
+              Download the Speakeasy observability plugin as a ZIP — a portable
+              Agent Plugins 1.0 package with a hooks-scoped API key already
+              embedded (no CLI, no key to export). Extract it into{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ~/.vibe/plugins/&lt;org&gt;-observability
+              </code>{" "}
+              and Vibe loads it on next start.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={isDownloading}
+              onClick={() => void handleDownloadPlugin()}
+              className="inline-flex items-center gap-2"
+            >
+              <Download className="size-4" />
+              {isDownloading ? "Downloading…" : "Download Plugin"}
+            </Button>
+            <p className="text-muted-foreground mt-2 text-xs">
+              Then extract:{" "}
+              <code className="bg-muted px-1 py-0.5">
+                mkdir -p ~/.vibe/plugins/&lt;org&gt;-observability &amp;&amp;
+                unzip observability-vibe.zip -d
+                ~/.vibe/plugins/&lt;org&gt;-observability
+              </code>
+            </p>
+            <p className="text-muted-foreground mt-2 text-xs">
+              &lt;org&gt; is your organization&apos;s slug — the prefix of the{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                &lt;org&gt;-observability
+              </code>{" "}
+              plugin name. Restart Vibe or run{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                /reload-plugins
+              </code>{" "}
+              to pick the plugin up; its{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ai.mistral.vibe/hooks.toml
+              </code>{" "}
+              runs automatically.
+            </p>
+          </div>
 
-      <div className="border-t" />
+          <div className="border-t" />
+        </>
+      )}
 
       {/* ── Manual setup ──────────────────────────────────────────────────── */}
       <div className="space-y-4">
@@ -1105,12 +1125,10 @@ url = "<mcp-server-url>"`;
         <p className="text-muted-foreground text-sm">
           Prefer installing from the marketplace repository? Vibe has no
           marketplace of its own, so copy the plugin&apos;s{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            &lt;org&gt;-observability-vibe/
-          </code>{" "}
+          <code className="bg-muted px-1 py-0.5 text-xs">{packageDir}/</code>{" "}
           directory into{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
-            ~/.vibe/plugins/&lt;org&gt;-observability
+            ~/.vibe/plugins/{installSlug}
           </code>
           :
         </p>
@@ -1120,15 +1138,20 @@ url = "<mcp-server-url>"`;
         <p className="text-muted-foreground text-sm">
           Then restart Vibe or run{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">/reload-plugins</code>.
-          The plugin&apos;s{" "}
+          User-scope plugins need no trust prompt. To uninstall, remove the
+          directory:{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
-            ai.mistral.vibe/hooks.toml
-          </code>{" "}
-          ships with the package and runs automatically — user-scope plugins
-          need no trust prompt. To uninstall, remove the directory:{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">
-            rm -rf ~/.vibe/plugins/&lt;org&gt;-observability
+            rm -rf ~/.vibe/plugins/{installSlug}
           </code>
+          {isObservability && (
+            <>
+              . The plugin&apos;s{" "}
+              <code className="bg-muted px-1 py-0.5 text-xs">
+                ai.mistral.vibe/hooks.toml
+              </code>{" "}
+              ships with the package and runs automatically.
+            </>
+          )}
         </p>
       </div>
 
@@ -1136,10 +1159,7 @@ url = "<mcp-server-url>"`;
       <div>
         <h3 className="mb-2 text-sm font-semibold">Connect an MCP server</h3>
         <p className="text-muted-foreground mb-3 text-sm">
-          The plugin package&apos;s{" "}
-          <code className="bg-muted px-1 py-0.5 text-xs">mcp.json</code> carries
-          its public MCP servers. To reach a Speakeasy-hosted server by hand,
-          add a{" "}
+          To reach a Speakeasy-hosted server by hand, add a{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">[[mcp_servers]]</code>{" "}
           entry to{" "}
           <code className="bg-muted px-1 py-0.5 text-xs">
@@ -1443,6 +1463,7 @@ export function InstallInstructionsDialog({
                 <VibeInstallContent
                   repoOwner={content.repoOwner}
                   repoName={content.repoName}
+                  pluginSlug={effectivePluginSlug}
                 />
               )}
             </div>

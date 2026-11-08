@@ -40,6 +40,11 @@ const PLATFORM_MCP_INSTALL_CLIENTS: PlatformMCPInstallClient[] = [
     description: "Copy the OpenCode package out of the marketplace repository",
   },
   {
+    id: "vibe",
+    label: "Mistral Vibe",
+    description: "Copy the Vibe plugin package into ~/.vibe/plugins/",
+  },
+  {
     id: "other",
     label: "Other agent",
     description: "Point any MCP-capable agent at the remote endpoint",
@@ -78,6 +83,9 @@ type PlatformMCPInstallWalkthroughProps = {
 function manualConfig(client: ClientFamily, mcpUrl: string): string {
   if (client === "codex") {
     return `[mcp_servers.${PLATFORM_MCP_SERVER_NAME}]\nurl = "${mcpUrl}"`;
+  }
+  if (client === "vibe") {
+    return `[[mcp_servers]]\nname = "${PLATFORM_MCP_SERVER_NAME}"\ntransport = "streamable-http"\nurl = "${mcpUrl}"`;
   }
   if (client === "opencode") {
     return JSON.stringify(
@@ -198,6 +206,21 @@ function manualSteps(client: ClientFamily, mcpUrl: string): InstallStep[] {
           title: "Open OpenCode and complete sign-in",
           description:
             "Start an OpenCode session, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted. Restart OpenCode first if it does not see Platform MCP.",
+        },
+      ];
+    case "vibe":
+      return [
+        {
+          title: "Add Platform MCP to your Vibe config",
+          description:
+            "Add this [[mcp_servers]] block to ~/.vibe/config.toml for your account (or .vibe/config.toml in a trusted repository). This does not install the reviewed plugin.",
+          code: manualConfig(client, mcpUrl),
+          language: "toml",
+        },
+        {
+          title: "Restart Vibe or reload, then complete sign-in",
+          description:
+            "Start a Vibe session (or run /reload), ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted.",
         },
       ];
   }
