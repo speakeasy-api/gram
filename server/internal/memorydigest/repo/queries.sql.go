@@ -626,6 +626,26 @@ WHERE c.project_id = $1
     WHERE d.project_id = c.project_id
       AND d.level = 'day'
       AND d.chat_ids @> ARRAY[c.id]
+      AND cardinality(d.chat_ids) = (
+        SELECT count(*)
+        FROM chats dc
+        LEFT JOIN user_accounts dua ON dua.id = dc.user_account_id
+        WHERE dc.id = ANY(d.chat_ids)
+          AND dc.summary_redacted IS TRUE
+          AND dc.summary IS NOT NULL
+          AND dc.memory_excluded_at IS NULL
+          AND dc.deleted IS FALSE
+          AND (dua.id IS NULL OR dua.account_type <> 'personal')
+      )
+      AND cardinality(d.memo_ids) = (
+        SELECT count(*)
+        FROM memory_memos dm
+        LEFT JOIN chats dmc ON dmc.id = dm.chat_id
+        LEFT JOIN user_accounts dua ON dua.id = dmc.user_account_id
+        WHERE dm.id = ANY(d.memo_ids)
+          AND dm.deleted IS FALSE
+          AND (dm.chat_id IS NULL OR (dmc.project_id = dm.project_id AND dmc.memory_excluded_at IS NULL AND dmc.deleted IS FALSE AND (dua.id IS NULL OR dua.account_type <> 'personal')))
+      )
   )
 ORDER BY c.summary_generated_at DESC
 LIMIT $4
@@ -644,8 +664,10 @@ type ListRecallChatsRow struct {
 	SummaryGeneratedAt pgtype.Timestamptz
 }
 
-// Eligible chats summarized since @since that no day digest has folded yet,
-// newest first so @row_limit keeps the most recent.
+// Eligible chats summarized since @since that no live day digest has folded
+// yet, newest first so @row_limit keeps the most recent. A stale day digest
+// (one that folded a source no longer eligible) is hidden from recall, so its
+// still-eligible sources come back here until the next run rebuilds the day.
 func (q *Queries) ListRecallChats(ctx context.Context, arg ListRecallChatsParams) ([]ListRecallChatsRow, error) {
 	rows, err := q.db.Query(ctx, listRecallChats,
 		arg.ProjectID,
@@ -783,6 +805,26 @@ WHERE m.project_id = $1
     WHERE d.project_id = m.project_id
       AND d.level = 'day'
       AND d.memo_ids @> ARRAY[m.id]
+      AND cardinality(d.chat_ids) = (
+        SELECT count(*)
+        FROM chats dc
+        LEFT JOIN user_accounts dua ON dua.id = dc.user_account_id
+        WHERE dc.id = ANY(d.chat_ids)
+          AND dc.summary_redacted IS TRUE
+          AND dc.summary IS NOT NULL
+          AND dc.memory_excluded_at IS NULL
+          AND dc.deleted IS FALSE
+          AND (dua.id IS NULL OR dua.account_type <> 'personal')
+      )
+      AND cardinality(d.memo_ids) = (
+        SELECT count(*)
+        FROM memory_memos dm
+        LEFT JOIN chats dmc ON dmc.id = dm.chat_id
+        LEFT JOIN user_accounts dua ON dua.id = dmc.user_account_id
+        WHERE dm.id = ANY(d.memo_ids)
+          AND dm.deleted IS FALSE
+          AND (dm.chat_id IS NULL OR (dmc.project_id = dm.project_id AND dmc.memory_excluded_at IS NULL AND dmc.deleted IS FALSE AND (dua.id IS NULL OR dua.account_type <> 'personal')))
+      )
   )
 ORDER BY m.created_at DESC
 LIMIT $4
@@ -801,9 +843,9 @@ type ListRecallMemosRow struct {
 	CreatedAt pgtype.Timestamptz
 }
 
-// Eligible memos saved since @since that no day digest has folded yet:
-// today's memos, and any a capped day digest left out. Newest first so
-// @row_limit keeps the most recent.
+// Eligible memos saved since @since that no live day digest has folded yet:
+// today's memos, any a capped day digest left out, and those folded only by a
+// stale day digest. Newest first so @row_limit keeps the most recent.
 func (q *Queries) ListRecallMemos(ctx context.Context, arg ListRecallMemosParams) ([]ListRecallMemosRow, error) {
 	rows, err := q.db.Query(ctx, listRecallMemos,
 		arg.ProjectID,

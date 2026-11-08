@@ -267,6 +267,21 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	byID, err := repo.New(conn).ListDigestsByID(ctx, repo.ListDigestsByIDParams{Ids: []uuid.UUID{staleDay}, ProjectID: enabled.projectID, OrganizationID: enabled.orgID})
 	require.NoError(t, err)
 	require.Empty(t, byID)
+	// The hidden day's still-eligible sources fall back to recall as raw
+	// summaries and memos, and the excluded chat does not.
+	since := pgtype.Timestamptz{Time: day, Valid: true, InfinityModifier: pgtype.Finite}
+	recallChats, err := repo.New(conn).ListRecallChats(ctx, repo.ListRecallChatsParams{ProjectID: enabled.projectID, OrganizationID: enabled.orgID, Since: since, RowLimit: 50})
+	require.NoError(t, err)
+	recallChatIDs := make([]uuid.UUID, 0, len(recallChats))
+	for _, row := range recallChats {
+		recallChatIDs = append(recallChatIDs, row.ID)
+	}
+	require.Contains(t, recallChatIDs, kept2)
+	require.NotContains(t, recallChatIDs, kept1)
+	recallMemos, err := repo.New(conn).ListRecallMemos(ctx, repo.ListRecallMemosParams{ProjectID: enabled.projectID, OrganizationID: enabled.orgID, Since: since, RowLimit: 50})
+	require.NoError(t, err)
+	require.Len(t, recallMemos, 1)
+	require.Equal(t, memoID, recallMemos[0].ID)
 	require.NoError(t, job.Invalidate(ctx))
 	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
 	require.NoError(t, err)
