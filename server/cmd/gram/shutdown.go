@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 )
 
 func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []func(context.Context) error) error {
@@ -51,10 +52,6 @@ func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []fu
 	return nil
 }
 
-// errShutdownDeadline is the cause given to a server's graceful shutdown
-// deadline and to the requests still running when it passes.
-var errShutdownDeadline = errors.New("graceful shutdown timed out")
-
 // drainHTTPServer stops srv accepting connections and waits up to timeout for
 // in-flight requests to finish. Requests still running at the deadline have
 // their context cancelled through cancelRequests, which must cancel the
@@ -62,7 +59,7 @@ var errShutdownDeadline = errors.New("graceful shutdown timed out")
 // a stalled stream nor a stalled client holds shutdown past the deadline.
 // failureMsg is the error logged when the deadline passes.
 func drainHTTPServer(ctx context.Context, logger *slog.Logger, srv *http.Server, cancelRequests context.CancelCauseFunc, timeout time.Duration, failureMsg string) {
-	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, errShutdownDeadline)
+	graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), timeout, httpstream.ErrServerShutdown)
 	defer graceCancel()
 
 	err := srv.Shutdown(graceCtx)
@@ -74,7 +71,9 @@ func drainHTTPServer(ctx context.Context, logger *slog.Logger, srv *http.Server,
 	}
 	logger.ErrorContext(ctx, failureMsg, attr.SlogError(err))
 
-	cancelRequests(errShutdownDeadline)
+	// The cause lets long-lived responses record that the server, not their
+	// client, ended them.
+	cancelRequests(httpstream.ErrServerShutdown)
 	if err := srv.Close(); err != nil {
 		logger.ErrorContext(ctx, "close connections after graceful shutdown deadline", attr.SlogError(err))
 	}

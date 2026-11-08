@@ -527,7 +527,7 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={`selected-${project.id}`}
                 id={project.id}
-                name={project.name}
+                label={project.name}
                 checked
                 onToggle={toggleResource}
               />
@@ -539,6 +539,8 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={`selected-${server.id}`}
                 id={server.id}
+                label={server.name}
+                qualifier={projectName}
                 name={
                   <>
                     <span title={server.name}>{server.name}</span>
@@ -569,7 +571,7 @@ export function GrantRuleDrawerContent({
               <ResourceCheckbox
                 key={resource.id}
                 id={resource.id}
-                name={resource.name}
+                label={resource.name}
                 checked={isResourceSelected(resource.id)}
                 onToggle={toggleResource}
               />
@@ -598,7 +600,7 @@ export function GrantRuleDrawerContent({
                 <ResourceCheckbox
                   key={server.id}
                   id={server.id}
-                  name={server.name}
+                  label={server.name}
                   qualifier={group.projectName}
                   checked={isResourceSelected(server.id)}
                   onToggle={toggleResource}
@@ -642,6 +644,8 @@ export function GrantRuleDrawerContent({
             <ResourceCheckbox
               key={`selected-${assistant.id}`}
               id={assistant.id}
+              label={assistant.name}
+              qualifier={projectName}
               name={
                 <>
                   <span title={assistant.name}>{assistant.name}</span>
@@ -678,7 +682,7 @@ export function GrantRuleDrawerContent({
                 <ResourceCheckbox
                   key={assistant.id}
                   id={assistant.id}
-                  name={assistant.name}
+                  label={assistant.name}
                   qualifier={group.projectName}
                   checked={isResourceSelected(assistant.id)}
                   onToggle={toggleResource}
@@ -722,7 +726,7 @@ export function GrantRuleDrawerContent({
             <ResourceCheckbox
               key={`selected-${project.id}`}
               id={project.id}
-              name={project.name}
+              label={project.name}
               checked
               onToggle={toggleProject}
             />
@@ -740,7 +744,7 @@ export function GrantRuleDrawerContent({
             <ResourceCheckbox
               key={project.id}
               id={project.id}
-              name={project.name}
+              label={project.name}
               checked={isProjectSelected(project.id)}
               onToggle={toggleProject}
             />
@@ -1257,6 +1261,7 @@ function SelectedGroup({
 
 function ResourceCheckbox({
   id,
+  label,
   name,
   qualifier,
   checked,
@@ -1264,7 +1269,14 @@ function ResourceCheckbox({
   compact,
 }: {
   id: string;
-  name: React.ReactNode;
+  /**
+   * The resource's name, as the checkbox's own accessible name. Without it
+   * the name was pieced together from the row's text, so a pinned row read
+   * "LinearDefault".
+   */
+  label: string;
+  /** What the row shows, when it is more than the label. */
+  name?: React.ReactNode;
   /** Read out after the name, for lists whose grouping is only a heading. */
   qualifier?: string;
   checked: boolean;
@@ -1277,6 +1289,7 @@ function ResourceCheckbox({
       onClick={() => onToggle(id)}
       role="checkbox"
       aria-checked={checked}
+      aria-label={qualifier ? `${label} in ${qualifier}` : label}
       className={cn(
         "hover:bg-accent flex w-full cursor-pointer items-center gap-3 px-4",
         compact ? "h-9 text-sm" : "py-1.5 text-sm",
@@ -1292,8 +1305,7 @@ function ResourceCheckbox({
       >
         {checked && <Check className="size-3" />}
       </span>
-      <span className="truncate">{name}</span>
-      {qualifier && <span className="sr-only">in {qualifier}</span>}
+      <span className="truncate">{name ?? label}</span>
     </button>
   );
 }

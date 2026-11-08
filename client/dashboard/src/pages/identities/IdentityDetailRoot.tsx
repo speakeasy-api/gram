@@ -1,6 +1,9 @@
 import { Page } from "@/components/page-layout";
 import { IdentityRail } from "@/components/identity-rail";
-import { identityRailItems } from "@/components/identity-rail-items";
+import {
+  identityRailItems,
+  identitySectionCrumbs,
+} from "@/components/identity-rail-items";
 import {
   removeResourceVisits,
   useRecentLabelOverride,
@@ -208,14 +211,24 @@ function IdentityDetailContent(): JSX.Element {
 
   const identity = identityQuery.data;
   const context: IdentityOutletContext = { identity, urn };
+  const railItems = identityRailItems(
+    routes,
+    encodedUrn ?? "",
+    // The Findings filter is that page's own, not a setting to
+    // carry into the other sections and back.
+    withoutFindingsFilter(location.search),
+    identity.kind,
+  );
 
   return (
     <Page>
       <Page.Header>
         <Page.Header.Breadcrumbs
-          substitutions={
-            encodedUrn ? { [encodedUrn]: identity.displayName } : undefined
-          }
+          // The section crumb names the page the way its tab does.
+          substitutions={{
+            ...identitySectionCrumbs(railItems),
+            ...(encodedUrn ? { [encodedUrn]: identity.displayName } : {}),
+          }}
           // The identity's own path has no page on it, so its crumb points
           // at the section the page opens on.
           urlSubstitutions={
@@ -291,14 +304,7 @@ function IdentityDetailContent(): JSX.Element {
           }
         >
           <IdentityRail
-            items={identityRailItems(
-              routes,
-              encodedUrn ?? "",
-              // The Findings filter is that page's own, not a setting to
-              // carry into the other sections and back.
-              withoutFindingsFilter(location.search),
-              identity.kind,
-            )}
+            items={railItems}
             // Narrow, the rail is a scrollable row above the content: hiding
             // it left the other sub-pages reachable only by editing the URL.
             // Sticks clear of the header above it rather than under it: both

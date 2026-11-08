@@ -1054,6 +1054,9 @@ var _ = Service("access", func() {
 			})
 			Attribute("principal_urn", String, "Filter by principal URN.")
 			Attribute("scope", String, "Filter by scope.")
+			Attribute("exclude_scopes", ArrayOf(String), "Leave out checks of these scopes, from the rows and from the total.", func() {
+				MaxLength(20)
+			})
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
@@ -1085,6 +1088,7 @@ var _ = Service("access", func() {
 			Param("outcome")
 			Param("principal_urn")
 			Param("scope")
+			Param("exclude_scopes")
 			Param("project_id")
 			Param("resolved")
 			Param("ids")

@@ -202,6 +202,7 @@ func (m *ChallengeManager) resolveClientCredential(ctx context.Context, req Clie
 		ClientCredentialErr:                nil,
 		renewal:                            &clientCredentialRenewal{credential: cred, request: req},
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}, nil
 }
 

@@ -138,7 +138,7 @@ func TestAHPInboundAttachmentPersistsAsPromptAttachment(t *testing.T) {
 	require.Equal(t, message.PromptAttachment, part.Kind)
 	require.Equal(t, msgs[0].ID, part.ParentChatMessageID.UUID)
 	require.Equal(t, "example-harness", part.Source.String)
-	require.Equal(t, ahpAttachmentEntryID("https://harness.example/runtime", eventID, "message", "notes"), part.ExternalID.String)
+	require.Equal(t, ahpAttachmentEntryID("https://harness.example/runtime", sessionID, eventID, "message", "notes"), part.ExternalID.String)
 	assetURL, err := url.Parse(part.ContentAssetUrl)
 	require.NoError(t, err)
 	reader, err := ti.assetStorage.Read(ctx, assetURL)
@@ -308,4 +308,22 @@ func TestAHPInboundAttachmentUnavailable(t *testing.T) {
 			})
 		}
 	}
+}
+
+func TestAHPAttachmentEntryIdentity(t *testing.T) {
+	t.Parallel()
+	original := ahpAttachmentEntryID("source", "session", "arrival", "message", "part")
+	require.Equal(t, original, ahpAttachmentEntryID("source", "session", "admission", "message", "part"))
+	for _, different := range []string{
+		ahpAttachmentEntryID("other-source", "session", "arrival", "message", "part"),
+		ahpAttachmentEntryID("source", "other-session", "arrival", "message", "part"),
+		ahpAttachmentEntryID("source", "session", "arrival", "other-message", "part"),
+		ahpAttachmentEntryID("source", "session", "arrival", "message", "other-part"),
+		ahpAttachmentEntryID("source", "", "session", "message", "part"),
+	} {
+		require.NotEqual(t, original, different)
+	}
+	detached := ahpAttachmentEntryID("source", "", "arrival", "message", "part")
+	require.Equal(t, detached, ahpAttachmentEntryID("source", "", "arrival", "message", "part"), "detached replay is stable")
+	require.NotEqual(t, detached, ahpAttachmentEntryID("source", "", "admission", "message", "part"), "unrelated detached events remain distinct")
 }

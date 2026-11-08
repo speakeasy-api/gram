@@ -70,6 +70,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		}
 	}
 	require.Equal(t, map[string]string{
+		"turn.start":           "intercept",
 		"user.message.inbound": "intercept",
 		"tool.before":          "intercept",
 		"session.start":        "observe",
@@ -78,7 +79,7 @@ func requireAHPConfiguration(t *testing.T, h http.Handler, failurePolicy string)
 		"model.response.after": "observe",
 		"tool.after":           "observe",
 	}, events)
-	require.Equal(t, 2, intercepts)
+	require.Equal(t, 3, intercepts)
 }
 
 func TestAHPConfigurationDynamicPosture(t *testing.T) {

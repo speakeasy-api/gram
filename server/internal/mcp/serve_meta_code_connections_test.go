@@ -92,6 +92,7 @@ func TestCodeConnectionsWorkWithoutToolPermission(t *testing.T) {
 	// The wrong browser user fails before any sign-in or credential handoff.
 	mock.upsertResult = "different-user"
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+state.ID+"&code=idp-auth-code", nil).WithContext(ctx)
+	callback.AddCookie(started.Result().Cookies()[0])
 	rejected := httptest.NewRecorder()
 	require.ErrorContains(t, ti.service.HandleIDPCallback(rejected, callback), "Only the user who requested this connection")
 	require.Empty(t, rejected.Header().Get("Location"))

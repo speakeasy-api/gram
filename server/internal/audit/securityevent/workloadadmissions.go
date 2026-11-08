@@ -12,45 +12,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-// LogWorkloadAdmissionAdmit records Speakeasy admitting a workload on its own,
-// as a Kit runtime admits its own workload identity on every start. An
-// administrator admitting a workload is a configuration change and goes
-// through audit.Logger.LogWorkloadAdmissionAdmit instead.
-func LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event audit.LogWorkloadAdmissionAdmitEvent) error {
-	action := audit.ActionWorkloadAdmissionAdmit
-	after, err := marshalSnapshot(event.AdmissionSnapshotAfter)
-	if err != nil {
-		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
-	}
-	return record(ctx, dbtx, repo.InsertSecurityAuditLogParams{
-		IsInternal:     false,
-		OrganizationID: event.OrganizationID,
-		ProjectID:      event.ProjectID,
-
-		ActorID:          event.Actor.ID,
-		ActorType:        string(event.Actor.Type),
-		ActorDisplayName: conv.PtrToPGTextEmpty(event.ActorDisplayName),
-		ActorSlug:        conv.PtrToPGTextEmpty(event.ActorSlug),
-
-		Action: string(action),
-
-		SubjectID:          event.AdmissionURN.ID.String(),
-		SubjectType:        audit.SubjectTypeWorkloadAdmission,
-		SubjectDisplayName: conv.ToPGTextEmpty(event.AdmissionDisplayName),
-		SubjectSlug:        conv.ToPGTextEmpty(""),
-
-		Metadata:       nil,
-		BeforeSnapshot: nil,
-		AfterSnapshot:  after,
-
-		ActingSurface:  conv.ToPGTextEmpty(""),
-		ActingClientID: conv.ToPGTextEmpty(""),
-	}, events.WorkloadAdmissionV1)
-}
-
-// LogWorkloadAdmissionWithdraw records the withdrawal of an admission a runtime
-// created for itself, whether the runtime withdrew it on teardown or an
-// administrator's issuer withdrawal cascaded to it.
+// LogWorkloadAdmissionWithdraw records the withdrawal of an admission whose
+// admit is already in the security log, so its history stays in one place:
+// either an administrator's issuer withdrawal cascading to it or the runtime's
+// own teardown. Kit runtimes recorded those admits on every start until their
+// own admits and withdrawals stopped being audited.
 func LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event audit.LogWorkloadAdmissionWithdrawEvent) error {
 	action := audit.ActionWorkloadAdmissionWithdraw
 	before, err := marshalSnapshot(event.AdmissionSnapshotBefore)
