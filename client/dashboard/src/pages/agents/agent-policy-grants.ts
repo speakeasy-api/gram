@@ -10,6 +10,8 @@ import type { Selector } from "@gram/client/models/components/selector.js";
 import type { ResourceType } from "@/pages/access/types";
 
 import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
+import { CONNECT_SCOPE } from "./agentPolicyEdit";
+
 /**
  * A permission per scope, in the shape the role editor's resource picker
  * already speaks: `null` is unrestricted, an array is one selector per chosen
@@ -259,17 +261,27 @@ export interface AgentPolicyView {
 export const AGENT_CREDENTIAL_BLOCK_SCOPE = "mcp:blocked_auth";
 
 /**
+ * The servers an agent reaches are chosen in its own setup flow, beside the
+ * sign-in each server needs, and listed in a section of their own. The
+ * permission editor neither shows nor rewrites them.
+ */
+export function isAgentPolicyEditorScope(scope: string): boolean {
+  return scope !== AGENT_CREDENTIAL_BLOCK_SCOPE && scope !== CONNECT_SCOPE;
+}
+
+/**
  * Split the stored ceiling into what the editor may rewrite and what it must
  * leave alone. A scope with even one unrepresentable grant is locked whole:
  * editing half of one would let a save drop the constrained grant and re-add a
- * broader one under the same scope. Credential restrictions are left out of
- * both; the fingerprint of the full ceiling still covers them.
+ * broader one under the same scope. Credential restrictions and MCP server
+ * grants are left out of both; the fingerprint of the full ceiling still
+ * covers them.
  */
 export function agentPolicyViewFromGrants(
   stored: AgentPolicyGrant[],
 ): AgentPolicyView {
-  const grants = stored.filter(
-    (grant) => grant.scope !== AGENT_CREDENTIAL_BLOCK_SCOPE,
+  const grants = stored.filter((grant) =>
+    isAgentPolicyEditorScope(grant.scope),
   );
   const locked = new Set(
     grants

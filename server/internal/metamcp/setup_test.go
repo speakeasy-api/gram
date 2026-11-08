@@ -305,9 +305,9 @@ func createRemoteSessionClient(t *testing.T, ctx context.Context, conn *pgxpool.
 }
 
 // stampAndWireMemberClient binds a client to the member server's own issuer and
-// stamps the server's denormalized remote_session_issuer_id, mirroring the state
-// AddMetaMcpMember's auto-attach reads from.
-func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID, serverID, remoteIssuerID, clientID uuid.UUID) {
+// stamps the server with it, mirroring the state AddMetaMcpMember's auto-attach
+// reads from.
+func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, serverID, clientID uuid.UUID) {
 	t.Helper()
 
 	server, err := mcpserversrepo.New(conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
@@ -321,10 +321,11 @@ func stampAndWireMemberClient(t *testing.T, ctx context.Context, conn *pgxpool.P
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   server.UserSessionIssuerID.UUID,
 	}))
-	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-		RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-		ID:                    serverID,
+	stamped, err := testrepo.New(conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)

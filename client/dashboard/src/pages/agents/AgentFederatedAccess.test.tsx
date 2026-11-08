@@ -232,3 +232,122 @@ it("renders one policy control per issuer while preserving every subject row", (
     screen.getAllByRole("button", { name: /Remove .* access/ }),
   ).toHaveLength(3);
 });
+
+it("counts an assistant's running sandboxes on one row instead of listing each", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_kit",
+    name: "kit-runtime-00000000000000000000000000000000",
+    issuer: "https://container.googleapis.com/v1/example",
+    jwksUri: "https://container.googleapis.com/v1/example/openid/jwks",
+    description: "",
+    tags: ["kit-runtime"],
+    allowAssertionReuse: true,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "proj_example",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [issuer];
+  mocks.admissions = [
+    admission(),
+    ...["a", "b", "c"].map((n) =>
+      admission({
+        id: `adm_kit_${n}`,
+        workloadIssuerId: issuer.id,
+        issuerName: issuer.name,
+        matchKind: "exact",
+        name: `kit-runtime-00000000-0000-0000-0000-00000000000${n}-${"0".repeat(32)}`,
+        subject: `system:serviceaccount:assistants:kit-${n}`,
+        tags: ["kit-runtime"],
+      }),
+    ),
+  ];
+  renderPanel();
+  expect(screen.getAllByText("Assistant runtime")).toHaveLength(1);
+  expect(screen.getByText("3 running sandboxes")).toBeTruthy();
+  expect(screen.queryByText(issuer.name)).toBeNull();
+  expect(
+    screen.getAllByRole("button", {
+      name: `Edit ${issuer.name} issuer policy`,
+    }),
+  ).toHaveLength(1);
+  // Removing one sandbox's sign-in only breaks that sandbox, so only the
+  // platform's own row offers it.
+  expect(
+    screen.getAllByRole("button", { name: /Remove .* access/ }),
+  ).toHaveLength(1);
+});
+
+it("keeps a customer's own admission on its row when it only carries the runtime tag", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_tagged",
+    name: "Build cluster",
+    issuer: "https://issuer.example",
+    jwksUri: "https://issuer.example/jwks",
+    description: "",
+    tags: ["kit-runtime"],
+    allowAssertionReuse: false,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [issuer];
+  mocks.admissions = [
+    admission({
+      workloadIssuerId: issuer.id,
+      issuerName: issuer.name,
+      matchKind: "exact",
+      tags: ["kit-runtime"],
+    }),
+  ];
+  renderPanel();
+  expect(screen.queryByText("Assistant runtime")).toBeNull();
+  expect(screen.getByText("Build cluster")).toBeTruthy();
+  expect(
+    screen.getByRole("button", { name: "Remove Build cluster access" }),
+  ).toBeTruthy();
+});
+
+it("shows the runtime issuer's policy control once when it also has an ordinary admission", () => {
+  const issuer: WorkloadIssuer = {
+    id: "iss_kit",
+    name: `kit-runtime-${"0".repeat(32)}`,
+    issuer: "https://issuer.example",
+    jwksUri: "https://issuer.example/jwks",
+    description: "",
+    tags: ["kit-runtime"],
+    allowAssertionReuse: true,
+    allowWildcardAdmission: false,
+    organizationId: "org_example",
+    projectId: "proj_example",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  mocks.issuers = [issuer];
+  mocks.admissions = [
+    admission({
+      id: "adm_manual",
+      workloadIssuerId: issuer.id,
+      issuerName: issuer.name,
+      matchKind: "exact",
+      name: "manual",
+    }),
+    admission({
+      id: "adm_kit",
+      workloadIssuerId: issuer.id,
+      issuerName: issuer.name,
+      matchKind: "exact",
+      name: `kit-runtime-00000000-0000-0000-0000-000000000001-${"0".repeat(32)}`,
+    }),
+  ];
+  renderPanel();
+  expect(screen.getByText("Assistant runtime")).toBeTruthy();
+  expect(
+    screen.getAllByRole("button", {
+      name: `Edit ${issuer.name} issuer policy`,
+    }),
+  ).toHaveLength(1);
+});

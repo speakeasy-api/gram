@@ -8,6 +8,7 @@ import {
   agentPolicyResourceKind,
   agentPolicyViewFromGrants,
   diffAgentPolicyGrants,
+  isAgentPolicyEditorScope,
   isAgentPolicyGrantRepresentable,
   isAgentPolicyNarrowable,
 } from "./agent-policy-grants";
@@ -296,9 +297,32 @@ describe("policy diff", () => {
 // (allowedSelectorKeys in server/internal/authz/selector.go) and the editor has
 // no control for either, so rewriting one through the draft would drop the
 // constraint.
+describe("MCP server grants", () => {
+  it("leaves mcp:connect out of the editor and out of every diff", () => {
+    const connect = storedGrant("grant_connect", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      projectId: "project_one",
+    });
+    const read = storedGrant("grant_read", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "*",
+    });
+    const view = agentPolicyViewFromGrants([connect, read]);
+    expect(view.editable).toEqual([read]);
+    expect(view.preserved).toEqual([]);
+    expect(view.draft).toEqual({ "mcp:read": null });
+    expect(
+      diffAgentPolicyGrants(view.editable, agentPolicyGrantsFromDraft({})),
+    ).toEqual({ create: [], remove: [read] });
+    expect(isAgentPolicyEditorScope("mcp:connect")).toBe(false);
+    expect(isAgentPolicyEditorScope("mcp:read")).toBe(true);
+  });
+});
+
 describe("stored constraints the editor cannot show", () => {
   it("preserves the whole scope when a grant has an unsupported effect", () => {
-    const allow = storedGrant("grant_allow", "mcp:connect", {
+    const allow = storedGrant("grant_allow", "mcp:read", {
       resourceKind: "mcp",
       resourceId: "*",
     });
@@ -311,7 +335,7 @@ describe("stored constraints the editor cannot show", () => {
     expect(view.editable).toEqual([]);
     expect(view.draft).toEqual({});
     expect(view.preserved).toEqual([allow, future]);
-    expect(view.preservedScopes).toEqual(["mcp:connect"]);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
     expect(
       diffAgentPolicyGrants(
         view.editable,
@@ -510,7 +534,7 @@ describe("empty-string dimensions", () => {
     ["both", { tool: "", projectId: "" }],
   ])("round-trips a grant constrained by an empty %s", (_, extra) => {
     const stored = [
-      storedGrant("grant_empty", "mcp:connect", {
+      storedGrant("grant_empty", "mcp:read", {
         resourceKind: "mcp",
         resourceId: "server_one",
         ...extra,
@@ -529,20 +553,20 @@ describe("empty-string dimensions", () => {
   it("does not read an empty dimension as unrestricted", () => {
     expect(
       agentPolicyDraftFromGrants([
-        storedGrant("grant_empty", "mcp:connect", {
+        storedGrant("grant_empty", "mcp:read", {
           resourceKind: "mcp",
           resourceId: "*",
           tool: "",
         }),
       ]),
     ).toEqual({
-      "mcp:connect": [{ resourceKind: "mcp", resourceId: "*", tool: "" }],
+      "mcp:read": [{ resourceKind: "mcp", resourceId: "*", tool: "" }],
     });
   });
 
   it("leaves it alone while an unrelated permission is added", () => {
     const stored = [
-      storedGrant("grant_empty", "mcp:connect", {
+      storedGrant("grant_empty", "mcp:read", {
         resourceKind: "mcp",
         resourceId: "server_one",
         tool: "",

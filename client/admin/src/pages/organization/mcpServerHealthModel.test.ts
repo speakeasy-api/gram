@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   adminMcpPrompt,
+  parseScopes,
   admissionLabel,
   bucketSquares,
   callsPerSquare,
@@ -208,5 +209,23 @@ describe("adminMcpPrompt", () => {
         range: "Sep 15 – Sep 29, 2026",
       }),
     ).not.toContain("what happened");
+  });
+});
+
+describe("parseScopes", () => {
+  it("splits on whitespace, keeping order and dropping repeats", () => {
+    expect(parseScopes(" read write  read\tadmin ")).toEqual([
+      "read",
+      "write",
+      "admin",
+    ]);
+  });
+
+  it("keeps a comma inside a scope", () => {
+    expect(parseScopes("read,write")).toEqual(["read,write"]);
+  });
+
+  it("reads an empty field as no pin", () => {
+    expect(parseScopes("  ")).toEqual([]);
   });
 });

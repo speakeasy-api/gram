@@ -227,6 +227,17 @@ describe("a person and the roles they are in", () => {
     expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
   });
 
+  it("names the stronger line when the row's own rule for every server grants it", () => {
+    // Clearing View leaves it allowed through Manage; the line says so
+    // rather than reading as set on its own.
+    const row = rowFor([
+      role("Collaborator", { appliesTo: "all_resources", level: "manage" }),
+    ]);
+
+    expect(scopeState(row, "view", catalog).note).toBe("included in Manage");
+    expect(scopeState(row, "manage", catalog).note).toBeUndefined();
+  });
+
   it("reads a row's own block for every server as blocked", () => {
     const row = rowFor([role("Collaborator", { level: "blocked_manage" })]);
     const state = scopeState(row, "manage", catalog);
