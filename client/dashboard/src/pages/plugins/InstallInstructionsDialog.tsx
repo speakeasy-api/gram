@@ -74,9 +74,16 @@ const VIBE_PROVIDER = {
   available: true,
 } as const;
 
+// Active providers first, Vibe among them, coming-soon tiles last — the grid
+// groups enabled and disabled tiles visually, so appending Vibe after the
+// disabled ones would misplace it.
+const surfaceProviders = agentProvidersForSurface("plugins").filter(
+  (p) => p.id !== "mistral",
+);
 const providers = [
-  ...agentProvidersForSurface("plugins").filter((p) => p.id !== "mistral"),
+  ...surfaceProviders.filter((p) => p.available),
   VIBE_PROVIDER,
+  ...surfaceProviders.filter((p) => !p.available),
 ];
 type Provider = (typeof providers)[number]["id"];
 

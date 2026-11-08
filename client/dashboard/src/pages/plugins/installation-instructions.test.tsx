@@ -205,6 +205,8 @@ describe("installation instructions", () => {
     expect(mistralButtons.map((b) => b.textContent?.trim())).toEqual([
       "Mistral Vibe",
     ]);
+    // The surviving Mistral tile must be enabled, not another coming-soon entry.
+    expect(mistralButtons[0].getAttribute("disabled")).toBeNull();
   });
 
   it("installs the selected feature plugin as <slug>-vibe for Mistral Vibe", () => {
