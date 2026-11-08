@@ -333,8 +333,9 @@ function marketplaceSteps(
       {
         title: "Clone the Speakeasy marketplace repository",
         description:
-          "Mistral Vibe has no marketplace importer, so copy the package out of the repository instead.",
-        code: `git clone ${marketplaceURL} marketplace`,
+          "Mistral Vibe has no marketplace importer, so copy the package out of the repository instead. Re-running replaces the checkout first so it never reinstalls stale files.",
+        code: `rm -rf marketplace\ngit clone ${marketplaceURL} marketplace`,
+        language: "bash",
       },
       {
         title: "Copy the Vibe package into your plugins directory",
