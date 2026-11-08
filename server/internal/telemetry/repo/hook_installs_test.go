@@ -12,8 +12,8 @@ import (
 )
 
 type hookRow struct {
-	org, email, hostname, harness, version, generation, route, source, hookErr string
-	at                                                                         time.Time
+	org, email, hostname, hookSource, deviceHarness, version, generation, route, source, hookErr string
+	at                                                                                           time.Time
 }
 
 func insertHookRow(t *testing.T, projectID string, r hookRow) {
@@ -23,17 +23,23 @@ func insertHookRow(t *testing.T, projectID string, r hookRow) {
 	require.NoError(t, err)
 
 	attrs := map[string]any{
-		"gram.event.source":               r.source,
-		"gram.org.id":                     r.org,
-		"user.email":                      r.email,
-		"gram.hook.hostname":              r.hostname,
-		"gram.hook.source":                r.harness,
+		"gram.event.source":  r.source,
+		"gram.org.id":        r.org,
+		"user.email":         r.email,
+		"gram.hook.hostname": r.hostname,
+		"gram.hook.source":   r.hookSource,
+	}
+	optional := map[string]string{
+		"gram.hook.device.harness":        r.deviceHarness,
 		"gram.hook.device.binary_version": r.version,
 		"gram.hook.endpoint_generation":   r.generation,
 		"gram.hook.device.install_route":  r.route,
+		"gram.hook.error":                 r.hookErr,
 	}
-	if r.hookErr != "" {
-		attrs["gram.hook.error"] = r.hookErr
+	for k, v := range optional {
+		if v != "" {
+			attrs[k] = v
+		}
 	}
 	attrsJSON, err := json.Marshal(attrs)
 	require.NoError(t, err)
@@ -48,93 +54,145 @@ func insertHookRow(t *testing.T, projectID string, r hookRow) {
 	require.NoError(t, err)
 }
 
-func TestListHookInstalls_LatestValuesPerInstall(t *testing.T) {
+func newHookInstallsQueries(t *testing.T) *repo.Queries {
+	t.Helper()
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	return repo.New(conn)
+}
+
+func TestListHookInstalls_MergesOneMachineIntoOneInstall(t *testing.T) {
 	t.Parallel()
 
 	org := "org-" + uuid.NewString()
 	project := uuid.NewString()
 	now := time.Now().UTC()
 
-	base := hookRow{org: org, email: "a@example.com", hostname: "laptop-a", harness: "claude",
+	live := hookRow{org: org, email: "a@example.com", hostname: "laptop-a", hookSource: "claude-code", deviceHarness: "claude",
 		version: "0.3.0", generation: "ingest_binary", route: "marketplace", source: "hook", at: now.Add(-48 * time.Hour)}
-	insertHookRow(t, project, base)
+	insertHookRow(t, project, live)
 
-	upgraded := base
+	upgraded := live
 	upgraded.version = "0.4.0"
 	upgraded.route = ""
 	upgraded.at = now.Add(-1 * time.Hour)
 	insertHookRow(t, project, upgraded)
 
-	diag := base
-	diag.source = "hook_diagnostic"
-	diag.version = ""
-	diag.generation = ""
-	diag.at = now.Add(-2 * time.Hour)
-	insertHookRow(t, project, diag)
+	replay := live
+	replay.deviceHarness = ""
+	replay.version = ""
+	replay.at = now.Add(-3 * time.Hour)
+	insertHookRow(t, project, replay)
 
-	legacy := hookRow{org: org, email: "b@example.com", hostname: "laptop-b", harness: "cursor",
-		generation: "legacy_keyed", source: "hook", hookErr: "boom", at: now.Add(-10 * 24 * time.Hour)}
+	legacy := hookRow{org: org, email: "a@example.com", hostname: "laptop-a", hookSource: "claude-code",
+		generation: "legacy_keyed", source: "hook", hookErr: "boom", at: now.Add(-72 * time.Hour)}
 	insertHookRow(t, project, legacy)
 
-	other := base
-	other.org = "org-" + uuid.NewString()
-	insertHookRow(t, project, other)
+	diag := hookRow{org: org, email: "a@example.com", hostname: "laptop-a", hookSource: "claude", deviceHarness: "claude",
+		version: "0.4.0", source: "hook_diagnostic", at: now.Add(-2 * time.Hour)}
+	insertHookRow(t, project, diag)
 
-	conn, err := infra.NewClickhouseClient(t)
+	q := newHookInstallsQueries(t)
+	page, err := q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 100)
 	require.NoError(t, err)
-	q := repo.New(conn)
-	installs, err := q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 100)
-	require.NoError(t, err)
-	require.Len(t, installs, 2)
+	require.False(t, page.Truncated)
+	require.Len(t, page.Installs, 1)
 
-	a := installs[0]
+	a := page.Installs[0]
 	require.Equal(t, project, a.ProjectID)
 	require.Equal(t, "laptop-a", a.Hostname)
 	require.Equal(t, "claude", a.Harness)
 	require.Equal(t, "0.4.0", a.BinaryVersion)
 	require.Equal(t, "ingest_binary", a.EndpointGeneration)
 	require.Equal(t, "marketplace", a.InstallRoute)
-	require.Equal(t, uint64(3), a.Events)
-	require.Equal(t, uint64(1), a.Errors)
-	require.WithinDuration(t, base.at, a.FirstSeen, time.Millisecond)
+	require.Equal(t, uint64(4), a.Events)
+	require.Equal(t, map[string]uint64{"ingest_binary": 3, "legacy_keyed": 1}, a.EventsByGeneration)
+	require.Equal(t, uint64(2), a.Errors)
+	require.WithinDuration(t, legacy.at, a.FirstSeen, time.Millisecond)
 	require.WithinDuration(t, upgraded.at, a.LastSeen, time.Millisecond)
-
-	b := installs[1]
-	require.Equal(t, "laptop-b", b.Hostname)
-	require.Empty(t, b.BinaryVersion)
-	require.Equal(t, "legacy_keyed", b.EndpointGeneration)
-	require.Equal(t, uint64(1), b.Errors)
-
-	recent, err := q.ListHookInstalls(t.Context(), org, now.Add(-5*24*time.Hour), 100)
-	require.NoError(t, err)
-	require.Len(t, recent, 1)
 }
 
-func TestSummarizeHookInstalls(t *testing.T) {
+func TestListHookInstalls_IgnoresRowsNotFromHookEndpoints(t *testing.T) {
 	t.Parallel()
 
-	now := time.Now()
-	installs := []repo.HookInstall{
-		{BinaryVersion: "0.4.0", EndpointGeneration: "ingest_binary", Events: 10, LastSeen: now},
-		{BinaryVersion: "0.10.0", EndpointGeneration: "ingest_binary", Events: 5, LastSeen: now},
-		{BinaryVersion: "0.3.0", EndpointGeneration: "ingest_binary", Events: 1, LastSeen: now.Add(-72 * time.Hour)},
-		{BinaryVersion: "", EndpointGeneration: "legacy_unkeyed", Events: 7, LastSeen: now},
-		{BinaryVersion: "0.4.0", EndpointGeneration: "ingest_script", Events: 2, LastSeen: now},
+	org := "org-" + uuid.NewString()
+	project := uuid.NewString()
+	now := time.Now().UTC()
+
+	// Provider OTEL, LiteLLM and imported sessions stamp the hook event
+	// source but no endpoint generation.
+	for _, source := range []string{"claude-code", "litellm", "claude-chat-web"} {
+		insertHookRow(t, project, hookRow{org: org, email: "a@example.com", hostname: "laptop-a",
+			hookSource: source, source: "hook", at: now.Add(-time.Hour)})
 	}
 
-	s := repo.SummarizeHookInstalls(installs, "0.4.0", now.Add(-24*time.Hour))
-	require.Equal(t, 5, s.Installs)
-	require.Equal(t, []repo.HookVersionCount{
-		{Version: "0.10.0", Installs: 1},
-		{Version: "0.4.0", Installs: 2},
-		{Version: "0.3.0", Installs: 1},
-		{Version: "", Installs: 1},
-	}, s.Versions)
-	require.Equal(t, 2, s.Outdated)
-	require.Equal(t, uint64(7), s.EventsByGeneration["legacy_unkeyed"])
-	require.Equal(t, uint64(16), s.EventsByGeneration["ingest_binary"])
-	require.Len(t, s.Quiet, 1)
-	require.Equal(t, "0.3.0", s.Quiet[0].BinaryVersion)
+	q := newHookInstallsQueries(t)
+	page, err := q.ListHookInstalls(t.Context(), org, now.Add(-24*time.Hour), 100)
+	require.NoError(t, err)
+	require.Empty(t, page.Installs)
+}
 
-	require.Zero(t, repo.SummarizeHookInstalls(installs, "", now).Outdated)
+func TestListHookInstalls_WindowLimitAndOrg(t *testing.T) {
+	t.Parallel()
+
+	org := "org-" + uuid.NewString()
+	project := uuid.NewString()
+	now := time.Now().UTC()
+
+	recent := hookRow{org: org, email: "a@example.com", hostname: "laptop-a", hookSource: "cursor", deviceHarness: "cursor",
+		version: "0.4.0", generation: "ingest_binary", source: "hook", at: now.Add(-time.Hour)}
+	insertHookRow(t, project, recent)
+
+	old := recent
+	old.hostname = "laptop-b"
+	old.at = now.Add(-10 * 24 * time.Hour)
+	insertHookRow(t, project, old)
+
+	other := recent
+	other.org = "org-" + uuid.NewString()
+	insertHookRow(t, project, other)
+
+	q := newHookInstallsQueries(t)
+
+	page, err := q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 100)
+	require.NoError(t, err)
+	require.Len(t, page.Installs, 2)
+	require.Equal(t, "laptop-a", page.Installs[0].Hostname)
+
+	page, err = q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 1)
+	require.NoError(t, err)
+	require.Len(t, page.Installs, 1)
+	require.True(t, page.Truncated)
+
+	page, err = q.ListHookInstalls(t.Context(), org, now.Add(-5*24*time.Hour), 100)
+	require.NoError(t, err)
+	require.Len(t, page.Installs, 1)
+
+	_, err = q.ListHookInstalls(t.Context(), "", now.Add(-24*time.Hour), 100)
+	require.Error(t, err)
+}
+
+func TestListUnattributedHookInstalls(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.NewString()
+	host := "laptop-" + uuid.NewString()
+	now := time.Now().UTC()
+
+	insertHookRow(t, project, hookRow{hostname: host, hookSource: "claude-code",
+		generation: "legacy_unkeyed", source: "hook", at: now.Add(-time.Hour)})
+
+	q := newHookInstallsQueries(t)
+	page, err := q.ListUnattributedHookInstalls(t.Context(), now.Add(-24*time.Hour), 10000)
+	require.NoError(t, err)
+
+	var found *repo.HookInstall
+	for i := range page.Installs {
+		if page.Installs[i].Hostname == host {
+			found = &page.Installs[i]
+		}
+	}
+	require.NotNil(t, found)
+	require.Equal(t, "legacy_unkeyed", found.EndpointGeneration)
+	require.Equal(t, "claude", found.Harness)
 }

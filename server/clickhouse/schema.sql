@@ -2658,23 +2658,27 @@ PARTITION BY toDate(bucket)
 ORDER BY (gram_project_id, source_id, bucket, kind, producer_id, server_id, method, client_family)
 TTL bucket + INTERVAL 90 DAY DELETE;
 
--- One row per hooks install per day: an install is an org, project, user,
--- machine and harness. Feeds the hooks fleet view, so oncall can see which
--- versions, endpoint generations and install routes an org runs without
--- scanning telemetry_logs.
+-- One row per hooks install per day. An install is an org, project, user,
+-- hostname and harness, not a device id. Only rows a hooks endpoint wrote
+-- (those stamped with an endpoint generation) and delivery failure reports
+-- count, so OTEL, LiteLLM and imported sessions never create an install.
+-- Claude surfaces fold into one claude harness so replays and legacy rows,
+-- which carry the hook source instead of the device harness, match the live
+-- install.
 CREATE TABLE IF NOT EXISTS hook_install_summaries (
     organization_id String COMMENT 'Organization the install reports to. Empty when the row could not be tied to an org.\n@access: confidential',
     gram_project_id UUID COMMENT 'Project the install reports to.\n@access: confidential',
     user_email String COMMENT 'Email of the user the hook events were attributed to, empty when none.\n@access: confidential-pii',
     hostname String COMMENT 'Hostname the hook reported, empty when none.\n@access: confidential-pii',
-    harness LowCardinality(String) COMMENT 'Coding agent the hook ran in, from the device header or else the hook source.\n@access: confidential',
+    harness LowCardinality(String) COMMENT 'Coding agent the hook ran in. All Claude surfaces read as claude.\n@access: confidential',
     day Date COMMENT 'UTC day of the events.\n@access: confidential',
     binary_version AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest reported speakeasy-hooks binary version.\n@access: confidential',
     endpoint_generation AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest endpoint generation: legacy_unkeyed, legacy_keyed, ingest_script or ingest_binary.\n@access: confidential',
     install_route AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest reported install route, such as marketplace or download.\n@access: confidential',
     first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')) COMMENT 'Time of the earliest event.\n@access: confidential',
     last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest event.\n@access: confidential',
-    event_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows recorded.\n@access: confidential',
+    event_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows recorded, delivery failure reports excluded.\n@access: confidential',
+    events_by_generation SimpleAggregateFunction(sumMap, Map(String, UInt64)) COMMENT 'Hook rows recorded per endpoint generation, delivery failure reports excluded.\n@access: confidential',
     error_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows that carried an error, plus delivery failure reports.\n@access: confidential'
 ) ENGINE = AggregatingMergeTree
 PARTITION BY toMonday(day)
@@ -2689,15 +2693,20 @@ SELECT
     gram_project_id,
     user_email,
     toString(attributes.gram.hook.hostname) AS hostname,
-    toLowCardinality(if(toString(attributes.gram.hook.device.harness) != '', toString(attributes.gram.hook.device.harness), hook_source)) AS harness,
+    toLowCardinality(multiIf(
+        toString(attributes.gram.hook.device.harness) != '', if(startsWith(toString(attributes.gram.hook.device.harness), 'claude') OR toString(attributes.gram.hook.device.harness) = 'cowork', 'claude', toString(attributes.gram.hook.device.harness)),
+        startsWith(hook_source, 'claude') OR hook_source = 'cowork', 'claude',
+        hook_source)) AS harness,
     toDate(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS day,
     argMaxIfState(toString(attributes.gram.hook.device.binary_version), time_unix_nano, toString(attributes.gram.hook.device.binary_version) != '') AS binary_version,
     argMaxIfState(toString(attributes.gram.hook.endpoint_generation), time_unix_nano, toString(attributes.gram.hook.endpoint_generation) != '') AS endpoint_generation,
     argMaxIfState(toString(attributes.gram.hook.device.install_route), time_unix_nano, toString(attributes.gram.hook.device.install_route) != '') AS install_route,
     min(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS first_seen,
     max(fromUnixTimestamp64Nano(time_unix_nano, 'UTC')) AS last_seen,
-    toUInt64(count()) AS event_count,
+    toUInt64(countIf(event_source = 'hook')) AS event_count,
+    sumMapIf(map(toString(attributes.gram.hook.endpoint_generation), toUInt64(1)), event_source = 'hook') AS events_by_generation,
     toUInt64(countIf(event_source = 'hook_diagnostic' OR toString(attributes.gram.hook.error) != '')) AS error_count
 FROM telemetry_logs
-WHERE event_source IN ('hook', 'hook_diagnostic')
+WHERE event_source = 'hook_diagnostic'
+   OR (event_source = 'hook' AND toString(attributes.gram.hook.endpoint_generation) != '')
 GROUP BY organization_id, gram_project_id, user_email, hostname, harness, day;
