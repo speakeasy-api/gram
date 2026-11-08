@@ -16,8 +16,7 @@ var AdminBackfillMCPConnectGrantsResult = Type("AdminBackfillMCPConnectGrantsRes
 
 // MCP parity: not exposed through Staff Admin MCP. This is a fleet-wide data
 // backfill run by a person from the admin API around one rollout; Admin MCP
-// writes need a per-tenant proposal and approval, which a fleet-wide backfill
-// has no target for.
+// writes need one exact target, which a fleet-wide backfill does not have.
 func mcpConnectBackfillMethods() {
 	Method("backfillMcpConnectGrants", func() {
 		Description("Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.")

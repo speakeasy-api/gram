@@ -72,8 +72,8 @@ export type ActorRun = {
 
 /**
  * Splits a day's entries into runs of consecutive entries by the same actor.
- * An agent's runtime writes a security entry on every start and teardown, so
- * a run reads as one process at work rather than a column of repeats.
+ * Machine access arrives in bursts from one actor, so a run reads as one
+ * process at work rather than a column of repeats.
  */
 export function groupConsecutiveByActor(logs: AuditLog[]): ActorRun[] {
   const runs: ActorRun[] = [];

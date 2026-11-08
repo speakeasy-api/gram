@@ -958,8 +958,8 @@ func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.U
 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
-	if reason, stale := staleNoAuthReason(res, err); stale {
-		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason}
+	if reason, stale, saved := staleNoAuthReason(res, err); stale {
+		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason, saved}
 		return
 	}
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
@@ -984,42 +984,56 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
 }
 
-// staleNoAuthReason names why a member's no-auth choice is stale, if it is.
-func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
+// staleNoAuthReason names why a member's no-auth choice is stale, if it is, and whether the choice was saved.
+func staleNoAuthReason(res authClientResolution, err error) (string, bool, bool) {
 	switch {
 	case errors.Is(err, errUpstreamSelectionStaleNoAuth):
-		return authClientReasonNoAuthStale, true
+		return authClientReasonNoAuthStale, true, true
 	case err == nil && res.staleNoAuth():
-		return res.reason, true
+		return res.reason, true, res.saved
 	}
-	return "", false
+	return "", false, false
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
 const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
+// staleChoiceRemedy is who a stale choice's message tells to act first.
+type staleChoiceRemedy string
+
+const (
+	// staleChoiceReconnect: a new consent replaces the choice.
+	staleChoiceReconnect staleChoiceRemedy = "reconnect"
+	// staleChoiceReconnectThenAdmin: the person reconnects first, and asks an administrator if that fails.
+	staleChoiceReconnectThenAdmin staleChoiceRemedy = "reconnect_then_admin"
+	// staleChoiceAskAdmin: reconnecting can't help, so the person asks an administrator or owner.
+	staleChoiceAskAdmin staleChoiceRemedy = "ask_admin"
+	// staleChoiceUnchecked: whether consent can replace the choice could not be checked.
+	staleChoiceUnchecked staleChoiceRemedy = "unchecked"
+)
+
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 // Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
-func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
+func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, staleChoiceRemedy) {
 	authentication := gate.authentication
 	choices := gate.memberChoices
 	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
 		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
 	if !person {
-		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", false
+		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", staleChoiceAskAdmin
 	}
 	if !authentication.refreshableUserSession {
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", false
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", staleChoiceReconnectThenAdmin
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return connectionNotCheckedMessage, false
+		return connectionNotCheckedMessage, staleChoiceUnchecked
 	case fixable:
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", staleChoiceReconnect
 	}
-	return "This server needs your administrator to finish setup or give you access.", false
+	return "This server needs your administrator to finish setup or give you access.", staleChoiceAskAdmin
 }
 
 // consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.
@@ -1108,7 +1122,26 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 	return res.outcome != authClientGap && res.outcome != authClientNoAccess, nil
 }
 
-// memberFailureMessage is what a call to a failed member reads.
+// refuseStaleChoiceCall counts, records and words a call refused for a stale choice.
+func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) (string, staleChoiceRemedy) {
+	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
+	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+	if stale.saved {
+		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+	}
+	return message, remedy
+}
+
+// callFailureMessage is what a refused call to a failed member reads.
+func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
+	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+		message, _ := s.refuseStaleChoiceCall(ctx, logger, gate, member, stale)
+		return message
+	}
+	return memberErrorMessage(err)
+}
+
+// memberFailureMessage is what a describe of a failed member reads.
 func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
 	stale, ok := errors.AsType[memberStaleChoiceError](err)
 	if !ok {

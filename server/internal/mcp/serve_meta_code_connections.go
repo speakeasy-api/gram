@@ -63,7 +63,7 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		}
 	}
 	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
-		if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); !reconnect {
+		if message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); remedy != staleChoiceReconnect {
 			state.Consent = "unknown"
 			state.Instructions = message
 			return state
@@ -159,8 +159,8 @@ func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateCont
 	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
 		return nil
 	}
-	message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-	if reconnect {
+	message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+	if remedy == staleChoiceReconnect {
 		return nil
 	}
 	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}

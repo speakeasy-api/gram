@@ -10,7 +10,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
-	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -137,18 +137,16 @@ func TestWithdrawIssuer_CascadedRuntimeAdmissionsGoToTheSecurityLog(t *testing.T
 	}
 	require.Len(t, ids, 2)
 
-	// The fleet rule stands in for a runtime-created admission: the Kit runtime
-	// records its own admit entry in the security log, attributed to the
-	// assistant's agent, when it creates one.
-	err = securityevent.LogWorkloadAdmissionAdmit(ctx, ti.conn, audit.LogWorkloadAdmissionAdmitEvent{
-		OrganizationID:         ti.orgID,
-		ProjectID:              uuid.NullUUID{},
-		Actor:                  urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String()),
-		ActorDisplayName:       nil,
-		ActorSlug:              nil,
-		AdmissionURN:           urn.NewWorkloadAdmission(uuid.MustParse(ids[fleetRule])),
-		AdmissionDisplayName:   fleetRule,
-		AdmissionSnapshotAfter: nil,
+	// The fleet rule stands in for a runtime-created admission from before Kit
+	// runtimes stopped auditing their own admits: its admit is in the security
+	// log, attributed to the assistant's agent.
+	_, err = securityrepo.New(ti.conn).InsertSecurityAuditLog(ctx, securityrepo.InsertSecurityAuditLogParams{
+		OrganizationID: ti.orgID,
+		ActorID:        agentID.String(),
+		ActorType:      string(urn.PrincipalTypeAgent),
+		Action:         string(audit.ActionWorkloadAdmissionAdmit),
+		SubjectID:      ids[fleetRule],
+		SubjectType:    "workload_admission",
 	})
 	require.NoError(t, err)
 
