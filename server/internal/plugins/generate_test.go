@@ -2185,7 +2185,7 @@ func TestGenerateVibeObservabilityPluginPackage(t *testing.T) {
 		types[hook.Type] = true
 		require.Equal(t, "*", hook.Match)
 		require.InDelta(t, vibeHookTimeoutSeconds, hook.Timeout, 1e-9)
-		wantCommand := `sh "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`
+		wantCommand := `bash "$PLUGIN_ROOT/hooks/bootstrap.sh" --config="$PLUGIN_ROOT/speakeasy.json" agenthooks run --provider=vibe --timeout=60s`
 		// Tool hooks are strict (relay failure denies/clears instead of
 		// failing open); post_agent has no strict mode in Vibe.
 		wantStrict := hook.Type != "post_agent"

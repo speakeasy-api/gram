@@ -328,6 +328,29 @@ function marketplaceSteps(
     ];
   }
 
+  if (client === "vibe") {
+    return [
+      {
+        title: "Clone the Speakeasy marketplace repository",
+        description:
+          "Mistral Vibe has no marketplace importer, so copy the package out of the repository instead.",
+        code: `git clone ${marketplaceURL} marketplace`,
+      },
+      {
+        title: "Copy the Vibe package into your plugins directory",
+        description:
+          "Copy the <slug>-vibe package into ~/.vibe/plugins/<slug> for your account (or .vibe/plugins/<slug> in a trusted repository). Clear the destination first on reinstall so the new package replaces the old one.",
+        code: `mkdir -p ~/.vibe/plugins\nrm -rf ~/.vibe/plugins/${PLATFORM_MCP_PLUGIN_NAME}\ncp -R marketplace/${PLATFORM_MCP_PLUGIN_NAME}-vibe ~/.vibe/plugins/${PLATFORM_MCP_PLUGIN_NAME}`,
+        language: "bash",
+      },
+      {
+        title: "Restart Vibe or reload plugins, then complete sign-in",
+        description:
+          "Start a Vibe session or run /reload-plugins, ask it to list your Speakeasy projects, and complete AI Control Plane browser authorization when prompted.",
+      },
+    ];
+  }
+
   return [
     {
       title: "Add the Speakeasy marketplace",
