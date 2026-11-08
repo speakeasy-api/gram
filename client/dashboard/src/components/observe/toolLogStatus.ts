@@ -1,3 +1,4 @@
+import { PENDING_DOT_CLASS } from "@/components/chart/palette";
 import type { ToolUsageTraceSummary } from "@gram/client/models/components/toolusagetracesummary.js";
 import { isStalePendingToolCall } from "@/lib/toolCallStatus";
 
@@ -18,12 +19,12 @@ export function getToolLogStatusConfig(
 ): ToolLogStatusConfig | null {
   const ok = {
     className: "text-muted-foreground",
-    dotClassName: "bg-emerald-500",
+    dotClassName: "bg-success-default",
     label: "Success",
   };
   const failed = {
     className: "text-destructive",
-    dotClassName: "bg-rose-500",
+    dotClassName: "bg-destructive-default",
     label: "Error",
   };
 
@@ -32,8 +33,12 @@ export function getToolLogStatusConfig(
       case "blocked":
         // Blocked is the same answer to "did this call run" (it did not), but
         // it is the policy working rather than something broken, so it takes
-        // amber and leaves red to mean failure.
-        return { ...failed, dotClassName: "bg-amber-500", label: "Blocked" };
+        // orange and leaves red to mean failure.
+        return {
+          ...failed,
+          dotClassName: "bg-warning-default",
+          label: "Blocked",
+        };
       case "failure":
         return failed;
       case "success":
@@ -47,7 +52,7 @@ export function getToolLogStatusConfig(
         );
         return {
           className: "text-muted-foreground",
-          dotClassName: "bg-muted-foreground/30",
+          dotClassName: PENDING_DOT_CLASS,
           label: isStalePendingToolCall(startedAtMs, nowMs)
             ? "Unknown"
             : "Pending",

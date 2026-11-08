@@ -36,7 +36,7 @@ describe("getToolLogStatusConfig", () => {
       now,
     );
     expect(status?.label).toBe("Unknown");
-    expect(status?.dotClassName).not.toContain("emerald");
+    expect(status?.dotClassName).not.toContain("success");
   });
 
   it("labels a failed hook call Error in red", () => {
