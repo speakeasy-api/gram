@@ -187,6 +187,26 @@ describe("installation instructions", () => {
     expect(text).toContain("~/.vibe/config.toml");
   });
 
+  it("offers Mistral Vibe without the disabled Mistral coming-soon tile", () => {
+    render(
+      <TooltipProvider>
+        <InstallInstructionsDialog
+          open
+          onOpenChange={vi.fn<() => void>()}
+          repoOwner="example-owner"
+          repoName="example-org-plugins"
+          marketplaceUrl="https://example.invalid/marketplace"
+          pluginName="Example plugin"
+          pluginSlug="example-plugin"
+        />
+      </TooltipProvider>,
+    );
+    const mistralButtons = screen.getAllByRole("button", { name: /^Mistral/ });
+    expect(mistralButtons.map((b) => b.textContent?.trim())).toEqual([
+      "Mistral Vibe",
+    ]);
+  });
+
   it("installs the selected feature plugin as <slug>-vibe for Mistral Vibe", () => {
     // A specific feature plugin (the default in openProvider) installs from
     // the marketplace repo's <slug>-vibe/ directory under its bare slug —

@@ -61,7 +61,10 @@ type ContentProps = {
 /**
  * Mistral Vibe is only offered on the plugins surface for now, so the plugins
  * dialog appends it here (with the Mistral mark) instead of widening the shared
- * provider registry's "plugins" surface for every consumer.
+ * provider registry's "plugins" surface for every consumer. The shared
+ * "mistral" coming-soon tile is dropped on this surface only: with Vibe
+ * available, it would just duplicate the Mistral mark as a disabled entry.
+ * Other surfaces keep it.
  */
 const VIBE_PROVIDER = {
   id: "vibe",
@@ -71,7 +74,10 @@ const VIBE_PROVIDER = {
   available: true,
 } as const;
 
-const providers = [...agentProvidersForSurface("plugins"), VIBE_PROVIDER];
+const providers = [
+  ...agentProvidersForSurface("plugins").filter((p) => p.id !== "mistral"),
+  VIBE_PROVIDER,
+];
 type Provider = (typeof providers)[number]["id"];
 
 function ExternalTextLink({
