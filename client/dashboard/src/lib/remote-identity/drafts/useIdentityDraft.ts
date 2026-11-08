@@ -285,7 +285,6 @@ export type UserIdentityDraft = {
   issuerEditorText: string;
   issuerEditorError: string | null;
   issuerEditorValidated: boolean;
-  openIssuerEditor: () => void;
   setIssuerEditorText: (value: string) => void;
   discoverIssuer: () => void;
   resetIssuer: () => void;
@@ -454,11 +453,32 @@ export function useUserIdentityDraft({
   );
   const advertisedIssuer =
     prm.metadata?.authorizationServers?.[0]?.trim() || null;
-  const issuerContext = JSON.stringify([
+  // Only a named issuer can change what the upstream advertises. A probe that
+  // is disabled or loading has no answer, and a failed one reads the same as an
+  // upstream advertising nothing, so none of them may discard what the operator
+  // typed: a background refetch or a passing upstream failure would wipe it.
+  const advertisementSource = JSON.stringify([
     mcpServerId,
     remoteMcpServerId,
     upstreamUrl,
-    advertisedIssuer,
+  ]);
+  const [advertisement, setAdvertisement] = useState({
+    source: advertisementSource,
+    issuer: advertisedIssuer,
+  });
+  const newSource = advertisement.source !== advertisementSource;
+  if (
+    newSource ||
+    (advertisedIssuer && advertisement.issuer !== advertisedIssuer)
+  ) {
+    setAdvertisement({
+      source: advertisementSource,
+      issuer: advertisedIssuer,
+    });
+  }
+  const issuerContext = JSON.stringify([
+    advertisementSource,
+    newSource || advertisedIssuer ? advertisedIssuer : advertisement.issuer,
   ]);
   const [correction, setCorrection] = useState({
     context: issuerContext,
@@ -711,6 +731,11 @@ export function useUserIdentityDraft({
         : discoveredMetadataQuery.data?.issuer === discoveredIssuerUrl
           ? "ready"
           : "idle";
+  // Once discovery fails the form stays until the operator is done with it, so
+  // a refetch reading "loading" cannot take it away mid-edit.
+  if (discoveryStatus === "error" && !correction.open) {
+    setCorrection((current) => ({ ...current, open: true }));
+  }
   const discoveredMetadata =
     discoveryStatus === "ready" ? discoveredMetadataQuery.data! : null;
   const discoveryError =
@@ -1083,10 +1108,6 @@ export function useUserIdentityDraft({
       !correction.edited &&
       !correction.error &&
       correction.text.trim() === discoveredIssuerUrl,
-    openIssuerEditor: () => {
-      if (!commitStarted.current && selectedDiscovered)
-        setCorrection((current) => ({ ...current, open: true }));
-    },
     setIssuerEditorText: (text) => {
       if (!commitStarted.current)
         setCorrection((current) => ({

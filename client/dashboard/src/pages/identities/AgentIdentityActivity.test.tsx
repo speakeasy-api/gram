@@ -193,14 +193,20 @@ it("queries agent actions without using its owner's identity", () => {
     { throwOnError: false },
   );
 });
-it("queries authorization checks using the agent principal and preserves it in the handoff", () => {
+it("queries authorization checks using the agent principal, without hook ingestion, and preserves it in the handoff", () => {
   render(
     <MemoryRouter>
       <AgentIdentityChallenges agent={agent} />
     </MemoryRouter>,
   );
   expect(mocks.challenges).toHaveBeenCalledWith(
-    { principalUrn: "agent:agent_example", from, to, limit: 25 },
+    {
+      principalUrn: "agent:agent_example",
+      excludeScopes: ["org:hooks_ingest"],
+      from,
+      to,
+      limit: 25,
+    },
     undefined,
     { throwOnError: false },
   );

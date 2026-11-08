@@ -1723,6 +1723,86 @@ func TestIngest_PersistsRenderableToolCalls(t *testing.T) {
 	require.Equal(t, "custom-adapter", toolResult.Source.String)
 }
 
+// A failed tool call's result row carries the error as its content and the
+// error finish reason, so the session transcript shows the call as failed
+// instead of as a call that returned output. A failure without an error text,
+// or with an empty one, and a completion without output still get a result
+// row: without one the call would read as still running.
+func TestIngest_PersistsFailedToolResultsAsErrors(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	ti.service.productFeatures = alwaysEnabledFeatures{}
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	sessionID := "canonical-failed-tools-" + uuid.NewString()
+	toolName := "speakeasy__execute_tool"
+	ingestTool := func(eventType, toolCallID string, data gen.HookToolCallData) {
+		t.Helper()
+		data.ID = &toolCallID
+		data.Name = &toolName
+		payload := canonicalIngestPayload("openclaw", eventType, sessionID)
+		payload.Data = &gen.HookIngestData{ToolCall: &data}
+		res, err := ti.service.Ingest(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, "allow", res.Decision)
+	}
+
+	failedID := "call_failed_" + uuid.NewString()
+	ingestTool("tool.requested", failedID, gen.HookToolCallData{Input: map[string]any{"name": "slack_search"}})
+	ingestTool("tool.failed", failedID, gen.HookToolCallData{Error: map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "MCP error -32603: internal error"}},
+	}})
+	silentID := "call_silent_" + uuid.NewString()
+	ingestTool("tool.requested", silentID, gen.HookToolCallData{Input: map[string]any{"name": "jira_search"}})
+	ingestTool("tool.failed", silentID, gen.HookToolCallData{})
+	emptyErrorID := "call_empty_error_" + uuid.NewString()
+	ingestTool("tool.requested", emptyErrorID, gen.HookToolCallData{Input: map[string]any{"name": "jira_get"}})
+	ingestTool("tool.failed", emptyErrorID, gen.HookToolCallData{Error: map[string]any{}})
+	okID := "call_ok_" + uuid.NewString()
+	ingestTool("tool.requested", okID, gen.HookToolCallData{Input: map[string]any{"name": "list"}})
+	ingestTool("tool.completed", okID, gen.HookToolCallData{Output: map[string]any{"content": "ok"}})
+	quietID := "call_quiet_" + uuid.NewString()
+	ingestTool("tool.requested", quietID, gen.HookToolCallData{Input: map[string]any{"name": "touch"}})
+	ingestTool("tool.completed", quietID, gen.HookToolCallData{})
+
+	msgs, err := chatRepo.New(ti.conn).ListChatMessages(ctx, chatRepo.ListChatMessagesParams{
+		ChatID:    sessionIDToUUID(sessionID),
+		ProjectID: *authCtx.ProjectID,
+	})
+	require.NoError(t, err)
+	results := map[string]chatRepo.ChatMessage{}
+	for _, msg := range msgs {
+		if msg.Role == "tool" {
+			results[msg.ToolCallID.String] = msg
+		}
+	}
+	require.Len(t, results, 5)
+
+	failed := results[failedID]
+	require.Equal(t, "error", failed.FinishReason.String)
+	require.JSONEq(t, `{"content":[{"type":"text","text":"MCP error -32603: internal error"}]}`, failed.Content)
+
+	silent := results[silentID]
+	require.Equal(t, "error", silent.FinishReason.String)
+	require.JSONEq(t, `"The tool call failed without an error message."`, silent.Content)
+
+	emptyError := results[emptyErrorID]
+	require.Equal(t, "error", emptyError.FinishReason.String)
+	require.JSONEq(t, `"The tool call failed without an error message."`, emptyError.Content)
+
+	completed := results[okID]
+	require.Empty(t, completed.FinishReason.String, "a completed call keeps no finish reason")
+	require.JSONEq(t, `{"content":"ok"}`, completed.Content)
+
+	quiet := results[quietID]
+	require.Empty(t, quiet.FinishReason.String, "a completed call keeps no finish reason")
+	require.JSONEq(t, `"The tool call returned no output."`, quiet.Content)
+}
+
 // Codex PermissionRequest normalizes to tool.requested but is only a
 // pre-approval preview — it may be denied or followed by the real request,
 // so it must not create tool_calls rows in the captured transcript.

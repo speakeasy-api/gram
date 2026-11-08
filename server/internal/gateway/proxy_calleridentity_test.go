@@ -59,6 +59,7 @@ func callFunctionToolWithClient(t *testing.T, client toolconfig.MCPClientIdentit
 			onRequest: func(req functions.RunnerToolCallRequest) { captured = req.Meta },
 		},
 		nil,
+		nil,
 	)
 
 	bodyBytes, err := json.Marshal(ToolCallBody{

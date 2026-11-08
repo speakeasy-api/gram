@@ -16,6 +16,7 @@ import (
 )
 
 // recordRefresh writes one refresh's row. A carried attempt gets a step; otherwise the refresh is its own attempt.
+// It reports whether a failed row was accepted, as its own attempt or as a step.
 func (s *RefreshService) recordRefresh(
 	ctx context.Context,
 	attribution RefreshAttribution,
@@ -24,10 +25,10 @@ func (s *RefreshService) recordRefresh(
 	trigger remotesessionmetrics.RefreshTrigger,
 	outcome remotesessionmetrics.RefreshOutcome,
 	err error,
-) bool {
+) (standalone, step bool) {
 	what, ok := refreshHappened(outcome, client, err)
 	if !ok {
-		return false
+		return false, false
 	}
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
 		lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
@@ -51,13 +52,13 @@ func (s *RefreshService) recordRefresh(
 		mcpconnectionattempts.Detail(string(trigger)),
 		attribution.client,
 	}
+	_, failed := what.(mcpconnectionattempts.Code)
 	if !attribution.attempt.IsZero() {
-		s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
-		return false
+		accepted := s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
+		return false, accepted && failed
 	}
 	accepted := s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
-	_, failed := what.(mcpconnectionattempts.Code)
-	return accepted && failed
+	return accepted && failed, false
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.

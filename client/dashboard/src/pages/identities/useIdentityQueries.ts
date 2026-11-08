@@ -1,8 +1,12 @@
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import {
+  minuteAlignedRange,
+  useDateRangeFilter,
+} from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   fetchIdentityPeers,
@@ -62,8 +66,14 @@ export function retryFailed(...queries: RetryableQuery[]): () => void {
  * sub-page carries the range the sender was looking at.
  */
 export function useIdentityWindow(): { from: Date; to: Date } {
-  const { from, to } = useDateRangeFilter();
-  return { from, to };
+  const { from, to, customRange } = useDateRangeFilter();
+  // Aligned the way the embedded Tool logs aligns its window, so the
+  // overview's usage reads and the logs below it ask the same question and
+  // share one request rather than sending it twice.
+  return useMemo(
+    () => customRange ?? minuteAlignedRange({ from, to }),
+    [customRange, from, to],
+  );
 }
 
 /**

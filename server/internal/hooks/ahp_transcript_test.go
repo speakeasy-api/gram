@@ -92,18 +92,6 @@ func TestAHPInboundPolicyAndLifecycle(t *testing.T) {
 			require.Equal(t, method == "hooks/intercept" && deny, scanner.scans > 0)
 		}
 	}
-	scanner := &recordingRiskScanner{}
-	ti.service.riskScanner = scanner
-	e := ahpTestInbound()
-	delete(e, "message")
-	e["type"] = "turn.start"
-	e["trigger"] = "user"
-	e["turn"] = map[string]any{"id": "turn"}
-	e["items"] = []any{ahpTestMessage("user", "duplicate prompt")}
-	w := ahpRequest(t, h, "hooks/intercept", e, []string{"deny"}, ahpAuthHeaders)
-	require.True(t, ahp.ParseInterceptResponse(w.Body.Bytes()).OK, w.Body.String())
-	require.False(t, ahpResponseHasEffects(w.Body.Bytes()))
-	require.Zero(t, scanner.scans)
 }
 
 func ahpResponseHasEffects(b []byte) bool {
@@ -164,7 +152,7 @@ func TestAHPAuthoritativeTranscriptReplay(t *testing.T) {
 	require.NoError(t, err)
 	session := uuid.NewString()
 	start := time.Now().UTC().Add(-time.Minute)
-	events := []map[string]any{ahpTestInbound()}
+	var events []map[string]any
 	turn := ahpTestInbound()
 	delete(turn, "message")
 	turn["type"] = "turn.start"

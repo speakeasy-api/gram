@@ -833,10 +833,11 @@ func (s *Service) WithdrawIssuer(ctx context.Context, payload *gen.WithdrawIssue
 		agentBySubject[assignment.MatchKind+"\x00"+assignment.Subject] = assignment.AgentID
 	}
 
-	// Admissions a Kit runtime created for itself are created and withdrawn on
-	// every runtime start and teardown, so their cascaded withdrawals belong in
-	// the security log with the rest of their history. The issuer withdrawal
-	// below is a configuration change either way.
+	// An admission whose admit is in the security log has its history there, so
+	// its cascaded withdrawal goes there too. Kit runtimes no longer audit their
+	// own admits, so their newer admissions have no history and are withdrawn in
+	// the configuration log with the issuer. The issuer withdrawal below is a
+	// configuration change either way.
 	admissionIDs := make([]uuid.UUID, 0, len(admissions))
 	for _, admission := range admissions {
 		admissionIDs = append(admissionIDs, admission.ID)

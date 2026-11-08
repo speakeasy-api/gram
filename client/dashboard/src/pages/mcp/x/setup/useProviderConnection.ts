@@ -37,7 +37,6 @@ import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remo
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers";
 import { invalidateAllRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
-import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes";
 
 const sameScopes = (
   left: readonly string[] | undefined,
@@ -456,7 +455,6 @@ export function useProviderConnection(
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllRemoteSessionClient(queryClient),
-      invalidateAllGetRemoteMcpServerScopes(queryClient),
     ]);
   };
 
