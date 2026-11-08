@@ -76,3 +76,17 @@ func TestCatalogReviewWriterRefusals(t *testing.T) {
 	_, err = outage.apply(ctx, input)
 	require.ErrorIs(t, err, errRegistryUnavailable)
 }
+
+func TestCatalogReviewWriterRefusesChangedConnectionsBeforeSpending(t *testing.T) {
+	t.Parallel()
+	f := newWriteFixture(t, "admin_mcp_promotion_review_revoked")
+	ctx := writeContext(t, f)
+	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationStartRegistryPromotionReview: true}} //nolint:exhaustive // Only the review operation is enabled.
+	reviews := &fakePromotionReviews{}
+	f.reauth()
+
+	_, err := (&catalogReviewWriter{runner: f.runner, writes: writes, starter: reviews}).apply(ctx, CatalogPromotionTargetInput{OrganizationID: "org-synthetic", ProjectID: uuid.NewString(), MCPServerID: uuid.NewString()})
+
+	require.ErrorIs(t, err, ErrConnectionChanged)
+	require.Empty(t, reviews.actor, "no review starts on a changed connection")
+}

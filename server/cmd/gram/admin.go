@@ -553,6 +553,7 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure catalog promotion reviews: %w", err)
 			}
+			catalogPromotions.SetLogger(logger)
 			if reviewsEnabled {
 				catalogPromotions.SetHome(reviewHome)
 				if temporalEnv != nil {

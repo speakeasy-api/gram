@@ -360,6 +360,9 @@ func (w *catalogReviewWriter) apply(ctx context.Context, input CatalogPromotionT
 	// connection lock is held across network calls. The review system guards the
 	// spend itself: if recording the event then fails, a retry returns the run in
 	// flight rather than paying again.
+	if err := checkLiveConnection(ctx, w.runner, authority); err != nil {
+		return catalogReviewReceipt{}, err
+	}
 	review, err := w.starter.StartReview(ctx, source, authority.Staff.OIDCSubject, &authority.Staff.Email)
 	if err != nil {
 		clientRowID, _, _, identityErr := connectionIdentity(authority)

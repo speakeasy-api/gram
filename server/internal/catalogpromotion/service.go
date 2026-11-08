@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"regexp"
@@ -21,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
@@ -80,6 +82,8 @@ type Service struct {
 	home Home
 	// reviewer runs MCP reviews in the home organization; nil disables them.
 	reviewer Reviewer
+	// logger reports supplementary evidence that could not be read.
+	logger *slog.Logger
 }
 
 type featureReader interface {
@@ -89,7 +93,7 @@ type featureReader interface {
 // New wires independently retryable delivery behind the authoritative Postgres record.
 // A nil delivery permits qualification-only use; Dispatch rejects it before claiming jobs.
 func New(db *pgxpool.Pool, registry *mcpregistry.Service, features *productfeatures.Client, health HealthReader, delivery DeliveryClient, policy *guardian.Policy) *Service {
-	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout, home: speakeasyTeamHome(), reviewer: nil}
+	return &Service{db: db, registry: registry, features: features, health: health, delivery: delivery, policy: policy, now: time.Now, effectTimeout: DocsRecordTimeout, home: speakeasyTeamHome(), reviewer: nil, logger: slog.New(slog.DiscardHandler)}
 }
 
 // speakeasyTeamHome is the default audit home, so no configuration path can
@@ -103,6 +107,9 @@ func (s *Service) SetHome(home Home) { s.home = home }
 
 // SetReviewer enables MCP reviews through the shared review system.
 func (s *Service) SetReviewer(reviewer Reviewer) { s.reviewer = reviewer }
+
+// SetLogger reports supplementary evidence failures that are otherwise silent.
+func (s *Service) SetLogger(logger *slog.Logger) { s.logger = logger }
 
 // GetCandidate refreshes a canonical source and supplies editable staff-only drafts.
 // Suggestions exclude credentials and unsafe endpoints.
@@ -759,9 +766,12 @@ func (s *Service) InspectCandidate(ctx context.Context, target Target) (Candidat
 		if s.reviewer.Available(ctx) {
 			candidate.ReviewAvailability = ReviewAvailable
 		}
-		if review, err := s.reviewer.Find(ctx, endpoint); err == nil {
-			candidate.Review = review
+		review, err := s.reviewer.Find(ctx, endpoint)
+		if err != nil {
+			// The candidate still renders; staff should know an existing review may be hidden.
+			s.logger.WarnContext(ctx, "read catalogue promotion review", attr.SlogError(err))
 		}
+		candidate.Review = review
 	}
 	return candidate, nil
 }

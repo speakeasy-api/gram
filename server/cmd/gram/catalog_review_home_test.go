@@ -16,6 +16,12 @@ func TestResolveCatalogReviewHome(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, enabled)
 	require.Equal(t, constants.SpeakeasyTeamOrganizationID, home.OrganizationID)
+	require.Equal(t, constants.SpeakeasyTeamDefaultProjectID, home.ProjectID.String())
+
+	home, enabled, err = resolveCatalogReviewHome("prod", "org-synthetic", projectID)
+	require.NoError(t, err)
+	require.True(t, enabled)
+	require.Equal(t, "org-synthetic", home.OrganizationID, "an explicit production override wins")
 
 	_, enabled, err = resolveCatalogReviewHome("dev", "", "")
 	require.NoError(t, err)
