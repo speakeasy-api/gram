@@ -249,6 +249,47 @@ describe("Agent permission editor", () => {
     });
     expect(mocks.create).not.toHaveBeenCalled();
   });
+  it("neither lists nor offers mcp:connect, and never writes it", async () => {
+    const connect: AgentPolicyGrant = {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      id: "connect_grant",
+      scope: "mcp:connect",
+      effect: "allow",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "server_example",
+        projectId: "project_one",
+      },
+    };
+    setup([inferenceGrant("project_one"), connect]);
+    expect(screen.queryByText("mcp:connect")).toBeNull();
+    expect(screen.queryByRole("tab", { name: /MCP access/ })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Choose resources for inference:execute",
+      }),
+    );
+    fireEvent.click(screen.getByText("Project two"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+      createAgentPolicyGrantForm: {
+        agentId: agent.id,
+        scope: "inference:execute",
+        effect: "allow",
+        selector: inferenceGrant("project_two").selector,
+      },
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("does not offer mcp:connect among the permissions to add", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    expect(screen.getByText("mcp:read")).toBeTruthy();
+    expect(screen.queryByText("mcp:connect")).toBeNull();
+  });
   it("rejects a stale base without creating or deleting permissions", async () => {
     setup([inferenceGrant("project_one")]);
     mocks.list.mockResolvedValue([inferenceGrant("project_two")]);

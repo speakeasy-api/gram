@@ -68,8 +68,10 @@ export const TOOL_USAGE_STATUS_OPTIONS: Array<{
   // Amber, not red: a denial is the policy working, not the call failing, and
   // a reader scanning for breakage should not be pulled to it.
   { label: "Blocked", value: "blocked", dotClassName: "bg-amber-500" },
+  // The filter matches every call with no result: still running (Pending)
+  // or long ended without one (Unknown).
   {
-    label: "Pending",
+    label: "Pending or unknown",
     value: "pending",
     dotClassName: "bg-muted-foreground/30",
   },

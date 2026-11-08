@@ -253,6 +253,70 @@ describe("Agent profile permissions", () => {
       signal: expect.any(AbortSignal),
     });
   });
+  it("lists the servers the agent reaches first, edited in its setup flow", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "read_grant",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "project_example" },
+      },
+      {
+        id: "connect_grant",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_example",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    await screen.findByText("mcp:connect");
+    const titles = screen
+      .getAllByText(/^(MCP servers|Other permissions)$/)
+      .map((title) => title.textContent);
+    expect(titles).toEqual(["MCP servers", "Other permissions"]);
+    expect(
+      screen.getByRole("link", { name: "Edit servers" }).getAttribute("href"),
+    ).toMatch(/\/identities\/agents\/agent_example\/edit\?step=1$/);
+    expect(screen.getAllByText("mcp:connect")).toHaveLength(1);
+    expect(screen.getByText("project:read")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit permissions" });
+    expect(dialog.textContent).not.toContain("mcp:connect");
+  });
+  it("offers to add servers when the agent reaches none", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "read_grant",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "project_example" },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText("This agent cannot connect to any MCP server."),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Edit servers" })).toBeTruthy();
+  });
+  it("does not say the agent cannot connect when mcp:write lets it", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "write_grant",
+        scope: "mcp:write",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText(
+        /Its mcp:write permissions, listed with its other permissions, also let it connect/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This agent cannot connect to any MCP server."),
+    ).toBeNull();
+  });
   it("names every server's project, whether or not its grant stores one", async () => {
     // The setup flow stores a server with its project; the permission picker
     // stores the server alone. A stored project wins over the server's own,

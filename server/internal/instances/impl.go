@@ -126,6 +126,11 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
+			// No shutdown drain: the direct path answers dashboard and
+			// playground callers rather than MCP clients, so its calls run
+			// until the server's shutdown deadline instead of being answered
+			// with an MCP server_shutdown error.
+			nil,
 		),
 		scanEvaluator:     scanEvaluator,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),

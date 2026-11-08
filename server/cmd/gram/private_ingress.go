@@ -243,7 +243,7 @@ func servePrivateIngress(
 		<-sigctx.Done()
 		// Listen streams never finish on their own, so end them first and let
 		// their clients reconnect to a replica that is still serving.
-		deps.Runtime.MCP.StartDrain(relayedRequestInterruptAfter)
+		deps.Runtime.MCP.StartDrain(requestInterruptAfter)
 		drainHTTPServer(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout, "failed to shutdown private network ingress listener")
 	}()
 

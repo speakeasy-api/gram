@@ -284,6 +284,7 @@ func TestToolProxy_Do_PathParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -413,6 +414,7 @@ func TestToolProxy_Do_HeaderParams(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 				nil,
 			)
 
@@ -765,6 +767,7 @@ func TestToolProxy_Do_QueryParams(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -985,6 +988,7 @@ func TestToolProxy_Do_Body(t *testing.T) {
 				nil, // no cache needed for this test
 				policy,
 				funcs,
+				nil,
 				nil,
 			)
 
@@ -1327,6 +1331,7 @@ func TestToolProxy_Do_StringifiedJSONBody(t *testing.T) {
 				policy,
 				funcs,
 				nil,
+				nil,
 			)
 
 			// Create response recorder
@@ -1428,6 +1433,7 @@ func TestResourceProxy_ReadResource(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -1568,6 +1574,7 @@ func TestToolProxy_Do_FunctionMetricsTrailers(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -1661,6 +1668,7 @@ func TestToolProxy_Do_PlatformTool_UsesWrappedBodyPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1728,6 +1736,7 @@ func TestToolProxy_Do_PlatformTool_PreservesRawBodyFieldPayload(t *testing.T) {
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
 	recorder := httptest.NewRecorder()
@@ -1777,6 +1786,7 @@ func TestToolProxy_Do_PlatformTool_PreservesCallerFaultAttribution(t *testing.T)
 		policy,
 		funcs,
 		platformExecutor,
+		nil,
 	)
 
 	err = proxy.Do(ctx, httptest.NewRecorder(), strings.NewReader(`{}`), toolconfig.ToolCallEnv{
@@ -1863,6 +1873,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigVariablesSent(t *testing.T) {
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 
 	// Create response recorder
@@ -1948,6 +1959,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		funcs,
+		nil,
 		nil,
 	)
 
@@ -2045,6 +2057,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigNotInPlanNotSent(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -2158,6 +2171,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 
 	// Create response recorder
@@ -2241,6 +2255,7 @@ func TestToolProxy_Do_HTTPTool_SystemEnvKeysConvertedToHTTPHeaders(t *testing.T)
 		nil,
 		policy,
 		funcs,
+		nil,
 		nil,
 	)
 
@@ -2337,6 +2352,7 @@ func TestToolProxy_Do_FunctionTool_SystemEnvSentWhenInPlan(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -2452,6 +2468,7 @@ func TestToolProxy_Do_HTTPTool_UserConfigPrefersOverSystemEnv(t *testing.T) {
 		policy,
 		funcs,
 		nil,
+		nil,
 	)
 
 	// Create response recorder
@@ -2549,6 +2566,7 @@ func TestToolProxy_Do_FunctionTool_UserConfigPrefersOverSystemEnv(t *testing.T) 
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -2668,6 +2686,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWhenInUserConfig(t *testing.T) {
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -2780,6 +2799,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNotSentWhenNotInUserConfig(t *testin
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -2891,6 +2911,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputPrefersUserConfigOverSystemEnv(t *te
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 
@@ -3010,6 +3031,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputSentWithRegularVariables(t *testing.
 		policy,
 		mockFuncCaller,
 		nil,
+		nil,
 	)
 
 	// Create request body
@@ -3122,6 +3144,7 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 		nil,
 		policy,
 		mockFuncCaller,
+		nil,
 		nil,
 	)
 

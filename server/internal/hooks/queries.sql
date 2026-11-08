@@ -191,6 +191,24 @@ WHERE id = @id
   AND user_account_id IS NULL
   AND deleted IS FALSE;
 
+-- name: LinkChatOwner :execrows
+-- Backfills the human owner of a session whose chat row was created before the
+-- session's identity was known: a shared plugin key with no self-reported email
+-- creates the chat ownerless when its first prompt beats the first OTEL export.
+-- Fill-once and only for a chat with no owner at all, so it never replaces an
+-- identity chat creation recorded, and never names a person on a session an
+-- agent key produced.
+UPDATE chats
+SET user_id = sqlc.narg(user_id)
+  , external_user_id = @external_user_id
+  , updated_at = NOW()
+WHERE id = @id
+  AND project_id = @project_id
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE;
+
 -- name: LinkChatActingAgent :execrows
 -- Records the Speakeasy agent principal that produced a captured session, so a
 -- session list can name the agent that made the calls. A channel session has no
