@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -45,6 +46,10 @@ type metaMember struct {
 	serverID uuid.UUID
 	// configurationHash is loaded with the request's approved member set.
 	configurationHash string
+
+	// otherConfigurationHash is configurationHash with the upstream issuer
+	// from the source the organization's flag does not make authoritative.
+	otherConfigurationHash string
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -64,6 +69,16 @@ type metaMember struct {
 	// mcpserverissuersync.go). Token routing for tunneled members keys on it,
 	// so NULL or stale degrades to an anonymous call, never a wrong bearer.
 	remoteSessionIssuerID uuid.NullUUID
+
+	// upstreamIssuer holds both of the member server's upstream issuer
+	// sources, its column and its client associations, as listed. It does not
+	// change when a choice replaces remoteSessionIssuerID.
+	upstreamIssuer upstreamIssuerKeys
+
+	// upstreamIssuerFromAssociations is the organization's upstream issuer
+	// flag: remoteSessionIssuerID starts as the associations' provider when
+	// set, and as the column otherwise.
+	upstreamIssuerFromAssociations bool
 
 	// A tunneled member's recorded RFC 8707 resource identifier, empty when it
 	// records none. Routing accepts a grant qualified to this value; it never
@@ -145,8 +160,19 @@ type metaMemberCandidate struct {
 	tunneledServerID           uuid.NullUUID
 	environmentID              uuid.NullUUID
 	toolVariationsGroupID      uuid.NullUUID
-	remoteSessionIssuerID      uuid.NullUUID
+	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
+}
+
+// memberUpstreamIssuer is a listed member's two upstream issuer sources: its
+// column, and the providers its live client associations name.
+func memberUpstreamIssuer(column uuid.NullUUID, associationProviderIDs []uuid.UUID) upstreamIssuerKeys {
+	association := remotesessions.AssociationIssuerFromProviders(associationProviderIDs)
+	return upstreamIssuerKeys{
+		column:      column,
+		association: associationUpstreamIssuer{Provider: association.Provider, Providers: association.Providers},
+		known:       true,
+	}
 }
 
 // resolveMetaMemberSnapshot loads a stored meta server's servable members and
@@ -195,7 +221,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
-			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
@@ -257,12 +283,13 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		for _, member := range members {
 			ids = append(ids, member.serverID)
 		}
-		hashes, hashErr := s.catalogMemberConfigurations(ctx, gate.organizationID, ids)
+		hashes, otherHashes, hashErr := s.catalogMemberConfigurations(ctx, gate.organizationID, ids)
 		if hashErr != nil {
 			return ctx, nil, hashErr
 		}
 		for i := range members {
 			members[i].configurationHash = hashes[members[i].serverID]
+			members[i].otherConfigurationHash = otherHashes[members[i].serverID]
 		}
 	}
 	if err == nil && gate.memberChoices != nil {
@@ -352,7 +379,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
-			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
@@ -451,6 +478,7 @@ func (s *Service) admitMetaMembers(
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, []metaMember, error) {
 	shadow := s.newMandatoryShadow(ctx, organizationID)
+	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
@@ -482,33 +510,37 @@ func (s *Service) admitMetaMembers(
 		}
 
 		member := metaMember{
-			serverID:                   candidate.serverID,
-			configurationHash:          "",
-			authClient:                 nil,
-			projectID:                  candidate.projectID,
-			projectSlug:                candidate.projectSlug,
-			slug:                       candidate.slug,
-			name:                       candidate.name,
-			sortOrder:                  candidate.sortOrder,
-			backend:                    backend,
-			toolsetID:                  candidate.toolsetID,
-			remoteServerID:             candidate.remoteServerID,
-			tunneledServerID:           candidate.tunneledServerID,
-			visibility:                 candidate.visibility,
-			environmentID:              candidate.environmentID,
-			toolVariationsGroupID:      candidate.toolVariationsGroupID,
-			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
-			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
-			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			upstreamNoAuth:             false,
-			upstreamUnavailable:        nil,
-			typedAuthClient:            false,
-			associatedClients:          nil,
-			typedRegistrations:         false,
+			serverID:                       candidate.serverID,
+			configurationHash:              "",
+			otherConfigurationHash:         "",
+			authClient:                     nil,
+			projectID:                      candidate.projectID,
+			projectSlug:                    candidate.projectSlug,
+			slug:                           candidate.slug,
+			name:                           candidate.name,
+			sortOrder:                      candidate.sortOrder,
+			backend:                        backend,
+			toolsetID:                      candidate.toolsetID,
+			remoteServerID:                 candidate.remoteServerID,
+			tunneledServerID:               candidate.tunneledServerID,
+			visibility:                     candidate.visibility,
+			environmentID:                  candidate.environmentID,
+			toolVariationsGroupID:          candidate.toolVariationsGroupID,
+			remoteSessionIssuerID:          candidate.upstreamIssuer.authoritative(fromAssociations),
+			upstreamIssuer:                 candidate.upstreamIssuer,
+			upstreamIssuerFromAssociations: fromAssociations,
+			tunneledResourceIdentifier:     candidate.tunneledResourceIdentifier,
+			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			upstreamNoAuth:                 false,
+			upstreamUnavailable:            nil,
+			typedAuthClient:                false,
+			associatedClients:              nil,
+			typedRegistrations:             false,
 		}
 		switch {
 		case refusal == nil:
 			members = append(members, member)
+			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
 		case candidate.visibility == mcpservers.VisibilityPrivate:
 			// Kept aside so a call that names it records its denied check.
 			// Any other visibility (malformed or future) is simply dropped.

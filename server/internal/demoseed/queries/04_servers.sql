@@ -219,14 +219,12 @@ VALUES
   (@remote_session_client_id::uuid,
    @user_session_issuer_id::uuid);
 
--- mcp_servers.remote_session_issuer_id is denormalized from the live client
--- bindings, and the app recomputes it after the commit that writes them
--- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
--- goes through that path, so stamp what the resync would derive: exactly one
--- remote issuer is bound to this server's user session issuer (the
--- attachment fixture's client below sits under the same one). Left NULL,
--- upstream token routing fails closed and Linear reads as having no identity.
--- name: ServersStampLinearRemoteSessionIssuer :exec
+-- mcp_servers.remote_session_issuer_id is denormalized from a server's client
+-- associations, and the app recomputes it after the commit that writes them
+-- (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+-- that path, so stamp what the resync would derive. Left NULL, upstream token
+-- routing fails closed and the server reads as having no identity.
+-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid
@@ -575,13 +573,13 @@ VALUES (@id::uuid, @project_id::uuid, @org_id::text,
 -- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes,
    upstream_display_name, created_at, last_used_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
-        ARRAY['releases:read'], 'https://mcp.linear.app/mcp', 'Fictional release account',
+        ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
 -- Upstream sessions on Linear's CIMD client, one per last-validation outcome
@@ -593,13 +591,13 @@ VALUES (@id::uuid,
 -- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes,
    grant_generation, last_validated_at, validation_status, created_at, last_used_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], 'https://mcp.linear.app/mcp', @grant_generation::bigint,
+        ARRAY['read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
         now() - make_interval(hours => @hours_ago::int));

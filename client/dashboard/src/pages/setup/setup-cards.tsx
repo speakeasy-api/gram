@@ -5,8 +5,9 @@ import { AdditionalAgentConfigStep } from "./components/steps/additional-agent-c
 import { AnthropicAdminControlsStep } from "./components/steps/anthropic-admin-controls-step";
 import { AnthropicInferenceHooksStep } from "./components/steps/anthropic-inference-hooks-step";
 import { ConfigurePoliciesStep } from "./components/steps/configure-policies-step";
+import { ClaudeOrgInstructionsStep } from "./components/steps/claude-org-instructions-step";
+import { ClaudePluginRegistrationStep } from "./components/steps/claude-plugin-registration-step";
 import { ConfirmTrafficStep } from "./components/steps/confirm-traffic-step";
-import { CreateMarketplaceStep } from "./components/steps/create-marketplace-step";
 import { CursorAdminControlsStep } from "./components/steps/cursor-admin-controls-step";
 import { DistributeServersStep } from "./components/steps/distribute-servers-step";
 import { IdentityProviderStep } from "./components/steps/identity-provider-step";
@@ -46,11 +47,6 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
       <PrivateNetworkSetupStep onComplete={onComplete} />
     ),
   },
-  "create-marketplace": {
-    Step: ({ onComplete, onClose }) => (
-      <CreateMarketplaceStep onComplete={onComplete} onBack={onClose} />
-    ),
-  },
   "enable-logging": {
     Step: ({ onComplete }) => (
       <StepContainer
@@ -76,6 +72,18 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
   "anthropic-admin-controls": {
     Step: ({ onComplete }) => (
       <AnthropicAdminControlsStep onComplete={onComplete} />
+    ),
+  },
+  "claude-plugin-registration": {
+    slug: "claude-plugins",
+    Step: ({ onComplete }) => (
+      <ClaudePluginRegistrationStep onComplete={onComplete} />
+    ),
+  },
+  "claude-org-instructions": {
+    slug: "claude-instructions",
+    Step: ({ onComplete }) => (
+      <ClaudeOrgInstructionsStep onComplete={onComplete} />
     ),
   },
   "cursor-admin-controls": {
@@ -123,7 +131,19 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
  */
 const SETUP_GROUP_SLUGS: Record<string, string> = {
   "agent-observability": "agent-observability",
-  "mcp-distribution": "mcp-distribution",
+  "claude-desktop": "claude-desktop",
+};
+
+/**
+ * ?task= values of retired cards and groups, mapped to the card that now does
+ * their job so older links still land somewhere useful. The server moves
+ * saved playbooks the same way (retiredStepSuccessors in onboarding_steps.go).
+ */
+const RETIRED_TASK_SLUGS: Record<string, string> = {
+  // The Create marketplace card folded into Distribute MCP servers, and its
+  // group went with it.
+  "mcp-distribution": "distribute-servers",
+  "create-marketplace": "distribute-servers",
 };
 
 export function setupCard(taskKey: string): SetupCard | undefined {
@@ -141,13 +161,14 @@ export function setupTaskSlug(taskKey: string): string {
 }
 
 /**
- * Resolves a ?task= value to a card or group key. Keys still work, so older
- * links resolve.
+ * Resolves a ?task= value to a card or group key. Keys still work, and so do
+ * retired cards and groups, so older links resolve.
  */
 export function setupTaskKeyForSlug(slug: string): string | undefined {
   const card = Object.entries(SETUP_CARDS).find(([, c]) => c.slug === slug);
   if (card) return card[0];
   const group = Object.entries(SETUP_GROUP_SLUGS).find(([, s]) => s === slug);
   if (group) return group[0];
+  if (Object.hasOwn(RETIRED_TASK_SLUGS, slug)) return RETIRED_TASK_SLUGS[slug];
   return setupCard(slug) || setupGroupSlug(slug) ? slug : undefined;
 }

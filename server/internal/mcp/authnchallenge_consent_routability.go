@@ -35,8 +35,6 @@ const (
 type consentRouting struct {
 	backend  consentBackend
 	upstream string // the single proxied server's upstream
-	// Missing-target reconnect markers must not become identity-chaining requests.
-	unroutableClients map[uuid.UUID]bool
 	// members claiming each client's grant, keyed by remote session client,
 	// meta only.
 	members map[uuid.UUID][]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow
@@ -92,7 +90,7 @@ func (s *Service) resolveConsentRouting(
 	clients []remotesessions.Client,
 	statuses map[uuid.UUID]remotesessions.RemoteSessionState,
 ) (consentRouting, error) {
-	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, unroutableClients: nil, members: nil}
+	r := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
 		memberCtx, err := s.contextForSessionSubject(ctx, endpoint, *challengeState.Subject, "consent:"+challengeState.ID, challengeState.ClientID)

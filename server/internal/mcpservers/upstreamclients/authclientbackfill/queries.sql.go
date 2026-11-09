@@ -4866,21 +4866,13 @@ WITH link AS (
 ), session AS (
   INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted)
   VALUES ($8::text, $7, $4, 'fixture-not-a-token')
-  -- Work on both index shapes without overwriting a bound resource's grant.
-  ON CONFLICT DO NOTHING
+  ON CONFLICT (subject_urn, remote_session_client_id) WHERE deleted IS FALSE
+  DO UPDATE SET access_token_encrypted = EXCLUDED.access_token_encrypted
   RETURNING id, grant_generation, user_session_issuer_id
-), source AS (
-  SELECT id, grant_generation, user_session_issuer_id FROM session
-  UNION ALL
-  SELECT id, grant_generation, user_session_issuer_id FROM remote_sessions
-  WHERE subject_urn = $8::text
-    AND remote_session_client_id = $4
-    AND resource IS NULL AND deleted IS FALSE
-    AND NOT EXISTS (SELECT 1 FROM session)
 )
 INSERT INTO principal_remote_session_bindings (project_id, organization_id, principal_id, user_session_issuer_id, remote_session_client_id, remote_session_id, grant_generation, attached_by_subject_id)
-SELECT $1, $2, $3, source.user_session_issuer_id, $4, source.id, source.grant_generation + $5::bigint, $6::text
-FROM source
+SELECT $1, $2, $3, session.user_session_issuer_id, $4, session.id, session.grant_generation + $5::bigint, $6::text
+FROM session
 RETURNING id
 `
 

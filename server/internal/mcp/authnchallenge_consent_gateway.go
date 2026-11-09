@@ -159,8 +159,6 @@ func (g gatewayServer) NotSetUp() bool {
 type gatewayConsentView struct {
 	members []metaMember
 	cards   []remoteSessionCard
-	// memberCards keeps a shared registration distinct for each member resource.
-	memberCards map[uuid.UUID][]remoteSessionCard
 	// auth is each proxied member's credential choice, by server, where
 	// typed auth client resolution is enforced.
 	auth map[uuid.UUID]*consentServerAuth
@@ -283,25 +281,7 @@ func (s *Service) gatewayConsent(
 	if err != nil {
 		return nil, nil, err
 	}
-	memberCards := make(map[uuid.UUID][]remoteSessionCard, len(members))
-	view := gatewayServersView(nil, cards)
-	view.members = members
-	view.memberCards = memberCards
-	policy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
-	for i := range members {
-		qualified := cards
-		if members[i].backend == metaMemberBackendProxied {
-			qualified, err = s.buildRemoteSessionCardsForMember(ctx, endpoint, challengeState, policy, &members[i])
-			if err != nil {
-				return nil, nil, err
-			}
-		}
-		memberCards[members[i].serverID] = qualified
-		memberView := gatewayServersView(members[i:i+1], qualified)
-		view.Servers = append(view.Servers, memberView.Servers...)
-	}
-	view.recount()
-	sortGatewayServers(view.Servers)
+	view := gatewayServersView(members, cards)
 	if challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
 		view.CanHide = true
 		hidden, herr := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, challengeState.Subject.ID)
@@ -320,11 +300,7 @@ func (s *Service) gatewayConsent(
 		}
 		focused := view.Servers[i]
 		view.Focus = &focused
-		id, err := uuid.Parse(focused.ServerID)
-		if err != nil {
-			return nil, nil, fmt.Errorf("invalid focused server ID: %w", err)
-		}
-		return view, focusedCards(view, focused, memberCards[id]), nil
+		return view, focusedCards(view, focused, cards), nil
 	}
 	view.FocusUnavailable = true
 	return view, nil, nil
@@ -335,7 +311,7 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, memberCards: nil, auth: nil}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
 		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}
 		for _, card := range cards {
@@ -484,7 +460,7 @@ func focusedCards(view *gatewayConsentView, focused gatewayServer, cards []remot
 				others++
 			}
 		}
-		if others > 0 && view.memberCards == nil {
+		if others > 0 {
 			card.SharedServerNote = fmt.Sprintf("Also connects %d other %s on this gateway", others, pluralize(others, "server"))
 		}
 		out = append(out, card)

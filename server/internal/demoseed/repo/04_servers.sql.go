@@ -146,13 +146,13 @@ func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg Servers
 const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes,
    upstream_display_name, created_at, last_used_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
-        ARRAY['releases:read'], 'https://mcp.linear.app/mcp', 'Fictional release account',
+        ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
 
@@ -2088,13 +2088,13 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 const serversInsertValidatedSession = `-- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes,
    grant_generation, last_validated_at, validation_status, created_at, last_used_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], 'https://mcp.linear.app/mcp', $5::bigint,
+        ARRAY['read'], $5::bigint,
         CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
         NULLIF($6::text, ''), now() - make_interval(days => $8::int),
         now() - make_interval(hours => $7::int))
@@ -2172,28 +2172,26 @@ func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
-const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
+const serversStampRemoteSessionIssuer = `-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1::uuid
 WHERE id = $2::uuid
   AND project_id = $3::uuid
 `
 
-type ServersStampLinearRemoteSessionIssuerParams struct {
+type ServersStampRemoteSessionIssuerParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	McpServerID           uuid.UUID
 	ProjectID             uuid.UUID
 }
 
-// mcp_servers.remote_session_issuer_id is denormalized from the live client
-// bindings, and the app recomputes it after the commit that writes them
-// (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
-// goes through that path, so stamp what the resync would derive: exactly one
-// remote issuer is bound to this server's user session issuer (the
-// attachment fixture's client below sits under the same one). Left NULL,
-// upstream token routing fails closed and Linear reads as having no identity.
-func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
+// mcp_servers.remote_session_issuer_id is denormalized from a server's client
+// associations, and the app recomputes it after the commit that writes them
+// (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+// that path, so stamp what the resync would derive. Left NULL, upstream token
+// routing fails closed and the server reads as having no identity.
+func (q *Queries) ServersStampRemoteSessionIssuer(ctx context.Context, arg ServersStampRemoteSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversStampRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
 }
 

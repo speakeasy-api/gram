@@ -614,15 +614,6 @@ func clientServesAnyMember(client remotesessions.Client, members []metaMember) b
 	return false
 }
 
-// directConsentResource carries only the resolved direct upstream target. Hosted
-// and gateway endpoints keep their existing unqualified session semantics.
-func (e *ResolvedMcpEndpoint) directConsentResource() string {
-	if !e.McpServerID.Valid || e.ToolsetID.Valid || e.MetaMcpServerID.Valid || e.IsOrganizationGateway() {
-		return ""
-	}
-	return e.UpstreamResource
-}
-
 // endpointRemoteSessionStatuses is the subject's remote session state on
 // every client listEndpointClients returns.
 func (s *Service) endpointRemoteSessionStatuses(ctx context.Context, subject urn.SessionSubject, endpoint *ResolvedMcpEndpoint) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
@@ -633,7 +624,7 @@ func (s *Service) endpointRemoteSessionStatuses(ctx context.Context, subject urn
 		}
 		return statuses, nil
 	}
-	statuses, err := s.remoteChallengeMgr.RemoteSessionStatusesForResource(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.directConsentResource())
+	statuses, err := s.remoteChallengeMgr.RemoteSessionStatuses(ctx, subject, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}

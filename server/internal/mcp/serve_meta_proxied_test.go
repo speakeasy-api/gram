@@ -31,7 +31,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -109,14 +108,14 @@ func withMetadataProbeHeldUntilToolCall() recordingUpstreamOption {
 func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstreamOption) *recordingUpstream {
 	t.Helper()
 
-	mock := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
+	mock := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{Tools: []testmcp.Tool{{
 		Name:        toolName,
 		Description: "returns pong",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		Response: testmcp.ToolResponse{
 			Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
 		},
-	}})
+	}}})
 	t.Cleanup(mock.Close)
 
 	target, err := url.Parse(mock.URL)
@@ -315,7 +314,6 @@ func insertQualifiedRemoteSessionToken(
 
 	accessTokenEncrypted, err := ti.enc.Encrypt([]byte(accessToken))
 	require.NoError(t, err)
-	setExistingFixtureSessionResource(t, ctx, ti.conn, subject, remoteSessionClientID, conv.ToPGTextEmpty(resource))
 	_, err = remotesessions_repo.New(ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
 		SubjectUrn:            subject,
 		UserSessionIssuerID:   userSessionIssuerID,

@@ -1109,6 +1109,11 @@ type issuerGateAuthentication struct {
 	// typed resolver checked against the endpoint's server for a client it
 	// does not serve itself, which authorizes it without a sign-in link.
 	checkedRegistration bool
+
+	// serverAssociation is the upstream issuer the proxied server's client
+	// associations give, read when its own clients' tokens were resolved.
+	// Nil when this request resolved tokens another way.
+	serverAssociation *remotesessions.ServerAssociationIssuer
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1266,6 +1271,7 @@ func (s *Service) authenticateIssuerGate(
 		request:                r,
 		agentKeyClients:        nil,
 		checkedRegistration:    false,
+		serverAssociation:      nil,
 	}, toolSelection, nil
 }
 

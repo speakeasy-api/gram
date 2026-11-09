@@ -2,17 +2,13 @@ package mcp_test
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -20,21 +16,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
-	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projects_repo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcp_repo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // consentTestTenant reads the project and organization the test service's auth
@@ -571,7 +562,7 @@ func TestServeConsentAction_MetaMCPConnectIgnoresTombstonedRows(t *testing.T) {
 // requireConnectActionFailsClosed drives one client's connect action and
 // asserts it errored before minting anything: no upstream redirect, no login
 // state, and therefore no grant that could carry a wrongly derived resource.
-func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID, expected ...oops.Code) {
+func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clientID uuid.UUID) {
 	t.Helper()
 
 	form := url.Values{}
@@ -579,10 +570,6 @@ func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clie
 	form.Set("csrf_token", "csrf-token")
 	form.Set("action", "connect")
 	form.Set("client_id", clientID.String())
-
-	if fx.server != "" {
-		form.Set("server", fx.server)
-	}
 
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -592,11 +579,7 @@ func requireConnectActionFailsClosed(t *testing.T, fx consentActionFixture, clie
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	code := oops.CodeUnexpected
-	if len(expected) > 0 {
-		code = expected[0]
-	}
-	require.Equal(t, code, oopsErr.Code)
+	require.Equal(t, oops.CodeUnexpected, oopsErr.Code)
 	require.Empty(t, w.Header().Get("Location"), "fail closed: no upstream redirect may be minted")
 }
 
@@ -779,206 +762,4 @@ func TestServeConsentAction_MetaMCPConnectResolvesFromTheRealResync(t *testing.T
 	loc := postConnectAction(t, fx, gatewayClientID)
 	require.Equal(t, "https://aim87-composed.example.com/mcp", loc.Query().Get("resource"),
 		"the member must resolve from the value the resync wrote, not from any fixture")
-}
-
-// A member handback may disambiguate a shared registration, but only with a
-// current admitted member's own persisted resource and exact server identity.
-func TestServeConsentAction_MetaMCPFocusedSharedRegistration(t *testing.T) {
-	t.Parallel()
-	ctx, fx, metaID := seedMetaConsentEndpoint(t, "focused-shared")
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "focused-shared-client", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	a := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	b := createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-b", "https://member-b.example.com/mcp/", conv.ToNullUUID(issuerID), 1)
-	fx.ti.service.SetAuthClientPermitted(true)
-	_, err := productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: fx.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
-	require.NoError(t, err)
-	fixtures := authclientfixtures.New(fx.ti.conn)
-	authClient, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: conv.ToNullUUID(fx.projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(clientID)})
-	require.NoError(t, err)
-	principal := urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID)
-	seedPrincipalGrant(t, ctx, fx.ti, fx.orgID, principal, authz.ScopeMCPAuth, authClient.String())
-
-	for _, member := range []uuid.UUID{a.mcpServerID, b.mcpServerID} {
-		seedPrincipalMCPConnectGrant(t, ctx, fx.ti, fx.orgID, principal, member)
-		require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: member, AuthClientID: authClient, Source: "admin"}))
-	}
-
-	for _, target := range []struct {
-		slug, resource string
-		id             uuid.UUID
-	}{
-		{"member-a", "https://member-a.example.com/mcp", a.mcpServerID},
-		{"member-b", "https://member-b.example.com/mcp/", b.mcpServerID},
-	} {
-		fx.server = target.slug
-		require.NoError(t, fx.ti.service.ValidateRemoteLoginTypedAuthorization(ctx, remotesessions.RemoteLoginState{OrganizationID: fx.orgID, ProjectID: fx.projectID, UserSessionIssuerID: fx.shared, RemoteSessionClientID: clientID, Subject: &fx.subject, TypedAuthorization: &remotesessions.TypedAuthorization{OrganizationID: fx.orgID, ProjectID: fx.projectID, ServerID: target.id, AuthClientID: authClient, RemoteSessionClientID: clientID, Subject: fx.subject}}))
-
-		loc := postConnectAction(t, fx, clientID)
-		require.Equal(t, target.resource, loc.Query().Get("resource"))
-		login := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
-		require.Equal(t, target.resource, login.Resource)
-		require.Equal(t, conv.ToNullUUID(target.id), login.ResourceMcpServerID)
-		require.Equal(t, target.slug, login.ConsentServer)
-		require.NotNil(t, login.TypedAuthorization)
-		require.Equal(t, target.id, login.TypedAuthorization.ServerID)
-		require.Equal(t, authClient, login.TypedAuthorization.AuthClientID)
-
-		require.Equal(t, clientID, login.RemoteSessionClientID)
-	}
-}
-
-func TestServeConsentAction_MetaMCPFocusedForeignMemberFailsClosed(t *testing.T) {
-	t.Parallel()
-	ctx, fx, metaID := seedMetaConsentEndpoint(t, "focused-foreign")
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "focused-foreign-client", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	recorder := recordConnections(t, fx.ti)
-	fx.server = "not-a-member"
-	requireConnectActionFailsClosed(t, fx, clientID, oops.CodeBadRequest)
-	recorder.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInvalidRequest)
-}
-
-func TestServeConsent_MetaMCPSharedRegistrationCardsAreMemberQualified(t *testing.T) {
-	t.Parallel()
-	ctx, fx, metaID := seedMetaConsentEndpoint(t, "qualified-cards")
-	registerPageClient(t, ctx, fx)
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "qualified-client", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-b", "https://member-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
-	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, clientID, fx.subject, "resource-a-token", "https://member-a.example.com/mcp")
-	fx.server = "member-a"
-	code, page, _ := render(t, fx)
-	require.Equal(t, http.StatusOK, code)
-	require.Contains(t, page, "Service connected")
-	fx.server = "member-b"
-	code, page, _ = render(t, fx)
-	require.Equal(t, http.StatusOK, code)
-	require.NotContains(t, page, "Service connected")
-	require.Contains(t, page, "> Reconnect </button>")
-	require.Contains(t, page, clientID.String())
-	require.NotContains(t, page, "Also connects")
-}
-
-func TestServeConsentAction_MetaMCPMemberActionsNeverMutateSiblingGrant(t *testing.T) {
-	t.Parallel()
-	ctx, fx, metaID := seedMetaConsentEndpoint(t, "qualified-action-safety")
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "qualified-action-client", "", []uuid.UUID{fx.shared})
-	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", "https://member-a.example.com/mcp", conv.ToNullUUID(issuerID), 0)
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-b", "https://member-b.example.com/mcp", conv.ToNullUUID(issuerID), 1)
-	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, clientID, fx.subject, "resource-a-token", "https://member-a.example.com/mcp")
-	manager := fx.ti.service.RemoteChallengeManager()
-	before, err := manager.AuthClientRemoteSessionStatusesForResource(ctx, fx.subject, fx.projectID, fx.orgID, []uuid.UUID{clientID}, "https://member-a.example.com/mcp")
-	require.NoError(t, err)
-	require.Len(t, before, 1)
-	for _, action := range []string{"disconnect", "set_auto_refresh", "validate"} {
-		form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {action}, "client_id": {clientID.String()}, "server": {"member-b"}}
-		request := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
-		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		response := httptest.NewRecorder()
-		err := fx.ti.service.ServeConsentAction(response, request, fx.endpoint)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusSeeOther, response.Code)
-		if action == "validate" {
-			require.Contains(t, response.Header().Get("Location"), "validate_failed="+clientID.String())
-		}
-
-		after, err := manager.AuthClientRemoteSessionStatusesForResource(ctx, fx.subject, fx.projectID, fx.orgID, []uuid.UUID{clientID}, "https://member-a.example.com/mcp")
-		require.NoError(t, err)
-		require.Equal(t, before, after, "a B action cannot mutate A's connection")
-	}
-}
-
-// The fixture expands only a private cloned test database, never the application DB.
-func TestServeConsentAction_MemberLifecycleAcrossResourceIndexShapes(t *testing.T) {
-	t.Parallel()
-	for _, expanded := range []bool{false, true} {
-		t.Run(map[bool]string{false: "old", true: "expanded"}[expanded], func(t *testing.T) {
-			t.Parallel()
-			ctx, fx, metaID := seedMetaConsentEndpoint(t, "member-lifecycle")
-			if expanded {
-				require.NoError(t, testrepo.New(fx.ti.conn).ExpandRemoteSessionResourceIndexesFixture(ctx))
-			} else {
-				require.NoError(t, testrepo.New(fx.ti.conn).CreateLegacyRemoteSessionSubjectClientIndexFixture(ctx))
-			}
-			require.NoError(t, fx.ti.productFeatures.SetFeatureEnabled(ctx, fx.orgID, productfeatures.FeatureRemoteSessionAutoRefresh, true))
-			clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "member-lifecycle-client", "", []uuid.UUID{fx.shared})
-			issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID)
-			const a = "https://resource-a.example.test/mcp"
-			const b = "https://resource-b.example.test/mcp/"
-			createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-a", a, conv.ToNullUUID(issuerID), 0)
-			createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "member-b", b, conv.ToNullUUID(issuerID), 1)
-			store := func(resource string) error {
-				encrypted, err := fx.ti.enc.Encrypt([]byte("synthetic-upstream-token"))
-				require.NoError(t, err)
-				_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{SubjectUrn: fx.subject, UserSessionIssuerID: fx.shared, RemoteSessionClientID: clientID, AccessTokenEncrypted: encrypted, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}, Resource: conv.ToPGText(resource), AutoRefresh: true, Scopes: []string{}})
-				if err != nil {
-					return fmt.Errorf("store resource-qualified fixture: %w", err)
-				}
-				return nil
-			}
-			require.NoError(t, store(a))
-			err := store(b)
-			if expanded {
-				require.NoError(t, err)
-			} else {
-				require.ErrorIs(t, err, pgx.ErrNoRows, "the compatibility upsert refuses a second audience on the old index without overwriting A")
-			}
-			manager := fx.ti.service.RemoteChallengeManager()
-			read := func(resource string) map[uuid.UUID]remotesessions.RemoteSessionState {
-				states, err := manager.AuthClientRemoteSessionStatusesForResource(ctx, fx.subject, fx.projectID, fx.orgID, []uuid.UUID{clientID}, resource)
-				require.NoError(t, err)
-				return states
-			}
-			before := read(a)
-			require.Len(t, before, 1)
-			require.True(t, before[clientID].AutoRefresh)
-			for _, action := range []string{"set_auto_refresh", "disconnect"} {
-				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {action}, "client_id": {clientID.String()}, "server": {"member-b"}, "resource": {a}}
-				request := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
-				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				response := httptest.NewRecorder()
-				require.NoError(t, fx.ti.service.ServeConsentAction(response, request, fx.endpoint))
-				require.Equal(t, http.StatusSeeOther, response.Code)
-				require.Equal(t, before, read(a), "B action and forged posted resource must never change A")
-				if expanded && action == "set_auto_refresh" {
-					states := read(b)
-					require.Contains(t, states, clientID)
-					require.False(t, states[clientID].AutoRefresh)
-				}
-			}
-			for _, action := range []string{"disconnect", "refresh"} {
-				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {action}, "client_id": {clientID.String()}}
-				request := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
-				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-				err := fx.ti.service.ServeConsentAction(httptest.NewRecorder(), request, fx.endpoint)
-				var refusal *oops.ShareableError
-				require.ErrorAs(t, err, &refusal)
-				require.Equal(t, oops.CodeBadRequest, refusal.Code)
-				require.Equal(t, before, read(a), "focus-less gateway actions must not choose the remaining A grant")
-			}
-
-			require.Empty(t, read(b))
-		})
-	}
-}
-
-func TestServeConsent_TunneledMemberWithoutResourceDoesNotBreakFocusedCards(t *testing.T) {
-	t.Parallel()
-	ctx, fx, metaID := seedMetaConsentEndpoint(t, "missing-tunnel-resource")
-	registerPageClient(t, ctx, fx)
-	clientID := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "missing-tunnel-client", "", []uuid.UUID{fx.shared})
-	issuer := conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, clientID))
-	createMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "remote-a", "https://remote-a.example.test/mcp", issuer, 0)
-	createTunneledMetaMember(t, ctx, fx.ti.conn, fx.projectID, metaID, "tunnel-b", "", issuer, 1)
-	for _, slug := range []string{"remote-a", "tunnel-b"} {
-		fx.server = slug
-		code, page, _ := render(t, fx)
-		require.Equal(t, http.StatusOK, code)
-		require.Contains(t, page, clientID.String())
-		require.NotContains(t, page, "Service connected")
-	}
 }

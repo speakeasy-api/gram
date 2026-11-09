@@ -1145,14 +1145,9 @@ type RemoteSessionState struct {
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
 // the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
 func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
-	return m.ConnectionOutageForResource(ctx, subject, clientID, "")
-}
-
-// ConnectionOutageForResource reads only the selected upstream grant's outage.
-func (m *ChallengeManager) ConnectionOutageForResource(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID, resource string) (RefreshOutageKind, uuid.NullUUID, bool) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	queries := remotesessions_repo.New(m.db)
-	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: resource})
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
 	if err != nil {
 		return RefreshOutageNone, none, false
 	}
@@ -1182,11 +1177,6 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false)
 }
 
-// RemoteSessionStatusesForResource reports only the selected upstream audience.
-func (m *ChallengeManager) RemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, resource string) (map[uuid.UUID]RemoteSessionState, error) {
-	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false, resource)
-}
-
 // OrganizationRemoteSessionStatuses is RemoteSessionStatuses over the clients
 // ListOrganizationClients returns.
 func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
@@ -1198,12 +1188,6 @@ func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
 	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true)
 }
 
-// OrganizationRemoteSessionStatusesForResource reports one audience across the
-// organization-tier clients bound to this sign-in.
-func (m *ChallengeManager) OrganizationRemoteSessionStatusesForResource(ctx context.Context, subject urn.SessionSubject, organizationID string, userSessionIssuerID uuid.UUID, resource string) (map[uuid.UUID]RemoteSessionState, error) {
-	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true, resource)
-}
-
 func (m *ChallengeManager) remoteSessionStatuses(
 	ctx context.Context,
 	subject urn.SessionSubject,
@@ -1211,7 +1195,6 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	organizationWide bool,
-	resources ...string,
 ) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
@@ -1226,12 +1209,11 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return remoteSessionStates(rows, resources...), nil
+	return remoteSessionStates(rows), nil
 }
 
 // remoteSessionStates keys each status row by its client.
-func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resources ...string) map[uuid.UUID]RemoteSessionState {
-	rows = selectRemoteSessionStatusRows(rows, firstResource(resources))
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1302,19 +1284,6 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	userSessionIssuerID uuid.UUID,
 	clientID uuid.UUID,
 ) (RefreshResult, error) {
-	return m.refreshRemoteSession(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
-}
-
-// RefreshRemoteSessionForResource refreshes one audience without replacing any
-// sibling grant. A nonempty matching bound resource is always required.
-func (m *ChallengeManager) RefreshRemoteSessionForResource(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
-	if resource == "" {
-		return RefreshResult{}, focusedResourceRequired()
-	}
-	return m.refreshRemoteSession(ctx, attribution, subject, projectID, organizationID, userSessionIssuerID, clientID, resource)
-}
-
-func (m *ChallengeManager) refreshRemoteSession(ctx context.Context, attribution RefreshAttribution, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) (RefreshResult, error) {
 	var zero RefreshResult
 
 	bound, err := remotesessions_repo.New(m.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
@@ -1331,7 +1300,6 @@ func (m *ChallengeManager) refreshRemoteSession(ctx context.Context, attribution
 	}
 
 	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
-		Resource:              resource,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 	})
@@ -1341,14 +1309,11 @@ func (m *ChallengeManager) refreshRemoteSession(ctx context.Context, attribution
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if resource != "" && (!session.Resource.Valid || session.Resource.String == "" || strings.TrimRight(session.Resource.String, "/") != strings.TrimRight(resource, "/")) {
-		return zero, ErrRemoteSessionNotRefreshable
-	}
 	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, resource, remotesessionmetrics.RefreshTriggerManual, attribution)
+	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, attribution)
 }
 
 // DrainRefreshes waits for request-path refreshes that outlived their callers.
@@ -1382,26 +1347,7 @@ func (m *ChallengeManager) ResourceForClientAtUpstream(ctx context.Context, orga
 // Returns the number of rows affected; zero means there was nothing to
 // disconnect and nothing is sent upstream.
 func (m *ChallengeManager) DisconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID) (int64, error) {
-	return m.disconnectRemoteSession(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "")
-}
-
-// DisconnectRemoteSessionForResource disconnects only the matching bound audience.
-// It does not guess that a legacy unbound grant belongs to a focused resource.
-// A nonempty matching bound resource is always required; use the separate
-// legacy wrapper only for an unqualified singleton operation.
-func (m *ChallengeManager) DisconnectRemoteSessionForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
-	if resource == "" {
-		return 0, focusedResourceRequired()
-	}
-	return m.disconnectRemoteSession(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource)
-}
-
-func (m *ChallengeManager) disconnectRemoteSession(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string) (int64, error) {
-	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
-		return 0, err
-	}
 	disconnected, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionBySubjectAndClient(ctx, remotesessions_repo.SoftDeleteRemoteSessionBySubjectAndClientParams{
-		Resource:              resource,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userSessionIssuerID,
@@ -1427,25 +1373,7 @@ func (m *ChallengeManager) disconnectRemoteSession(ctx context.Context, subject 
 // auto-refresh choice for one client. Returns rows affected; zero means no
 // active session exists for the binding (e.g. disconnected in another tab).
 func (m *ChallengeManager) SetRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, enabled bool) (int64, error) {
-	return m.setRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, "", enabled)
-}
-
-// SetRemoteSessionAutoRefreshForResource changes one audience's preference without
-// touching its siblings or the refresh CAS timestamp. No legacy resource inference
-// is permitted for this mutation; an unqualified multi-grant request is refused.
-func (m *ChallengeManager) SetRemoteSessionAutoRefreshForResource(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string, enabled bool) (int64, error) {
-	if resource == "" {
-		return 0, focusedResourceRequired()
-	}
-	return m.setRemoteSessionAutoRefresh(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource, enabled)
-}
-
-func (m *ChallengeManager) setRemoteSessionAutoRefresh(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, clientID uuid.UUID, resource string, enabled bool) (int64, error) {
-	if err := m.requireUnambiguousSessionMutation(ctx, subject, projectID, organizationID, userSessionIssuerID, clientID, resource); err != nil {
-		return 0, err
-	}
 	n, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefresh(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshParams{
-		Resource:              resource,
 		AutoRefresh:           enabled,
 		SubjectUrn:            subject,
 		RemoteSessionClientID: clientID,
@@ -1457,68 +1385,6 @@ func (m *ChallengeManager) setRemoteSessionAutoRefresh(ctx context.Context, subj
 		return 0, fmt.Errorf("set remote session auto refresh: %w", err)
 	}
 	return n, nil
-}
-
-// DisconnectRemoteSessionByRef permits an explicit legacy/unbound source to be
-// revoked independently. The reference must be selected and authorized by the
-// caller, not inferred from a focused server; subject, tenant, binding and CAS
-// checks prevent another user's or a stale grant from being changed. A missed
-// match returns a failed precondition, not a successful disconnect.
-func (m *ChallengeManager) DisconnectRemoteSessionByRef(ctx context.Context, ref RemoteSessionRef, userSessionIssuerID uuid.UUID) (int64, error) {
-	rows, err := remotesessions_repo.New(m.db).SoftDeleteRemoteSessionByRef(ctx, remotesessions_repo.SoftDeleteRemoteSessionByRefParams{
-		ID: ref.ID, ExpectedUpdatedAt: conv.ToPGTimestamptz(ref.UpdatedAt), SubjectUrn: ref.Subject,
-		RemoteSessionClientID: ref.ClientID, ProjectID: ref.ProjectID, OrganizationID: ref.OrganizationID, UserSessionIssuerID: userSessionIssuerID,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("disconnect explicit remote session: %w", err)
-	}
-	if len(rows) == 0 {
-		return 0, remoteSessionReferenceChanged()
-	}
-	for _, row := range rows {
-		m.revoker.RevokeDetached(ctx, RevokedCredentials{RemoteSessionClientID: row.RemoteSessionClientID, AccessTokenEncrypted: row.AccessTokenEncrypted, RefreshTokenEncrypted: row.RefreshTokenEncrypted})
-	}
-	return int64(len(rows)), nil
-}
-
-// SetRemoteSessionAutoRefreshByRef changes an explicitly selected source,
-// including a legacy NULL-resource grant, without changing its siblings or CAS.
-func (m *ChallengeManager) SetRemoteSessionAutoRefreshByRef(ctx context.Context, ref RemoteSessionRef, userSessionIssuerID uuid.UUID, enabled bool) (int64, error) {
-	rows, err := remotesessions_repo.New(m.db).SetRemoteSessionAutoRefreshByRef(ctx, remotesessions_repo.SetRemoteSessionAutoRefreshByRefParams{
-		ID: ref.ID, ExpectedUpdatedAt: conv.ToPGTimestamptz(ref.UpdatedAt), SubjectUrn: ref.Subject,
-		RemoteSessionClientID: ref.ClientID, ProjectID: ref.ProjectID, OrganizationID: ref.OrganizationID, UserSessionIssuerID: userSessionIssuerID, AutoRefresh: enabled,
-	})
-	if err != nil {
-		return 0, fmt.Errorf("set explicit remote session auto refresh: %w", err)
-	}
-	if rows == 0 {
-		return 0, remoteSessionReferenceChanged()
-	}
-	return rows, nil
-}
-
-// A missing, unauthorized or changed source is one bounded refusal. Do not
-// reveal whether a reference belongs to another tenant or user.
-func remoteSessionReferenceChanged() error {
-	return oops.E(oops.CodeFailedPrecondition, nil, "the selected connection changed or is unavailable; reload before retrying")
-}
-
-func focusedResourceRequired() error {
-	return oops.E(oops.CodeFailedPrecondition, nil, "a specific upstream resource is required for this focused connection action")
-}
-
-func (m *ChallengeManager) requireUnambiguousSessionMutation(ctx context.Context, subject urn.SessionSubject, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource string) error {
-	rows, err := remotesessions_repo.New(m.db).ListRemoteSessionMutationCandidates(ctx, remotesessions_repo.ListRemoteSessionMutationCandidatesParams{
-		SubjectUrn: subject, RemoteSessionClientID: clientID, UserSessionIssuerID: userSessionIssuerID,
-		ProjectID: projectID, OrganizationID: organizationID, Resource: resource,
-	})
-	if err != nil {
-		return fmt.Errorf("select resource connection for mutation: %w", err)
-	}
-	if len(rows) > 1 {
-		return oops.E(oops.CodeFailedPrecondition, nil, "multiple resource connections use this registration; choose a specific resource connection before changing it")
-	}
-	return nil
 }
 
 // BuildAuthorizationUrl mints a RemoteLoginState (with PKCE S256) for the
@@ -1765,9 +1631,7 @@ func (m *ChallengeManager) mintAuthorization(
 // organization's grant.
 var errRemoteLoginWithoutOrganization = errors.New("remote login state has no organization")
 
-var errRemoteSessionResourceCollision = errors.New("resource-qualified remote session collision")
-
-// storeRemoteSessionGrant records a consent for (subject, client, resource). A live
+// storeRemoteSessionGrant records a consent for (subject, client). A live
 // grant consented through another organization's sign-in is tombstoned first,
 // so the new row records the organization the consent was made in; otherwise
 // the grant is updated in place. q must be the caller's transaction, holding
@@ -1784,9 +1648,6 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 		return remotesessions_repo.RemoteSession{}, fmt.Errorf("tombstone grant from another organization: %w", err)
 	}
 	sess, err := q.UpsertRemoteSession(ctx, params)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return sess, oops.E(oops.CodeFailedPrecondition, errors.Join(err, errRemoteSessionResourceCollision), "this registration cannot retain another resource connection until the OAuth session migration is enabled; the existing connection was not replaced")
-	}
 	if err != nil {
 		return sess, fmt.Errorf("upsert remote session: %w", err)
 	}
@@ -2268,10 +2129,6 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		Enrichment:          enrichment,
 	})
 	if err != nil {
-		if errors.Is(err, errRemoteSessionResourceCollision) {
-			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
-			return none, err
-		}
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
@@ -2878,36 +2735,3 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
-
-// selectRemoteSessionStatusRows never collapses distinct resource grants into
-// an arbitrary registration-wide status. Exact grants outrank legacy NULLs.
-func selectRemoteSessionStatusRows(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resource string) []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow {
-	selected := make(map[uuid.UUID]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, len(rows))
-	ambiguous := make(map[uuid.UUID]bool)
-	for _, row := range rows {
-		if resource != "" && row.Resource.Valid && strings.TrimRight(row.Resource.String, "/") != strings.TrimRight(resource, "/") {
-			continue
-		}
-		previous, exists := selected[row.RemoteSessionClientID]
-		if exists {
-			if resource == "" {
-				ambiguous[row.RemoteSessionClientID] = true
-				continue
-			}
-			if previous.Resource.Valid {
-				if row.Resource.Valid {
-					ambiguous[row.RemoteSessionClientID] = true
-				}
-				continue
-			}
-		}
-		selected[row.RemoteSessionClientID] = row
-	}
-	result := make([]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, 0, len(selected))
-	for id, row := range selected {
-		if !ambiguous[id] {
-			result = append(result, row)
-		}
-	}
-	return result
-}

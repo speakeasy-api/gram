@@ -16,7 +16,6 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersrepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
@@ -275,30 +274,6 @@ func TestRun_AttachmentGrantWaitsOnAConcurrentConnectionChange(t *testing.T) {
 				agent := urn.NewPrincipal(urn.PrincipalTypeAgent, agentID.String())
 				require.Contains(t, f.grantsOf(agent), authz.Grant{PrincipalUrn: agent.String(), Scope: authz.ScopeMCPAuth, Selector: authz.ConnectionAuthClientSelector(registration.String(), owner), Inferred: true})
 			}
-		})
-	}
-}
-
-// The backfill fixture must not require an index retired by the resource cutover.
-// Both runs use private cloned test databases, never the application database.
-func TestSeedAgentAttachmentFixture_BothGrantIndexShapes(t *testing.T) {
-	t.Parallel()
-	for _, expanded := range []bool{false, true} {
-		name := "old_indexes"
-		if expanded {
-			name = "resource_indexes"
-		}
-		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-			f := newFixture(t)
-			if expanded {
-				require.NoError(t, testrepo.New(f.pool).ExpandRemoteSessionResourceIndexesFixture(t.Context()))
-			}
-			registration := f.client("subject")
-			owner := f.member()
-			first := f.attach(f.agent(owner), registration, "user:"+owner, owner, 0)
-			second := f.attach(f.agent(owner), registration, "user:"+owner, owner, 0)
-			require.NotEqual(t, first, second, "separate attachments reuse the same legacy source without a conflict-target dependency")
 		})
 	}
 }
