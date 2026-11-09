@@ -31,7 +31,10 @@ func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
 	f.protectedResources.SetClock(now)
 }
 
-// RequestFailureConnections is the interceptor a direct server's proxy records rejected handshakes with.
-func RequestFailureConnections(attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamURL, upstreamAuth string) []proxy.RequestFailureInterceptor {
-	return newRequestConnections(&attribution, recorder, proxy.ServerIdentity{}, upstreamURL, upstreamAuth, nil).requestFailures()
+// InstallConnections has p send upstreamAuth and record its failures the way a direct server's proxy does.
+func InstallConnections(p *proxy.Proxy, attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamAuth string) {
+	connections := newRequestConnections(&attribution, recorder, proxy.ServerIdentity{}, p.RemoteURL, upstreamAuth, nil)
+	p.AuthorizationOverride = upstreamAuth
+	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+	p.RequestFailureInterceptors = connections.requestFailures()
 }

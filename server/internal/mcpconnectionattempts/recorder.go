@@ -110,6 +110,17 @@ func Grant(grantType string) Option {
 	}}
 }
 
+// RequestMethod labels the request a row is about. It is the sub-reason, and
+// Once folds repeats per method. The label must come from a fixed set.
+func RequestMethod(label string) Option {
+	return Option{apply: func(row *Row) {
+		if shortLabel.MatchString(label) {
+			row.SubReason = label
+			row.foldMethod = label
+		}
+	}}
+}
+
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
@@ -207,6 +218,9 @@ type Row struct {
 
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
+
+	// foldMethod separates Once repeats by request method. It is never stored.
+	foldMethod string
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -281,6 +295,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil},
+		foldMethod:            "",
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {

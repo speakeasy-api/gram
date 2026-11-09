@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
@@ -47,8 +48,8 @@ type requestConnections struct {
 	// upstreamAuth reports that Speakeasy attached a credential.
 	upstreamAuth bool
 
-	// configuredCredential reports that an admin-set header went upstream.
-	configuredCredential bool
+	// credentialHeaders names the admin-set credential headers.
+	credentialHeaders []string
 
 	// provider is the upstream URL, empty for a tunnel's internal gateway address.
 	provider string
@@ -59,7 +60,7 @@ func newRequestConnections(attribution *ConnectionAttribution, recorder *mcpconn
 	if attribution == nil {
 		return nil
 	}
-	connections := &requestConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", configuredCredential: HasConfiguredCredential(headers), provider: ""}
+	connections := &requestConnections{ConnectionAttribution: *attribution, recorder: recorder, tunneled: identity.TunneledMCPServerID != "", upstreamAuth: upstreamAuth != "", credentialHeaders: configuredCredentialNames(headers), provider: ""}
 	if !connections.tunneled {
 		connections.provider = upstreamURL
 	}
@@ -115,7 +116,7 @@ func (c *requestConnections) InterceptToolsCallFailure(ctx context.Context, fail
 	if errors.Is(failure.Err, shutdowndrain.ErrInterrupted) {
 		return
 	}
-	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
+	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
 		c.record(ctx, code)
 	}
 }
@@ -128,9 +129,26 @@ func (c *requestConnections) InterceptRequestFailure(ctx context.Context, failur
 	if failure.StatusCode != http.StatusUnauthorized && failure.StatusCode != http.StatusForbidden {
 		return
 	}
-	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader)); ok {
-		c.record(ctx, code, mcpconnectionattempts.Detail(requestMethodDetail(failure.Method)))
+	if code, ok := c.upstreamFailureHappened(failure.StatusCode, failure.SentHeader, failure.Header, failure.Err); ok {
+		c.record(ctx, code, mcpconnectionattempts.RequestMethod(requestMethodDetail(failure.Method)))
 	}
+}
+
+// upstreamFailureHappened classifies by what the final request carried: a redirect off
+// the server's origin or a suppressed header sends no credential to reject. A
+// credential renewal that failed for an outage is that outage, not a rejection.
+func (c *requestConnections) upstreamFailureHappened(status int, sent, response http.Header, cause error) (mcpconnectionattempts.Code, bool) {
+	if errors.Is(cause, remotesessions.ErrRemoteSessionUnavailable) {
+		code := remotesessions.ConnectionOutageHappened(cause)
+		return code, code != (mcpconnectionattempts.Code{})
+	}
+	attached := c.upstreamAuth && sent.Get("Authorization") != ""
+	credential := UpstreamCredentialSent{
+		Attached:   attached,
+		Self:       attached && c.SelfCredential,
+		Configured: slices.ContainsFunc(c.credentialHeaders, func(name string) bool { return sent.Get(name) != "" }),
+	}
+	return UpstreamFailureHappened(status, credential, c.tunneled, response.Get(tunnelrouting.ErrorHeader), cause)
 }
 
 // requestMethodDetail bounds a client-supplied method to a known label.
@@ -161,10 +179,23 @@ type UpstreamCredentialSent struct {
 
 // HasConfiguredCredential reports an admin-set static credential. A header forwarded from the caller is the caller's.
 func HasConfiguredCredential(headers []proxy.ConfiguredHeader) bool {
-	return slices.ContainsFunc(headers, func(header proxy.ConfiguredHeader) bool {
-		return header.StaticValue != "" && header.ValueFromRequestHeader == "" &&
-			proxy.IsCredentialHeader(header.Name, header.IsSecret, false)
-	})
+	return slices.ContainsFunc(headers, isConfiguredCredential)
+}
+
+func isConfiguredCredential(header proxy.ConfiguredHeader) bool {
+	return header.StaticValue != "" && header.ValueFromRequestHeader == "" &&
+		proxy.IsCredentialHeader(header.Name, header.IsSecret, false)
+}
+
+// configuredCredentialNames lists the admin-set credential headers.
+func configuredCredentialNames(headers []proxy.ConfiguredHeader) []string {
+	var names []string
+	for _, header := range headers {
+		if isConfiguredCredential(header) {
+			names = append(names, header.Name)
+		}
+	}
+	return names
 }
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.

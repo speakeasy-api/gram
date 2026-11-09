@@ -588,3 +588,29 @@ func TestDropped_ALostRowCountsItsRepeats(t *testing.T) {
 
 	require.Equal(t, int64(calls), recorder.droppedTotal(t))
 }
+
+// Request methods fold apart, so a burst of one method never hides another; other details still fold together.
+func TestOnceLimiter_RequestMethodsFoldApart(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	now := time.Now()
+	withOption := func(opt Option) Row {
+		row := limiterRow("org", "server", "provider_rejected", "")
+		opt.apply(&row)
+		return row
+	}
+	initialize := withOption(RequestMethod("initialize"))
+	for range onceKeyBurst {
+		require.True(t, limiterAllows(limiter, initialize, now))
+	}
+	require.False(t, limiterAllows(limiter, initialize, now))
+	require.True(t, limiterAllows(limiter, withOption(RequestMethod("tools_list")), now))
+	require.True(t, limiterAllows(limiter, limiterRow("org", "server", "provider_rejected", ""), now), "a tool call folds apart from handshakes")
+
+	detailed := withOption(Detail("first"))
+	for range onceKeyBurst - 1 {
+		require.True(t, limiterAllows(limiter, detailed, now))
+	}
+	require.False(t, limiterAllows(limiter, withOption(Detail("second")), now), "a free-form detail does not split the key")
+}

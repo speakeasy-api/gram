@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-// A client retrying initialize in a loop folds into a few rows that still count every failure.
+// A client retrying in a loop folds into a few rows per method, and each method's rows count its own failures.
 func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 	t.Parallel()
 
@@ -35,7 +35,11 @@ func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 		_ = recorder.Shutdown(cleanupCtx)
 	})
 
-	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer token" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(upstream.Close)
@@ -52,22 +56,29 @@ func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 		StreamingTimeout:     5 * time.Second,
 		MaxBufferedBodyBytes: proxy.DefaultMaxBufferedBodyBytes,
 		RemoteURL:            upstream.URL,
-		RequestFailureInterceptors: remotemcp.RequestFailureConnections(remotemcp.ConnectionAttribution{
-			Scope:            mcpconnectionattempts.ServerScope(uuid.NewString(), uuid.New(), serverID, mcpconnectionattempts.AppUnverified),
-			Details:          nil,
-			UpstreamFailures: true,
-			SelfCredential:   false,
-			Request:          nil,
-		}, recorder, "https://provider.example.com/mcp", "token"),
 	}
+	remotemcp.InstallConnections(p, remotemcp.ConnectionAttribution{
+		Scope:            mcpconnectionattempts.ServerScope(uuid.NewString(), uuid.New(), serverID, mcpconnectionattempts.AppUnverified),
+		Details:          nil,
+		UpstreamFailures: true,
+		SelfCredential:   false,
+		Request:          nil,
+	}, recorder, "token")
 
+	bodies := map[string]string{
+		"initialize": `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`,
+		"tools_list": `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`,
+		"":           `{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"protected","arguments":{}}}`,
+	}
 	for range attempts {
-		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Accept", "application/json, text/event-stream")
-		rr := httptest.NewRecorder()
-		require.NoError(t, p.Post(rr, req))
-		require.Equal(t, http.StatusUnauthorized, rr.Code)
+		for _, body := range bodies {
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			rr := httptest.NewRecorder()
+			require.NoError(t, p.Post(rr, req))
+			require.Equal(t, http.StatusUnauthorized, rr.Code)
+		}
 	}
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
@@ -77,13 +88,11 @@ func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 		Repeats   uint32 `ch:"repeats"`
 	}
 	require.NoError(t, conn.Select(t.Context(), &rows, `SELECT reason, sub_reason, repeats FROM mcp_connection_events WHERE server_id = ?`, serverID.String()))
-	require.NotEmpty(t, rows)
-	require.Less(t, len(rows), attempts, "repeats fold instead of writing a row each")
-	total := 0
+	require.Less(t, len(rows), attempts*len(bodies), "repeats fold instead of writing a row each")
+	failures := map[string]int{}
 	for _, row := range rows {
 		require.Equal(t, mcpconnectionattempts.CodeProviderRejected.String(), row.Reason)
-		require.Equal(t, "initialize", row.SubReason)
-		total += 1 + int(row.Repeats)
+		failures[row.SubReason] += 1 + int(row.Repeats)
 	}
-	require.Equal(t, attempts, total, "folded rows still count every failure")
+	require.Equal(t, map[string]int{"initialize": attempts, "tools_list": attempts, "": attempts}, failures, "each method's rows count only its own failures")
 }

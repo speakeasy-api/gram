@@ -629,6 +629,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	var (
 		upstreamStatus int
 		upstreamHeader http.Header
+		upstreamSent   http.Header
 		responseBytes  int64
 	)
 	defer func() {
@@ -838,7 +839,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			if failure != nil {
 				cause = failure
 			}
-			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, Err: cause})
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, SentHeader: upstreamSent, Err: cause})
 		}
 	}()
 
@@ -895,10 +896,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	upstreamStatus = upstreamResp.StatusCode
 	upstreamHeader = upstreamResp.Header
+	if upstreamResp.Request != nil {
+		upstreamSent = upstreamResp.Request.Header
+	}
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
 		if !toolsCallForwarded {
-			p.runRequestFailureInterceptors(ctx, &RequestFailure{Method: jsonrpcMethod, StatusCode: upstreamStatus, Header: upstreamHeader})
+			defer func() {
+				p.runRequestFailureInterceptors(ctx, &RequestFailure{Method: jsonrpcMethod, StatusCode: upstreamStatus, Header: upstreamHeader, SentHeader: upstreamSent, Err: err})
+			}()
 		}
 	}
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))

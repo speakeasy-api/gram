@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -30,16 +31,14 @@ import (
 
 const connectionToolsCall = `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`
 
-func serveToolsCall(ctx context.Context, t *testing.T, connections *requestConnections, upstream http.HandlerFunc, checkpoint ToolsCallKillswitchCheckpoint) {
+func serveToolsCall(ctx context.Context, t *testing.T, connections connectionsUnderTest, upstream http.HandlerFunc, checkpoint ToolsCallKillswitchCheckpoint) {
 	t.Helper()
 
 	server := httptest.NewServer(upstream)
 	t.Cleanup(server.Close)
 
 	p := newKillswitchTestProxy(t, server.URL, NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)))
-	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
-	p.ToolsCallRefusalInterceptors = connections.refusals()
-	p.RequestFailureInterceptors = connections.requestFailures()
+	connections.install(p)
 
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
 	req.Header.Set("Content-Type", "application/json")
@@ -48,14 +47,38 @@ func serveToolsCall(ctx context.Context, t *testing.T, connections *requestConne
 	require.NoError(t, p.Post(rr, req))
 }
 
-func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth string) *requestConnections {
-	return newRequestConnections(&ConnectionAttribution{
+func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth string) connectionsUnderTest {
+	return newConnectionsUnderTest(&ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 		Details:          nil,
 		UpstreamFailures: true,
 		SelfCredential:   false,
 		Request:          nil,
 	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth, nil)
+}
+
+// connectionsUnderTest is a proxy's connection interceptor with the credentials that proxy sends.
+type connectionsUnderTest struct {
+	*requestConnections
+
+	upstreamAuth string
+	headers      []proxy.ConfiguredHeader
+}
+
+func newConnectionsUnderTest(attribution *ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, identity proxy.ServerIdentity, upstreamURL, upstreamAuth string, headers []proxy.ConfiguredHeader) connectionsUnderTest {
+	return connectionsUnderTest{requestConnections: newRequestConnections(attribution, recorder, identity, upstreamURL, upstreamAuth, headers), upstreamAuth: upstreamAuth, headers: headers}
+}
+
+// install has p send the credentials the interceptor was built for, and adds the interceptor.
+func (c connectionsUnderTest) install(p *proxy.Proxy) {
+	p.AuthorizationOverride = c.upstreamAuth
+	p.Headers = c.headers
+	if c.tunneled {
+		p.HeaderPolicy = proxy.HeaderPolicyTunneled
+	}
+	p.ToolsCallFailureInterceptors = c.withFailures(nil)
+	p.ToolsCallRefusalInterceptors = c.refusals()
+	p.RequestFailureInterceptors = c.requestFailures()
 }
 
 func continueCheckpoint() ToolsCallKillswitchCheckpoint {
@@ -187,7 +210,7 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
 
 	rec := mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newConnectionsUnderTest(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
 	rec.RequireNothing()
 
 	refused := func(w http.ResponseWriter, _ *http.Request) {
@@ -196,12 +219,12 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	}
 	secret := proxy.ConfiguredHeader{IsRequired: true, IsSecret: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}
 	rec = mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newConnectionsUnderTest(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Empty(t, row.ProviderHost)
 
 	rec = mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newConnectionsUnderTest(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 }
 
@@ -305,7 +328,7 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 			for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 				rec := mcpconnectionattemptstest.New(t)
 				reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }
-				serveToolsCall(t.Context(), t, newRequestConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
+				serveToolsCall(t.Context(), t, newConnectionsUnderTest(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
 				if tc.admin {
 					row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 					require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
@@ -518,13 +541,11 @@ const (
 )
 
 // serveRequest posts body through a proxy carrying every connection interceptor and returns what the client got.
-func serveRequest(t *testing.T, connections *requestConnections, upstreamURL, body string) *httptest.ResponseRecorder {
+func serveRequest(t *testing.T, connections connectionsUnderTest, upstreamURL, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	p := newKillswitchTestProxy(t, upstreamURL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
-	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
-	p.ToolsCallRefusalInterceptors = connections.refusals()
-	p.RequestFailureInterceptors = connections.requestFailures()
+	connections.install(p)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -572,7 +593,7 @@ func TestRequestConnections_CredentialRejected(t *testing.T) {
 			t.Parallel()
 
 			rec := mcpconnectionattemptstest.New(t)
-			connections := newRequestConnections(&ConnectionAttribution{
+			connections := newConnectionsUnderTest(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
 				UpstreamFailures: true,
@@ -634,7 +655,7 @@ func TestRequestConnections_Tunneled(t *testing.T) {
 			t.Cleanup(upstream.Close)
 
 			rec := mcpconnectionattemptstest.New(t)
-			connections := newRequestConnections(&ConnectionAttribution{
+			connections := newConnectionsUnderTest(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
 				UpstreamFailures: true,
@@ -708,4 +729,82 @@ func TestRequestConnections_GatewayMemberRecordsNothing(t *testing.T) {
 	require.Nil(t, connections.requestFailures())
 	serveRequest(t, connections, rejectingUpstream(t, http.StatusUnauthorized), connectionInitialize)
 	rec.RequireNothing()
+}
+
+// A redirect off the server's origin drops the credentials, so the destination's 401 rejected none.
+func TestRequestConnections_RedirectedChallengeRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	secret := []proxy.ConfiguredHeader{{Name: "X-Api-Key", IsSecret: true, StaticValue: "key"}}
+	for _, tc := range []struct {
+		name         string
+		body         string
+		upstreamAuth string
+		headers      []proxy.ConfiguredHeader
+	}{
+		{name: "bearer on initialize", body: connectionInitialize, upstreamAuth: "token"},
+		{name: "static key on tools/list", body: connectionToolsList, headers: secret},
+		{name: "bearer on tools/call", body: connectionToolsCall, upstreamAuth: "token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				assert.Empty(t, r.Header.Get("Authorization"))
+				assert.Empty(t, r.Header.Get("X-Api-Key"))
+				w.WriteHeader(http.StatusUnauthorized)
+			}))
+			t.Cleanup(destination.Close)
+			origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, destination.URL, http.StatusFound)
+			}))
+			t.Cleanup(origin.Close)
+
+			rec := mcpconnectionattemptstest.New(t)
+			connections := newConnectionsUnderTest(&ConnectionAttribution{
+				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+				Details:          nil,
+				UpstreamFailures: true,
+				SelfCredential:   false,
+				Request:          nil,
+			}, rec.Recorder, proxy.ServerIdentity{}, origin.URL, tc.upstreamAuth, tc.headers)
+
+			p := newKillswitchTestProxy(t, origin.URL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+			connections.install(p)
+			p.Identity.RemoteMCPServerID = "server"
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(tc.body))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			rr := httptest.NewRecorder()
+			require.NoError(t, p.Post(rr, req))
+			require.Equal(t, http.StatusUnauthorized, rr.Code)
+			rec.RequireNothing()
+		})
+	}
+}
+
+// An optional key that fails validation is not sent, so a 401 did not reject it.
+func TestRequestConnections_SuppressedKeyRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	headers := []proxy.ConfiguredHeader{{Name: "X-Api-Key", IsSecret: true, StaticValue: "bad\nkey"}}
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Empty(t, r.Header.Get("X-Api-Key"))
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+
+	for _, body := range []string{connectionInitialize, connectionToolsCall} {
+		rec := mcpconnectionattemptstest.New(t)
+		connections := newConnectionsUnderTest(&ConnectionAttribution{
+			Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+			Details:          nil,
+			UpstreamFailures: true,
+			SelfCredential:   false,
+			Request:          nil,
+		}, rec.Recorder, proxy.ServerIdentity{}, upstream.URL, "", headers)
+		require.True(t, HasConfiguredCredential(headers), "the stored row is a credential")
+		serveRequest(t, connections, upstream.URL, body)
+		rec.RequireNothing()
+	}
 }
