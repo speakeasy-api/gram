@@ -326,6 +326,10 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if err != nil && clientType == authClientTypeServiceAccount {
 		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
 	}
+	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
+		// The cause names the remote session for the connection row.
+		return nil, memberSignInUnreadableError{memberConnectionError: memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}, cause: err}
+	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
