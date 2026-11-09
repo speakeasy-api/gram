@@ -283,7 +283,9 @@ func TestResolveAccessTokens_UnreadableRefreshInsideSkewForwardsAccess(t *testin
 	storeTokens(t, env, "skew-access", "", remotesessions.AccessTokenExpirySkew/2)
 
 	require.False(t, needsReconnect(t, env))
-	require.Equal(t, remotesessions.RemoteSessionActive, storedSessionStatus(t, env).Status)
+	state := storedSessionStatus(t, env)
+	require.Equal(t, remotesessions.RemoteSessionActive, state.Status, "the access token still serves")
+	require.False(t, state.CanRefresh, "a refresh token this key can't read is never offered")
 	tokens, err := resolveAll(t, env)
 	require.NoError(t, err)
 	for _, entry := range tokens {
@@ -484,4 +486,47 @@ func TestUnreadableRemoteSessionID(t *testing.T) {
 	id, ok = remotesessions.UnreadableRemoteSessionID(resolveAvailable(t, env).ClientCredentialErr)
 	require.True(t, ok)
 	require.Equal(t, env.session.ID, id)
+}
+
+// A refresh from a stale snapshot whose refresh token can't be read uses the row a renewal has since written.
+func TestRefreshNow_UnreadableSnapshotAdoptsTheMovedRow(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "unreadable-snapshot-moved", &refreshes, healingRefresh)
+	storeTokens(t, env, "", "", time.Hour)
+	stale, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	storeTokens(t, env, "rewritten-access", "rewritten-refresh", time.Hour)
+
+	res, err := env.refresher.RefreshNow(t.Context(), stale, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	require.NoError(t, err)
+	require.Equal(t, "rewritten-access", res.AccessToken)
+	require.Equal(t, remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, res.Outcome)
+	require.Zero(t, refreshes.Load())
+}
+
+// An unreadable refresh token on a grant that has already lapsed is an ordinary lapsed grant, not a decrypt failure.
+func TestRefreshNow_LapsedGrantSkipsTheDecrypt(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, logs := unreadableEnv(t, "unreadable-lapsed", &refreshes, healingRefresh)
+	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText("not-ciphertext"), RefreshTokenRotated: true,
+		RefreshExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+	lapsed, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	_, err = env.refresher.RefreshNow(t.Context(), lapsed, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.False(t, remotesessions.StoredTokenUnreadable(err))
+	require.Empty(t, logs.levelOf("remote session stored refresh token could not be decrypted"))
+	require.Zero(t, refreshes.Load())
 }

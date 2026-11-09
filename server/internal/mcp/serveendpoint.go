@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -381,6 +382,7 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 	}
 
 	var match, outage remotesessions.UpstreamToken
+	var outageIssuer uuid.UUID
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
@@ -390,7 +392,9 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 			continue
 		}
 		if entry.HeldWithoutToken() {
-			outage = entry
+			if heldOutranks(entry, issuerID, outage, outageIssuer) {
+				outage, outageIssuer = entry, issuerID
+			}
 			continue
 		}
 		found++
@@ -449,6 +453,19 @@ func upstreamTokenRoutes(issuerID uuid.UUID, entry remotesessions.UpstreamToken,
 			(entry.Resource == "" || grantRoutesToUpstream(entry.Resource, want, false))
 	}
 	return grantRoutesToUpstream(entry.Resource, want, false)
+}
+
+// heldOutranks reports whether held entry candidate, keyed under candidateIssuer,
+// answers instead of current, so the answer never depends on map order: an
+// outage, which a retry can clear, comes first, then the lower issuer id.
+func heldOutranks(candidate remotesessions.UpstreamToken, candidateIssuer uuid.UUID, current remotesessions.UpstreamToken, currentIssuer uuid.UUID) bool {
+	if !current.HeldWithoutToken() {
+		return true
+	}
+	if candidate.SessionUnavailable() != current.SessionUnavailable() {
+		return candidate.SessionUnavailable()
+	}
+	return bytes.Compare(candidateIssuer[:], currentIssuer[:]) < 0
 }
 
 // tunneledIssuerToken selects a tunneled backend's credential from the entry

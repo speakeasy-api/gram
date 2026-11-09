@@ -58,8 +58,11 @@ import (
 // be obtained, or was requested for another resource, answers with the
 // member-scoped remedy rather than an anonymous call.
 //
-// A subject's connection in an outage answers retryably and returns its entry
-// for chaining. A usable credential for the same upstream outranks it.
+// A subject's connection held without a token returns its entry with the
+// member-scoped failure: an outage answers retryably, a sign-in that can't be
+// read asks for a reconnect, and a refused renewal names the administrator.
+// The entry is returned for chaining. A usable credential for the same
+// upstream outranks it, and of several held entries an outage answers first.
 //
 // A tunneled member is routed by identity alone: only the entry keyed by its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
@@ -85,13 +88,15 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 		return none, nil
 	}
 	var matched, outage remotesessions.UpstreamToken
+	var outageIssuer uuid.UUID
 	found := 0
 	for issuerID, entry := range tokens {
 		if entry.HeldWithoutToken() {
 			// A held grant on the member's own issuer answers for it even when its resource
 			// no longer matches: it carries no bearer, and the alternative is an anonymous call.
-			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
-				outage = entry
+			routes := upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID)
+			if routes && heldOutranks(entry, issuerID, outage, outageIssuer) {
+				outage, outageIssuer = entry, issuerID
 			}
 			continue
 		}
@@ -269,7 +274,10 @@ func memberCredentialLoadError(member metaMember, err error) error {
 	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code}
 }
 
-// chainMetaMember chains a member with no routed credential or one held without a token, whose failure otherwise stands.
+// chainMetaMember chains a member with no routed credential or one held without
+// a token, as a direct server does. A chained token is a verified credential for
+// the same person, never an anonymous call; when chaining yields none, the held
+// failure stands, so an unreadable sign-in still asks for a reconnect.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
 	held := routed.HeldWithoutToken()
 	switch {

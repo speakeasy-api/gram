@@ -131,7 +131,7 @@ func (s *seeder) connectionRequestRows() ([]mcpconnectionattempts.Row, error) {
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
 			// On a gateway, these refusals come from a selected member, never the gateway itself.
-			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused) {
+			if scope != s.connectionServerScope() && ending.step == mcpconnectionattempts.StepMCPRequest && (ending.what == mcpconnectionattempts.CodeProviderServerError || ending.what == mcpconnectionattempts.CodeToolPermissionDenied || ending.what == mcpconnectionattempts.CodeUsageLimitReached || ending.what == mcpconnectionattempts.CodeProviderRejected || ending.what == mcpconnectionattempts.CodeMCPToolCallsPaused || ending.what == mcpconnectionattempts.CodeStoredSignInUnreadable) {
 				scope = mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR)
 				opts = append(opts, mcpconnectionattempts.Member(s.det("mcpserver-support")))
 			}

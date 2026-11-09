@@ -815,10 +815,32 @@ func (s *RefreshService) refresh(
 ) (RefreshResult, *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, *identityRestatement, error) {
 	var zero RefreshResult
 
-	// An unreadable refresh token can't be sent, so it never takes the lease; the post-lock reread checks again.
-	if hasRefreshToken(sess) {
-		if _, err := s.readRefreshToken(ctx, sess); err != nil {
-			return zero, nil, nil, err
+	// An unreadable refresh token can't be sent, so it never takes the lease;
+	// a row that moved since the snapshot is used instead. The post-lock reread checks again.
+	if hasRefreshToken(sess) && refreshTokenUsable(sess, time.Now()) {
+		if _, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String); err != nil {
+			current, currentErr := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+				SubjectUrn:            sess.SubjectUrn,
+				RemoteSessionClientID: sess.RemoteSessionClientID,
+			})
+			switch {
+			case errors.Is(currentErr, pgx.ErrNoRows), currentErr == nil && current.ID != sess.ID:
+				var inactive remotesessions_repo.RemoteSession
+				return RefreshResult{Session: inactive, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil, nil, nil
+			case currentErr == nil && current.UpdatedAt.Time.After(sess.UpdatedAt.Time):
+				if accessTokenLive(current, time.Now()) {
+					if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted); derr == nil {
+						return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
+					}
+				}
+				sess = current
+				*attempted = current
+			}
+			if hasRefreshToken(sess) && refreshTokenUsable(sess, time.Now()) {
+				if _, err := s.readRefreshToken(ctx, sess); err != nil {
+					return zero, nil, nil, err
+				}
+			}
 		}
 	}
 

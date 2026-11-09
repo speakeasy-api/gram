@@ -97,6 +97,11 @@ func readStoredTokens(enc *encryption.Client, sess remotesessions_repo.RemoteSes
 	return read
 }
 
+// StoredSignInUsable reports whether a grant's stored tokens can serve or renew it, by the rule resolution uses.
+func StoredSignInUsable(enc *encryption.Client, sess remotesessions_repo.RemoteSession, now time.Time) bool {
+	return readStoredTokens(enc, sess, now).usable
+}
+
 // err is the resolution error for an unreadable grant.
 func (s storedTokens) err() error {
 	return fmt.Errorf("%w: %w", errStoredTokenUnreadable, errors.Join(s.accessErr, s.refreshErr))

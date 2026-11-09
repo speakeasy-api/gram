@@ -1242,6 +1242,15 @@ func TestUnreadableUpstreamTokenGatewayMemberHeals(t *testing.T) {
 	require.EqualValues(t, 1, f.refreshes.Load())
 	require.Positive(t, f.memberCalls.Load())
 	require.Equal(t, "Bearer refreshed-token", f.upstream.Load())
+
+	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	access, err := ti.enc.Decrypt(stored.AccessTokenEncrypted)
+	require.NoError(t, err, "the renewed access token is stored under the current key")
+	require.Equal(t, "refreshed-token", access)
+	refresh, err := ti.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, "rotated-refresh", refresh)
 }
 
 // An expired access token with an unreadable refresh token never reaches the member without credentials.

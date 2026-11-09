@@ -1141,6 +1141,9 @@ type RemoteSessionState struct {
 	ValidationStatus ValidationOutcome
 	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
+
+	// SignInUnreadable marks a stored sign-in no token of which can be read; only a new sign-in replaces it.
+	SignInUnreadable bool
 }
 
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
@@ -1220,8 +1223,16 @@ func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRe
 	now := time.Now()
 	for _, row := range rows {
 		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
-		if status == RemoteSessionActive && !readStoredTokens(m.enc, storedTokenRow(row), now).usable {
+		stored := storedTokenRow(row)
+		read := readStoredTokens(m.enc, stored, now)
+		if status == RemoteSessionActive && !read.usable {
 			status, canRefresh = RemoteSessionExpired, false
+		}
+		// A refresh token this key can't read can't be sent, so Refresh is not offered.
+		if canRefresh {
+			if _, err := m.enc.Decrypt(stored.RefreshTokenEncrypted.String); err != nil {
+				canRefresh = false
+			}
 		}
 		var accessExpiresAt *time.Time
 		if row.AccessExpiresAt.Valid {
@@ -1267,6 +1278,7 @@ func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRe
 			LastValidatedAt:        lastValidatedAt,
 			ValidationStatus:       ValidationOutcome(row.ValidationStatus.String),
 			ValidationReason:       row.ValidationReason.String,
+			SignInUnreadable:       read.unreadable,
 		}
 	}
 	return statuses

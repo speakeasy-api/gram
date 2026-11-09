@@ -15,7 +15,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -135,9 +134,6 @@ func rejectSurvivingClientCredentialRejection(w http.ResponseWriter, p *proxy.Pr
 // whose credential could not be obtained, with the remedy its classification
 // names: retry an outage, or contact the administrator.
 func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
-	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
-		return oops.E(oops.CodeUnauthorized, err, "%s", remoteSessionReconnectDescription)
-	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		return remoteSessionUnavailableError(w, err)
 	}
