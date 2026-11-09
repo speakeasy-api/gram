@@ -162,7 +162,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		tokens, err := hostedMemberTokens(gateTokens, member)
 		if err != nil {
-			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberFix(member).callerURL()))
+			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
 		}
 		if len(tokens) == 0 {
 			return notConnectedRow(gate, true)
@@ -258,7 +258,7 @@ func memberFailureSignIn(gate metaGateContext, member metaMember, err error) met
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
 	if kind == remotesessions.RefreshOutageProvider {
-		reconnectURL = gate.memberFix(member).callerURL()
+		reconnectURL = gate.memberCallerURL(member)
 	}
 	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL})
 }

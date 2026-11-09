@@ -129,6 +129,10 @@ type metaGateContext struct {
 	// connection each registration's agent credential was authorized for,
 	// keyed by registration. Nil outside a dial, which records nothing.
 	servedCredentials map[uuid.UUID]contextvalues.UpstreamCredential
+	// skippedClientFailure is, for one agent member dial, why one of the
+	// member's clients failed while another client's credential stood in.
+	// It names the cause when no credential serves the member after all.
+	skippedClientFailure error
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -902,11 +906,12 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
-		protocolVersion:   request.resolution,
-		connectURL:        connectURL,
-		agentOwner:        s.newAgentOwnerReconnect(ctx, logger, metaServer.OrganizationID, membership.agentID),
-		skillsOverMCP:     nil,
-		servedCredentials: nil,
+		protocolVersion:      request.resolution,
+		connectURL:           connectURL,
+		agentOwner:           s.newAgentOwnerReconnect(ctx, logger, metaServer.OrganizationID, membership.agentID),
+		skillsOverMCP:        nil,
+		servedCredentials:    nil,
+		skippedClientFailure: nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog

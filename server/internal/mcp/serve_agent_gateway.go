@@ -7,6 +7,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -190,6 +191,9 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 				usable = usable || token.Token != "" || token.SessionUnavailable()
 			}
 			if !usable {
+				if shared := sharedCredentialError(member, tokens); shared != nil {
+					return nil, shared
+				}
 				return nil, gate.agentReconnectError(member)
 			}
 		}
@@ -228,13 +232,30 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 		gate.recordServedCredential(uuid.Nil, credential)
 		return nil, err
 	}
+	return s.agentMemberTokens(ctx, gate, member, server.UserSessionIssuerID.UUID, clients)
+}
+
+// agentMemberTokens resolves the agent's credential for each of a member's
+// clients. One client the agent cannot use does not fail a member another
+// client serves: the member's clients can include another server's personal
+// client beside its own service account. Routing still refuses the member
+// when no credential serves it, naming the skipped failure.
+func (s *Service) agentMemberTokens(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, clients []remotesessions.Client) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(clients))
+	gate.skippedClientFailure = nil
 	for _, client := range clients {
-		resolved, err := s.agentMemberClientTokens(ctx, gate, member, server.UserSessionIssuerID.UUID, client.ID, agentClientType(client))
+		resolved, err := s.agentMemberClientTokens(ctx, gate, member, issuer, client.ID, agentClientType(client))
+		if _, memberScoped := errors.AsType[*metaMemberError](err); memberScoped {
+			gate.skippedClientFailure = cmp.Or(gate.skippedClientFailure, err)
+			continue
+		}
 		if err != nil {
 			return nil, err
 		}
 		maps.Copy(tokens, resolved)
+	}
+	if len(tokens) == 0 && gate.skippedClientFailure != nil {
+		return nil, gate.skippedClientFailure
 	}
 	return tokens, nil
 }
@@ -280,6 +301,11 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
+	// A service account's credential is the server's, shared by every
+	// caller: the agent's sign-in step does not set it.
+	if err != nil && clientType == authClientTypeServiceAccount {
+		return nil, memberConnectionError{metaMemberClientCredentialError(member, err), resolveFailureHappened(err)}
+	}
 	if err != nil {
 		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
@@ -302,19 +328,28 @@ type agentCredentialError struct{ *metaMemberError }
 
 func (e agentCredentialError) Unwrap() error { return e.metaMemberError }
 
-// agentServerAccessError refuses an agent the use of a connection to a server:
-// no single auth client serves it, or policy does not permit the use.
-// Reconnecting does not change either. Its text matches
-// agentServerCredentialError, so surfaces other than the agent gateway read
-// the same as before.
+// agentServerAccessError refuses an agent the use of a connection to a server
+// that policy does not permit. Reconnecting does not change it. Its text
+// matches agentServerCredentialError, so surfaces other than the agent
+// gateway read the same as before.
 func agentServerAccessError(slug string) error {
-	return agentAccessError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}}
+	return agentAccessError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}, false}
+}
+
+// agentServerGapError refuses an agent a server that no single auth client
+// serves. The server's auth clients fix it, not the agent's permissions. Its
+// text matches agentServerAccessError.
+func agentServerGapError(slug string) error {
+	return agentAccessError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}, true}
 }
 
 // agentAccessError is an agent refused the use of a connection to a server,
-// which a person fixes in the agent's permissions or the server's auth
-// clients, not by reconnecting.
-type agentAccessError struct{ *metaMemberError }
+// which a person fixes in the agent's permissions or, when server is set,
+// in the server's auth clients, not by reconnecting.
+type agentAccessError struct {
+	*metaMemberError
+	server bool
+}
 
 func (e agentAccessError) Unwrap() error { return e.metaMemberError }
 
@@ -403,7 +438,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, fmt.Errorf("load agent member auth client: %w", err)
 	}
 	if len(rows) != 1 {
-		return none, noCredential, agentServerAccessError(target.slug)
+		return none, noCredential, agentServerGapError(target.slug)
 	}
 	res := decideAuthClient(rows[0])
 	mode, err := s.authClientMode(ctx, target.organizationID)
@@ -419,7 +454,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, res.servedCredential(), nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
-		return none, noCredential, agentServerAccessError(target.slug)
+		return none, noCredential, agentServerGapError(target.slug)
 	}
 	permit := authClientPermitRequest{
 		OrganizationID: target.organizationID, ProjectID: target.projectID, ServerID: target.serverID,

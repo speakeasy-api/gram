@@ -256,7 +256,8 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	require.Nil(t, row.Outage)
 	require.Equal(t, metamcp.SignInActionRequired, row.Status)
 	require.Equal(t, want, row.Detail)
-	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: row.Status, Detail: row.Detail}}}.Text()
+	require.False(t, row.Reconnect, "a stale choice is not reconnectable")
+	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: row.Status, Detail: row.Detail, Reconnect: row.Reconnect}}}.Text()
 	require.NotContains(t, text, "To sign in")
 	require.NotContains(t, text, "Reconnect this gateway")
 

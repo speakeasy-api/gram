@@ -228,7 +228,7 @@ func TestRouteMetaMemberToken_SelfCredential(t *testing.T) {
 		_, err := routeMetaMemberToken(map[uuid.UUID]remotesessions.UpstreamToken{memberIssuer: self("", remotesessions.ErrClientCredentialMisconfigured)}, remoteMember, "https://a.example.com/mcp")
 		memberErr, ok := errors.AsType[*metaMemberError](err)
 		require.True(t, ok, "error: %v", err)
-		require.Contains(t, memberErr.message, "contact the MCP server administrator")
+		require.Contains(t, memberErr.message, "Ask an admin of the server's project to fix the server's credential")
 	})
 
 	t.Run("self credential for another resource names the administrator", func(t *testing.T) {
@@ -379,7 +379,7 @@ func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 
 	member := metaMember{slug: "m"}
 	err := memberAuthFailure(member, memberDial{anonymous: false, clientCredential: true}, http.StatusUnauthorized)
-	require.Contains(t, err.Error(), "contact the MCP server administrator")
+	require.Contains(t, err.Error(), "Ask an admin of the server's project to fix the server's credential")
 	require.NotContains(t, err.Error(), "reconnect")
 
 	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false}, http.StatusUnauthorized)

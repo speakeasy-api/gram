@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -813,5 +814,78 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		tokens, err := choices.tokens(ctx, members[0])
 		require.NoError(t, err)
 		require.Equal(t, "authorizer-token", tokens[f.issuerID].Token)
+	})
+}
+
+// registrationTokens answers each registration's credential read with its own
+// tokens or error.
+type registrationTokens map[uuid.UUID]struct {
+	tokens map[uuid.UUID]remotesessions.UpstreamToken
+	err    error
+}
+
+func (r registrationTokens) ResolveAuthClientAccessTokens(_ context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return r[req.RegistrationID].tokens, r[req.RegistrationID].err
+}
+
+func (r registrationTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, _ urn.SessionSubject, clientID uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	return r[clientID].tokens, r[clientID].err
+}
+
+// An agent key's member that offers a service account beside a personal
+// client: a service account the agent cannot use is the server's to fix, and
+// a personal client the agent has no connection for does not fail the member
+// the service account serves.
+func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_enforced_agent_key_service_account")
+	require.NoError(t, err)
+
+	seed := func(t *testing.T) (*enforcedCallerFixture, metaGateContext, metaMember, []remotesessions.Client, uuid.UUID) {
+		t.Helper()
+		f := newEnforcedCallerFixture(t, pool)
+		f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+		sharedIssuer, shared := uuid.New(), uuid.New()
+		require.NoError(t, f.q.SeedRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SeedRemoteSessionIssuerFixtureParams{ID: sharedIssuer, ProjectID: validUUID(f.projectID), Slug: "rsi-" + sharedIssuer.String()[:8], Issuer: "https://shared.example.com/" + sharedIssuer.String()[:8], Name: pgtype.Text{String: "Shared", Valid: true}}))
+		require.NoError(t, f.q.SeedRemoteSessionClientFixture(t.Context(), authclientbackfill.SeedRemoteSessionClientFixtureParams{ID: shared, ProjectID: validUUID(f.projectID), OrganizationID: pgtype.Text{String: f.orgID, Valid: true}, RemoteSessionIssuerID: sharedIssuer, ClientID: "svc-" + shared.String()[:8], CredentialOwner: "self", TokenEndpointAuthMethod: pgtype.Text{String: "client_secret_post", Valid: true}}))
+		f.adminClient(authClientTypeServiceAccount, validUUID(shared))
+		gate := testAgentGate(t, nil)
+		gate.organizationID = f.orgID
+		member := metaMember{slug: "maps", name: "Maps", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}
+		clients := []remotesessions.Client{
+			{ID: f.registration, CredentialOwner: remotesessions.CredentialOwnerSubject},
+			{ID: shared, CredentialOwner: remotesessions.CredentialOwnerSelf},
+		}
+		return f, gate, member, clients, shared
+	}
+
+	t.Run("a personal client with no connection does not fail the service account", func(t *testing.T) {
+		t.Parallel()
+		f, gate, member, clients, shared := seed(t)
+		serviceToken := remotesessions.UpstreamToken{Token: "service-token", CredentialOwner: remotesessions.CredentialOwnerSelf, Resource: "https://mcp.example.com"}
+		f.service.upstreamTokens = registrationTokens{shared: {tokens: map[uuid.UUID]remotesessions.UpstreamToken{shared: serviceToken}, err: nil}}
+
+		tokens, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients)
+		require.NoError(t, err, "the service account serves the member")
+		require.Equal(t, "service-token", tokens[shared].Token)
+		require.Error(t, gate.skippedClientFailure, "the personal client's failure is kept for routing")
+		_, reconnect := errors.AsType[agentCredentialError](gate.skippedClientFailure)
+		require.True(t, reconnect)
+	})
+
+	t.Run("a service account the agent cannot use asks an admin of the server's project", func(t *testing.T) {
+		t.Parallel()
+		f, gate, member, clients, shared := seed(t)
+		f.service.upstreamTokens = registrationTokens{shared: {tokens: nil, err: remotesessions.ErrClientCredentialMisconfigured}}
+
+		_, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients[1:])
+		require.ErrorContains(t, err, `server "maps" has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry`)
+		require.NotContains(t, err.Error(), "re-authentication")
+		require.NotContains(t, err.Error(), testAgentSignIn)
+		_, reconnect := errors.AsType[agentCredentialError](err)
+		require.False(t, reconnect, "connection_status must not offer the agent's sign-in step")
+		row := memberFailureSignIn(gate, member, err)
+		require.False(t, row.Reconnect)
 	})
 }

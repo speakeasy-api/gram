@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // agentEditSignInStep is the agent edit wizard's MCP sign-in step (0 Name,
@@ -82,6 +83,80 @@ func (f memberFix) askEditor(action string) string {
 	return fmt.Sprintf("Ask %s to open %s and %s it, then retry", agentEditors, f.url, action)
 }
 
+// memberCallerURL is the page the caller opens to fix member itself. An agent
+// cannot, so on an agent gateway it is empty and its links are never built.
+func (g metaGateContext) memberCallerURL(member metaMember) string {
+	if g.agentOwner != nil {
+		return ""
+	}
+	return g.memberFix(member).callerURL()
+}
+
+// serverCredentialMissing is a member whose credential is configured on the
+// server, such as an API key or a service account, and shared by every
+// caller, with none the caller can use. Signing in does not set it, so an
+// admin of the server's project adds or fixes it.
+func serverCredentialMissing(slug string) *metaMemberError {
+	return &metaMemberError{message: fmt.Sprintf("server %q needs a credential configured for it in Speakeasy, such as an API key or a service account, and has none this agent can use. This agent cannot add one. Ask an admin of the server's project to add or fix the server's credential, then retry", slug)}
+}
+
+// sharedCredentialError is the failure of a member whose resolved
+// credentials include a service account's, which belongs to the server
+// rather than to the agent: why that credential could not be obtained, or
+// that none serves the member. It is nil when every credential is one of the
+// agent's own connections.
+func sharedCredentialError(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken) error {
+	shared := false
+	for _, token := range tokens {
+		if token.CredentialOwner != remotesessions.CredentialOwnerSelf {
+			continue
+		}
+		if token.ClientCredentialErr != nil {
+			return metaMemberClientCredentialError(member, token.ClientCredentialErr)
+		}
+		shared = true
+	}
+	if !shared {
+		return nil
+	}
+	return serverCredentialMissing(member.slug)
+}
+
+// memberOAuthSignIn reports whether the caller connects member through an
+// upstream OAuth sign-in of its own. A person signs in through the server's
+// sign-in. An agent reaches a member only with the credentials its own
+// connections resolved, so a member it holds no such connection for, or
+// only a service account's token, offers nothing the agent's sign-in step
+// connects: its credential, if any, is configured on the server.
+func memberOAuthSignIn(gate metaGateContext, member metaMember, serverSignIn bool, tokens map[uuid.UUID]remotesessions.UpstreamToken) bool {
+	if member.upstreamNoAuth {
+		return false
+	}
+	if gate.agentID == uuid.Nil {
+		return serverSignIn || len(tokens) != 0
+	}
+	for _, token := range tokens {
+		if token.CredentialOwner != remotesessions.CredentialOwnerSelf {
+			return true
+		}
+	}
+	return false
+}
+
+// agentUnroutedError is an agent gateway member none of whose resolved
+// credentials serve it. A client that failed while another stood in for it
+// is the cause; a service account's credential is the server's to fix;
+// otherwise the agent's own connection needs reconnecting.
+func (g metaGateContext) agentUnroutedError(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken) error {
+	if g.skippedClientFailure != nil {
+		return g.skippedClientFailure
+	}
+	if err := sharedCredentialError(member, tokens); err != nil {
+		return err
+	}
+	return g.agentReconnectError(member)
+}
+
 // agentReconnectError is the missing or unusable connection an agent gateway
 // member was refused for: a person reconnects it, so the message says who and
 // where. Without a link it keeps the generic wording.
@@ -94,10 +169,11 @@ func (g metaGateContext) agentReconnectError(member metaMember) error {
 }
 
 // withAgentMemberFix replaces an agent refusal from the shared authorization
-// path with the gateway's own: a missing connection asks for a reconnect, and
-// a refused use, which reconnecting does not change, asks for a permissions
-// review. Any other error, and any gateway that is not an agent's, passes
-// through.
+// path with the gateway's own: a missing connection asks for a reconnect; a
+// refused use, which reconnecting does not change, asks for a permissions
+// review; and a server that offers the agent no auth client asks an admin of
+// the server's project. Any other error, and any gateway that is not an
+// agent's, passes through.
 func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error {
 	if err == nil || g.agentOwner == nil {
 		return err
@@ -105,14 +181,19 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 	if _, ok := errors.AsType[agentCredentialError](err); ok {
 		return g.agentReconnectError(member)
 	}
-	if _, ok := errors.AsType[agentAccessError](err); !ok {
+	access, ok := errors.AsType[agentAccessError](err)
+	if !ok {
 		return err
+	}
+	const refused = "server %q refused this agent: it is not allowed to use a connection to this server, and reconnecting does not change that. "
+	if access.server {
+		return &metaMemberError{message: fmt.Sprintf(refused+"No auth client of the server serves this agent. Ask an admin of the server's project to check the server's auth clients, then retry", member.slug)}
 	}
 	fix := g.memberFix(member)
 	if fix.accessURL == "" {
-		return err
+		return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions in Speakeasy, then retry", member.slug, agentEditors)}
 	}
-	return &metaMemberError{message: fmt.Sprintf("server %q refused this agent: it is not allowed to use a connection to this server, and reconnecting does not change that. Ask %s to review its permissions at %s, then retry", member.slug, agentEditors, fix.accessURL)}
+	return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions at %s, then retry", member.slug, agentEditors, fix.accessURL)}
 }
 
 // agentOwnerReconnect builds an agent gateway's fix links. It reads the agent

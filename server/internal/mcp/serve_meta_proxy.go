@@ -147,7 +147,7 @@ type memberDial struct {
 
 	// oauthSignIn reports that the member signs in through an upstream OAuth
 	// sign-in, which a person connects. Without one, its credential is
-	// configured on the server, or it needs none.
+	// configured on the server, or it needs none. See memberOAuthSignIn.
 	oauthSignIn bool
 
 	// sessionKey fingerprints the route and credential the build sends, so
@@ -210,7 +210,7 @@ func memberAuthFailure(member metaMember, dial memberDial, status int) error {
 	case agent && dial.anonymous && dial.configuredHeaders:
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry", member.slug)}}
 	case agent && dial.anonymous && !dial.oauthSignIn:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires a credential, such as an API key, and none is configured for it in Speakeasy. This agent cannot add one. Ask an admin of the server's project to add the server's credential, then retry", member.slug)}}
+		return memberCredentialError{serverCredentialMissing(member.slug)}
 	case agent && fix.url != "" && dial.anonymous:
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this agent has no connection to it. %s", member.slug, fix.askEditor("connect"))}}
 	// A 403 to a credential the upstream accepted is the upstream account's
@@ -271,7 +271,7 @@ func memberCredentialLoadError(member metaMember, err error) error {
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
 	outage := routed.SessionUnavailable()
 	if outage {
-		routeErr = withMemberConnectLink(routeErr, member, gate.memberFix(member).callerURL())
+		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {
 			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
@@ -385,7 +385,7 @@ func (s *Service) routeMetaMember(
 		// not permission to dial it anonymously. Header/no-auth members have
 		// no token map and retain their existing path.
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
-			return memberDial{}, "remote", gate.agentReconnectError(member)
+			return memberDial{}, "remote", gate.agentUnroutedError(member, tokens)
 		}
 		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, remoteServer.Url, routed, terr)
 		if terr != nil {
@@ -399,7 +399,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: !member.upstreamNoAuth && (serverRow.UserSessionIssuerID.Valid || len(tokens) != 0), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: serverHeadersHaveCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: memberOAuthSignIn(gate, member, serverRow.UserSessionIssuerID.Valid, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: serverHeadersHaveCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -417,7 +417,7 @@ func (s *Service) routeMetaMember(
 		// not permission to dial it anonymously. Header/no-auth members have
 		// no token map and retain their existing path.
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
-			return memberDial{}, "tunneled", gate.agentReconnectError(member)
+			return memberDial{}, "tunneled", gate.agentUnroutedError(member, tokens)
 		}
 		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, member.tunneledResourceIdentifier, routed, terr)
 		if terr != nil {
@@ -426,7 +426,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: !member.upstreamNoAuth && (serverRow.UserSessionIssuerID.Valid || len(tokens) != 0), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: memberOAuthSignIn(gate, member, serverRow.UserSessionIssuerID.Valid, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
