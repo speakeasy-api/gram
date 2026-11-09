@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCreateSessionHandoffLinkConfirmsBeforeFeatureOrContentWork(t *testing.T) {
+func TestCreateSessionHandoffLinkChecksAvailabilityAndFeatureBeforeConfirmation(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_handoff_confirmation")
@@ -18,10 +18,16 @@ func TestCreateSessionHandoffLinkConfirmsBeforeFeatureOrContentWork(t *testing.T
 	svc, _ := newRecallService(t, conn, &enabled)
 	featureReads := 0
 	svc.portability = func(context.Context, string) (bool, error) { featureReads++; return true, nil }
+
+	_, err = svc.CreateSessionHandoffLink(ctx, registrationServicePrincipal(), CreateSessionHandoffLinkInput{SessionID: "ses_missing", Confirmed: false})
+	require.ErrorIs(t, err, errSessionHandoffUnavailable)
+	require.Zero(t, featureReads, "minter availability must precede feature reads")
+
 	svc.WithHandoffMinter(&recordingHandoffMinter{})
 	_, err = svc.CreateSessionHandoffLink(ctx, registrationServicePrincipal(), CreateSessionHandoffLinkInput{SessionID: "ses_missing", Confirmed: false})
 	require.ErrorIs(t, err, errSessionHandoffConfirmationRequired)
-	require.Zero(t, featureReads, "confirmation must precede feature, budget, ownership, and transcript reads")
+	require.Equal(t, 1, featureReads, "feature availability must precede confirmation")
+	// A missing session would return not_found if ownership or content were read.
 }
 
 func TestCreateSessionHandoffLinkUsesCanonicalChatIDAndDefaultTTL(t *testing.T) {
@@ -40,7 +46,7 @@ func TestCreateSessionHandoffLinkUsesCanonicalChatIDAndDefaultTTL(t *testing.T) 
 
 	continued, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
 	require.NoError(t, err)
-	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true})
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true, IdempotencyKey: uuid.NewString()})
 	require.NoError(t, err)
 	require.Len(t, minter.inputs, 1)
 	minted := minter.inputs[0]
@@ -68,13 +74,13 @@ func TestCreateSessionHandoffLinkClampsTTLAndHidesForeignSessions(t *testing.T) 
 	seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, "other-user", foreign, "foreign", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
 
 	low, high := 1, 999999
-	for _, input := range []CreateSessionHandoffLinkInput{{SessionID: owned, Confirmed: true}, {SessionID: owned, Confirmed: true, TTLSeconds: &low}, {SessionID: owned, Confirmed: true, TTLSeconds: &high}} {
+	for _, input := range []CreateSessionHandoffLinkInput{{SessionID: owned, Confirmed: true, IdempotencyKey: uuid.NewString()}, {SessionID: owned, Confirmed: true, TTLSeconds: &low, IdempotencyKey: uuid.NewString()}, {SessionID: owned, Confirmed: true, TTLSeconds: &high, IdempotencyKey: uuid.NewString()}} {
 		_, err := svc.CreateSessionHandoffLink(ctx, principal, input)
 		require.NoError(t, err)
 	}
 	require.Equal(t, []int{900, 60, 3600}, []int{*minter.inputs[0].TTLSeconds, *minter.inputs[1].TTLSeconds, *minter.inputs[2].TTLSeconds})
-	_, foreignErr := svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: foreign, Confirmed: true})
-	_, unknownErr := svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: "ses_" + uuid.NewString(), Confirmed: true})
+	_, foreignErr := svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: foreign, Confirmed: true, IdempotencyKey: uuid.NewString()})
+	_, unknownErr := svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: "ses_" + uuid.NewString(), Confirmed: true, IdempotencyKey: uuid.NewString()})
 	require.ErrorIs(t, foreignErr, errSessionNotFound)
 	require.ErrorIs(t, unknownErr, errSessionNotFound)
 	require.Equal(t, foreignErr.Error(), unknownErr.Error())

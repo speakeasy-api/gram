@@ -74,6 +74,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -194,6 +195,8 @@ type Activities struct {
 	mcpResearch                      *activities.McpResearch
 	mcpApprovalRecheck               *activities.McpApprovalRecheck
 	billingNotifications             *billingnotifications.Service
+	sessionHandoffCleaner            *sessionhandoff.ExpiredUnreadCleaner
+	sessionHandoffIntentCleaner      *sessionhandoff.UploadIntentCleaner
 }
 
 func NewActivities(
@@ -398,6 +401,8 @@ func NewActivities(
 	return &Activities{
 		db:                               db,
 		temporalEnv:                      temporalEnv,
+		sessionHandoffCleaner:            sessionhandoff.NewExpiredUnreadCleaner(sessionhandoff.NewPgxExpiredUnreadRepository(db), assetStorage),
+		sessionHandoffIntentCleaner:      sessionhandoff.NewUploadIntentCleaner(sessionhandoff.NewPgxUploadIntentRepository(db), assetStorage),
 		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
 		collectOpenRouterDailySpend:      activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
 		settleStripeInvoiceAllocations:   activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),

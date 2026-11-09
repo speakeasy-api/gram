@@ -140,10 +140,18 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 // desired state. The precondition also flips the SDK's default
 // RetryIdempotent policy on for this Writer, so transient errors retry
 // automatically.
-func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
+func (gbs *GCSBlobStore) Location(subpath string) (*url.URL, error) {
 	uri, err := gbs.getBucketURI(subpath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("generate asset path: %w", err)
+		return nil, fmt.Errorf("generate asset path: %w", err)
+	}
+	return uri, nil
+}
+
+func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
+	uri, err := gbs.Location(subpath)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	obj := gbs.bucket.Object(strings.TrimPrefix(uri.Path, "/")).If(storage.Conditions{

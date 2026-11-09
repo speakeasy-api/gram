@@ -847,7 +847,7 @@ WHERE organization_id = @organization_id
 -- name: GetSessionHandoffLinkFixture :one
 -- Test-only inspection of a minted session-handoff link, so tests can assert a
 -- consumed link keeps its burn bookkeeping without keeping the blob pointer.
-SELECT blob_url, consumed_at, session_id
+SELECT blob_url, consumed_at, session_id, blob_cleanup_attempted_at
 FROM session_handoff_links
 WHERE token = @token;
 
@@ -2643,3 +2643,70 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: ExpireSessionHandoffLinkFixture :exec
+UPDATE session_handoff_links
+SET expires_at = @expires_at
+WHERE token = @token AND project_id = sqlc.arg(project_id)::uuid;
+
+-- name: AgeSessionHandoffConsumerClaimFixture :exec
+UPDATE session_handoff_links
+SET blob_cleanup_attempted_at = @attempted_at
+WHERE token = @token AND project_id = sqlc.arg(project_id)::uuid
+  AND blob_cleanup_state = 'consumer_claimed';
+
+-- name: HardDeleteProjectFixture :exec
+DELETE FROM projects
+WHERE id = @project_id;
+
+-- name: HardDeleteOrganizationMetadataFixture :exec
+WITH owned AS (
+  SELECT 1 FROM projects p
+  WHERE p.id = @project_id AND p.organization_id = @organization_id
+), relationships AS (
+  DELETE FROM organization_user_relationships r
+  USING owned
+  WHERE r.organization_id = @organization_id
+)
+DELETE FROM organization_metadata o
+USING owned
+WHERE o.id = @organization_id;
+
+-- name: AgeSessionHandoffUploadRegistryFixture :exec
+UPDATE session_handoff_upload_intents
+SET created_at = @created_at
+WHERE project_id = @project_id AND blob_url = @blob_url;
+
+-- name: InsertLegacySessionHandoffLinkFixture :exec
+-- Simulates an old replica whose INSERT predates optional idempotency and cleanup columns.
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url,
+  created_by_email, expires_at
+) VALUES (
+  sqlc.arg(project_id)::uuid, @organization_id, @session_id, @token, @blob_url,
+  @created_by_email, clock_timestamp() + interval '5 minutes'
+);
+
+-- name: GetSessionHandoffUploadRegistryFixture :one
+SELECT project_id, organization_id, actor_user_id, object_path, blob_url, state
+FROM session_handoff_upload_intents
+WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url;
+
+-- name: DeleteSessionHandoffUploadRegistryFixture :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url;
+
+-- name: BackfillSessionHandoffUploadRegistryFixture :exec
+-- Project-scoped equivalent of the migration backfill for compatibility tests.
+INSERT INTO session_handoff_upload_intents (
+  project_id, organization_id, actor_user_id, object_path, blob_url, state
+)
+SELECT l.project_id, l.organization_id, NULL, '', l.blob_url, 'linked'
+FROM session_handoff_links l
+WHERE l.project_id = sqlc.arg(project_id)::uuid AND l.blob_url <> ''
+ON CONFLICT (blob_url) WHERE blob_url <> '' DO UPDATE
+SET project_id = EXCLUDED.project_id,
+    organization_id = EXCLUDED.organization_id,
+    state = 'linked',
+    last_error = NULL,
+    updated_at = clock_timestamp();

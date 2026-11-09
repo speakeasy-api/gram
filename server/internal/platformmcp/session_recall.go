@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
@@ -103,6 +104,7 @@ type SessionRecallService struct {
 type SessionHandoffMinter interface {
 	Valid() bool
 	Mint(context.Context, sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error)
+	Replay(context.Context, string, string, string, string, string) (sessionhandoff.SessionHandoffMintResult, error)
 }
 
 // NewSessionRecallService composes recall. A nil findings reader leaves recall
@@ -137,21 +139,77 @@ func (s *SessionRecallService) valid() bool {
 	return s != nil && s.logger != nil && s.db != nil && s.repo != nil && s.auditor != nil && s.portability != nil && s.findings != nil && s.budget.valid()
 }
 
+const (
+	capturedSessionFallback   = "Captured coding session"
+	chooserTitleByteCap       = 160
+	chooserMetadataByteCap    = 96
+	chooserDescriptionByteCap = 320
+)
+
+// safeChooserText turns database metadata into bounded display-only text. It
+// repairs invalid UTF-8, removes controls (including C1) and Unicode format
+// controls such as bidi overrides, collapses whitespace, and truncates only at
+// rune boundaries.
+func safeChooserText(value string, maxBytes int, fallback string) string {
+	value = strings.ToValidUTF8(value, string(utf8.RuneError))
+	var b strings.Builder
+	pendingSpace := false
+	for _, r := range value {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
+			continue
+		}
+		if unicode.IsSpace(r) {
+			pendingSpace = b.Len() > 0
+			continue
+		}
+		if pendingSpace {
+			b.WriteByte(' ')
+			pendingSpace = false
+		}
+		b.WriteRune(r)
+	}
+	clean := b.String()
+	if len(clean) > maxBytes {
+		clean = clean[:maxBytes]
+		for !utf8.ValidString(clean) {
+			clean = clean[:len(clean)-1]
+		}
+		clean = strings.TrimSpace(clean)
+	}
+	if clean == "" {
+		return fallback
+	}
+	return clean
+}
+
+func chooserDescription(project, lastActive string) string {
+	description := "Last active " + lastActive
+	if project != "" {
+		description = "Project " + project + " | " + description
+	}
+	return safeChooserText(description, chooserDescriptionByteCap, capturedSessionFallback)
+}
+
 type ListMySessionsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"maximum sessions to return for a numbered chooser; server clamps to 100; show session_id and title, compose description only from project_name/project_slug and last_active with a generic fallback, and ignore raw summary because it may be transcript-derived"`
+	Limit int `json:"limit,omitempty" jsonschema:"maximum sessions to return for a numbered chooser; server clamps to 100; display only session_id, display_title, and display_description; canonical display fields are sanitized and bounded by the server"`
 }
 
 // RecallableSession is one captured session the caller owns — metadata only,
 // never transcript content.
 type RecallableSession struct {
-	SessionID   string `json:"session_id"`
-	ChatID      string `json:"chat_id"`
+	SessionID          string `json:"session_id"`
+	DisplayTitle       string `json:"display_title"`
+	DisplayDescription string `json:"display_description"`
+	LastActive         string `json:"last_active"`
+
+	// Legacy metadata remains for older clients, but is sanitized and bounded.
+	// Transcript-derived summary and local cwd are never populated.
+	ChatID      string `json:"chat_id,omitempty"`
 	Title       string `json:"title,omitempty"`
-	Summary     string `json:"summary,omitempty"`
-	ProjectName string `json:"project_name"`
-	ProjectSlug string `json:"project_slug"`
-	Cwd         string `json:"cwd,omitempty"`
-	LastActive  string `json:"last_active"`
+	Summary     string `json:"-"`
+	ProjectName string `json:"project_name,omitempty"`
+	ProjectSlug string `json:"project_slug,omitempty"`
+	Cwd         string `json:"-"`
 }
 
 type ListMySessionsOutput struct {
@@ -163,9 +221,10 @@ type ContinueSessionInput struct {
 }
 
 type CreateSessionHandoffLinkInput struct {
-	SessionID  string `json:"session_id" jsonschema:"the exact session_id the user selected from a displayed list_my_sessions numbered chooser; never ask the user to remember or type it from memory"`
-	TTLSeconds *int   `json:"ttl_seconds,omitempty" jsonschema:"exact link lifetime the user chose or confirmed, in seconds; defaults to 900 and is clamped to 60..3600; display the exact clamped lifetime before confirmation"`
-	Confirmed  bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the exact displayed session title/session_id and exact clamped lifetime; a general request to share is not confirmation"`
+	SessionID      string `json:"session_id" jsonschema:"the exact session_id the user selected from a displayed list_my_sessions numbered chooser; never ask the user to remember or type it from memory"`
+	TTLSeconds     *int   `json:"ttl_seconds,omitempty" jsonschema:"exact link lifetime the user chose or confirmed, in seconds; defaults to 900 and is clamped to 60..3600; display the exact clamped lifetime before confirmation"`
+	Confirmed      bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the exact displayed session title/session_id and exact clamped lifetime; a general request to share is not confirmation"`
+	IdempotencyKey string `json:"idempotency_key" jsonschema:"required retry key generated once after exact confirmation; trim it and reuse it only when retrying this identical session and effective TTL; 1..128 bytes"`
 }
 
 type CreateSessionHandoffLinkOutput struct {
@@ -201,16 +260,25 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	}
 	sessions := make([]RecallableSession, 0, len(rows))
 	for _, row := range rows {
+		title := safeChooserText(chatDisplayTitle(row.Title, row.TitleManuallySet), chooserTitleByteCap, capturedSessionFallback)
+		projectName := safeChooserText(row.ProjectName, chooserMetadataByteCap, "")
+		projectSlug := safeChooserText(row.ProjectSlug, chooserMetadataByteCap, "")
+		lastActive := row.UpdatedAt.Time.UTC().Format(time.RFC3339)
+		project := projectName
+		if project == "" {
+			project = projectSlug
+		}
 		sessions = append(sessions, RecallableSession{
-			SessionID: sessionIDForChat(row.ExternalChatID, row.ID),
-			ChatID:    row.ID.String(),
-			Title:     chatDisplayTitle(row.Title, row.TitleManuallySet),
-			// Stored summaries can be transcript-derived and are deliberately not exposed.
-			Summary:     "",
-			ProjectName: row.ProjectName,
-			ProjectSlug: row.ProjectSlug,
-			Cwd:         conv.FromPGTextOrEmpty[string](row.Cwd),
-			LastActive:  row.UpdatedAt.Time.UTC().Format(time.RFC3339),
+			SessionID:          sessionIDForChat(row.ExternalChatID, row.ID),
+			DisplayTitle:       title,
+			DisplayDescription: chooserDescription(project, lastActive),
+			LastActive:         lastActive,
+			ChatID:             row.ID.String(),
+			Title:              title,
+			Summary:            "",
+			ProjectName:        projectName,
+			ProjectSlug:        projectSlug,
+			Cwd:                "",
 		})
 	}
 	return ListMySessionsOutput{Sessions: sessions}, nil
@@ -364,15 +432,28 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 
 func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, principal Principal, input CreateSessionHandoffLinkInput) (CreateSessionHandoffLinkOutput, error) {
 	var empty CreateSessionHandoffLinkOutput
-	if !input.Confirmed {
-		ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
-		return empty, &sessionHandoffConfirmationError{ttlSeconds: ttlSeconds}
-	}
 	if !s.valid() || s.handoffMinter == nil || !s.handoffMinter.Valid() {
 		return empty, errSessionHandoffUnavailable
 	}
 	if err := s.requirePortability(ctx, principal); err != nil {
 		return empty, err
+	}
+	if !input.Confirmed {
+		ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
+		return empty, &sessionHandoffConfirmationError{ttlSeconds: ttlSeconds}
+	}
+	idempotencyKey := strings.TrimSpace(input.IdempotencyKey)
+	if idempotencyKey == "" || len(idempotencyKey) > sessionhandoff.MaxIdempotencyKeyBytes {
+		return empty, oops.E(oops.CodeBadRequest, nil, "idempotency_key must be 1..128 bytes after trimming")
+	}
+	ttl := sessionhandoff.ClampHandoffTTL(input.TTLSeconds)
+	inputHash := sessionhandoff.PlatformIdempotencyInputHash(input.SessionID, ttl)
+	replayed, replayErr := s.handoffMinter.Replay(ctx, principal.OrganizationID, principal.UserID, "platform_create", idempotencyKey, inputHash)
+	if replayErr == nil {
+		return CreateSessionHandoffLinkOutput{URL: replayed.URL, ExpiresAt: replayed.ExpiresAt}, nil
+	}
+	if !errors.Is(replayErr, pgx.ErrNoRows) {
+		return empty, fmt.Errorf("replay session handoff: %w", replayErr)
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return empty, err
@@ -381,12 +462,15 @@ func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, pri
 	if err != nil {
 		return empty, err
 	}
-	ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
+	ttlSeconds := int(ttl / time.Second)
 	result, err := s.handoffMinter.Mint(ctx, sessionhandoff.SessionHandoffMintInput{
 		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID, UserID: principal.UserID,
 		ChatID: rendered.chatID, SessionID: rendered.sourceSessionID, ChatTitle: chatDisplayTitle(rendered.row.Title, rendered.row.TitleManuallySet),
 		Content: rendered.digest, TTLSeconds: &ttlSeconds, SourceSurface: string(principal.surface()),
 		ActorEmail: nil, DeviceSerial: "", DeviceHostname: "",
+		IdempotencyOperation: "platform_create",
+		IdempotencyKey:       idempotencyKey,
+		IdempotencyInputHash: inputHash,
 	})
 	if err != nil {
 		return empty, fmt.Errorf("mint session handoff: %w", err)

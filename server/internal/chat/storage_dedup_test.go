@@ -62,6 +62,14 @@ func (c *countingBlobStore) ReadAt(ctx context.Context, u *url.URL) (assets.Read
 	return r, n, nil
 }
 
+func (c *countingBlobStore) Location(p string) (*url.URL, error) {
+	u, err := c.inner.Location(p)
+	if err != nil {
+		return nil, fmt.Errorf("countingBlobStore location: %w", err)
+	}
+	return u, nil
+}
+
 func (c *countingBlobStore) Write(ctx context.Context, p string, ct string, cl int64) (io.WriteCloser, *url.URL, error) {
 	c.mu.Lock()
 	c.writes++

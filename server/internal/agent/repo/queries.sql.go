@@ -42,41 +42,146 @@ func (q *Queries) AcquireDeviceAgentConfigurationLock(ctx context.Context, organ
 	return err
 }
 
-const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
-UPDATE session_handoff_links s
-SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
-FROM (
-  SELECT l.id, l.blob_url
-  FROM session_handoff_links l
-  JOIN projects p ON p.id = l.project_id
-  WHERE l.token = $1
-    AND l.consumed_at IS NULL
-    AND l.expires_at > clock_timestamp()
-    AND p.deleted IS FALSE
-    AND p.organization_id = l.organization_id
-  FOR UPDATE OF l
-) claimed
-WHERE s.id = claimed.id
-RETURNING claimed.blob_url
+const claimExpiredUnreadSessionHandoffLink = `-- name: ClaimExpiredUnreadSessionHandoffLink :one
+UPDATE session_handoff_links
+SET blob_cleanup_state = 'cleaner_claimed', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2::uuid AND blob_url = $3
+  AND expires_at = $4
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= $5)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+RETURNING id, $2::uuid AS project_id, blob_url, expires_at
 `
 
-// Atomically claim a link on read: exactly one caller can flip consumed_at,
-// so a raced second fetch loses and gets no rows — burn-after-read without a
-// separate lock. Expired, already-consumed, and links whose project has since
-// been soft-deleted all return no rows; callers must serve every case as an
-// indistinguishable 404.
-//
-// The claim returns the blob URL and blanks the stored pointer in the same
-// statement; the caller reads the document from object storage and deletes
-// the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
-// from the subquery because the outer UPDATE's own RETURNING would hand back
-// the blanked value. The join also pins l.organization_id to the project's
-// real owner as a fail-closed consistency guard.
-func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (string, error) {
+type ClaimExpiredUnreadSessionHandoffLinkParams struct {
+	ID                  uuid.UUID
+	ProjectID           uuid.UUID
+	BlobUrl             string
+	ExpiresAt           pgtype.Timestamptz
+	ConsumerLeaseBefore pgtype.Timestamptz
+}
+
+type ClaimExpiredUnreadSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) ClaimExpiredUnreadSessionHandoffLink(ctx context.Context, arg ClaimExpiredUnreadSessionHandoffLinkParams) (ClaimExpiredUnreadSessionHandoffLinkRow, error) {
+	row := q.db.QueryRow(ctx, claimExpiredUnreadSessionHandoffLink,
+		arg.ID,
+		arg.ProjectID,
+		arg.BlobUrl,
+		arg.ExpiresAt,
+		arg.ConsumerLeaseBefore,
+	)
+	var i ClaimExpiredUnreadSessionHandoffLinkRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.BlobUrl,
+		&i.ExpiresAt,
+	)
+	return i, err
+}
+
+const claimStaleSessionHandoffUploadIntent = `-- name: ClaimStaleSessionHandoffUploadIntent :one
+UPDATE session_handoff_upload_intents
+SET state = 'cleaning', updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2::uuid AND created_at <= $3
+  AND state IN ('pending', 'cleaning', 'linked')
+RETURNING id, project_id, blob_url, created_at
+`
+
+type ClaimStaleSessionHandoffUploadIntentParams struct {
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+	StaleBefore pgtype.Timestamptz
+}
+
+type ClaimStaleSessionHandoffUploadIntentRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ClaimStaleSessionHandoffUploadIntent(ctx context.Context, arg ClaimStaleSessionHandoffUploadIntentParams) (ClaimStaleSessionHandoffUploadIntentRow, error) {
+	row := q.db.QueryRow(ctx, claimStaleSessionHandoffUploadIntent, arg.ID, arg.ProjectID, arg.StaleBefore)
+	var i ClaimStaleSessionHandoffUploadIntentRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.BlobUrl,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const consumeSessionHandoffLink = `-- name: ConsumeSessionHandoffLink :one
+UPDATE session_handoff_links l
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(),
+    blob_cleanup_state = 'consumer_claimed', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp()
+FROM projects p
+WHERE l.token = $1
+  AND l.consumed_at IS NULL
+  AND l.expires_at > clock_timestamp()
+  AND l.blob_cleanup_state = 'available'
+  AND p.id = l.project_id
+  AND p.deleted IS FALSE
+  AND p.organization_id = l.organization_id
+RETURNING l.id, p.id AS project_id, l.blob_url
+`
+
+type ConsumeSessionHandoffLinkRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) ConsumeSessionHandoffLink(ctx context.Context, token string) (ConsumeSessionHandoffLinkRow, error) {
 	row := q.db.QueryRow(ctx, consumeSessionHandoffLink, token)
-	var blob_url string
-	err := row.Scan(&blob_url)
-	return blob_url, err
+	var i ConsumeSessionHandoffLinkRow
+	err := row.Scan(&i.ID, &i.ProjectID, &i.BlobUrl)
+	return i, err
+}
+
+const createSessionHandoffUploadIntent = `-- name: CreateSessionHandoffUploadIntent :one
+INSERT INTO session_handoff_upload_intents (
+  project_id, organization_id, actor_user_id, object_path, blob_url
+)
+SELECT p.id, p.organization_id, $1::text, $2, $3
+FROM projects p
+WHERE p.id = $4 AND p.organization_id = $5 AND p.deleted IS FALSE
+  AND $1::text <> ''
+RETURNING id
+`
+
+type CreateSessionHandoffUploadIntentParams struct {
+	ActorUserID    string
+	ObjectPath     string
+	BlobUrl        string
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CreateSessionHandoffUploadIntent(ctx context.Context, arg CreateSessionHandoffUploadIntentParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createSessionHandoffUploadIntent,
+		arg.ActorUserID,
+		arg.ObjectPath,
+		arg.BlobUrl,
+		arg.ProjectID,
+		arg.OrganizationID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const deleteAIScanTarget = `-- name: DeleteAIScanTarget :one
@@ -116,6 +221,42 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	return i, err
 }
 
+const deleteSessionHandoffUploadRegistry = `-- name: DeleteSessionHandoffUploadRegistry :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE id = $1 AND project_id = $2
+`
+
+type DeleteSessionHandoffUploadRegistryParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) DeleteSessionHandoffUploadRegistry(ctx context.Context, arg DeleteSessionHandoffUploadRegistryParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionHandoffUploadRegistry, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteSessionHandoffUploadRegistryByBlob = `-- name: DeleteSessionHandoffUploadRegistryByBlob :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE project_id = $1 AND blob_url = $2
+`
+
+type DeleteSessionHandoffUploadRegistryByBlobParams struct {
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) DeleteSessionHandoffUploadRegistryByBlob(ctx context.Context, arg DeleteSessionHandoffUploadRegistryByBlobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionHandoffUploadRegistryByBlob, arg.ProjectID, arg.BlobUrl)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deviceAgentStateReportExists = `-- name: DeviceAgentStateReportExists :one
 SELECT EXISTS (
   SELECT 1
@@ -143,6 +284,57 @@ func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAg
 	var found bool
 	err := row.Scan(&found)
 	return found, err
+}
+
+const finalizeConsumedSessionHandoffBlob = `-- name: FinalizeConsumedSessionHandoffBlob :execrows
+UPDATE session_handoff_links
+SET blob_url = '', blob_cleanup_state = 'deleted', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2::uuid AND blob_url = $3
+  AND blob_cleanup_state = 'consumer_claimed'
+`
+
+type FinalizeConsumedSessionHandoffBlobParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) FinalizeConsumedSessionHandoffBlob(ctx context.Context, arg FinalizeConsumedSessionHandoffBlobParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeConsumedSessionHandoffBlob, arg.ID, arg.ProjectID, arg.BlobUrl)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const finalizeExpiredUnreadSessionHandoffLink = `-- name: FinalizeExpiredUnreadSessionHandoffLink :execrows
+UPDATE session_handoff_links
+SET blob_url = '', blob_cleanup_state = 'deleted', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2::uuid AND blob_url = $3
+  AND expires_at = $4
+  AND blob_cleanup_state = 'cleaner_claimed'
+`
+
+type FinalizeExpiredUnreadSessionHandoffLinkParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+	ExpiresAt pgtype.Timestamptz
+}
+
+func (q *Queries) FinalizeExpiredUnreadSessionHandoffLink(ctx context.Context, arg FinalizeExpiredUnreadSessionHandoffLinkParams) (int64, error) {
+	result, err := q.db.Exec(ctx, finalizeExpiredUnreadSessionHandoffLink,
+		arg.ID,
+		arg.ProjectID,
+		arg.BlobUrl,
+		arg.ExpiresAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
@@ -438,6 +630,51 @@ func (q *Queries) GetDeviceAgentConfigurationForUpdate(ctx context.Context, orga
 	return i, err
 }
 
+const getSessionHandoffLinkByIdempotencyKey = `-- name: GetSessionHandoffLinkByIdempotencyKey :one
+SELECT token, expires_at, idempotency_input_hash, actor_user_id, created_by_email
+FROM session_handoff_links
+WHERE organization_id = $1
+  AND actor_user_id = $2
+  AND idempotency_operation = $3
+  AND idempotency_key = $4
+  AND ($3 = 'platform_create' OR project_id = $5::uuid)
+`
+
+type GetSessionHandoffLinkByIdempotencyKeyParams struct {
+	OrganizationID       string
+	ActorUserID          pgtype.Text
+	IdempotencyOperation pgtype.Text
+	IdempotencyKey       pgtype.Text
+	ProjectID            uuid.UUID
+}
+
+type GetSessionHandoffLinkByIdempotencyKeyRow struct {
+	Token                string
+	ExpiresAt            pgtype.Timestamptz
+	IdempotencyInputHash pgtype.Text
+	ActorUserID          pgtype.Text
+	CreatedByEmail       string
+}
+
+func (q *Queries) GetSessionHandoffLinkByIdempotencyKey(ctx context.Context, arg GetSessionHandoffLinkByIdempotencyKeyParams) (GetSessionHandoffLinkByIdempotencyKeyRow, error) {
+	row := q.db.QueryRow(ctx, getSessionHandoffLinkByIdempotencyKey,
+		arg.OrganizationID,
+		arg.ActorUserID,
+		arg.IdempotencyOperation,
+		arg.IdempotencyKey,
+		arg.ProjectID,
+	)
+	var i GetSessionHandoffLinkByIdempotencyKeyRow
+	err := row.Scan(
+		&i.Token,
+		&i.ExpiresAt,
+		&i.IdempotencyInputHash,
+		&i.ActorUserID,
+		&i.CreatedByEmail,
+	)
+	return i, err
+}
+
 const insertChatSessionLink = `-- name: InsertChatSessionLink :exec
 INSERT INTO chat_session_links (
   project_id, organization_id, parent_chat_id, child_chat_id,
@@ -490,48 +727,68 @@ func (q *Queries) InsertChatSessionLink(ctx context.Context, arg InsertChatSessi
 
 const insertSessionHandoffLink = `-- name: InsertSessionHandoffLink :one
 INSERT INTO session_handoff_links (
-  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
+  project_id, organization_id, session_id, token, blob_url, actor_user_id,
+  created_by_email, idempotency_operation, idempotency_key,
+  idempotency_input_hash, expires_at
 )
-SELECT p.id, p.organization_id, $1, $2, $3, $4, $5
+SELECT p.id, p.organization_id, $1, $2, $3, $4,
+  $5, $6,
+  $7, $8, $9
 FROM projects p
-WHERE p.id = $6
-  AND p.organization_id = $7
+JOIN session_handoff_upload_intents i
+  ON i.id = $10 AND i.project_id = p.id AND i.state = 'pending'
+WHERE p.id = $11
+  AND p.organization_id = $12
   AND p.deleted IS FALSE
-RETURNING id, expires_at
+FOR SHARE OF i
+ON CONFLICT DO NOTHING
+RETURNING id, token, expires_at, idempotency_input_hash
 `
 
 type InsertSessionHandoffLinkParams struct {
-	SessionID      string
-	Token          string
-	BlobUrl        string
-	CreatedByEmail string
-	ExpiresAt      pgtype.Timestamptz
-	ProjectID      uuid.UUID
-	OrganizationID string
+	SessionID            string
+	Token                string
+	BlobUrl              string
+	ActorUserID          pgtype.Text
+	CreatedByEmail       string
+	IdempotencyOperation pgtype.Text
+	IdempotencyKey       pgtype.Text
+	IdempotencyInputHash pgtype.Text
+	ExpiresAt            pgtype.Timestamptz
+	UploadIntentID       uuid.UUID
+	ProjectID            uuid.UUID
+	OrganizationID       string
 }
 
 type InsertSessionHandoffLinkRow struct {
-	ID        uuid.UUID
-	ExpiresAt pgtype.Timestamptz
+	ID                   uuid.UUID
+	Token                string
+	ExpiresAt            pgtype.Timestamptz
+	IdempotencyInputHash pgtype.Text
 }
 
-// Mint a session-handoff capability link. The token is the capability; TTL
-// and burn-after-read (consumed_at) bound a leaked link's exposure window.
-// Minting goes through the tenant-qualified project so a caller whose project
-// and organization disagree, or whose project is soft-deleted, gets no row
-// rather than a live capability URL.
 func (q *Queries) InsertSessionHandoffLink(ctx context.Context, arg InsertSessionHandoffLinkParams) (InsertSessionHandoffLinkRow, error) {
 	row := q.db.QueryRow(ctx, insertSessionHandoffLink,
 		arg.SessionID,
 		arg.Token,
 		arg.BlobUrl,
+		arg.ActorUserID,
 		arg.CreatedByEmail,
+		arg.IdempotencyOperation,
+		arg.IdempotencyKey,
+		arg.IdempotencyInputHash,
 		arg.ExpiresAt,
+		arg.UploadIntentID,
 		arg.ProjectID,
 		arg.OrganizationID,
 	)
 	var i InsertSessionHandoffLinkRow
-	err := row.Scan(&i.ID, &i.ExpiresAt)
+	err := row.Scan(
+		&i.ID,
+		&i.Token,
+		&i.ExpiresAt,
+		&i.IdempotencyInputHash,
+	)
 	return i, err
 }
 
@@ -766,6 +1023,70 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 	return items, nil
 }
 
+const listExpiredUnreadSessionHandoffLinks = `-- name: ListExpiredUnreadSessionHandoffLinks :many
+SELECT id, project_id, blob_url, expires_at, blob_cleanup_state
+FROM session_handoff_links
+WHERE project_id IS NOT NULL
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= $1)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+  AND (
+    $2::timestamptz IS NULL
+    OR (expires_at, id) > ($2::timestamptz, $3::uuid)
+  )
+ORDER BY expires_at, id
+LIMIT $4
+`
+
+type ListExpiredUnreadSessionHandoffLinksParams struct {
+	ConsumerLeaseBefore pgtype.Timestamptz
+	AfterExpiresAt      pgtype.Timestamptz
+	AfterID             uuid.UUID
+	BatchSize           int32
+}
+
+type ListExpiredUnreadSessionHandoffLinksRow struct {
+	ID               uuid.UUID
+	ProjectID        uuid.NullUUID
+	BlobUrl          string
+	ExpiresAt        pgtype.Timestamptz
+	BlobCleanupState string
+}
+
+func (q *Queries) ListExpiredUnreadSessionHandoffLinks(ctx context.Context, arg ListExpiredUnreadSessionHandoffLinksParams) ([]ListExpiredUnreadSessionHandoffLinksRow, error) {
+	rows, err := q.db.Query(ctx, listExpiredUnreadSessionHandoffLinks,
+		arg.ConsumerLeaseBefore,
+		arg.AfterExpiresAt,
+		arg.AfterID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListExpiredUnreadSessionHandoffLinksRow
+	for rows.Next() {
+		var i ListExpiredUnreadSessionHandoffLinksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.BlobUrl,
+			&i.ExpiresAt,
+			&i.BlobCleanupState,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOwnedChatSessionMeta = `-- name: ListOwnedChatSessionMeta :many
 SELECT c.id, c.title, c.updated_at
 FROM chats c
@@ -822,6 +1143,111 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 	return items, nil
 }
 
+const listStaleSessionHandoffUploadIntents = `-- name: ListStaleSessionHandoffUploadIntents :many
+SELECT id, project_id, blob_url, created_at
+FROM session_handoff_upload_intents
+WHERE created_at <= $1
+  AND state IN ('pending', 'cleaning', 'linked')
+  AND (
+    $2::timestamptz IS NULL
+    OR (created_at, id) > ($2::timestamptz, $3::uuid)
+  )
+ORDER BY created_at, id
+LIMIT $4
+`
+
+type ListStaleSessionHandoffUploadIntentsParams struct {
+	StaleBefore    pgtype.Timestamptz
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        uuid.UUID
+	BatchSize      int32
+}
+
+type ListStaleSessionHandoffUploadIntentsRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	BlobUrl   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ListStaleSessionHandoffUploadIntents(ctx context.Context, arg ListStaleSessionHandoffUploadIntentsParams) ([]ListStaleSessionHandoffUploadIntentsRow, error) {
+	rows, err := q.db.Query(ctx, listStaleSessionHandoffUploadIntents,
+		arg.StaleBefore,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.BatchSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListStaleSessionHandoffUploadIntentsRow
+	for rows.Next() {
+		var i ListStaleSessionHandoffUploadIntentsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.BlobUrl,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const quarantineSessionHandoffBlobCleanup = `-- name: QuarantineSessionHandoffBlobCleanup :execrows
+UPDATE session_handoff_links
+SET blob_cleanup_state = 'quarantined', blob_cleanup_error = $1,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3::uuid AND blob_url = $4
+  AND blob_cleanup_state = 'cleaner_claimed'
+`
+
+type QuarantineSessionHandoffBlobCleanupParams struct {
+	BlobCleanupError pgtype.Text
+	ID               uuid.UUID
+	ProjectID        uuid.UUID
+	BlobUrl          string
+}
+
+func (q *Queries) QuarantineSessionHandoffBlobCleanup(ctx context.Context, arg QuarantineSessionHandoffBlobCleanupParams) (int64, error) {
+	result, err := q.db.Exec(ctx, quarantineSessionHandoffBlobCleanup,
+		arg.BlobCleanupError,
+		arg.ID,
+		arg.ProjectID,
+		arg.BlobUrl,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const quarantineSessionHandoffUploadIntent = `-- name: QuarantineSessionHandoffUploadIntent :execrows
+UPDATE session_handoff_upload_intents
+SET state = 'quarantined', last_error = $1, updated_at = clock_timestamp()
+WHERE id = $2 AND project_id = $3 AND state = 'cleaning'
+`
+
+type QuarantineSessionHandoffUploadIntentParams struct {
+	LastError pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) QuarantineSessionHandoffUploadIntent(ctx context.Context, arg QuarantineSessionHandoffUploadIntentParams) (int64, error) {
+	result, err := q.db.Exec(ctx, quarantineSessionHandoffUploadIntent, arg.LastError, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const recordDeviceAgentServedEtag = `-- name: RecordDeviceAgentServedEtag :exec
 UPDATE device_agent_syncs
 SET served_etag            = $1
@@ -846,6 +1272,44 @@ type RecordDeviceAgentServedEtagParams struct {
 func (q *Queries) RecordDeviceAgentServedEtag(ctx context.Context, arg RecordDeviceAgentServedEtagParams) error {
 	_, err := q.db.Exec(ctx, recordDeviceAgentServedEtag, arg.ServedEtag, arg.OrganizationID, arg.Email)
 	return err
+}
+
+const restoreSessionHandoffUploadRegistryLinked = `-- name: RestoreSessionHandoffUploadRegistryLinked :execrows
+UPDATE session_handoff_upload_intents
+SET state = 'linked', last_error = NULL, updated_at = clock_timestamp()
+WHERE id = $1 AND project_id = $2::uuid AND state = 'cleaning'
+`
+
+type RestoreSessionHandoffUploadRegistryLinkedParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) RestoreSessionHandoffUploadRegistryLinked(ctx context.Context, arg RestoreSessionHandoffUploadRegistryLinkedParams) (int64, error) {
+	result, err := q.db.Exec(ctx, restoreSessionHandoffUploadRegistryLinked, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const sessionHandoffBlobIsReferenced = `-- name: SessionHandoffBlobIsReferenced :one
+SELECT EXISTS (
+  SELECT 1 FROM session_handoff_links
+  WHERE project_id = $1::uuid AND blob_url = $2
+)
+`
+
+type SessionHandoffBlobIsReferencedParams struct {
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) SessionHandoffBlobIsReferenced(ctx context.Context, arg SessionHandoffBlobIsReferencedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, sessionHandoffBlobIsReferenced, arg.ProjectID, arg.BlobUrl)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const setAIScanTargetStatus = `-- name: SetAIScanTargetStatus :one

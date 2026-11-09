@@ -14320,7 +14320,7 @@ func agentCreateSessionHandoffUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent create-session-handoff --body '{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent create-session-handoff --body '{\n      \"content\": \"aaa\",\n      \"idempotency_key\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }' --apikey-token \"abc123\" --serial-number \"abc123\" --hostname \"abc123\"")
 }
 
 // agentsUsage displays the usage of the agents command and its subcommands.

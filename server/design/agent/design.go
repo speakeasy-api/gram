@@ -636,6 +636,9 @@ var _ = Service("agent", func() {
 			Attribute("ttl_seconds", Int, "Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900 when omitted.", func() {
 				Example(900)
 			})
+			Attribute("idempotency_key", String, "Optional retry key. Reuse the same key only when retrying an identical session, content, effective TTL, source, and device request.", func() {
+				MaxLength(128)
+			})
 			Attribute("serial_number", String, "Hardware serial number of the machine minting the link, when the agent can read it.")
 			Attribute("hostname", String, "Hostname of the machine minting the link, when the agent can read it.")
 			Required("session_id", "content")

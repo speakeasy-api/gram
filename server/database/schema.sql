@@ -14704,6 +14704,29 @@ CREATE INDEX IF NOT EXISTS platform_mcp_readiness_organization_actor_idx
 ON platform_mcp_readiness (organization_id, user_id, acting_surface)
 WHERE connection_id IS NULL;
 
+-- Durable upload intents make candidate blobs discoverable before upload. A
+-- stale sweeper claims intents before deciding whether their blob is referenced.
+CREATE TABLE IF NOT EXISTS session_handoff_upload_intents (
+  id uuid NOT NULL DEFAULT generate_uuidv7(),
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  actor_user_id TEXT CONSTRAINT session_handoff_upload_intents_actor_check CHECK (actor_user_id IS NULL OR actor_user_id <> ''),
+  object_path TEXT NOT NULL,
+  blob_url TEXT NOT NULL DEFAULT '',
+  state TEXT NOT NULL DEFAULT 'pending',
+  last_error TEXT,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CONSTRAINT session_handoff_upload_intents_pkey PRIMARY KEY (id)
+);
+COMMENT ON COLUMN session_handoff_upload_intents.actor_user_id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.object_path IS '@access: secret-restricted';
+COMMENT ON COLUMN session_handoff_upload_intents.blob_url IS '@access: secret-restricted';
+CREATE INDEX IF NOT EXISTS session_handoff_upload_intents_stale_idx
+ON session_handoff_upload_intents (created_at, id) WHERE state IN ('pending', 'cleaning', 'linked');
+CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_upload_intents_blob_url_key
+ON session_handoff_upload_intents (blob_url) WHERE blob_url <> '';
+
 -- Session handoff links: short-lived capability URLs through which a rendered
 -- session-handoff document can be fetched by a cloud agent or another machine
 -- (session portability). The unguessable token IS the capability: the serving
@@ -14712,7 +14735,9 @@ WHERE connection_id IS NULL;
 -- window is a single fetch or the TTL, whichever ends first.
 CREATE TABLE IF NOT EXISTS session_handoff_links (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
-  project_id uuid NOT NULL,
+  -- Nullable so project deletion invalidates device-scoped access while
+  -- organization-wide Platform idempotency can continue to replay.
+  project_id uuid,
   organization_id TEXT NOT NULL,
   -- The harness session id the handoff was rendered from (matches
   -- chats.external_chat_id semantics for captured coding-agent sessions).
@@ -14721,23 +14746,39 @@ CREATE TABLE IF NOT EXISTS session_handoff_links (
   -- Object-store URL of the rendered handoff document (Tigris via the assets
   -- abstraction). The document itself never lands in Postgres: this row holds
   -- the capability token, tenancy, and the atomic consume claim; the blob is
-  -- deleted on first read (bucket lifecycle policies are the backstop).
+  -- deleted on first read; the expiry cleaner removes unread expired blobs.
   blob_url TEXT NOT NULL,
+  -- Immutable creator identity for new rows. NULL is retained only for legacy
+  -- rows whose historical email cannot be treated as a reliable user id.
+  actor_user_id TEXT CONSTRAINT session_handoff_links_actor_user_id_check CHECK (actor_user_id IS NULL OR actor_user_id <> ''),
   created_by_email TEXT NOT NULL,
+  -- Optional request idempotency metadata. Both columns are present together;
+  -- the hash binds a key to the exact normalized minting input.
+  idempotency_operation TEXT,
+  idempotency_key TEXT,
+  idempotency_input_hash TEXT,
   expires_at timestamptz NOT NULL,
+  -- Consumer and cleaner claims serialize access to the blob. Values are
+  -- application-managed to keep lifecycle evolution out of schema enums.
+  blob_cleanup_state TEXT NOT NULL DEFAULT 'available',
+  blob_cleanup_error TEXT,
+  blob_cleanup_attempted_at timestamptz,
   -- Set on the first successful read; once set, the link serves 404.
   consumed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT session_handoff_links_pkey PRIMARY KEY (id),
+  CONSTRAINT session_handoff_links_idempotency_pair_check CHECK ((idempotency_key IS NULL) = (idempotency_input_hash IS NULL) AND (idempotency_key IS NULL) = (idempotency_operation IS NULL)),
+  CONSTRAINT session_handoff_links_idempotency_key_check CHECK (idempotency_key IS NULL OR (idempotency_key = btrim(idempotency_key) AND octet_length(idempotency_key) BETWEEN 1 AND 128)),
+  CONSTRAINT session_handoff_links_idempotency_input_hash_check CHECK (idempotency_input_hash IS NULL OR idempotency_input_hash ~ '^[0-9a-f]{64}$'),
   CONSTRAINT session_handoff_links_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   -- Composite tenancy pin: the database, not the application, guarantees the
   -- organization_id agrees with the project's real owner. Matters here because
   -- the serving route is unauthenticated and scopes solely on these columns.
   CONSTRAINT session_handoff_links_organization_project_fkey
-    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE CASCADE
+    FOREIGN KEY (organization_id, project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL (project_id)
 );
 
 COMMENT ON COLUMN session_handoff_links.id IS '@access: confidential';
@@ -14746,13 +14787,28 @@ COMMENT ON COLUMN session_handoff_links.organization_id IS '@access: confidentia
 COMMENT ON COLUMN session_handoff_links.session_id IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.token IS '@access: secret-restricted';
 COMMENT ON COLUMN session_handoff_links.blob_url IS '@access: secret-restricted';
+COMMENT ON COLUMN session_handoff_links.actor_user_id IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.created_by_email IS '@access: confidential-pii';
+COMMENT ON COLUMN session_handoff_links.idempotency_operation IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.idempotency_key IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.idempotency_input_hash IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.blob_cleanup_state IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.blob_cleanup_error IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_links.blob_cleanup_attempted_at IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.expires_at IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.consumed_at IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.created_at IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_links.updated_at IS '@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_token_key ON session_handoff_links (token);
+
+CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_platform_idempotency_key
+ON session_handoff_links (organization_id, actor_user_id, idempotency_operation, idempotency_key)
+WHERE idempotency_key IS NOT NULL AND idempotency_operation = 'platform_create';
+
+CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_links_device_idempotency_key
+ON session_handoff_links (organization_id, project_id, actor_user_id, idempotency_operation, idempotency_key)
+WHERE idempotency_key IS NOT NULL AND idempotency_operation = 'device_create';
 
 -- Serves both cascade paths: an organization delete scans by the leading
 -- organization_id, a project delete by the full (organization_id, project_id)
@@ -14762,6 +14818,38 @@ CREATE INDEX IF NOT EXISTS session_handoff_links_organization_project_idx
 ON session_handoff_links (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
+
+
+-- Keep a durable blob cleanup pointer for new and rolling-deploy legacy link
+-- writers. The trigger runs in the link transaction, so rollback restores a
+-- pre-upload pending intent and commit publishes it as linked.
+CREATE OR REPLACE FUNCTION register_session_handoff_blob()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.blob_url <> '' AND NEW.project_id IS NOT NULL
+     AND (TG_OP = 'INSERT' OR OLD.blob_url IS DISTINCT FROM NEW.blob_url) THEN
+    INSERT INTO session_handoff_upload_intents (
+      project_id, organization_id, actor_user_id, object_path, blob_url, state
+    ) VALUES (
+      NEW.project_id, NEW.organization_id, NULLIF(to_jsonb(NEW)->>'actor_user_id', ''), '', NEW.blob_url, 'linked'
+    )
+    ON CONFLICT (blob_url) WHERE blob_url <> '' DO UPDATE
+    SET project_id = EXCLUDED.project_id,
+        organization_id = EXCLUDED.organization_id,
+        actor_user_id = COALESCE(session_handoff_upload_intents.actor_user_id, EXCLUDED.actor_user_id),
+        state = 'linked',
+        last_error = NULL,
+        updated_at = clock_timestamp();
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER session_handoff_links_register_blob
+AFTER INSERT OR UPDATE OF blob_url ON session_handoff_links
+FOR EACH ROW EXECUTE FUNCTION register_session_handoff_blob();
 
 CREATE TABLE IF NOT EXISTS chat_session_links (
   id uuid NOT NULL DEFAULT generate_uuidv7(),

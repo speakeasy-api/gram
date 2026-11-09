@@ -432,50 +432,73 @@ WHERE c.id = @id
   AND c.organization_id = @organization_id
   AND c.deleted IS FALSE;
 
--- name: InsertSessionHandoffLink :one
--- Mint a session-handoff capability link. The token is the capability; TTL
--- and burn-after-read (consumed_at) bound a leaked link's exposure window.
--- Minting goes through the tenant-qualified project so a caller whose project
--- and organization disagree, or whose project is soft-deleted, gets no row
--- rather than a live capability URL.
-INSERT INTO session_handoff_links (
-  project_id, organization_id, session_id, token, blob_url, created_by_email, expires_at
+-- name: CreateSessionHandoffUploadIntent :one
+INSERT INTO session_handoff_upload_intents (
+  project_id, organization_id, actor_user_id, object_path, blob_url
 )
-SELECT p.id, p.organization_id, @session_id, @token, @blob_url, @created_by_email, @expires_at
+SELECT p.id, p.organization_id, sqlc.arg(actor_user_id)::text, @object_path, @blob_url
 FROM projects p
+WHERE p.id = @project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+  AND sqlc.arg(actor_user_id)::text <> ''
+RETURNING id;
+
+-- name: InsertSessionHandoffLink :one
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url, actor_user_id,
+  created_by_email, idempotency_operation, idempotency_key,
+  idempotency_input_hash, expires_at
+)
+SELECT p.id, p.organization_id, @session_id, @token, @blob_url, @actor_user_id,
+  @created_by_email, sqlc.narg('idempotency_operation'),
+  sqlc.narg('idempotency_key'), sqlc.narg('idempotency_input_hash'), @expires_at
+FROM projects p
+JOIN session_handoff_upload_intents i
+  ON i.id = @upload_intent_id AND i.project_id = p.id AND i.state = 'pending'
 WHERE p.id = @project_id
   AND p.organization_id = @organization_id
   AND p.deleted IS FALSE
-RETURNING id, expires_at;
+FOR SHARE OF i
+ON CONFLICT DO NOTHING
+RETURNING id, token, expires_at, idempotency_input_hash;
+
+-- name: DeleteSessionHandoffUploadRegistry :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE id = @id AND project_id = @project_id;
+
+-- name: DeleteSessionHandoffUploadRegistryByBlob :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE project_id = @project_id AND blob_url = @blob_url;
+
+-- name: GetSessionHandoffLinkByIdempotencyKey :one
+SELECT token, expires_at, idempotency_input_hash, actor_user_id, created_by_email
+FROM session_handoff_links
+WHERE organization_id = @organization_id
+  AND actor_user_id = @actor_user_id
+  AND idempotency_operation = @idempotency_operation
+  AND idempotency_key = @idempotency_key
+  AND (@idempotency_operation = 'platform_create' OR project_id = sqlc.arg(project_id)::uuid);
 
 -- name: ConsumeSessionHandoffLink :one
--- Atomically claim a link on read: exactly one caller can flip consumed_at,
--- so a raced second fetch loses and gets no rows — burn-after-read without a
--- separate lock. Expired, already-consumed, and links whose project has since
--- been soft-deleted all return no rows; callers must serve every case as an
--- indistinguishable 404.
---
--- The claim returns the blob URL and blanks the stored pointer in the same
--- statement; the caller reads the document from object storage and deletes
--- the blob best-effort (bucket lifecycle is the backstop). RETURNING reads
--- from the subquery because the outer UPDATE's own RETURNING would hand back
--- the blanked value. The join also pins l.organization_id to the project's
--- real owner as a fail-closed consistency guard.
-UPDATE session_handoff_links s
-SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(), blob_url = ''
-FROM (
-  SELECT l.id, l.blob_url
-  FROM session_handoff_links l
-  JOIN projects p ON p.id = l.project_id
-  WHERE l.token = @token
-    AND l.consumed_at IS NULL
-    AND l.expires_at > clock_timestamp()
-    AND p.deleted IS FALSE
-    AND p.organization_id = l.organization_id
-  FOR UPDATE OF l
-) claimed
-WHERE s.id = claimed.id
-RETURNING claimed.blob_url;
+UPDATE session_handoff_links l
+SET consumed_at = clock_timestamp(), updated_at = clock_timestamp(),
+    blob_cleanup_state = 'consumer_claimed', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp()
+FROM projects p
+WHERE l.token = @token
+  AND l.consumed_at IS NULL
+  AND l.expires_at > clock_timestamp()
+  AND l.blob_cleanup_state = 'available'
+  AND p.id = l.project_id
+  AND p.deleted IS FALSE
+  AND p.organization_id = l.organization_id
+RETURNING l.id, p.id AS project_id, l.blob_url;
+
+-- name: FinalizeConsumedSessionHandoffBlob :execrows
+UPDATE session_handoff_links
+SET blob_url = '', blob_cleanup_state = 'deleted', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url
+  AND blob_cleanup_state = 'consumer_claimed';
 
 -- name: InsertChatSessionLink :exec
 -- One lineage edge per reported session move. Both chat ids are DERIVED
@@ -611,3 +634,84 @@ ORDER BY id;
 
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
+
+-- name: ListExpiredUnreadSessionHandoffLinks :many
+SELECT id, project_id, blob_url, expires_at, blob_cleanup_state
+FROM session_handoff_links
+WHERE project_id IS NOT NULL
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= @consumer_lease_before)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+  AND (
+    sqlc.narg('after_expires_at')::timestamptz IS NULL
+    OR (expires_at, id) > (sqlc.narg('after_expires_at')::timestamptz, @after_id::uuid)
+  )
+ORDER BY expires_at, id
+LIMIT @batch_size;
+
+-- name: ClaimExpiredUnreadSessionHandoffLink :one
+UPDATE session_handoff_links
+SET blob_cleanup_state = 'cleaner_claimed', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url
+  AND expires_at = @expires_at
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= @consumer_lease_before)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+RETURNING id, sqlc.arg(project_id)::uuid AS project_id, blob_url, expires_at;
+
+-- name: FinalizeExpiredUnreadSessionHandoffLink :execrows
+UPDATE session_handoff_links
+SET blob_url = '', blob_cleanup_state = 'deleted', blob_cleanup_error = NULL,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url
+  AND expires_at = @expires_at
+  AND blob_cleanup_state = 'cleaner_claimed';
+
+-- name: QuarantineSessionHandoffBlobCleanup :execrows
+UPDATE session_handoff_links
+SET blob_cleanup_state = 'quarantined', blob_cleanup_error = @blob_cleanup_error,
+    blob_cleanup_attempted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url
+  AND blob_cleanup_state = 'cleaner_claimed';
+
+-- name: ListStaleSessionHandoffUploadIntents :many
+SELECT id, project_id, blob_url, created_at
+FROM session_handoff_upload_intents
+WHERE created_at <= @stale_before
+  AND state IN ('pending', 'cleaning', 'linked')
+  AND (
+    sqlc.narg('after_created_at')::timestamptz IS NULL
+    OR (created_at, id) > (sqlc.narg('after_created_at')::timestamptz, @after_id::uuid)
+  )
+ORDER BY created_at, id
+LIMIT @batch_size;
+
+-- name: ClaimStaleSessionHandoffUploadIntent :one
+UPDATE session_handoff_upload_intents
+SET state = 'cleaning', updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND created_at <= @stale_before
+  AND state IN ('pending', 'cleaning', 'linked')
+RETURNING id, project_id, blob_url, created_at;
+
+-- name: RestoreSessionHandoffUploadRegistryLinked :execrows
+UPDATE session_handoff_upload_intents
+SET state = 'linked', last_error = NULL, updated_at = clock_timestamp()
+WHERE id = @id AND project_id = sqlc.arg(project_id)::uuid AND state = 'cleaning';
+
+-- name: SessionHandoffBlobIsReferenced :one
+SELECT EXISTS (
+  SELECT 1 FROM session_handoff_links
+  WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url
+);
+
+-- name: QuarantineSessionHandoffUploadIntent :execrows
+UPDATE session_handoff_upload_intents
+SET state = 'quarantined', last_error = @last_error, updated_at = clock_timestamp()
+WHERE id = @id AND project_id = @project_id AND state = 'cleaning';

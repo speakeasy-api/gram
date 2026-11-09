@@ -179,33 +179,60 @@ func (sbs *S3BlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser,
 	}, aws.ToInt64(headResult.ContentLength), nil
 }
 
-func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
+func (sbs *S3BlobStore) Location(subpath string) (*url.URL, error) {
 	uri, err := sbs.getBucketURI(subpath)
 	if err != nil {
-		return nil, nil, fmt.Errorf("generate asset path: %w", err)
+		return nil, fmt.Errorf("generate asset path: %w", err)
+	}
+	return uri, nil
+}
+
+func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
+	uri, err := sbs.Location(subpath)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	pr, pw := io.Pipe()
+	done := make(chan error, 1)
 
 	go func() {
-		defer func() {
-			if closeErr := pw.Close(); closeErr != nil {
-				sbs.logger.ErrorContext(ctx, "failed to close pipe writer", attr.SlogError(closeErr))
-			}
-		}()
-		_, err := sbs.client.PutObject(ctx, &s3.PutObjectInput{
+		_, putErr := sbs.client.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:        aws.String(sbs.bucket),
 			Key:           aws.String(strings.TrimPrefix(uri.Path, "/")),
 			Body:          pr,
 			ContentType:   aws.String(contentType),
 			ContentLength: new(contentLength),
 		})
-		if err != nil {
-			sbs.logger.ErrorContext(ctx, "failed to put object to s3", attr.SlogError(err))
-		}
+		// If PutObject fails before consuming the body, wake any blocked Write.
+		_ = pr.CloseWithError(putErr)
+		done <- putErr
 	}()
 
-	return pw, uri, nil
+	return &s3WriteCloser{pipe: pw, done: done}, uri, nil
+}
+
+type s3WriteCloser struct {
+	pipe *io.PipeWriter
+	done <-chan error
+}
+
+func (w *s3WriteCloser) Write(p []byte) (int, error) {
+	n, err := w.pipe.Write(p)
+	if err != nil {
+		return n, fmt.Errorf("write s3 upload body: %w", err)
+	}
+	return n, nil
+}
+
+func (w *s3WriteCloser) Close() error {
+	if err := w.pipe.Close(); err != nil {
+		return fmt.Errorf("close s3 upload body: %w", err)
+	}
+	if err := <-w.done; err != nil {
+		return fmt.Errorf("put object: %w", err)
+	}
+	return nil
 }
 
 // Delete removes the object; a missing key is success (S3 DeleteObject is

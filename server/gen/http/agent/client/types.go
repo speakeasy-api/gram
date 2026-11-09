@@ -154,6 +154,9 @@ type CreateSessionHandoffRequestBody struct {
 	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
 	// when omitted.
 	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
+	// Optional retry key. Reuse the same key only when retrying an identical
+	// session, content, effective TTL, source, and device request.
+	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 }
 
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
@@ -4029,10 +4032,11 @@ func NewReportCrashRequestBody(p *agent.ReportCrashPayload) *ReportCrashRequestB
 // payload of the "createSessionHandoff" endpoint of the "agent" service.
 func NewCreateSessionHandoffRequestBody(p *agent.CreateSessionHandoffPayload) *CreateSessionHandoffRequestBody {
 	body := &CreateSessionHandoffRequestBody{
-		SessionID:     p.SessionID,
-		Content:       p.Content,
-		SourceSurface: p.SourceSurface,
-		TTLSeconds:    p.TTLSeconds,
+		SessionID:      p.SessionID,
+		Content:        p.Content,
+		SourceSurface:  p.SourceSurface,
+		TTLSeconds:     p.TTLSeconds,
+		IdempotencyKey: p.IdempotencyKey,
 	}
 	return body
 }

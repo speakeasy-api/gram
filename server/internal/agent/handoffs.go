@@ -9,11 +9,13 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
+	"github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/chat"
@@ -61,19 +63,34 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 	}
 
 	ttlSeconds := payload.TTLSeconds
+	ttl := sessionhandoff.ClampHandoffTTL(ttlSeconds)
+	sourceSurface := strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, ""))
+	deviceSerial := deviceidentity.NormalizeSerial(payload.SerialNumber)
+	deviceHostname := strings.TrimSpace(conv.PtrValOr(payload.Hostname, ""))
+	idempotencyKey := strings.TrimSpace(conv.PtrValOr(payload.IdempotencyKey, ""))
+	if len(idempotencyKey) > sessionhandoff.MaxIdempotencyKeyBytes {
+		return nil, oops.E(oops.CodeBadRequest, nil, "idempotency_key exceeds 128 bytes")
+	}
+	idempotencyHash := ""
+	if idempotencyKey != "" {
+		idempotencyHash = sessionhandoff.DeviceIdempotencyInputHash(sessionID, payload.Content, sourceSurface, deviceSerial, deviceHostname, ttl)
+	}
 	result, err := sessionhandoff.NewSessionHandoffMinter(s.logger, s.db, s.blobStore, s.serverURL, s.audit).Mint(ctx, sessionhandoff.SessionHandoffMintInput{
-		OrganizationID: authCtx.ActiveOrganizationID,
-		ProjectID:      *authCtx.ProjectID,
-		UserID:         authCtx.UserID,
-		ActorEmail:     authCtx.Email,
-		ChatID:         chat.SessionIDToChatID(sessionID),
-		SessionID:      sessionID,
-		ChatTitle:      "",
-		Content:        payload.Content,
-		TTLSeconds:     ttlSeconds,
-		SourceSurface:  strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
-		DeviceSerial:   deviceidentity.NormalizeSerial(payload.SerialNumber),
-		DeviceHostname: strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
+		OrganizationID:       authCtx.ActiveOrganizationID,
+		ProjectID:            *authCtx.ProjectID,
+		UserID:               authCtx.UserID,
+		ActorEmail:           authCtx.Email,
+		ChatID:               chat.SessionIDToChatID(sessionID),
+		SessionID:            sessionID,
+		ChatTitle:            "",
+		Content:              payload.Content,
+		TTLSeconds:           ttlSeconds,
+		SourceSurface:        sourceSurface,
+		DeviceSerial:         deviceSerial,
+		DeviceHostname:       deviceHostname,
+		IdempotencyOperation: "device_create",
+		IdempotencyKey:       idempotencyKey,
+		IdempotencyInputHash: idempotencyHash,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("mint session handoff: %w", err)
@@ -87,6 +104,13 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 // claims the row, so expired, already-read, and never-existed tokens are an
 // indistinguishable 404 with no timing or body difference for a prober.
 func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) error {
+	// Set the security posture before inspecting the bearer token so malformed,
+	// expired, and successful responses all carry the same protections.
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+
 	token := chi.URLParam(r, "token")
 	// Shape check before the lookup: length first, so an attacker-sized path
 	// segment is rejected before hex.DecodeString allocates for it, then the
@@ -97,7 +121,7 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 		return nil
 	}
 
-	rawBlobURL, err := s.repo.ConsumeSessionHandoffLink(r.Context(), token)
+	claim, err := s.repo.ConsumeSessionHandoffLink(r.Context(), token)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		http.NotFound(w, r)
@@ -106,24 +130,34 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 		return oops.E(oops.CodeUnexpected, err, "resolve handoff link").LogError(r.Context(), s.logger)
 	}
 
-	// The claim is already burned in Postgres; everything past this point is
-	// delivery. The blob URL is internal — it must never surface in the
+	// The claim has burned the capability and leased the blob to this consumer;
+	// the pointer remains durable until deletion succeeds. The blob URL is
+	// internal — it must never surface in the
 	// response or an error body, so failures log it out-of-band and the
 	// caller sees a generic error.
-	blobURL, err := url.Parse(rawBlobURL)
+	blobURL, err := url.Parse(claim.BlobUrl)
 	if err != nil {
-		// Nothing addressable to delete, so the bucket lifecycle is the only
-		// backstop left for this one.
+		// The durable pointer remains claimed. After the consumer lease expires,
+		// cleanup will quarantine the malformed row without blocking later work.
 		return oops.E(oops.CodeUnexpected, err, "resolve handoff document").LogError(r.Context(), s.logger)
 	}
 
-	// The claim already burned the link, so the document must not outlive it
-	// on any path: a failed read or a half-written response leaves the link
-	// just as dead, and keeping the blob would mean a burned handoff still
-	// sitting in storage. Deferred so delivery failures burn it too.
+	// The consumer lease is the sole deletion owner while this handler runs.
+	// Deferred deletion covers read and response failures; if deletion fails,
+	// the pointer and registry remain durable for cleanup after the lease.
 	defer func() {
-		if err := s.blobStore.Delete(context.WithoutCancel(r.Context()), blobURL); err != nil {
+		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(r.Context()), 10*time.Second)
+		defer cancel()
+		if err := s.blobStore.Delete(cleanupCtx, blobURL); err != nil {
 			s.logger.WarnContext(r.Context(), "consumed handoff blob not deleted", attr.SlogError(err))
+			return
+		}
+		if _, err := s.repo.FinalizeConsumedSessionHandoffBlob(cleanupCtx, repo.FinalizeConsumedSessionHandoffBlobParams(claim)); err != nil {
+			s.logger.WarnContext(r.Context(), "consumed handoff blob state not finalized", attr.SlogError(err))
+			return
+		}
+		if _, err := s.repo.DeleteSessionHandoffUploadRegistryByBlob(cleanupCtx, repo.DeleteSessionHandoffUploadRegistryByBlobParams{ProjectID: claim.ProjectID, BlobUrl: claim.BlobUrl}); err != nil {
+			s.logger.WarnContext(r.Context(), "consumed handoff blob registry not cleared", attr.SlogError(err))
 		}
 	}()
 
@@ -133,12 +167,11 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	}
 	defer o11y.LogDefer(r.Context(), s.logger, "failed to close handoff document reader", func() error { return rdr.Close() })
 
-	// no-store on a single-use document: any cache replaying it would defeat
-	// burn-after-read; noindex belt-and-braces against crawler ingestion.
+	// Force a download with a fixed filename. The CSP is intentionally hostile
+	// to active content in case a browser ignores the attachment disposition.
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Disposition", `attachment; filename="session-handoff.md"`)
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
 	if _, err := io.Copy(w, rdr); err != nil {
 		s.logger.DebugContext(r.Context(), "write handoff response", attr.SlogError(err))
 	}

@@ -49,6 +49,41 @@ func (q *Queries) AgePreparationFixtureClaim(ctx context.Context, arg AgePrepara
 	return err
 }
 
+const ageSessionHandoffConsumerClaimFixture = `-- name: AgeSessionHandoffConsumerClaimFixture :exec
+UPDATE session_handoff_links
+SET blob_cleanup_attempted_at = $1
+WHERE token = $2 AND project_id = $3::uuid
+  AND blob_cleanup_state = 'consumer_claimed'
+`
+
+type AgeSessionHandoffConsumerClaimFixtureParams struct {
+	AttemptedAt pgtype.Timestamptz
+	Token       string
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) AgeSessionHandoffConsumerClaimFixture(ctx context.Context, arg AgeSessionHandoffConsumerClaimFixtureParams) error {
+	_, err := q.db.Exec(ctx, ageSessionHandoffConsumerClaimFixture, arg.AttemptedAt, arg.Token, arg.ProjectID)
+	return err
+}
+
+const ageSessionHandoffUploadRegistryFixture = `-- name: AgeSessionHandoffUploadRegistryFixture :exec
+UPDATE session_handoff_upload_intents
+SET created_at = $1
+WHERE project_id = $2 AND blob_url = $3
+`
+
+type AgeSessionHandoffUploadRegistryFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) AgeSessionHandoffUploadRegistryFixture(ctx context.Context, arg AgeSessionHandoffUploadRegistryFixtureParams) error {
+	_, err := q.db.Exec(ctx, ageSessionHandoffUploadRegistryFixture, arg.CreatedAt, arg.ProjectID, arg.BlobUrl)
+	return err
+}
+
 const associateAuthClientFixture = `-- name: AssociateAuthClientFixture :exec
 INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
 VALUES (
@@ -130,6 +165,27 @@ func (q *Queries) BackendPIDFixture(ctx context.Context) (int32, error) {
 	var pg_backend_pid int32
 	err := row.Scan(&pg_backend_pid)
 	return pg_backend_pid, err
+}
+
+const backfillSessionHandoffUploadRegistryFixture = `-- name: BackfillSessionHandoffUploadRegistryFixture :exec
+INSERT INTO session_handoff_upload_intents (
+  project_id, organization_id, actor_user_id, object_path, blob_url, state
+)
+SELECT l.project_id, l.organization_id, NULL, '', l.blob_url, 'linked'
+FROM session_handoff_links l
+WHERE l.project_id = $1::uuid AND l.blob_url <> ''
+ON CONFLICT (blob_url) WHERE blob_url <> '' DO UPDATE
+SET project_id = EXCLUDED.project_id,
+    organization_id = EXCLUDED.organization_id,
+    state = 'linked',
+    last_error = NULL,
+    updated_at = clock_timestamp()
+`
+
+// Project-scoped equivalent of the migration backfill for compatibility tests.
+func (q *Queries) BackfillSessionHandoffUploadRegistryFixture(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, backfillSessionHandoffUploadRegistryFixture, projectID)
+	return err
 }
 
 const clearAttachmentRefreshClaimFixture = `-- name: ClearAttachmentRefreshClaimFixture :execrows
@@ -1472,6 +1528,24 @@ func (q *Queries) DeleteRetainedCatalogSourcesFixture(ctx context.Context) error
 	return err
 }
 
+const deleteSessionHandoffUploadRegistryFixture = `-- name: DeleteSessionHandoffUploadRegistryFixture :execrows
+DELETE FROM session_handoff_upload_intents
+WHERE project_id = $1::uuid AND blob_url = $2
+`
+
+type DeleteSessionHandoffUploadRegistryFixtureParams struct {
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) DeleteSessionHandoffUploadRegistryFixture(ctx context.Context, arg DeleteSessionHandoffUploadRegistryFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteSessionHandoffUploadRegistryFixture, arg.ProjectID, arg.BlobUrl)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deletedRemoteSessionIdentityClearedFixture = `-- name: DeletedRemoteSessionIdentityClearedFixture :one
 SELECT (upstream_subject IS NULL AND upstream_email IS NULL AND upstream_display_name IS NULL AND identity_source IS NULL AND enrichment IS NULL)::boolean AS identity_cleared
 FROM remote_sessions WHERE id = $1 AND deleted
@@ -1783,6 +1857,23 @@ WHERE id = $1
 // Test-only fixture forcing the shared remote-session refresh path.
 func (q *Queries) ExpireRemoteSessionAccessTokenFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, expireRemoteSessionAccessTokenFixture, id)
+	return err
+}
+
+const expireSessionHandoffLinkFixture = `-- name: ExpireSessionHandoffLinkFixture :exec
+UPDATE session_handoff_links
+SET expires_at = $1
+WHERE token = $2 AND project_id = $3::uuid
+`
+
+type ExpireSessionHandoffLinkFixtureParams struct {
+	ExpiresAt pgtype.Timestamptz
+	Token     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ExpireSessionHandoffLinkFixture(ctx context.Context, arg ExpireSessionHandoffLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, expireSessionHandoffLinkFixture, arg.ExpiresAt, arg.Token, arg.ProjectID)
 	return err
 }
 
@@ -2845,15 +2936,16 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 }
 
 const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
-SELECT blob_url, consumed_at, session_id
+SELECT blob_url, consumed_at, session_id, blob_cleanup_attempted_at
 FROM session_handoff_links
 WHERE token = $1
 `
 
 type GetSessionHandoffLinkFixtureRow struct {
-	BlobUrl    string
-	ConsumedAt pgtype.Timestamptz
-	SessionID  string
+	BlobUrl                string
+	ConsumedAt             pgtype.Timestamptz
+	SessionID              string
+	BlobCleanupAttemptedAt pgtype.Timestamptz
 }
 
 // Test-only inspection of a minted session-handoff link, so tests can assert a
@@ -2861,7 +2953,46 @@ type GetSessionHandoffLinkFixtureRow struct {
 func (q *Queries) GetSessionHandoffLinkFixture(ctx context.Context, token string) (GetSessionHandoffLinkFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getSessionHandoffLinkFixture, token)
 	var i GetSessionHandoffLinkFixtureRow
-	err := row.Scan(&i.BlobUrl, &i.ConsumedAt, &i.SessionID)
+	err := row.Scan(
+		&i.BlobUrl,
+		&i.ConsumedAt,
+		&i.SessionID,
+		&i.BlobCleanupAttemptedAt,
+	)
+	return i, err
+}
+
+const getSessionHandoffUploadRegistryFixture = `-- name: GetSessionHandoffUploadRegistryFixture :one
+SELECT project_id, organization_id, actor_user_id, object_path, blob_url, state
+FROM session_handoff_upload_intents
+WHERE project_id = $1::uuid AND blob_url = $2
+`
+
+type GetSessionHandoffUploadRegistryFixtureParams struct {
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+type GetSessionHandoffUploadRegistryFixtureRow struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	ActorUserID    pgtype.Text
+	ObjectPath     string
+	BlobUrl        string
+	State          string
+}
+
+func (q *Queries) GetSessionHandoffUploadRegistryFixture(ctx context.Context, arg GetSessionHandoffUploadRegistryFixtureParams) (GetSessionHandoffUploadRegistryFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSessionHandoffUploadRegistryFixture, arg.ProjectID, arg.BlobUrl)
+	var i GetSessionHandoffUploadRegistryFixtureRow
+	err := row.Scan(
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.ActorUserID,
+		&i.ObjectPath,
+		&i.BlobUrl,
+		&i.State,
+	)
 	return i, err
 }
 
@@ -2991,6 +3122,40 @@ func (q *Queries) GetUserSessionMigrationTombstonesFixture(ctx context.Context, 
 		&i.RemoteSessionIssuerID,
 	)
 	return i, err
+}
+
+const hardDeleteOrganizationMetadataFixture = `-- name: HardDeleteOrganizationMetadataFixture :exec
+WITH owned AS (
+  SELECT 1 FROM projects p
+  WHERE p.id = $2 AND p.organization_id = $1
+), relationships AS (
+  DELETE FROM organization_user_relationships r
+  USING owned
+  WHERE r.organization_id = $1
+)
+DELETE FROM organization_metadata o
+USING owned
+WHERE o.id = $1
+`
+
+type HardDeleteOrganizationMetadataFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) HardDeleteOrganizationMetadataFixture(ctx context.Context, arg HardDeleteOrganizationMetadataFixtureParams) error {
+	_, err := q.db.Exec(ctx, hardDeleteOrganizationMetadataFixture, arg.OrganizationID, arg.ProjectID)
+	return err
+}
+
+const hardDeleteProjectFixture = `-- name: HardDeleteProjectFixture :exec
+DELETE FROM projects
+WHERE id = $1
+`
+
+func (q *Queries) HardDeleteProjectFixture(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, hardDeleteProjectFixture, projectID)
+	return err
 }
 
 const insertAttachmentFixture = `-- name: InsertAttachmentFixture :execrows
@@ -3433,6 +3598,38 @@ func (q *Queries) InsertKillswitchPrescriptionFixture(ctx context.Context, arg I
 		arg.ResourceScope,
 		arg.InternalNote,
 		arg.ExternalNote,
+	)
+	return err
+}
+
+const insertLegacySessionHandoffLinkFixture = `-- name: InsertLegacySessionHandoffLinkFixture :exec
+INSERT INTO session_handoff_links (
+  project_id, organization_id, session_id, token, blob_url,
+  created_by_email, expires_at
+) VALUES (
+  $1::uuid, $2, $3, $4, $5,
+  $6, clock_timestamp() + interval '5 minutes'
+)
+`
+
+type InsertLegacySessionHandoffLinkFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	SessionID      string
+	Token          string
+	BlobUrl        string
+	CreatedByEmail string
+}
+
+// Simulates an old replica whose INSERT predates optional idempotency and cleanup columns.
+func (q *Queries) InsertLegacySessionHandoffLinkFixture(ctx context.Context, arg InsertLegacySessionHandoffLinkFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertLegacySessionHandoffLinkFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.SessionID,
+		arg.Token,
+		arg.BlobUrl,
+		arg.CreatedByEmail,
 	)
 	return err
 }

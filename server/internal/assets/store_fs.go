@@ -103,11 +103,20 @@ func (fbs *FSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser,
 	return f, stat.Size(), nil
 }
 
+func (fbs *FSBlobStore) Location(pathname string) (*url.URL, error) {
+	fspath := filepath.Join(strings.Split(pathname, "/")...)
+	return &url.URL{Scheme: "file", Path: fspath}, nil
+}
+
 func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	fbs.mut.Lock()
 	defer fbs.mut.Unlock()
 
-	fspath := filepath.Join(strings.Split(pathname, "/")...)
+	uri, err := fbs.Location(pathname)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resolve asset location: %w", err)
+	}
+	fspath := uri.Path
 	if err := fbs.mkdirAll(fspath); err != nil {
 		return nil, nil, err
 	}
@@ -117,7 +126,7 @@ func (fbs *FSBlobStore) Write(ctx context.Context, pathname string, contentType 
 		return nil, nil, fmt.Errorf("open file for writing: %w", err)
 	}
 
-	return dst, &url.URL{Scheme: "file", Path: fspath}, nil
+	return dst, uri, nil
 }
 
 // Delete removes the file; an already-absent file is success, matching the
