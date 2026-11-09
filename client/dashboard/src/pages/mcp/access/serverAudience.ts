@@ -401,10 +401,12 @@ function reachLabel({
 /** Weakest first, so a row reads "connect, view" rather than "view, connect". */
 function capabilitiesOf(level: AudienceLevel): AudienceLevel[] {
   switch (level) {
+    // Manage includes View; neither includes Connect, which is granted on
+    // its own (scopeExpansions in authz/scopes.go).
     case "manage":
-      return ["use", "view", "manage"];
+      return ["view", "manage"];
     case "view":
-      return ["use", "view"];
+      return ["view"];
     case "use":
       return ["use"];
     case "blocked":
