@@ -495,7 +495,7 @@
         "session": {
           "status": "supported",
           "note": "via transcripts",
-          "verify": false
+          "verify": true
         },
         "session-cost": {
           "status": "unimplemented",

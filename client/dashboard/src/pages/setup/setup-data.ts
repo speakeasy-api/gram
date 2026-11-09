@@ -176,7 +176,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
   const check: PlatformSetupStep = {
     title: "Check it in a new conversation",
     description:
-      "Start a new conversation in Claude Desktop and send any message. Claude runs a short command before replying. When the reply finishes, the conversation appears in Agent Sessions under the signed-in Claude account. If Claude doesn't run the command, check that the instruction is saved and Code execution and file creation is on. If it runs but no session appears, the sandbox is still blocking Speakeasy: recheck that every domain from the network egress step is listed under Additional allowed domains as a bare hostname.",
+      "Start a new conversation in Claude Desktop and send any message. Claude runs a short command before replying. When the reply finishes, the conversation appears in Agent Sessions under the signed-in Claude account. If Claude doesn't run the command, check that the instruction is saved and Code execution and file creation is on. If it runs but no session appears, check that the observability plugin is synced and set to Required in Claude.ai, then that every domain from the network egress step is listed under Additional allowed domains as a bare hostname.",
   };
   return { registration, instruction, monitoring, check };
 };
