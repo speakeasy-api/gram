@@ -152,12 +152,20 @@ func consentAttemptID(raw string) (string, error) {
 // loadConsentInventoryDraft reads the attempt's draft, creating the initial
 // empty draft on first use.
 func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) (consentToolInventory, error) {
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	backendHashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
 		return consentToolInventory{}, err
 	}
+	backendHash := backendHashes.decided
 	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt, endpointToolSelectionResource(endpoint)))
 	if err == nil {
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: endpoint.OrganizationID,
+			serverID:       endpoint.McpServerID.UUID,
+			site:           upstreamIssuerReconsentSiteInventoryDraft,
+			consenter:      stateID,
+			outcome:        upstreamIssuerReconsent(cached.BackendHash, backendHashes.decided, backendHashes.other, backendHashes.otherErr),
+		})
 		if cached.BackendHash != backendHash {
 			return consentToolInventory{}, errConsentConfigurationChanged
 		}

@@ -996,32 +996,83 @@ ORDER BY ms.toolset_id, (ms.id = ms.toolset_id) DESC, ms.created_at, ms.id;
 -- name: ListMCPServerConsentConfigurations :many
 -- Hash stored routing configuration in one tenant-scoped read. Header secrets
 -- remain ciphertext; tool definitions are deliberately outside this boundary.
-SELECT m.id, m.project_id,
-       encode(sha256(convert_to(jsonb_build_object(
-           'remote', m.remote_mcp_server_id, 'url', r.url,
-           'transport', r.transport_type,
-           'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
-           'toolset', m.toolset_id, 'environment', m.environment_id,
-           'variation', m.tool_variations_group_id,
-           'issuer', m.remote_session_issuer_id,
-           'visibility', m.visibility, 'network', m.network_access_mode,
-           'requires_auth', m.requires_upstream_auth,
-           'headers', COALESCE((
-               SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
-                          h.value_from_request_header, h.is_required, h.is_secret)
-                                ORDER BY h.name, h.id)
-               FROM remote_mcp_server_headers AS h
-               WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
-           ), '[]'::jsonb)
-       )::text, 'UTF8')), 'hex')::text AS configuration_hash
+--
+-- configuration_hash takes the upstream issuer from the column and
+-- association_configuration_hash from the server's associations: their one
+-- provider, or null with several or none. jsonb stores its keys sorted, so
+-- adding the issuer to the rest renders the same text as building every key
+-- at once.
+WITH servers AS (
+    SELECT m.id, m.project_id, m.remote_session_issuer_id,
+           jsonb_build_object(
+               'remote', m.remote_mcp_server_id, 'url', r.url,
+               'transport', r.transport_type,
+               'tunnel', m.tunneled_mcp_server_id, 'resource', t.resource_identifier,
+               'toolset', m.toolset_id, 'environment', m.environment_id,
+               'variation', m.tool_variations_group_id,
+               'visibility', m.visibility, 'network', m.network_access_mode,
+               'requires_auth', m.requires_upstream_auth,
+               'headers', COALESCE((
+                   SELECT jsonb_agg(jsonb_build_array(h.name, h.value,
+                              h.value_from_request_header, h.is_required, h.is_secret)
+                                    ORDER BY h.name, h.id)
+                   FROM remote_mcp_server_headers AS h
+                   WHERE h.remote_mcp_server_id = r.id AND h.deleted IS FALSE
+               ), '[]'::jsonb)
+           ) AS base,
+           ARRAY(
+               SELECT DISTINCT c.remote_session_issuer_id
+               FROM mcp_server_remote_session_clients AS a
+               JOIN remote_session_clients AS c
+                 ON c.id = a.remote_session_client_id
+                AND c.deleted IS FALSE
+                AND (c.project_id = a.project_id
+                     OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+               JOIN remote_session_issuers AS provider
+                 ON provider.id = c.remote_session_issuer_id
+                AND provider.deleted IS FALSE
+                AND (provider.project_id = a.project_id
+                     OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+               WHERE a.mcp_server_id = m.id
+                 AND a.deleted IS FALSE
+           )::uuid[] AS association_provider_ids
+    FROM mcp_servers AS m
+    JOIN projects AS p ON p.id = m.project_id
+     AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+    LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
+     AND r.project_id = m.project_id AND r.deleted IS FALSE
+    LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
+     AND t.project_id = m.project_id AND t.deleted IS FALSE
+    WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
+)
+SELECT id, project_id,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
+       encode(sha256(convert_to(
+           (base || jsonb_build_object('issuer',
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash
+FROM servers;
+
+-- name: ListMCPServerAssociationProviders :one
+-- The distinct live providers an MCP server's live client associations name.
+SELECT ARRAY(
+           SELECT DISTINCT c.remote_session_issuer_id
+           FROM mcp_server_remote_session_clients AS a
+           JOIN remote_session_clients AS c
+             ON c.id = a.remote_session_client_id
+            AND c.deleted IS FALSE
+            AND (c.project_id = a.project_id
+                 OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+           JOIN remote_session_issuers AS provider
+             ON provider.id = c.remote_session_issuer_id
+            AND provider.deleted IS FALSE
+            AND (provider.project_id = a.project_id
+                 OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+           WHERE a.mcp_server_id = m.id
+             AND a.deleted IS FALSE
+       )::uuid[] AS association_provider_ids
 FROM mcp_servers AS m
-JOIN projects AS p ON p.id = m.project_id
- AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
-LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
- AND r.project_id = m.project_id AND r.deleted IS FALSE
-LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
- AND t.project_id = m.project_id AND t.deleted IS FALSE
-WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;
+WHERE m.id = @id AND m.project_id = @project_id AND m.deleted IS FALSE;
 
 -- name: CountEMAClientHeadersFixture :one
 SELECT count(*) FROM mcp_auth_client_headers

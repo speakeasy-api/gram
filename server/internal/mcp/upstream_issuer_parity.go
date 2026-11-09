@@ -107,8 +107,31 @@ const (
 	upstreamIssuerReconsentAlreadyInvalid upstreamIssuerReconsentOutcome = "already_invalid"
 
 	// upstreamIssuerReconsentError is a check whose other hash could not be
-	// computed.
+	// computed or was not loaded.
 	upstreamIssuerReconsentError upstreamIssuerReconsentOutcome = "error"
+)
+
+// Consent check sites of the re-consent forecast.
+const (
+	// upstreamIssuerReconsentSiteReuseResource checks a person's stored
+	// approval of a direct server's resource.
+	upstreamIssuerReconsentSiteReuseResource = "reuse_resource"
+
+	// upstreamIssuerReconsentSiteReuseInventory checks the tool inventory a
+	// reused approval was captured with.
+	upstreamIssuerReconsentSiteReuseInventory = "reuse_inventory"
+
+	// upstreamIssuerReconsentSiteInventoryDraft checks a consent attempt's
+	// cached tool inventory draft.
+	upstreamIssuerReconsentSiteInventoryDraft = "inventory_draft"
+
+	// upstreamIssuerReconsentSiteCatalogFreeze checks a gateway member's
+	// binding when its connection catalog is frozen at approval.
+	upstreamIssuerReconsentSiteCatalogFreeze = "catalog_freeze"
+
+	// upstreamIssuerReconsentSiteCatalogMember checks a gateway member
+	// against its approved connection catalog at serve time.
+	upstreamIssuerReconsentSiteCatalogMember = "catalog_member"
 )
 
 // discardLogger routes the non-authoritative source silently: routing logs
@@ -272,7 +295,7 @@ func (s *Service) recordUpstreamIssuerParity(ctx context.Context, logger *slog.L
 // other the hash from the other source.
 func upstreamIssuerReconsent(stored, decided, other string, otherErr error) upstreamIssuerReconsentOutcome {
 	switch {
-	case otherErr != nil:
+	case otherErr != nil, other == "":
 		return upstreamIssuerReconsentError
 	case stored != decided:
 		return upstreamIssuerReconsentAlreadyInvalid
@@ -304,10 +327,10 @@ type upstreamIssuerReconsentCheck struct {
 
 // recordUpstreamIssuerReconsent counts one consent check and logs a forced
 // re-consent once per organization, server, site and consenter in the dedup
-// window.
+// window. Other outcomes are only counted.
 func (s *Service) recordUpstreamIssuerReconsent(ctx context.Context, logger *slog.Logger, c upstreamIssuerReconsentCheck) {
 	s.metrics.RecordUpstreamIssuerReconsent(ctx, c.site, string(c.outcome))
-	if c.outcome != upstreamIssuerReconsentForced && c.outcome != upstreamIssuerReconsentError {
+	if c.outcome != upstreamIssuerReconsentForced {
 		return
 	}
 	key := strings.Join([]string{"reconsent", c.organizationID, c.serverID.String(), c.site, c.consenter, string(c.outcome)}, "|")
@@ -477,4 +500,39 @@ func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions
 		return entry
 	}
 	return none
+}
+
+// forecastResourceReconsent records whether a stored resource approval would
+// survive taking the upstream issuer from the other source. saved is the
+// stored inventory hash and decided the one checked against it.
+func (s *Service) forecastResourceReconsent(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, saved, decided string) {
+	check := upstreamIssuerReconsentCheck{
+		organizationID: endpoint.OrganizationID,
+		serverID:       endpoint.McpServerID.UUID,
+		site:           upstreamIssuerReconsentSiteReuseResource,
+		consenter:      reconsentConsenter(state),
+		outcome:        upstreamIssuerReconsentError,
+	}
+	if inventory == nil {
+		check.outcome = upstreamIssuerReconsent(saved, decided, decided, nil)
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, check)
+		return
+	}
+	hashes, err := s.consentBackendFingerprint(ctx, endpoint)
+	if err == nil {
+		err = hashes.otherErr
+	}
+	other := *inventory
+	other.BackendHash = hashes.other
+	check.outcome = upstreamIssuerReconsent(saved, decided, consentInventoryFingerprint(&other), err)
+	s.recordUpstreamIssuerReconsent(ctx, s.logger, check)
+}
+
+// reconsentConsenter is whose consent a check is about: the consenting
+// subject, or the challenge when it names none.
+func reconsentConsenter(state AuthnChallengeState) string {
+	if state.Subject != nil {
+		return state.Subject.String()
+	}
+	return state.ID
 }
