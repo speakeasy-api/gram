@@ -27,6 +27,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -2055,7 +2056,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 	if toolResult, ok := errors.AsType[*ToolResultError](cause); ok && id.IsValid() {
 		return p.writeToolResultError(ctx, w, id, toolResult)
 	}
-	rejectErr := RejectErrorFromCause(cause)
+	rejectErr := withConnectionReference(ctx, RejectErrorFromCause(cause))
 	payload, err := marshalErrorResponse(id, rejectErr)
 	if err != nil {
 		p.Logger.WarnContext(ctx, "failed to marshal jsonrpc rejection envelope; client will see no body",
@@ -2089,7 +2090,7 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 // call did not fail at the protocol level, so the request span stays
 // unmarked. The interceptor's own span still records the error.
 func (p *Proxy) writeToolResultError(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, result *ToolResultError) int64 {
-	payload, err := marshalToolResultError(id, result.Message)
+	payload, err := marshalToolResultError(id, contextvalues.AppendConnectionReference(ctx, result.Message))
 	if err != nil {
 		p.Logger.WarnContext(ctx, "failed to marshal tool error result; client will see no body",
 			attr.SlogError(err),

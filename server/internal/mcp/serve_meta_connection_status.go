@@ -109,14 +109,25 @@ func (s *Service) handleMetaConnectionStatusCall(
 // withStatusReference adds the reference of a row this check stored to a member reporting a
 // problem. Most problems here are read from stored state and store no row, so show none.
 func withStatusReference(ctx context.Context, row *metamcp.ConnectionStatusServer) {
+	if row.Status == metamcp.SignInError || row.Status == metamcp.SignInUnavailable {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
+	}
 	line := contextvalues.ConnectionReferenceLine(ctx)
 	if line == "" || row.Status == metamcp.SignInConnected || row.Status == metamcp.SignInNotRequired {
 		return
 	}
-	row.Detail = strings.TrimSpace(row.Detail + " " + line)
+	row.Detail = withReferenceSentence(row.Detail, line)
 	if row.Outage != nil {
-		row.Outage.Message += " " + line
+		row.Outage.Message = withReferenceSentence(row.Outage.Message, line)
 	}
+}
+
+// withReferenceSentence ends a status text with the reference, as one more sentence.
+func withReferenceSentence(text, line string) string {
+	if text == "" {
+		return line
+	}
+	return strings.TrimSuffix(text, ".") + ". " + line
 }
 
 // agentConnectURL is the agent's sign-in step for the first row it fixes, or

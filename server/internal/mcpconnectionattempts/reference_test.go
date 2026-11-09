@@ -3,6 +3,7 @@ package mcpconnectionattempts
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -64,19 +65,79 @@ func TestReference_NotShownWhenTheLogsCheckFails(t *testing.T) {
 func TestReference_ALogsAnswerIsCachedForTheFailureLoop(t *testing.T) {
 	t.Parallel()
 
-	ctx := withSlot(t)
 	check := &logsCheck{enabled: true, err: nil, block: nil, panics: false, checks: atomic.Int64{}}
 	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
-	cfg := testConfig()
-	cfg.flushInterval = time.Hour
-	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, cfg)
-	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(ctx)) })
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
 
-	for range onceKeyBurst {
-		recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	for range 5 {
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"))
 	}
-	require.NotEmpty(t, contextvalues.ConnectionReference(ctx))
-	require.LessOrEqual(t, check.checks.Load(), int64(1))
+	require.Equal(t, int64(1), check.checks.Load(), "only reference checks run here: no row was queued")
+}
+
+// A stalled logs lookup must not hold the failure response; the answer serves the next one.
+func TestReference_ASlowLogsCheckShowsNoReferenceAndDoesNotBlock(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		block := make(chan struct{})
+		check := &logsCheck{enabled: true, err: nil, block: block, panics: false, checks: atomic.Int64{}}
+		conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+
+		start := time.Now()
+		var wg sync.WaitGroup
+		results := make([]bool, 3)
+		for i := range results {
+			wg.Go(func() { results[i] = recorder.logsAllowForReference(t.Context(), "org") })
+		}
+		wg.Wait()
+		require.Equal(t, referenceLogsTimeout, time.Since(start), "the slow path waits only the bound")
+		require.Equal(t, []bool{false, false, false}, results)
+		require.Equal(t, int64(1), check.checks.Load(), "one background check for the organization")
+
+		close(block)
+		synctest.Wait()
+		require.True(t, recorder.logsAllowForReference(t.Context(), "org"), "the finished check answers the next failure")
+		require.NoError(t, recorder.Shutdown(t.Context()))
+	})
+}
+
+func TestReference_NonFailuresLeaveNone(t *testing.T) {
+	t.Parallel()
+
+	for _, what := range []Happened{CodeRefreshedUnverified, CodeCanceled, CodeReviewCanceled} {
+		ctx := withSlot(t)
+		NewCapturing(func(Row) {}, logsOn).Once(ctx, testScope(), StepMCPRequest, what)
+		require.Empty(t, contextvalues.ConnectionReference(ctx))
+	}
+}
+
+func TestReference_AFailedRefreshIsNotShownUntilClaimed(t *testing.T) {
+	t.Parallel()
+
+	var rows []Row
+	recorder := NewCapturing(func(row Row) { rows = append(rows, row) }, logsOn)
+	ctx := withSlot(t)
+
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+	require.Empty(t, contextvalues.ConnectionReference(ctx), "an error unrelated to the refresh must not show it")
+
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Equal(t, rows[0].AttemptID.String(), contextvalues.ConnectionReference(ctx))
+}
+
+func TestReference_SeveralFailedRefreshesCannotBeClaimed(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+	recorder.Once(ctx, testScope(), StepProviderRefresh, CodeRefreshRejected)
+
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
 }
 
 func TestReference_DroppedRowsLeaveNone(t *testing.T) {

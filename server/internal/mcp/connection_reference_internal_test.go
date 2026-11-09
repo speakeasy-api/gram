@@ -66,7 +66,7 @@ func TestConnectionReference_StatusRowReportingAProblem(t *testing.T) {
 
 	broken := metamcp.ConnectionStatusServer{Slug: "s", Status: metamcp.SignInUnavailable, Detail: "down", Outage: &metamcp.ConnectionStatusOutage{Message: "Try again.", ReconnectURL: ""}}
 	withStatusReference(ctx, &broken)
-	require.Equal(t, "down Reference: ref-1", broken.Detail)
+	require.Equal(t, "down. Reference: ref-1", broken.Detail)
 	require.Equal(t, "Try again. Reference: ref-1", broken.Outage.Message)
 
 	connected := metamcp.ConnectionStatusServer{Slug: "s", Status: metamcp.SignInConnected}
@@ -81,13 +81,48 @@ func TestConnectionReference_StatusRowReportingAProblem(t *testing.T) {
 func TestConnectionReference_RecoveryPage(t *testing.T) {
 	t.Parallel()
 
-	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
-	contextvalues.SetConnectionReference(ctx, "ref-1")
 	w := httptest.NewRecorder()
-	require.NoError(t, renderConnectionRecoveryPage(ctx, w, http.StatusForbidden, connectionRecoveryNoAccessPage))
+	require.NoError(t, renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, "Reference: ref-1"))
 	require.Contains(t, w.Body.String(), "Reference: ref-1")
 
 	plain := httptest.NewRecorder()
-	require.NoError(t, renderConnectionRecoveryPage(t.Context(), plain, http.StatusForbidden, connectionRecoveryNoAccessPage))
+	require.NoError(t, renderConnectionRecoveryPage(plain, http.StatusForbidden, connectionRecoveryNoAccessPage, ""))
 	require.NotContains(t, plain.Body.String(), "Reference")
+}
+
+func TestConnectionReference_NotShownToSomeoneElsesLink(t *testing.T) {
+	t.Parallel()
+
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetConnectionReference(ctx, "ref-1")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequestWithContext(ctx, http.MethodGet, "/", nil)
+
+	require.NoError(t, (&Service{}).answerConnectionRecoveryRefusal(w, r, connectionRecovery{}, errRecoveryOtherUser))
+	require.NotContains(t, w.Body.String(), "Reference")
+}
+
+// Member A's failed refresh, earlier in the request, must not label member B's error.
+func TestConnectionReference_MemberDispatchDoesNotInheritAnEarlierRow(t *testing.T) {
+	t.Parallel()
+
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetConnectionReference(ctx, "ref-member-a")
+
+	service := &Service{logger: testenv.NewLogger(t)}
+	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call", Params: nil}
+	_, err := service.executeMetaMemberTool(ctx, service.logger, &metaGateContext{}, nil, req, "member-b--tool", nil, nil)
+	require.Error(t, err, "the unknown server is answered with no row of its own")
+	require.Empty(t, contextvalues.ConnectionReference(ctx), "member B's error shows no reference")
+}
+
+func TestConnectionReference_AFailedRefreshDoesNotLabelAnUnrelatedError(t *testing.T) {
+	t.Parallel()
+
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetRefreshConnectionReference(ctx, "ref-refresh")
+
+	raw, err := marshalMetaToolError(ctx, testenv.NewLogger(t), mcpjsonrpc.StringID("1"), "Ask your administrator")
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "ref-refresh")
 }

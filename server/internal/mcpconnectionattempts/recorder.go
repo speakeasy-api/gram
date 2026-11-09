@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -65,7 +66,7 @@ const (
 	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add up to 5s on the writer.
 	defaultLogsCheckTimeout = 500 * time.Millisecond
 
-	// referenceLogsTimeout bounds the logs lookup behind a reference; a slower answer shows none.
+	// referenceLogsTimeout is how long a failure waits for its logs answer; a slower one shows no reference.
 	referenceLogsTimeout = 100 * time.Millisecond
 
 	// referenceLogsTTL is how long one logs answer serves references, so a failure loop costs one lookup.
@@ -388,6 +389,9 @@ type Recorder struct {
 
 	// referableMu guards referableOrgs. It is never held during a logs check.
 	referableMu sync.Mutex
+
+	// referenceChecks runs one background logs check per organization, so a slow one holds no request up.
+	referenceChecks singleflight.Group
 }
 
 // referableOrg is one logs answer and when it was read.
@@ -469,6 +473,8 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		insertFailing: atomic.Bool{},
 		referableOrgs: newReferableOrgs(),
 		referableMu:   sync.Mutex{},
+
+		referenceChecks: singleflight.Group{},
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -505,6 +511,8 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		insertFailing: atomic.Bool{},
 		referableOrgs: nil,
 		referableMu:   sync.Mutex{},
+
+		referenceChecks: singleflight.Group{},
 	}
 }
 
@@ -591,7 +599,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
-			r.leaveReference(ctx, row.OrganizationID, decision.foldID, what)
+			r.leaveReference(ctx, step, row.OrganizationID, decision.foldID, what)
 			return false
 		}
 		row.Repeats = decision.repeats
@@ -607,7 +615,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
-			r.leaveReference(ctx, row.OrganizationID, row.AttemptID, what)
+			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 			return true
 		}
 		return false
@@ -617,7 +625,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, reason, events(row), nil)
 		return false
 	}
-	r.leaveReference(ctx, row.OrganizationID, row.AttemptID, what)
+	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
 	return true
 }
 
@@ -627,39 +635,69 @@ func (r *Recorder) PromiseReference(ctx context.Context, attempt Attempt, what H
 	if r == nil || attempt.IsZero() {
 		return
 	}
-	r.leaveReference(ctx, attempt.scope.organizationID, attempt.id, what)
+	r.leaveReference(ctx, Step{}, attempt.scope.organizationID, attempt.id, what) //nolint:exhaustruct // an ending from no side step
 }
 
 // leaveReference puts a failure's id on ctx if a row can honestly be expected for it. The row is
 // still in memory at this point, so this rules out only what is knowable now: logs off, and a
 // ClickHouse that refused the last insert. A check that fails shows nothing.
-func (r *Recorder) leaveReference(ctx context.Context, organizationID string, id uuid.UUID, what Happened) {
-	if _, failed := what.(Code); !failed || id == uuid.Nil || !contextvalues.ConnectionReferenceWanted(ctx) {
+func (r *Recorder) leaveReference(ctx context.Context, step Step, organizationID string, id uuid.UUID, what Happened) {
+	if !failureWorthAReference(what) || id == uuid.Nil || step == StepDiscoveryMember || !contextvalues.ConnectionReferenceWanted(ctx) {
 		return
 	}
-	if r.insertFailing.Load() || !r.logsAllowForReference(organizationID) {
+	if r.insertFailing.Load() || !r.logsAllowForReference(ctx, organizationID) {
+		return
+	}
+	if step == StepProviderRefresh {
+		contextvalues.SetRefreshConnectionReference(ctx, id.String())
 		return
 	}
 	contextvalues.SetConnectionReference(ctx, id.String())
 }
 
-func (r *Recorder) logsAllowForReference(organizationID string) bool {
-	if r.referableOrgs != nil {
-		r.referableMu.Lock()
-		cached, ok := r.referableOrgs.Get(organizationID)
-		r.referableMu.Unlock()
-		if ok && time.Since(cached.at) < referenceLogsTTL {
-			return cached.allowed
-		}
+// failureWorthAReference is true for a failure the person can ask about. A refresh that worked or a
+// person's own decline isn't one.
+func failureWorthAReference(what Happened) bool {
+	code, ok := what.(Code)
+	if !ok {
+		return false
 	}
-	reason, _ := r.organizationAllowed(organizationID, referenceLogsTimeout)
-	allowed := reason == ""
-	if r.referableOrgs != nil {
+	meaning := catalog[code.name]
+	return meaning.Outcome == OutcomeFailed || meaning.Outcome == OutcomeBlocked
+}
+
+// logsAllowForReference waits a bounded time for one background logs check per organization.
+// A slow check answers false now and fills the cache for the next failure.
+func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
+	if r.referableOrgs == nil {
+		reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+		return reason == ""
+	}
+	r.referableMu.Lock()
+	cached, ok := r.referableOrgs.Get(organizationID)
+	r.referableMu.Unlock()
+	if ok && time.Since(cached.at) < referenceLogsTTL {
+		return cached.allowed
+	}
+	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
+		reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+		allowed := reason == ""
 		r.referableMu.Lock()
 		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
 		r.referableMu.Unlock()
+		return allowed, nil
+	})
+	timer := time.NewTimer(referenceLogsTimeout)
+	defer timer.Stop()
+	select {
+	case result := <-answer:
+		allowed, _ := result.Val.(bool)
+		return allowed
+	case <-timer.C:
+		return false
+	case <-ctx.Done():
+		return false
 	}
-	return allowed
 }
 
 // admitOnce applies the Once limits under stopMu, so a row held back before stopping is in the final pass.

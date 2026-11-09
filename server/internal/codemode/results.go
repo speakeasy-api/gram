@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 // NormalizeResult preserves structured and content results without exposing _meta.
@@ -89,7 +91,13 @@ const maxRejectionBytes = 1 << 10
 // tool or invalid arguments, as a completed failed call the program can fix.
 func rejectedResult(message string) *ToolResult {
 	if len(message) > maxRejectionBytes {
-		message = strings.ToValidUTF8(message[:maxRejectionBytes], "")
+		// The reference is shortened last: a shortened id finds nothing.
+		reference := ""
+		if at := strings.LastIndex(message, contextvalues.ConnectionReferenceMarker); at >= 0 {
+			reference = message[at:]
+			message = message[:at]
+		}
+		message = strings.ToValidUTF8(message[:maxRejectionBytes-len(reference)], "") + reference
 	}
 	content, err := json.Marshal([]map[string]string{{"type": "text", "text": message}})
 	if err != nil {
