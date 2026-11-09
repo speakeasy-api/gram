@@ -52,7 +52,8 @@ LIMIT ?`
 var errHookInstallsNoOrganization = errors.New("hook installs: organization id is required")
 
 // ListHookInstalls reads the installs of one organization seen since the
-// given time.
+// given time. The table is daily, so a listed install's counts and FirstSeen
+// cover the whole UTC day that since falls on.
 func (q *Queries) ListHookInstalls(ctx context.Context, organizationID string, since time.Time, limit int) (HookInstallPage, error) {
 	if organizationID == "" {
 		return HookInstallPage{}, errHookInstallsNoOrganization

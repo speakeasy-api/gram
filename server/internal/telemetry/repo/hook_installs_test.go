@@ -152,11 +152,17 @@ func TestListHookInstalls_WindowLimitAndOrg(t *testing.T) {
 	other.org = "org-" + uuid.NewString()
 	insertHookRow(t, project, other)
 
+	since := now.Add(-5 * 24 * time.Hour)
+	sameDayBeforeSince := recent
+	sameDayBeforeSince.hostname = "laptop-c"
+	sameDayBeforeSince.at = time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, time.UTC)
+	insertHookRow(t, project, sameDayBeforeSince)
+
 	q := newHookInstallsQueries(t)
 
 	page, err := q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 100)
 	require.NoError(t, err)
-	require.Len(t, page.Installs, 2)
+	require.Len(t, page.Installs, 3)
 	require.Equal(t, "laptop-a", page.Installs[0].Hostname)
 
 	page, err = q.ListHookInstalls(t.Context(), org, now.Add(-30*24*time.Hour), 1)
@@ -164,9 +170,10 @@ func TestListHookInstalls_WindowLimitAndOrg(t *testing.T) {
 	require.Len(t, page.Installs, 1)
 	require.True(t, page.Truncated)
 
-	page, err = q.ListHookInstalls(t.Context(), org, now.Add(-5*24*time.Hour), 100)
+	page, err = q.ListHookInstalls(t.Context(), org, since, 100)
 	require.NoError(t, err)
 	require.Len(t, page.Installs, 1)
+	require.Equal(t, "laptop-a", page.Installs[0].Hostname)
 
 	_, err = q.ListHookInstalls(t.Context(), "", now.Add(-24*time.Hour), 100)
 	require.Error(t, err)

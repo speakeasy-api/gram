@@ -22,7 +22,7 @@ CREATE TABLE `gram`.`hook_install_summaries` (
 @access: confidential',
   `last_seen` SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest event.
 @access: confidential',
-  `event_count` SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows recorded, delivery failure reports excluded.
+  `event_count` SimpleAggregateFunction(sum, UInt64) COMMENT 'Total hook rows recorded, delivery failure reports excluded. Denormalized sum of events_by_generation.
 @access: confidential',
   `events_by_generation` SimpleAggregateFunction(sumMap, Map(String, UInt64)) COMMENT 'Hook rows recorded per endpoint generation, delivery failure reports excluded.
 @access: confidential',

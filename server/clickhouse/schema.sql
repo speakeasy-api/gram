@@ -2677,7 +2677,7 @@ CREATE TABLE IF NOT EXISTS hook_install_summaries (
     install_route AggregateFunction(argMaxIf, String, Int64, UInt8) COMMENT 'Latest reported install route, such as marketplace or download.\n@access: confidential',
     first_seen SimpleAggregateFunction(min, DateTime64(9, 'UTC')) COMMENT 'Time of the earliest event.\n@access: confidential',
     last_seen SimpleAggregateFunction(max, DateTime64(9, 'UTC')) COMMENT 'Time of the latest event.\n@access: confidential',
-    event_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows recorded, delivery failure reports excluded.\n@access: confidential',
+    event_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Total hook rows recorded, delivery failure reports excluded. Denormalized sum of events_by_generation.\n@access: confidential',
     events_by_generation SimpleAggregateFunction(sumMap, Map(String, UInt64)) COMMENT 'Hook rows recorded per endpoint generation, delivery failure reports excluded.\n@access: confidential',
     error_count SimpleAggregateFunction(sum, UInt64) COMMENT 'Hook rows that carried an error, plus delivery failure reports.\n@access: confidential'
 ) ENGINE = AggregatingMergeTree
