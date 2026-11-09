@@ -194,6 +194,7 @@ export function useProviderConnection(
     open: openPopup,
   } = useOAuthPopup(() => checkOnReturn.current());
   const generation = useRef(0);
+  const activeSave = useRef<number | null>(null);
   const hydrated = useRef(false);
   const appliedSource = useRef(source ? { ...source } : undefined);
   const observedSource = useRef({ ...source, id: server.remoteMcpServerId });
@@ -219,7 +220,7 @@ export function useProviderConnection(
       if (!ownRefresh) {
         generation.current++;
         cancelPopup();
-        setPhase("idle");
+        if (activeSave.current === null) setPhase("idle");
         setToolCount(null);
         setFailure(null);
         appliedSource.current = { ...source };
@@ -448,9 +449,13 @@ export function useProviderConnection(
         const latestInstance = salesforceInstanceConfiguration(
           latestHeaders.headers,
         );
+        const latestLinks = await sdk.mcpServers.list();
         const applied = appliedSource.current;
         if (
           generation.current !== run ||
+          latestLinks.mcpServers.some(
+            (item) => item.id !== server.id && item.remoteMcpServerId === id,
+          ) ||
           latestTarget.remoteMcpServerId !== id ||
           latestTarget.environmentId !== server.environmentId ||
           !applied ||
@@ -759,6 +764,7 @@ export function useProviderConnection(
   };
 
   const save = async () => {
+    if (activeSave.current !== null) return;
     const run = generation.current;
     if (s.saved && !s.values.clientId && !s.values.clientSecret) {
       dispatch({ type: "goto", step: "test" });
@@ -768,6 +774,7 @@ export function useProviderConnection(
       dispatch({ type: "next" });
       return;
     }
+    activeSave.current = run;
     setPhase("saving");
     setFailure(null);
     if (providerKey === "salesforce")
@@ -943,7 +950,10 @@ export function useProviderConnection(
         identityConflict ? "settings" : undefined,
       );
     } finally {
-      setPhase("idle");
+      if (activeSave.current === run) {
+        activeSave.current = null;
+        setPhase("idle");
+      }
       if (providerKey === "salesforce") {
         await Promise.all([
           invalidateRemoteMcpSourceViews(queryClient),

@@ -1864,6 +1864,65 @@ describe("Salesforce source safeguards", () => {
 });
 
 describe("Salesforce review recovery", () => {
+  it("keeps a superseded credential save locked until the old request settles", async () => {
+    let rejectCommit!: (error: Error) => void;
+    mocks.commit.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectCommit = reject;
+        }),
+    );
+    const state = initialState("salesforce");
+    const mounted = mount("salesforce", {
+      step: "credentials",
+      values: { ...state.values, environment: "sandbox", clientId: "key" },
+    });
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    act(() => mounted.result.current.next());
+    await waitFor(() => expect(mocks.commit).toHaveBeenCalledOnce());
+    mounted.rerender({
+      mcpServer: server,
+      currentSource: {
+        url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-all",
+        instanceUrl: "",
+      },
+    });
+    expect(mounted.result.current.pending).toBe("save");
+    act(() => {
+      mounted.result.current.next();
+      mounted.result.current.signIn();
+      mounted.result.current.testConnection();
+    });
+    expect(mocks.commit).toHaveBeenCalledOnce();
+    expect(mocks.probe).not.toHaveBeenCalled();
+    await act(async () => rejectCommit(new Error("old request rejected")));
+    await waitFor(() => expect(mounted.result.current.pending).toBeNull());
+    expect(mounted.result.current.state.saved).toBe(false);
+  });
+  it("refuses rollback if another server began sharing the source during credential commit", async () => {
+    mocks.commit.mockImplementationOnce(async () => {
+      mocks.linkedServers.mockResolvedValue({
+        mcpServers: [server, { ...server, id: "new-wrapper" }],
+      });
+      throw new Error("commit failed");
+    });
+    const state = initialState("salesforce");
+    const { result } = mount("salesforce", {
+      step: "credentials",
+      values: { ...state.values, environment: "sandbox", clientId: "key" },
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    act(() => result.current.next());
+    await waitFor(() =>
+      expect(result.current.error).toContain("partially saved"),
+    );
+    expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
+    expect((await mocks.remote()).url).toContain(
+      "sandbox/platform/sobject-reads",
+    );
+    expect(result.current.recovery).toBe("settings");
+  });
+
   it("compensates a rejected commit after its own upstream query refresh during save", async () => {
     let rejectCommit!: (error: Error) => void;
     mocks.commit.mockImplementationOnce(
