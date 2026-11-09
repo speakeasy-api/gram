@@ -108,26 +108,30 @@ func (s *Service) handleMetaConnectionStatusCall(
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string, *metamcp.ConnectionStatusOutage) {
-	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-			if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
-				return s.staleMemberStatus(ctx, logger, gate, member)
+	if gate.catalog != nil {
+		// Live discovery checks the approval too, so a refused call never reads as ready.
+		err := s.validateCatalogMember(ctx, gate, member)
+		if consent, ok := errors.AsType[catalogConsentError](err); ok {
+			message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
+			if remedy == staleChoiceAskAdmin {
+				return metamcp.SignInActionRequired, message, nil
 			}
-			if consent, ok := errors.AsType[catalogConsentError](err); ok {
-				message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
-				if remedy == staleChoiceAskAdmin {
-					return metamcp.SignInActionRequired, message, nil
+			return metamcp.SignInNeedsConsent, message, nil
+		}
+		if gate.catalogRef.Mode == toolfilter.CatalogModeCached {
+			if err != nil {
+				if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+					return s.staleMemberStatus(ctx, logger, gate, member)
 				}
-				return metamcp.SignInNeedsConsent, message, nil
+				return metamcp.SignInNeedsConsent, memberErrorMessage(err), nil
 			}
-			return metamcp.SignInNeedsConsent, memberErrorMessage(err), nil
-		}
-		for _, outcome := range gate.catalog.MemberOutcomes {
-			if outcome.Slug == member.slug {
-				return metamcp.SignInVerifiedAtConsent, outcome.Label + ". Tool calls check current authorization.", nil
+			for _, outcome := range gate.catalog.MemberOutcomes {
+				if outcome.Slug == member.slug {
+					return metamcp.SignInVerifiedAtConsent, outcome.Label + ". Tool calls check current authorization.", nil
+				}
 			}
+			return metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil
 		}
-		return metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil
 	}
 	if member.backend == metaMemberBackendHosted {
 		if !member.remoteSessionIssuerID.Valid {

@@ -184,20 +184,23 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 				require.Equal(t, tc.remedy != staleChoiceAskAdmin, refused.ConsentRequired)
 			}
 
-			if tc.signInChanged {
-				// A cached status reads the approval without checking the sign-in, so it sees only settings changes.
-				return
-			}
-			gate.execute = false
-			gate.catalogRef.Mode = toolfilter.CatalogModeCached
-			status, detail, outage := s.memberSignInStatus(t.Context(), logger, gate, member, nil)
-			require.Nil(t, outage)
-			require.Equal(t, unnamed, detail)
 			wantStatus := metamcp.SignInNeedsConsent
 			if tc.remedy == staleChoiceAskAdmin {
 				wantStatus = metamcp.SignInActionRequired
 			}
-			require.Equal(t, wantStatus, status)
+			gate.execute = false
+			modes := []toolfilter.CatalogMode{toolfilter.CatalogModeLive}
+			if !tc.signInChanged {
+				// A cached status reads the approval without checking the sign-in, so it sees only settings changes.
+				modes = append(modes, toolfilter.CatalogModeCached)
+			}
+			for _, mode := range modes {
+				gate.catalogRef.Mode = mode
+				status, detail, outage := s.memberSignInStatus(t.Context(), logger, gate, member, nil)
+				require.Nil(t, outage, mode)
+				require.Equal(t, unnamed, detail, mode)
+				require.Equal(t, wantStatus, status, mode)
+			}
 			require.Empty(t, rec.Rows())
 		})
 	}
