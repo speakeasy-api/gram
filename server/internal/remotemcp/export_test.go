@@ -31,10 +31,11 @@ func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
 	f.protectedResources.SetClock(now)
 }
 
-// InstallConnections has p send upstreamAuth and record its failures the way a direct server's proxy does.
+// InstallConnections has p send upstreamAuth and record its failures and refusals the way a direct server's proxy does.
 func InstallConnections(p *proxy.Proxy, attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamAuth string) {
 	connections := newRequestConnections(&attribution, recorder, proxy.ServerIdentity{}, p.RemoteURL, upstreamAuth, nil)
 	p.AuthorizationOverride = upstreamAuth
 	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+	p.ToolsCallRefusalInterceptors = connections.refusals()
 	p.RequestFailureInterceptors = connections.requestFailures()
 }
