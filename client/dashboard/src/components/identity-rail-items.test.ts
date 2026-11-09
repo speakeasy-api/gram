@@ -1,7 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 
-import { identityRailItems } from "./identity-rail-items";
+import {
+  identityRailItems,
+  identitySectionCrumbs,
+} from "./identity-rail-items";
 import type { useRoutes } from "@/routes";
 
 /** Only the detail sub-routes the rail builds links from. */
@@ -87,5 +90,19 @@ describe("identityRailItems", () => {
     )) {
       expect(item.href.endsWith("?window=7d")).toBe(true);
     }
+  });
+
+  it("names each section's crumb the way its tab does", () => {
+    // The crumb used to title-case the URL segment, so an agent's
+    // "Controls & Safety" tab sat under a "Controls" crumb.
+    const agent = identitySectionCrumbs(
+      identityRailItems(routes(), "agent%3A1", "", "agent"),
+    );
+    expect(agent["controls"]).toBe("Controls & Safety");
+    expect(agent["credentials"]).toBe("Credentials");
+    const person = identitySectionCrumbs(
+      identityRailItems(routes(), "user%3A1", "", "user"),
+    );
+    expect(person["devices"]).toBe("Accounts & devices");
   });
 });

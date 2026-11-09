@@ -98,7 +98,7 @@ func teeCompletionStream(src io.Reader, onDelta func(string)) (assembledCompleti
 			continue
 		}
 		payload := strings.TrimPrefix(line, "data: ")
-		if payload == "[DONE]" {
+		if payload == completionStreamDone {
 			break
 		}
 

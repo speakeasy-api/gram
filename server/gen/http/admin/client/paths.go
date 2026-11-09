@@ -312,6 +312,11 @@ func DescribeMcpServerHealthAdminPath() string {
 	return "/admin/project.mcpServerHealth"
 }
 
+// SetMcpServerScopePinAdminPath returns the URL path to the admin service setMcpServerScopePin HTTP endpoint.
+func SetMcpServerScopePinAdminPath() string {
+	return "/admin/project.setMcpServerScopePin"
+}
+
 // GetMcpServerToolCallsAdminPath returns the URL path to the admin service getMcpServerToolCalls HTTP endpoint.
 func GetMcpServerToolCallsAdminPath() string {
 	return "/admin/project.mcpServerToolCalls"
@@ -320,21 +325,6 @@ func GetMcpServerToolCallsAdminPath() string {
 // GetHookClientsAdminPath returns the URL path to the admin service getHookClients HTTP endpoint.
 func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
-}
-
-// ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
-func ListExternalMcpMigrationCandidatesAdminPath() string {
-	return "/admin/externalMcpMigration.listCandidates"
-}
-
-// PreviewExternalMcpMigrationAdminPath returns the URL path to the admin service previewExternalMcpMigration HTTP endpoint.
-func PreviewExternalMcpMigrationAdminPath() string {
-	return "/admin/externalMcpMigration.preview"
-}
-
-// MigrateExternalMcpServersAdminPath returns the URL path to the admin service migrateExternalMcpServers HTTP endpoint.
-func MigrateExternalMcpServersAdminPath() string {
-	return "/admin/externalMcpMigration.migrate"
 }
 
 // ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.
@@ -530,4 +520,19 @@ func DisableUpstreamAuthEnforcementAdminPath() string {
 // BackfillMcpAuthGrantsAdminPath returns the URL path to the admin service backfillMcpAuthGrants HTTP endpoint.
 func BackfillMcpAuthGrantsAdminPath() string {
 	return "/admin/mcpAuthGrants.backfill"
+}
+
+// BackfillMcpConnectGrantsAdminPath returns the URL path to the admin service backfillMcpConnectGrants HTTP endpoint.
+func BackfillMcpConnectGrantsAdminPath() string {
+	return "/admin/mcpConnectGrants.backfill"
+}
+
+// GetProjectRedeployPreviewAdminPath returns the URL path to the admin service getProjectRedeployPreview HTTP endpoint.
+func GetProjectRedeployPreviewAdminPath() string {
+	return "/admin/project.redeployPreview"
+}
+
+// RedeployProjectAdminPath returns the URL path to the admin service redeployProject HTTP endpoint.
+func RedeployProjectAdminPath() string {
+	return "/admin/project.redeploy"
 }

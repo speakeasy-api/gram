@@ -1,0 +1,92 @@
+name: Queue version packages
+
+# Merges the Changesets release pull request by approving it and adding it to
+# the merge queue. gram-bot opens that pull request, and GitHub rejects a
+# self-approval, so the approver has to be a different GitHub App.
+#
+# One-time setup for the approver app, installed on this repository only:
+#   - Permissions: Pull requests (read and write), Contents (read and write)
+#   - Repository variable RELEASE_APPROVER_APP_ID
+#   - Repository secret RELEASE_APPROVER_PRIVATE_KEY
+# Do not point these at gram-bot.
+#
+# GitHub cron is UTC and does not follow Pacific daylight saving. 03:00 UTC is
+# 8pm during PDT and 04:00 UTC is 8pm during PST. The gate job drops the run
+# whose Pacific hour is not 20, so one of the two crons acts each day.
+#
+# SECURITY: keep the triggers as schedule and workflow_dispatch. This workflow
+# mints an app token that can approve and enqueue. A pull_request_target
+# trigger would hand that key to workflows defined by a fork.
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Report the version pull request and stop before approving or enqueueing
+        type: boolean
+        default: false
+
+concurrency:
+  group: release-merge
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  gate:
+    name: Pacific 8pm
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - name: Run at 8pm Pacific, or on a manual dispatch
+        id: check
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != "schedule" ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hour=$(TZ=America/Los_Angeles date +%H)
+          if [[ "$hour" == "20" ]]; then
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            echo "Pacific hour is ${hour}; queueing."
+          else
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+            echo "Pacific hour is ${hour}; the other cron is the 8pm run."
+          fi
+
+  queue:
+    name: Approve and enqueue
+    needs: gate
+    if: needs.gate.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read # checkout the queue script from this commit
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Generate approver token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.RELEASE_APPROVER_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APPROVER_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: Approve and add to the merge queue
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ github.repository }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
+        run: bash .github/scripts/queue-version-packages.sh

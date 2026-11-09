@@ -20,6 +20,9 @@ const mocks = vi.hoisted(() => ({
   createAgent: vi.fn(),
   createKey: vi.fn(),
   listKeys: vi.fn(),
+  // The agent's keys as its own pages read them; `undefined` while that read
+  // is pending or has failed. Not called while the read is disabled.
+  agentKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
   checkAuthGrant: vi.fn(),
@@ -278,6 +281,19 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
     isError: false,
   }),
 }));
+vi.mock("@gram/client/react-query/listAPIKeys.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useListAPIKeys: (
+    request: unknown,
+    _security: unknown,
+    options: { enabled?: boolean },
+  ) => {
+    const keys = options.enabled ? mocks.agentKeys(request) : undefined;
+    return keys === undefined
+      ? { data: undefined, isSuccess: false }
+      : { data: { keys }, isSuccess: true };
+  },
+}));
 // Only read to keep a prefilled name from colliding with one in use.
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({ data: { result: { items: mocks.agentList() } } }),
@@ -503,6 +519,7 @@ beforeEach(() => {
   mocks.authEnforced = false;
   mocks.createKey.mockResolvedValue({ id: "key_new", key: "gram_secret" });
   mocks.listKeys.mockResolvedValue({ keys: [] });
+  mocks.agentKeys.mockReturnValue([]);
   mocks.fetch.mockResolvedValue({
     ok: true,
     json: () => Promise.resolve({ code: "setup_code" }),
@@ -2198,7 +2215,13 @@ describe("Editing an agent that already exists", () => {
     updatedAt: new Date(),
   };
 
-  function editing(over: { grants?: unknown; withoutAuth?: boolean } = {}) {
+  function editing(
+    over: {
+      grants?: unknown;
+      withoutAuth?: boolean;
+      permissions?: { write: boolean; authorize: boolean };
+    } = {},
+  ) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -2207,7 +2230,14 @@ describe("Editing an agent that already exists", () => {
       <MemoryRouter>
         <QueryClientProvider client={client}>
           <CredentialsWizard
-            agent={agent}
+            agent={
+              over.permissions
+                ? ({
+                    ...(agent as object),
+                    permissions: over.permissions,
+                  } as never)
+                : agent
+            }
             editing
             grants={
               [
@@ -2371,6 +2401,103 @@ describe("Editing an agent that already exists", () => {
     const credential = screen.getByRole("button", { name: /Agent sign-in/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
+  });
+
+  it("says an agent whose key is in use is already connected", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_one",
+        createdAt: new Date(Date.now() - 86_400_000),
+        expiresAt: new Date(Date.now() + 86_400_000),
+        lastAccessedAt: new Date(Date.now() - 5 * 60_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent is already connected. Its key was last used 5m ago.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Issue another key" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This agent needs a key before it can be connected."),
+    ).toBeNull();
+  });
+
+  it("says an agent with an unused key is not yet connected", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_one",
+        createdAt: new Date(Date.now() - 86_400_000),
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText("This agent already has a key."),
+    ).toBeTruthy();
+  });
+
+  it("asks for a key once the agent is confirmed to have none", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent needs a key before it can be connected.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.agentKeys).toHaveBeenCalledWith({ agentId: "agent_one" });
+  });
+
+  it("claims neither state while the agent's keys are loading or failed", async () => {
+    mocks.agentKeys.mockReturnValue(undefined);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "A key that already exists cannot be shown here.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("does not read the keys of an agent the caller may not authorize", async () => {
+    editing({ permissions: { write: true, authorize: false } });
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "A key that already exists cannot be shown here.",
+      ),
+    ).toBeTruthy();
+    expect(mocks.agentKeys).not.toHaveBeenCalled();
+  });
+
+  it("still asks for a key when the agent's only key has expired", async () => {
+    mocks.agentKeys.mockReturnValue([
+      {
+        id: "key_old",
+        createdAt: new Date(Date.now() - 100 * 86_400_000),
+        expiresAt: new Date(Date.now() - 86_400_000),
+        lastAccessedAt: new Date(Date.now() - 2 * 86_400_000),
+      },
+    ]);
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: /Install/ }));
+
+    expect(
+      await screen.findByText(
+        "This agent needs a key before it can be connected.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Issue a key" })).toBeTruthy();
   });
 
   it("checks the servers the agent already reaches", async () => {

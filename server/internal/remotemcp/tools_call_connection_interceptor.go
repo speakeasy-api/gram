@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 // ConnectionAttribution files a proxy's refused and failed tool calls.
@@ -100,7 +101,7 @@ func (c *toolsCallConnections) InterceptToolsCallRefusal(ctx context.Context, er
 
 // InterceptToolsCallFailure implements [proxy.ToolsCallFailureInterceptor].
 func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, failure *proxy.ToolsCallFailure) {
-	if proxy.IsShutdownInterrupt(failure.Err) {
+	if errors.Is(failure.Err, shutdowndrain.ErrInterrupted) {
 		return
 	}
 	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {

@@ -2831,6 +2831,205 @@ func (q *Queries) DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx c
 	return err
 }
 
+const describeBoundClientUse = `-- name: DescribeBoundClientUse :many
+SELECT
+  requested.client_id::uuid AS remote_session_client_id,
+  EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS own
+    WHERE own.mcp_server_id = $1::uuid
+      AND own.remote_session_client_id = requested.client_id
+      AND own.organization_id = $2::text
+      AND own.deleted IS FALSE
+  )::boolean AS associated_with_mcp_server,
+  EXISTS (
+    SELECT 1
+    FROM mcp_server_remote_session_clients AS detached
+    WHERE detached.mcp_server_id = $1::uuid
+      AND detached.remote_session_client_id = requested.client_id
+      AND detached.organization_id = $2::text
+      AND detached.deleted IS TRUE
+  )::boolean AS detached_from_mcp_server,
+  ARRAY(
+    SELECT a.mcp_server_id
+    FROM mcp_server_remote_session_clients AS a
+    JOIN mcp_servers AS s
+      ON s.id = a.mcp_server_id
+     AND s.project_id = a.project_id
+     AND s.deleted IS FALSE
+    JOIN projects AS p
+      ON p.id = a.project_id
+     AND p.organization_id = a.organization_id
+     AND p.deleted IS FALSE
+    WHERE a.organization_id = $2::text
+      AND a.remote_session_client_id = requested.client_id
+      AND a.mcp_server_id <> $1::uuid
+      AND a.deleted IS FALSE
+      AND (
+        s.user_session_issuer_id = $3::uuid
+        OR EXISTS (
+          SELECT 1
+          FROM meta_mcp_servers AS gateway
+          JOIN meta_mcp_server_members AS member
+            ON member.meta_mcp_server_id = gateway.id
+           AND member.project_id = gateway.project_id
+           AND member.deleted IS FALSE
+          WHERE gateway.user_session_issuer_id = $3::uuid
+            AND gateway.organization_id = a.organization_id
+            AND gateway.deleted IS FALSE
+            AND member.mcp_server_id = s.id
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM user_session_issuers AS organization_issuer
+          WHERE organization_issuer.id = $3::uuid
+            AND organization_issuer.project_id IS NULL
+            AND organization_issuer.organization_id = a.organization_id
+            AND organization_issuer.deleted IS FALSE
+            AND (
+              SELECT count(*)
+              FROM user_session_issuers AS sibling
+              WHERE sibling.organization_id = organization_issuer.organization_id
+                AND sibling.project_id IS NULL
+                AND sibling.deleted IS FALSE
+            ) = 1
+        )
+      )
+    ORDER BY a.mcp_server_id
+  )::uuid[] AS other_mcp_server_ids
+FROM unnest($4::uuid[]) AS requested(client_id)
+`
+
+type DescribeBoundClientUseParams struct {
+	McpServerID            uuid.UUID
+	OrganizationID         string
+	UserSessionIssuerID    uuid.UUID
+	RemoteSessionClientIds []uuid.UUID
+}
+
+type DescribeBoundClientUseRow struct {
+	RemoteSessionClientID   uuid.UUID
+	AssociatedWithMcpServer bool
+	DetachedFromMcpServer   bool
+	OtherMcpServerIds       []uuid.UUID
+}
+
+// For each client bound to one user session issuer, who signs in through it on
+// behalf of a commit that configures one MCP server.
+//
+// associated_with_mcp_server: the configured server is associated with the
+// client.
+//
+// detached_from_mcp_server: an explicit detach of the client from the configured
+// server is on record, as a soft-deleted association. Automatic cleanup deletes
+// rows outright, so it never reads as one.
+//
+// other_mcp_server_ids: other live MCP servers of the organization associated
+// with the client that reach it through this issuer, as their own issuer, as
+// the issuer of a gateway they are a member of, or as the organization's only
+// organization-level issuer.
+//
+// Organization-wide, because an organization-owned client bound to an
+// organization-level issuer serves servers in every project.
+func (q *Queries) DescribeBoundClientUse(ctx context.Context, arg DescribeBoundClientUseParams) ([]DescribeBoundClientUseRow, error) {
+	rows, err := q.db.Query(ctx, describeBoundClientUse,
+		arg.McpServerID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+		arg.RemoteSessionClientIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []DescribeBoundClientUseRow
+	for rows.Next() {
+		var i DescribeBoundClientUseRow
+		if err := rows.Scan(
+			&i.RemoteSessionClientID,
+			&i.AssociatedWithMcpServer,
+			&i.DetachedFromMcpServer,
+			&i.OtherMcpServerIds,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const describeUserSessionIssuerConsumers = `-- name: DescribeUserSessionIssuerConsumers :one
+SELECT
+  (NOT EXISTS (
+    SELECT 1
+    FROM mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id
+    WHERE s.user_session_issuer_id = $1::uuid
+      AND s.id <> $2::uuid
+      AND p.organization_id = $3::text
+      AND p.deleted IS FALSE
+      AND s.deleted IS FALSE
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS g
+    JOIN projects AS p ON p.id = g.project_id
+    WHERE g.user_session_issuer_id = $1::uuid
+      AND g.organization_id = $3::text
+      AND p.deleted IS FALSE
+      AND g.deleted IS FALSE
+  ))::boolean AS sole_consumer,
+  (EXISTS (
+    SELECT 1
+    FROM mcp_servers AS s
+    JOIN projects AS p ON p.id = s.project_id
+    WHERE s.user_session_issuer_id = $1::uuid
+      AND s.id <> $2::uuid
+      AND s.remote_mcp_server_id IS NULL
+      AND p.organization_id = $3::text
+      AND p.deleted IS FALSE
+      AND s.deleted IS FALSE
+  ) OR EXISTS (
+    SELECT 1
+    FROM meta_mcp_servers AS g
+    JOIN projects AS p ON p.id = g.project_id
+    WHERE g.user_session_issuer_id = $1::uuid
+      AND g.organization_id = $3::text
+      AND p.deleted IS FALSE
+      AND g.deleted IS FALSE
+  ))::boolean AS reads_bindings
+`
+
+type DescribeUserSessionIssuerConsumersParams struct {
+	UserSessionIssuerID uuid.UUID
+	McpServerID         uuid.UUID
+	OrganizationID      string
+}
+
+type DescribeUserSessionIssuerConsumersRow struct {
+	SoleConsumer  bool
+	ReadsBindings bool
+}
+
+// Who else consumes one user session issuer's bindings besides the MCP server a
+// commit configures, across the organization's projects.
+//
+// sole_consumer: no other live server or gateway uses the issuer, so a client
+// bound to it can only be meant for the configured server.
+//
+// reads_bindings: another live consumer signs in through the issuer's bindings
+// without an association to show for it: a gateway, or a server that is not
+// directly Remote MCP-backed. A client may be in use by one even though no
+// association says so.
+func (q *Queries) DescribeUserSessionIssuerConsumers(ctx context.Context, arg DescribeUserSessionIssuerConsumersParams) (DescribeUserSessionIssuerConsumersRow, error) {
+	row := q.db.QueryRow(ctx, describeUserSessionIssuerConsumers, arg.UserSessionIssuerID, arg.McpServerID, arg.OrganizationID)
+	var i DescribeUserSessionIssuerConsumersRow
+	err := row.Scan(&i.SoleConsumer, &i.ReadsBindings)
+	return i, err
+}
+
 const detachOrganizationRemoteSessionClientFromUserSessionIssuer = `-- name: DetachOrganizationRemoteSessionClientFromUserSessionIssuer :execrows
 DELETE FROM remote_session_client_user_session_issuers link
 USING remote_session_clients c, user_session_issuers u
@@ -8362,7 +8561,7 @@ func (q *Queries) ListGlobalRemoteSessionIssuersByIssuerURL(ctx context.Context,
 }
 
 const listOrganizationClientsForUserSessionIssuer = `-- name: ListOrganizationClientsForUserSessionIssuer :many
-SELECT c.id, c.project_id, c.remote_session_issuer_id, i.deleted AS provider_deleted
+SELECT c.id, c.project_id, c.remote_session_issuer_id, c.credential_owner, i.deleted AS provider_deleted
 FROM remote_session_client_user_session_issuers AS link
 JOIN remote_session_clients AS c
   ON c.id = link.remote_session_client_id
@@ -8387,6 +8586,7 @@ type ListOrganizationClientsForUserSessionIssuerRow struct {
 	ID                    uuid.UUID
 	ProjectID             uuid.NullUUID
 	RemoteSessionIssuerID uuid.UUID
+	CredentialOwner       string
 	ProviderDeleted       bool
 }
 
@@ -8410,6 +8610,7 @@ func (q *Queries) ListOrganizationClientsForUserSessionIssuer(ctx context.Contex
 			&i.ID,
 			&i.ProjectID,
 			&i.RemoteSessionIssuerID,
+			&i.CredentialOwner,
 			&i.ProviderDeleted,
 		); err != nil {
 			return nil, err
@@ -8474,7 +8675,7 @@ func (q *Queries) ListOrganizationGatewaysForUserSessionIssuer(ctx context.Conte
 }
 
 const listOrganizationMCPServersForUserSessionIssuer = `-- name: ListOrganizationMCPServersForUserSessionIssuer :many
-SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, p.name AS project_name
+SELECT s.id, s.project_id, s.name, s.slug, s.toolset_id, s.remote_mcp_server_id, p.name AS project_name
 FROM mcp_servers AS s
 JOIN projects AS p ON p.id = s.project_id
 WHERE s.user_session_issuer_id = $1
@@ -8490,12 +8691,13 @@ type ListOrganizationMCPServersForUserSessionIssuerParams struct {
 }
 
 type ListOrganizationMCPServersForUserSessionIssuerRow struct {
-	ID          uuid.UUID
-	ProjectID   uuid.UUID
-	Name        pgtype.Text
-	Slug        pgtype.Text
-	ToolsetID   uuid.NullUUID
-	ProjectName string
+	ID                uuid.UUID
+	ProjectID         uuid.UUID
+	Name              pgtype.Text
+	Slug              pgtype.Text
+	ToolsetID         uuid.NullUUID
+	RemoteMcpServerID uuid.NullUUID
+	ProjectName       string
 }
 
 // Live MCP servers on one user session issuer in every project of the
@@ -8515,6 +8717,7 @@ func (q *Queries) ListOrganizationMCPServersForUserSessionIssuer(ctx context.Con
 			&i.Name,
 			&i.Slug,
 			&i.ToolsetID,
+			&i.RemoteMcpServerID,
 			&i.ProjectName,
 		); err != nil {
 			return nil, err

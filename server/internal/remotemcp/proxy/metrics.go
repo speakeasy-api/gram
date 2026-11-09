@@ -3,12 +3,14 @@ package proxy
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
 )
 
@@ -45,6 +47,12 @@ const (
 	// POST stream still waiting on its response, and the proxy answered the
 	// request with a JSON-RPC error instead.
 	StreamEndShutdownInterrupted StreamEndReason = "shutdown_interrupted"
+
+	// StreamEndMaxAge means the proxy closed the stream because it reached
+	// the maximum stream age, before the load balancer's response deadline
+	// would cut it: a listen stream, or a POST stream whose response had
+	// already been relayed.
+	StreamEndMaxAge StreamEndReason = "max_age"
 
 	// StreamEndError means relaying failed for any other reason, such as a
 	// write to the client failing or an oversized event.
@@ -92,6 +100,11 @@ type Metrics struct {
 	responseBytes   metric.Int64Histogram
 	streams         metric.Int64Counter
 	streamDuration  metric.Float64Histogram
+
+	// httpStreams records every relayed stream on the histogram shared by all
+	// long-lived responses, so the proxy's streams are compared with the
+	// others by route and end reason.
+	httpStreams *httpstream.Metrics
 }
 
 // NewMetrics constructs the counter and histograms served by the proxy. Errors
@@ -162,6 +175,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		responseBytes:   responseBytes,
 		streams:         streams,
 		streamDuration:  streamDuration,
+		httpStreams:     httpstream.NewMetrics(meter, logger),
 	}
 }
 
@@ -225,6 +239,45 @@ func (m *Metrics) RecordStreamEnd(ctx context.Context, identity ServerIdentity, 
 			attr.RemoteMCPProxyStreamResumeRequested(end.ResumeRequested),
 		)
 		m.streams.Add(ctx, 1, metric.WithAttributes(identity.AppendAttributes(labels)...))
+	}
+}
+
+// RecordHTTPStreamEnd records a relayed SSE stream that ended on the histogram
+// shared by every long-lived response. started is when the proxy received
+// the request, so the recorded age is the one the load balancer's deadline
+// measures. A cancelled request is told apart here, from its context's
+// cause, as a client that went away or the server's shutdown deadline; the
+// proxy's own counter reports both as request_canceled.
+func (m *Metrics) RecordHTTPStreamEnd(ctx context.Context, r *http.Request, reason StreamEndReason, started time.Time, now time.Time) {
+	if m == nil {
+		return
+	}
+	end := reason.httpEndReason()
+	if reason == StreamEndRequestCanceled {
+		end = httpstream.CanceledReason(r.Context())
+	}
+	m.httpStreams.RecordEnd(ctx, r, end, started, now)
+}
+
+// httpEndReason maps a proxy stream end onto the reasons shared by every
+// long-lived response. Both shutdown reasons map to the server shutting down;
+// the proxy's own counter keeps them apart.
+func (r StreamEndReason) httpEndReason() httpstream.EndReason {
+	switch r {
+	case StreamEndUpstreamClosed:
+		return httpstream.EndUpstreamClosed
+	case StreamEndIdleTimeout:
+		return httpstream.EndIdleTimeout
+	case StreamEndRequestCanceled:
+		return httpstream.EndClientClosed
+	case StreamEndShutdown, StreamEndShutdownInterrupted:
+		return httpstream.EndServerShutdown
+	case StreamEndMaxAge:
+		return httpstream.EndMaxAge
+	case StreamEndError:
+		return httpstream.EndError
+	default:
+		return httpstream.EndError
 	}
 }
 

@@ -988,6 +988,9 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
+        -- pinned_first lists pinned chats ahead of the rest; NULL when off, so
+        -- it does not affect the order.
+        CASE WHEN @pinned_first::boolean THEN fc.pinned_at IS NOT NULL END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
         CASE WHEN @sort_by = 'last_message_timestamp' AND @sort_order = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
         CASE WHEN @sort_by = 'num_messages' AND @sort_order = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
@@ -1855,37 +1858,6 @@ del AS (
 SELECT
   EXISTS (SELECT 1 FROM del) AS deleted,
   COALESCE((SELECT backs_live_thread FROM guard), FALSE)::boolean AS backs_live_thread;
-
--- name: GetTopUsersByMessages :many
-SELECT
-  COALESCE(NULLIF(c.external_user_id, ''), c.user_id) as user_id,
-  CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END as user_type,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-  AND COALESCE(NULLIF(c.external_user_id, ''), c.user_id) IS NOT NULL
-GROUP BY COALESCE(NULLIF(c.external_user_id, ''), c.user_id), CASE WHEN c.external_user_id IS NOT NULL AND c.external_user_id != '' THEN 'external' ELSE 'internal' END
-ORDER BY message_count DESC
-LIMIT @result_limit;
-
--- name: GetLLMClientBreakdownByMessages :many
-SELECT
-  COALESCE(m.source, 'unknown') as client_name,
-  COUNT(DISTINCT m.id) as message_count
-FROM chats c
-INNER JOIN chat_messages m ON m.chat_id = c.id
-WHERE c.project_id = @project_id
-  AND c.deleted IS FALSE
-  AND m.created_at >= @time_start
-  AND m.created_at <= @time_end
-  AND m.role IN ('user', 'assistant')
-GROUP BY client_name
-ORDER BY message_count DESC;
 
 -- name: GetActiveUserCountByMessages :one
 SELECT

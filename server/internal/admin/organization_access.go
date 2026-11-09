@@ -40,7 +40,7 @@ func LockOrganizationAccessTx(ctx context.Context, tx pgx.Tx, organizationID str
 
 // SetOrganizationAccessTx changes access and writes its tenant audit event in
 // the caller's transaction. The metadata row lock serializes dashboard and
-// proposal writes; the SQL update retains the original disable timestamp and
+// Admin MCP writes; the SQL update retains the original disable timestamp and
 // leaves the WorkOS event cursor untouched.
 func SetOrganizationAccessTx(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, organizationID string, enabled bool, actor urn.Principal, actorDisplayName *string) (OrganizationAccessState, error) {
 	before, err := LockOrganizationAccessTx(ctx, tx, organizationID)

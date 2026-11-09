@@ -308,7 +308,6 @@ const (
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
-	ExternalMCPFailureReasonKey = attribute.Key("gram.external_mcp.failure_reason")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -438,6 +437,7 @@ const (
 	HTTPResponseExternalKey             = attribute.Key("gram.http.response.external")
 	HTTPResponseFilteredKey             = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey            = attribute.Key("gram.http.status_code_pattern")
+	HTTPStreamEndReasonKey              = attribute.Key("gram.http.stream.end_reason") // closed set of httpstream.EndReason values
 	IngressNameKey                      = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey      = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey                   = attribute.Key("gram.network.surface")
@@ -871,7 +871,11 @@ const (
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
 	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
-	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
+	ToolCallIDKey = attribute.Key("gram.tool_call.id")
+	// ToolCallInterruptReasonKey is why the server stopped waiting for a tool
+	// call it was running, such as "server_shutdown" when a deploy interrupted
+	// it, so the failure is not attributed to the tool.
+	ToolCallInterruptReasonKey     = attribute.Key("gram.tool_call.interrupt_reason")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
@@ -938,6 +942,15 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// HookDeviceInstallRouteKey is the install route the binary reports, from
+	// speakeasy.json or SPEAKEASY_AI_HOOKS_INSTALL_ROUTE. Known routes are
+	// marketplace, download, agent_install, hooks_install and dogfood; the
+	// value is free-form. Installs that predate it don't report one.
+	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// HookEndpointGenerationKey records which generation of hook endpoint
+	// and sender produced a row (see the HookEndpointGeneration* values), so
+	// traffic on retired endpoints can be found and moved to a supported one.
+	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -2316,6 +2329,11 @@ func SlogHTTPStatusCodePattern(v string) slog.Attr {
 	return slog.String(string(HTTPStatusCodePatternKey), v)
 }
 
+func HTTPStreamEndReason(v string) attribute.KeyValue { return HTTPStreamEndReasonKey.String(v) }
+func SlogHTTPStreamEndReason(v string) slog.Attr {
+	return slog.String(string(HTTPStreamEndReasonKey), v)
+}
+
 func HTTPParamName(v string) attribute.KeyValue { return HTTPParamNameKey.String(v) }
 
 func HTTPHeaderAliasName(v string) attribute.KeyValue { return HTTPHeaderAliasNameKey.String(v) }
@@ -3687,6 +3705,13 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 func ToolCallID(v string) attribute.KeyValue { return ToolCallIDKey.String(v) }
 func SlogToolCallID(v string) slog.Attr      { return slog.String(string(ToolCallIDKey), v) }
 
+func ToolCallInterruptReason(v string) attribute.KeyValue {
+	return ToolCallInterruptReasonKey.String(v)
+}
+func SlogToolCallInterruptReason(v string) slog.Attr {
+	return slog.String(string(ToolCallInterruptReasonKey), v)
+}
+
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)
 }
@@ -3770,10 +3795,6 @@ func SlogMCPApprovalRequestID(v string) slog.Attr {
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
-
-func SlogExternalMCPFailureReason(v string) slog.Attr {
-	return slog.String(string(ExternalMCPFailureReasonKey), v)
-}
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }

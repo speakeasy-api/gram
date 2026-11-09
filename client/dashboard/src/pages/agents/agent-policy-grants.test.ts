@@ -2,13 +2,13 @@
 import { describe, expect, it } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
-  AGENT_POLICY_SCOPES,
   agentPolicyFingerprint,
   agentPolicyDraftFromGrants,
   agentPolicyGrantsFromDraft,
   agentPolicyResourceKind,
   agentPolicyViewFromGrants,
   diffAgentPolicyGrants,
+  isAgentPolicyEditorScope,
   isAgentPolicyGrantRepresentable,
   isAgentPolicyNarrowable,
 } from "./agent-policy-grants";
@@ -30,49 +30,25 @@ function storedGrant(
 }
 
 describe("agent policy scope catalog", () => {
-  // Pins the mirror of safeRuntimeScope() in
-  // server/internal/agents/runtimepolicy/scopes.go. Drift is a 400 in one
-  // direction and a missing capability in the other.
-  it("offers exactly the agent-runtime-safe scopes", () => {
-    expect(AGENT_POLICY_SCOPES.map((scope) => scope.slug).sort()).toEqual([
-      "assistant:read",
-      "assistant:write",
-      "environment:read",
-      "environment:write",
-      "inference:execute",
-      "mcp:connect",
-      "mcp:read",
-      "mcp:write",
-      "org:device_agent_sync",
-      "org:hooks_ingest",
-      "project:read",
-      "project:write",
-      "risk_policy:evaluate",
-      "skill:read",
-      "skill:write",
-    ]);
-  });
-
-  it("never offers a scope outside the safe set", () => {
-    for (const scope of AGENT_POLICY_SCOPES) {
-      const family = scope.slug.split(":")[0];
-      expect(scope.slug).not.toMatch(/blocked_/);
-      if (family === "org") {
-        expect(["org:device_agent_sync", "org:hooks_ingest"]).toContain(
-          scope.slug,
-        );
-      }
-      expect(family).not.toBe("chat");
-      expect(family).not.toBe("agent");
-      expect(scope.slug).not.toBe("risk_policy:bypass");
-      expect(scope.slug).not.toBe("risk_policy:block");
-    }
-  });
-
+  // The scopes an agent may hold come from access.listAgentPolicyScopes;
+  // TestService_ListAgentPolicyScopes_OffersExactlyTheRuntimeSafeScopes pins
+  // the set on the server. What stays here is the selector shape per family.
   it("fixes the resource kind from the scope family", () => {
-    for (const scope of AGENT_POLICY_SCOPES) {
-      expect(agentPolicyResourceKind(scope.slug)).toBe(scope.resourceType);
+    for (const [slug, resourceType] of [
+      ["inference:execute", "inference"],
+      ["mcp:connect", "mcp"],
+      ["mcp:write", "mcp"],
+      ["project:read", "project"],
+      ["environment:write", "environment"],
+      ["skill:read", "skill"],
+      ["assistant:write", "assistant"],
+      ["risk_policy:evaluate", "risk_policy"],
+      ["org:device_agent_sync", "org"],
+      ["org:hooks_ingest", "org"],
+    ] as const) {
+      expect(agentPolicyResourceKind(slug)).toBe(resourceType);
     }
+    expect(agentPolicyResourceKind("widget:read")).toBe("*");
   });
 
   it("withholds a resource choice where the picker cannot name the right kind", () => {
@@ -321,9 +297,32 @@ describe("policy diff", () => {
 // (allowedSelectorKeys in server/internal/authz/selector.go) and the editor has
 // no control for either, so rewriting one through the draft would drop the
 // constraint.
+describe("MCP server grants", () => {
+  it("leaves mcp:connect out of the editor and out of every diff", () => {
+    const connect = storedGrant("grant_connect", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      projectId: "project_one",
+    });
+    const read = storedGrant("grant_read", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "*",
+    });
+    const view = agentPolicyViewFromGrants([connect, read]);
+    expect(view.editable).toEqual([read]);
+    expect(view.preserved).toEqual([]);
+    expect(view.draft).toEqual({ "mcp:read": null });
+    expect(
+      diffAgentPolicyGrants(view.editable, agentPolicyGrantsFromDraft({})),
+    ).toEqual({ create: [], remove: [read] });
+    expect(isAgentPolicyEditorScope("mcp:connect")).toBe(false);
+    expect(isAgentPolicyEditorScope("mcp:read")).toBe(true);
+  });
+});
+
 describe("stored constraints the editor cannot show", () => {
   it("preserves the whole scope when a grant has an unsupported effect", () => {
-    const allow = storedGrant("grant_allow", "mcp:connect", {
+    const allow = storedGrant("grant_allow", "mcp:read", {
       resourceKind: "mcp",
       resourceId: "*",
     });
@@ -336,7 +335,7 @@ describe("stored constraints the editor cannot show", () => {
     expect(view.editable).toEqual([]);
     expect(view.draft).toEqual({});
     expect(view.preserved).toEqual([allow, future]);
-    expect(view.preservedScopes).toEqual(["mcp:connect"]);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
     expect(
       diffAgentPolicyGrants(
         view.editable,
@@ -535,7 +534,7 @@ describe("empty-string dimensions", () => {
     ["both", { tool: "", projectId: "" }],
   ])("round-trips a grant constrained by an empty %s", (_, extra) => {
     const stored = [
-      storedGrant("grant_empty", "mcp:connect", {
+      storedGrant("grant_empty", "mcp:read", {
         resourceKind: "mcp",
         resourceId: "server_one",
         ...extra,
@@ -554,20 +553,20 @@ describe("empty-string dimensions", () => {
   it("does not read an empty dimension as unrestricted", () => {
     expect(
       agentPolicyDraftFromGrants([
-        storedGrant("grant_empty", "mcp:connect", {
+        storedGrant("grant_empty", "mcp:read", {
           resourceKind: "mcp",
           resourceId: "*",
           tool: "",
         }),
       ]),
     ).toEqual({
-      "mcp:connect": [{ resourceKind: "mcp", resourceId: "*", tool: "" }],
+      "mcp:read": [{ resourceKind: "mcp", resourceId: "*", tool: "" }],
     });
   });
 
   it("leaves it alone while an unrelated permission is added", () => {
     const stored = [
-      storedGrant("grant_empty", "mcp:connect", {
+      storedGrant("grant_empty", "mcp:read", {
         resourceKind: "mcp",
         resourceId: "server_one",
         tool: "",

@@ -444,14 +444,14 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 			return nil, oops.E(oops.CodeUnexpected, ierr, "list member provider identities").LogError(ctx, logger)
 		}
 		for _, identity := range identities {
-			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID.UUID); lerr != nil {
+			if lerr := remotesessionsrepo.New(dbtx).LockRemoteSessionIssuerForClientBinding(ctx, identity.RemoteSessionIssuerID); lerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, lerr, "lock remote session issuer for client binding").LogError(ctx, logger)
 			}
 			if _, aerr := txRepo.AutoAttachMemberProviderClient(ctx, repo.AutoAttachMemberProviderClientParams{
 				GatewayIssuerID: issuerID.UUID,
 				ProjectID:       *authCtx.ProjectID,
-				MemberIssuerID:  identity.UserSessionIssuerID.UUID,
-				RemoteIssuerID:  identity.RemoteSessionIssuerID.UUID,
+				MemberServerID:  identity.McpServerID,
+				RemoteIssuerID:  identity.RemoteSessionIssuerID,
 			}); aerr != nil {
 				return nil, oops.E(oops.CodeUnexpected, aerr, "attach member provider client").LogError(ctx, logger)
 			}

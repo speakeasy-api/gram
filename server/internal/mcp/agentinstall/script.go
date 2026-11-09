@@ -148,6 +148,7 @@ func openClawPlugin(p Params) ([]byte, error) {
 		// An agent has no browser to sign in with; the baked key is its only
 		// credential.
 		BrowserLogin:    false,
+		InstallRoute:    plugins.InstallRouteAgentInstall,
 		HooksKeyIsAgent: true,
 		HooksOrgName:    "",
 		InstallFailOpen: p.InstallFailOpen,

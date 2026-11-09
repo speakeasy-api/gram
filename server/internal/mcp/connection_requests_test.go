@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -819,6 +820,80 @@ func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
+}
+
+// A notification gets the 401 but writes no row; a tool call missing the caller's credentials does.
+func TestDirectHostedMissingSecuritySkipsNotifications(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	setSecurityVariableProvidedBy(t, ctx, ti, ts.ID, *auth.ProjectID, "user")
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, []byte(`{"jsonrpc":"2.0","method":"notifications/initialized"}`), "", nil)
+	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	rec.RequireNothing()
+
+	_, err = servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+	require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCallerCredentialMissing)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// Our own failure during the security check writes a row naming us.
+func TestDirectHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	key := ti.createTestAPIKey(ctx, t)
+	ti.service.SetEnvironmentLoader(failingSystemEnv{})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), key, nil)
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	require.True(t, ok, err)
+	require.Equal(t, oops.CodeUnexpected, shareable.Code)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// A gateway member's security check failing on our side writes one row for that member.
+func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unconfigured", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	ti.service.SetEnvironmentLoader(failingSystemEnv{})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "execute_tool",
+		"arguments": map[string]any{"name": member.slug + "--test_tool", "arguments": map[string]any{}},
+	})
+	resp, err := servePublicHTTP(t, t.Context(), ti, slug, body, "", nil)
+	require.NoError(t, err)
+	require.Contains(t, resp.Body.String(), `"code":-32603`)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// failingSystemEnv fails the security check's system environment read.
+type failingSystemEnv struct{ toolconfig.EnvironmentLoader }
+
+func (failingSystemEnv) LoadSystemEnv(context.Context, uuid.UUID, uuid.UUID, string, string) (*toolconfig.CaseInsensitiveEnv, error) {
+	return nil, errors.New("environment store unavailable")
 }
 
 func setSecurityVariableProvidedBy(t *testing.T, ctx context.Context, ti *testInstance, toolsetID, projectID uuid.UUID, providedBy string) {

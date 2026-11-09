@@ -228,8 +228,8 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 // distinguishable from one that is merely unavailable.
 func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateContext, member metaMember, err error) error {
 	if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
-		message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-		return &codemode.MemberRefusalError{Message: message, ConsentRequired: reconnect}
+		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
 	}
 	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired
@@ -379,10 +379,11 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
 			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
-				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				return nil, b.helperFailure(ctx, &callGate, member, stale)
+				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
+				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
 			}
-			if needsNewConsent(b.service.validateCatalogMember(ctx, &callGate, member)) {
+			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
+				b.service.recordConsentRefusal(ctx, &callGate, member, err)
 				return nil, codemode.ErrConsentRequired
 			}
 		}

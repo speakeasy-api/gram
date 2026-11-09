@@ -4264,6 +4264,237 @@ func DecodeListScopesResponse(decoder func(*http.Response) goahttp.Decoder, rest
 	}
 }
 
+// BuildListAgentPolicyScopesRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listAgentPolicyScopes"
+// endpoint
+func (c *Client) BuildListAgentPolicyScopesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListAgentPolicyScopesAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listAgentPolicyScopes", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListAgentPolicyScopesRequest returns an encoder for requests sent to
+// the access listAgentPolicyScopes server.
+func EncodeListAgentPolicyScopesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListAgentPolicyScopesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listAgentPolicyScopes", "*access.ListAgentPolicyScopesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		return nil
+	}
+}
+
+// DecodeListAgentPolicyScopesResponse returns a decoder for responses returned
+// by the access listAgentPolicyScopes endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeListAgentPolicyScopesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListAgentPolicyScopesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListAgentPolicyScopesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			res := NewListAgentPolicyScopesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListAgentPolicyScopesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListAgentPolicyScopesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListAgentPolicyScopesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListAgentPolicyScopesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListAgentPolicyScopesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListAgentPolicyScopesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListAgentPolicyScopesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListAgentPolicyScopesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+				}
+				err = ValidateListAgentPolicyScopesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+				}
+				return nil, NewListAgentPolicyScopesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListAgentPolicyScopesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+				}
+				err = ValidateListAgentPolicyScopesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+				}
+				return nil, NewListAgentPolicyScopesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listAgentPolicyScopes", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListAgentPolicyScopesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listAgentPolicyScopes", err)
+			}
+			err = ValidateListAgentPolicyScopesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listAgentPolicyScopes", err)
+			}
+			return nil, NewListAgentPolicyScopesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listAgentPolicyScopes", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListMembersRequest instantiates a HTTP request object with method and
 // path set to call the "access" service "listMembers" endpoint
 func (c *Client) BuildListMembersRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -8560,6 +8791,9 @@ func EncodeListChallengesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		}
 		if p.Scope != nil {
 			values.Add("scope", *p.Scope)
+		}
+		for _, value := range p.ExcludeScopes {
+			values.Add("exclude_scopes", value)
 		}
 		if p.ProjectID != nil {
 			values.Add("project_id", *p.ProjectID)

@@ -1,15 +1,22 @@
 // @vitest-environment node
+import { ListScopesResult$inboundSchema } from "@gram/client/models/components/listscopesresult.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
 import { describe, expect, it } from "vitest";
 
+import servedCatalogue from "./listScopes.fixture.json";
 import { grantKeysString } from "./roleDialogState";
-import { grantsFromRole, sdkGrantsFromForm } from "./roleGrantTransform";
+import {
+  diffGrants,
+  grantsFromRole,
+  sdkGrantsFromForm,
+} from "./roleGrantTransform";
 import {
   type McpRow,
   mcpAllows,
   mcpBlocks,
+  mcpLevelIncludes,
   mcpToolLimit,
   otherMcpRules,
   platformAreas,
@@ -20,6 +27,7 @@ import {
   setMcpToolLimit,
   setPlatformAllow,
   setPlatformBlocked,
+  setPlatformScopeBlocked,
   splitMcpToolLimit,
   clearMcp,
   clearPlatform,
@@ -32,6 +40,7 @@ const def = (
   slug: string,
   resourceType: string,
   exclusionScope?: string,
+  extra: Partial<ScopeDefinition> = {},
 ): ScopeDefinition =>
   ({
     slug,
@@ -44,20 +53,30 @@ const def = (
     exclusionScope,
     sensitive: false,
     subScopes: [],
+    ...extra,
   }) as ScopeDefinition;
 
 const scopes: ScopeDefinition[] = [
   def("mcp:connect", "mcp", "mcp:blocked_connect"),
-  def("mcp:read", "mcp", "mcp:blocked_read"),
-  def("mcp:write", "mcp", "mcp:blocked_write"),
+  def("mcp:read", "mcp", "mcp:blocked_read", { subScopes: ["mcp:connect"] }),
+  def("mcp:write", "mcp", "mcp:blocked_write", { subScopes: ["mcp:read"] }),
   def("org:read", "org", "org:blocked_read"),
-  def("org:admin", "org", "org:blocked_admin"),
+  def("org:admin", "org", "org:blocked_admin", { subScopes: ["org:read"] }),
   def("org:hooks_ingest", "org"),
   def("project:read", "project", "project:blocked_read"),
-  def("project:write", "project", "project:blocked_write"),
-  def("plugin:write", "project", "plugin:blocked_write"),
-  def("chat:read", "chat"),
-  def("chat:write", "chat"),
+  def("project:write", "project", "project:blocked_write", {
+    subScopes: ["project:read"],
+  }),
+  def("plugin:write", "project", "plugin:blocked_write", {
+    category: "plugin" as ScopeDefinition["category"],
+  }),
+  def("chat:read", "chat", undefined, {
+    category: "session" as ScopeDefinition["category"],
+  }),
+  def("chat:write", "chat", undefined, {
+    category: "session" as ScopeDefinition["category"],
+    subScopes: ["chat:read"],
+  }),
 ];
 
 const mcp = (resourceId: string, extra: Partial<Selector> = {}): Selector => ({
@@ -246,7 +265,7 @@ describe("MCP cells", () => {
 });
 
 describe("platform areas", () => {
-  it("pairs read and write per area, and keeps the rest as extras", () => {
+  it("groups by catalogue category, pairing View with what includes it", () => {
     const areas = platformAreas(scopes);
     expect(
       areas.map((a) => [
@@ -257,9 +276,40 @@ describe("platform areas", () => {
       ]),
     ).toEqual([
       ["Organization", "org:read", "org:admin", ["org:hooks_ingest"]],
-      ["Projects", "project:read", "project:write", ["plugin:write"]],
+      ["Projects", "project:read", "project:write", []],
+      ["Plugins", undefined, undefined, ["plugin:write"]],
       ["Agent sessions", "chat:read", "chat:write", []],
     ]);
+  });
+
+  it("names an unknown category after itself", () => {
+    const [area] = platformAreas([
+      def("widget:read", "widget", undefined, {
+        category: "widget_kind" as ScopeDefinition["category"],
+      }),
+    ]);
+    expect(area?.label).toBe("Widget kind");
+  });
+
+  it("reads which levels the MCP permissions include from the catalogue", () => {
+    expect(mcpLevelIncludes(scopes, "manage")).toEqual(["use", "view"]);
+    expect(mcpLevelIncludes(scopes, "view")).toEqual(["use"]);
+    expect(mcpLevelIncludes(scopes, "use")).toEqual([]);
+  });
+
+  it("blocks a single permission everywhere and takes it back", () => {
+    const blocked = setPlatformScopeBlocked(
+      load([{ scope: "plugin:write" }]),
+      "plugin:write" as Scope,
+      true,
+    );
+    expect(save(blocked)).toEqual([
+      { scope: "plugin:blocked_write", selectors: undefined },
+    ]);
+    expect(platformBlock(blocked, "plugin:write")).toBe("all");
+    expect(
+      save(setPlatformScopeBlocked(blocked, "plugin:write" as Scope, false)),
+    ).toEqual([]);
   });
 
   it("grants everywhere and keeps a block beside it", () => {
@@ -292,6 +342,46 @@ describe("platform areas", () => {
     ]);
     expect(platformBlock(blocked, "project:read")).toBe("all");
     expect(save(setPlatformBlocked(blocked, area, false))).toEqual([]);
+  });
+});
+
+describe("the catalogue as the server serves it", () => {
+  // listScopes.fixture.json is written by the server's
+  // TestListScopes_DashboardFixture, so these run against the real catalogue.
+  const served = ListScopesResult$inboundSchema.parse(servedCatalogue).scopes;
+  const evaluate = {
+    scope: "risk_policy:evaluate" as Scope,
+    selectors: [{ resourceKind: "risk_policy", resourceId: "policy-1" }],
+  };
+
+  it("renders no row for risk policy permissions, which role writes reject", () => {
+    const areas = platformAreas(served);
+    expect(areas.map((a) => a.category)).not.toContain("risk_policy");
+    const slugs = areas.flatMap((a) =>
+      [a.view, a.manage, ...a.extras].flatMap((d) => (d ? [d.slug] : [])),
+    );
+    expect(slugs.filter((slug) => slug.startsWith("risk_policy:"))).toEqual([]);
+    expect(slugs).toContain("log:read");
+  });
+
+  it("keeps a role's risk policy grants through Reset and Save", () => {
+    const stored = grantsFromRole(
+      {
+        grants: [evaluate, { scope: "project:read" as Scope }],
+      } as unknown as Parameters<typeof grantsFromRole>[0],
+      served,
+    );
+    const reset = clearPlatform(stored, platformAreas(served));
+    expect(sdkGrantsFromForm(reset, served)).toEqual([evaluate]);
+    expect(
+      diffGrants(
+        sdkGrantsFromForm(stored, served),
+        sdkGrantsFromForm(reset, served),
+      ),
+    ).toEqual({
+      addGrants: [],
+      removeGrants: [{ scope: "project:read", selectors: undefined }],
+    });
   });
 });
 

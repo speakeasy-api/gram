@@ -413,3 +413,83 @@ describe.each(projectResourceTypes)(
     });
   },
 );
+
+describe("grant rule picker copy", () => {
+  it("names the role in the role editor", () => {
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This role reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Plugins shared with this role/)).toBeTruthy();
+  });
+
+  it("names the agent, and leaves out plugins, on an agent", () => {
+    // Plugins are shared with roles, never with an agent.
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        subject="agent"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This agent reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/this role/i)).toBeNull();
+    expect(screen.queryByText(/Plugins shared/)).toBeNull();
+  });
+});
+
+describe("grant rule picker checkboxes", () => {
+  it("names each server checkbox after the server and its project", () => {
+    mocks.inventory = {
+      ...mocks.inventory,
+      settled: true,
+      groups: serverGroups,
+    };
+    setup();
+    expect(
+      screen.getByRole("checkbox", { name: "Server one in Project one" }),
+    ).toBeTruthy();
+  });
+
+  it("names a chosen server's pinned row the same way, not from its text", () => {
+    // The pinned row shows the project beside the name; read from its text
+    // the checkbox was "Server oneProject one".
+    mocks.inventory = {
+      ...mocks.inventory,
+      settled: true,
+      groups: serverGroups,
+    };
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:read"
+        selectors={[{ resourceKind: "mcp", resourceId: "server_one" }]}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    const boxes = screen.getAllByRole("checkbox", {
+      name: "Server one in Project one",
+    });
+    expect(boxes).toHaveLength(2);
+    for (const box of boxes) {
+      expect(box.getAttribute("aria-checked")).toBe("true");
+    }
+  });
+
+  it("names each project checkbox after the project", () => {
+    setup("project");
+    fireEvent.click(screen.getByRole("button", { name: /Specific projects/ }));
+    expect(screen.getByRole("checkbox", { name: "Project one" })).toBeTruthy();
+  });
+});

@@ -12,7 +12,7 @@ function scope(
 ): ScopeDefinition {
   return {
     slug: slug as ScopeDefinition["slug"],
-    label: slug,
+    label: `${slug} label`,
     resourceType,
     category: resourceType as ScopeDefinition["category"],
     description: `${slug} description`,
@@ -65,6 +65,19 @@ describe("RolePermissionsSection tabs", () => {
     ).toBeTruthy();
     expect(screen.getByText("mcp:connect")).toBeTruthy();
     expect(screen.queryByText("mcp:read")).toBeNull();
+  });
+
+  it("shows the catalogue label beside the slug in rows and the picker", () => {
+    renderSection(["mcp:connect"]);
+
+    expect(screen.getByText("mcp:connect label")).toBeTruthy();
+    expect(screen.getByText("mcp:connect")).toBeTruthy();
+    expect(screen.getByText("mcp:connect description")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+
+    expect(screen.getAllByText("mcp:connect label")).toHaveLength(2);
+    expect(screen.getAllByText("mcp:connect")).toHaveLength(2);
   });
 
   it("lists mcp:read and mcp:write under Platform access with the connect note", () => {

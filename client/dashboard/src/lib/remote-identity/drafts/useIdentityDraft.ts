@@ -285,7 +285,6 @@ export type UserIdentityDraft = {
   issuerEditorText: string;
   issuerEditorError: string | null;
   issuerEditorValidated: boolean;
-  openIssuerEditor: () => void;
   setIssuerEditorText: (value: string) => void;
   discoverIssuer: () => void;
   resetIssuer: () => void;
@@ -336,8 +335,12 @@ export type UserIdentityDraft = {
   canSave: boolean;
   /** The operator changed the selection, whether or not it can be saved yet. */
   pendingChange: boolean;
-  /** Resolves true when the commit landed; failures are already on screen. */
-  save: () => Promise<boolean>;
+  /**
+   * Resolves true when the commit landed; failures are already on screen.
+   * replaceClientServerIds confirms the other servers a replacement moves, as
+   * the impact preview listed them.
+   */
+  save: (replaceClientServerIds?: string[]) => Promise<boolean>;
   saving: boolean;
 };
 
@@ -450,11 +453,32 @@ export function useUserIdentityDraft({
   );
   const advertisedIssuer =
     prm.metadata?.authorizationServers?.[0]?.trim() || null;
-  const issuerContext = JSON.stringify([
+  // Only a named issuer can change what the upstream advertises. A probe that
+  // is disabled or loading has no answer, and a failed one reads the same as an
+  // upstream advertising nothing, so none of them may discard what the operator
+  // typed: a background refetch or a passing upstream failure would wipe it.
+  const advertisementSource = JSON.stringify([
     mcpServerId,
     remoteMcpServerId,
     upstreamUrl,
-    advertisedIssuer,
+  ]);
+  const [advertisement, setAdvertisement] = useState({
+    source: advertisementSource,
+    issuer: advertisedIssuer,
+  });
+  const newSource = advertisement.source !== advertisementSource;
+  if (
+    newSource ||
+    (advertisedIssuer && advertisement.issuer !== advertisedIssuer)
+  ) {
+    setAdvertisement({
+      source: advertisementSource,
+      issuer: advertisedIssuer,
+    });
+  }
+  const issuerContext = JSON.stringify([
+    advertisementSource,
+    newSource || advertisedIssuer ? advertisedIssuer : advertisement.issuer,
   ]);
   const [correction, setCorrection] = useState({
     context: issuerContext,
@@ -707,6 +731,11 @@ export function useUserIdentityDraft({
         : discoveredMetadataQuery.data?.issuer === discoveredIssuerUrl
           ? "ready"
           : "idle";
+  // Once discovery fails the form stays until the operator is done with it, so
+  // a refetch reading "loading" cannot take it away mid-edit.
+  if (discoveryStatus === "error" && !correction.open) {
+    setCorrection((current) => ({ ...current, open: true }));
+  }
   const discoveredMetadata =
     discoveryStatus === "ready" ? discoveredMetadataQuery.data! : null;
   const discoveryError =
@@ -826,7 +855,13 @@ export function useUserIdentityDraft({
   };
 
   const commit = useMutation({
-    mutationFn: async (revision: number) => {
+    mutationFn: async ({
+      revision,
+      replaceClientServerIds,
+    }: {
+      revision: number;
+      replaceClientServerIds: string[];
+    }) => {
       if (!selected) throw new Error("choose an identity provider");
       if (!choice) throw new Error("Choose a registration method.");
       const assertCurrentSelection = () => {
@@ -954,6 +989,11 @@ export function useUserIdentityDraft({
               choice === "auto" && methodChoiceAvailable
                 ? registrationMethod
                 : undefined,
+            // Clearing the connection is the administrator asking for a new
+            // client, which automatic registration would otherwise not do.
+            replaceClient: cleared && !sameAsConnected ? true : undefined,
+            replaceClientServerIds:
+              cleared && !sameAsConnected ? replaceClientServerIds : undefined,
           },
         });
       } finally {
@@ -1068,10 +1108,6 @@ export function useUserIdentityDraft({
       !correction.edited &&
       !correction.error &&
       correction.text.trim() === discoveredIssuerUrl,
-    openIssuerEditor: () => {
-      if (!commitStarted.current && selectedDiscovered)
-        setCorrection((current) => ({ ...current, open: true }));
-    },
     setIssuerEditorText: (text) => {
       if (!commitStarted.current)
         setCorrection((current) => ({
@@ -1159,12 +1195,15 @@ export function useUserIdentityDraft({
     status,
     canSave,
     pendingChange,
-    save: async (): Promise<boolean> => {
+    save: async (replaceClientServerIds: string[] = []): Promise<boolean> => {
       // Awaitable so callers can sequence work after it. onError has already
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit(selectionRevision.current);
+        await runCommit({
+          revision: selectionRevision.current,
+          replaceClientServerIds,
+        });
         return true;
       } catch {
         /* reported by onError */

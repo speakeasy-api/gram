@@ -100,6 +100,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				RegistrationID: result.Registration,
 				ProviderKey:    result.ProviderKey,
 				CatalogRef:     result.CatalogRef,
+				NextAction:     nextAction,
 			})
 			if err != nil {
 				// The registration has already committed. A failed setup link must
