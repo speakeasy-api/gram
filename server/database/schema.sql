@@ -11379,6 +11379,31 @@ COMMENT ON COLUMN project_marketplace_settings.observability_enabled IS '@access
 COMMENT ON COLUMN project_marketplace_settings.created_at IS '@access: confidential';
 COMMENT ON COLUMN project_marketplace_settings.updated_at IS '@access: confidential';
 
+-- Per-project on/off switch for the project gateway: one MCP URL per project
+-- whose members are every server in the project the signed-in user can reach.
+-- A project with no row uses the server-side default, so the default lives in
+-- code, not data. The organization-wide organization_gateway_disabled product
+-- feature still turns every project gateway in the organization off.
+CREATE TABLE IF NOT EXISTS project_gateway_settings (
+  project_id uuid NOT NULL,
+  organization_id TEXT NOT NULL,
+  -- Whether a project admin turned the project gateway on (TRUE) or off
+  -- (FALSE).
+  enabled BOOLEAN NOT NULL,
+
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+
+  CONSTRAINT project_gateway_settings_pkey PRIMARY KEY (project_id),
+  CONSTRAINT project_gateway_settings_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects (id) ON DELETE CASCADE
+);
+
+COMMENT ON COLUMN project_gateway_settings.project_id IS '@access: confidential';
+COMMENT ON COLUMN project_gateway_settings.organization_id IS '@access: confidential';
+COMMENT ON COLUMN project_gateway_settings.enabled IS '@access: confidential';
+COMMENT ON COLUMN project_gateway_settings.created_at IS '@access: confidential';
+COMMENT ON COLUMN project_gateway_settings.updated_at IS '@access: confidential';
+
 -- Risk analysis policies for scanning chat messages against configurable rules.
 -- One workflow per policy drains unanalyzed messages and produces risk_results.
 CREATE TABLE IF NOT EXISTS risk_policies (
