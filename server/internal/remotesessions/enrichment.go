@@ -765,8 +765,7 @@ func (m *ChallengeManager) EnrichRemoteSession(ctx context.Context, ref RemoteSe
 		}
 		return none, fmt.Errorf("load remote_session_client for enrichment: %w", err)
 	}
-	sess, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
-		ID:                    ref.ID,
+	sess, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            ref.Subject,
 		RemoteSessionClientID: ref.ClientID,
 	})

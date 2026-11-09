@@ -46,7 +46,11 @@ reap_stale_lock() {
     ln -s "$$" "$reap" 2> /dev/null || return 1
     identity="$(readlink "$lock" 2> /dev/null || true)"
     owner="${identity%%:*}"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null; then
+    # Re-read after the liveness check: the owner may have released and exited
+    # after the first read, letting a new holder in. A dead owner cannot release,
+    # so an unchanged identity stays put until the removal below.
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2> /dev/null \
+        && [ "$(readlink "$lock" 2> /dev/null || true)" = "$identity" ]; then
         echo "Clearing a stack lock left behind by a dead process ($owner)." >&2
         rm -f "$lock"
     fi
@@ -79,6 +83,7 @@ fi
 if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --group application
     pitchfork stop idle-pause
+    pitchfork stop tailscale-cert
 fi
 
 # Pause before stopping Temporal to avoid catchup after deliberate sleep.

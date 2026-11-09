@@ -61,7 +61,6 @@ func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	require.NoError(t, err)
 	// Token refresh updates tokens without changing the attached authorization.
 	refreshed, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
-		ID:         source.ID,
 		SubjectUrn: source.SubjectUrn, RemoteSessionClientID: source.RemoteSessionClientID,
 		ExpectedUpdatedAt: source.UpdatedAt, AccessTokenEncrypted: source.AccessTokenEncrypted,
 		AccessExpiresAt: source.AccessExpiresAt, RefreshTokenEncrypted: source.RefreshTokenEncrypted,

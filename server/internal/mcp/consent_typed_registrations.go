@@ -142,10 +142,6 @@ func (s *Service) withTypedRegistrationClients(ctx context.Context, organization
 // registrations in typed where the auth client resolver would serve them, in
 // place of what statuses holds for them.
 func (s *Service) withTypedRegistrationStatuses(ctx context.Context, organizationID string, subject urn.SessionSubject, statuses map[uuid.UUID]remotesessions.RemoteSessionState, typed map[uuid.UUID]uuid.UUID) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
-	return s.withTypedRegistrationStatusesForResource(ctx, organizationID, subject, statuses, typed, "")
-}
-
-func (s *Service) withTypedRegistrationStatusesForResource(ctx context.Context, organizationID string, subject urn.SessionSubject, statuses map[uuid.UUID]remotesessions.RemoteSessionState, typed map[uuid.UUID]uuid.UUID, resource string) (map[uuid.UUID]remotesessions.RemoteSessionState, error) {
 	if len(typed) == 0 {
 		return statuses, nil
 	}
@@ -160,7 +156,7 @@ func (s *Service) withTypedRegistrationStatusesForResource(ctx context.Context, 
 		return ok
 	})
 	for projectID, ids := range byProject {
-		found, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, projectID, organizationID, ids, resource)
+		found, err := s.remoteChallengeMgr.AuthClientRemoteSessionStatuses(ctx, subject, projectID, organizationID, ids)
 		if err != nil {
 			return nil, fmt.Errorf("typed auth client session statuses: %w", err)
 		}

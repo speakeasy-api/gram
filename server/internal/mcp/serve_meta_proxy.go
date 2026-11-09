@@ -322,7 +322,7 @@ func (s *Service) dialMetaMember(
 	member metaMember,
 	callerIdentity string,
 ) (memberDial, error) {
-	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity)
+	dial, backend, err := s.routeMetaMember(ctx, logger, gate, member, callerIdentity, true)
 	dial.fix = func() memberFix { return gate.memberFix(member) }
 	switch {
 	case errors.Is(err, errAmbiguousMemberCredential):
@@ -338,13 +338,16 @@ func (s *Service) dialMetaMember(
 // outcome and the backend kind. The snapshot already
 // enforced mcp:connect for private members with the same key
 // authorizeProxyBackendAccess uses; per-tool RBAC for private members
-// attaches inside the proxy build. Uncounted, so probes can use it.
+// attaches inside the proxy build. Uncounted, so probes can use it; a
+// dispatch sets countParity to also compare the member's upstream issuer
+// sources.
 func (s *Service) routeMetaMember(
 	ctx context.Context,
 	logger *slog.Logger,
 	gate metaGateContext,
 	member metaMember,
 	callerIdentity string,
+	countParity bool,
 ) (memberDial, string, error) {
 	serverRow, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID:        member.serverID,
@@ -381,6 +384,9 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		if countParity {
+			s.compareMemberRouting(ctx, logger, gate.organizationID, tokens, member, strings.TrimRight(remoteServer.Url, "/"), routed, terr)
+		}
 		upstreamToken := routed.Token
 		// A resolved agent credential that does not route to this member is
 		// not permission to dial it anonymously. Header/no-auth members have
@@ -413,6 +419,9 @@ func (s *Service) routeMetaMember(
 
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		if countParity {
+			s.compareMemberRouting(ctx, logger, gate.organizationID, tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"), routed, terr)
+		}
 		upstreamToken := routed.Token
 		// A resolved agent credential that does not route to this member is
 		// not permission to dial it anonymously. Header/no-auth members have

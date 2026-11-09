@@ -82,7 +82,7 @@ func TestDiscoveryModeFollowsHarnessVariant(t *testing.T) {
 	}
 
 	require.Equal(t, discoveryCode, mode(testCodexClientID))
-	require.Equal(t, discoveryProgressive, mode(testChatGPTConnectorClientID))
+	require.Equal(t, discoveryFull, mode(testChatGPTConnectorClientID), "ChatGPT keeps the catalogue even when flagged")
 	require.Equal(t, discoveryFull, mode(testOtherClientID), "harnesses outside the treatment keep the catalogue")
 
 	codeAvailable = false
@@ -357,21 +357,35 @@ func TestDiscoveryModeFailsClosedToCatalogue(t *testing.T) {
 	require.Equal(t, discoveryFull, flagged.discoveryModeFor(t.Context(), flagged.registrar.logger, principal), "no organization serves the catalogue")
 }
 
-func TestFlaggedChatGPTReachesToolsOutsideAllowlist(t *testing.T) {
+func TestFlaggedChatGPTKeepsAllowlistedCatalogue(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithDiscovery(DiscoveryConfig{
-		Flags:             harnessFlags{"chatgpt": feature.VariantPlatformMCPDiscoveryProgressive},
-		CodeExecutor:      nil,
-		CodeModeAvailable: nil,
+		Flags:             harnessFlags{"chatgpt": feature.VariantPlatformMCPDiscoveryCodeMode},
+		CodeExecutor:      codemode.Disabled{},
+		CodeModeAvailable: func(context.Context, string) bool { return true },
 	})
-	require.NotContains(t, chatGPTToolAllowlist, "get_platform_context")
+	handler := runtime.Handler()
 
-	response := allowlistRPCRaw(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, callBody(callPlatformToolName, map[string]any{"name": "get_platform_context"}))
-	require.Nil(t, response.Error)
-	var result mcp.CallToolResult
-	require.NoError(t, json.Unmarshal(response.Result, &result))
-	require.False(t, result.IsError, "the ChatGPT allowlist applies to the full catalogue only")
+	var list struct {
+		Tools []*mcp.Tool `json:"tools"`
+	}
+	allowlistRPC(t, handler, runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+	require.ElementsMatch(t, chatGPTToolAllowlist, toolNames(list.Tools), "ChatGPT lists every operation upfront, never the meta-tools")
+
+	response := allowlistRPCRaw(t, handler, runtime, testChatGPTConnectorClientID, callBody(callPlatformToolName, map[string]any{"name": "get_platform_context"}))
+	require.NotNil(t, response.Error)
+	require.Equal(t, `unknown tool "`+callPlatformToolName+`"`, response.Error.Message)
+}
+
+func TestDiscoveryToolsDeclareExplicitHints(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []discoveryMode{discoveryProgressive, discoveryCode} {
+		for _, tool := range discoveryTools(mode) {
+			assertExplicitHints(t, tool.Name, tool.Annotations)
+		}
+	}
 }
 
 func TestDiscoverySurfaceProtocolEdges(t *testing.T) {
@@ -574,24 +588,23 @@ func TestFirstRunToolsFitHostBudget(t *testing.T) {
 	}
 }
 
-// ChatGPT on the small surface sees every first-run tool it may use, including
-// ones outside its full-catalogue allowlist, and a member does not see the
-// administrator-only ones.
+// A flagged harness on the small surface sees every first-run tool it may use,
+// and a member does not see the administrator-only ones.
 func TestDiscoverySurfaceListsFirstRunToolsTheCallerMayUse(t *testing.T) {
 	t.Parallel()
 
-	flags := harnessFlags{"chatgpt": feature.VariantPlatformMCPDiscoveryProgressive}
+	flags := harnessFlags{"codex": feature.VariantPlatformMCPDiscoveryProgressive}
 	toolsList := func(grants []authz.Grant) []string {
 		runtime := newAllowlistTestRuntime(t, grants).WithDiscovery(DiscoveryConfig{Flags: flags, CodeExecutor: nil, CodeModeAvailable: nil})
 		var list struct {
 			Tools []*mcp.Tool `json:"tools"`
 		}
-		allowlistRPC(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+		allowlistRPC(t, runtime.Handler(), runtime, testCodexClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
 		return toolNames(list.Tools)
 	}
 
 	admin := toolsList([]authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
-	require.Contains(t, admin, "find_mcp", "the full-catalogue allowlist does not narrow the small surface")
+	require.Contains(t, admin, "find_mcp", "the small surface lists first-run tools")
 	require.Contains(t, admin, "register_catalog_mcp")
 
 	member := toolsList([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")})
@@ -650,7 +663,7 @@ func TestMetaToolsCarryResultCards(t *testing.T) {
 	require.NotEmpty(t, want)
 	require.Equal(t, want, cardOf(callPlatformToolName, map[string]any{"name": cardTool}), "call_platform_tool returns the tool's card")
 	require.Equal(t, want, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute returns the card of its one card call")
-	require.Nil(t, cardOf(callPlatformToolName, map[string]any{"name": "get_platform_context"}), "a result without a card carries none")
+	require.Nil(t, cardOf(callPlatformToolName, map[string]any{"name": "get_platform_context"}), "a text-only tool's successful result carries no card")
 
 	calls = 2
 	require.Nil(t, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute never picks between several cards")

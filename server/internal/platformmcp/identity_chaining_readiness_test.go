@@ -266,9 +266,9 @@ func TestMemberMCPConnectionStatusReportsIdentityChaining(t *testing.T) {
 	secondClientID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuer.ID)
 	clients := []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuer.ID}}
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
-	rejected := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp", ValidationStatus: remotesessions.ValidationOutcomeInactive}}
+	rejected := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, ValidationStatus: remotesessions.ValidationOutcomeInactive}}
 	expired := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionExpired}}
-	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive, Resource: "https://cohort.example.test/mcp"}}
+	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}
 
 	for _, test := range []struct {
 		name       string

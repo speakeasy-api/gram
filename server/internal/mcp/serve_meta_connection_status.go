@@ -184,7 +184,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 
 	probe := *gate
 	probe.chainUpstream = nil
-	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
+	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "", false)
 	if err != nil {
 		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 			return s.staleMemberStatus(ctx, logger, gate, member)

@@ -219,7 +219,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
 	}
-	if err := s.q.ServersStampLinearRemoteSessionIssuer(ctx, repo.ServersStampLinearRemoteSessionIssuerParams{
+	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
 		McpServerID:           s.det("mcpserver-linear"),
 		ProjectID:             proj,
@@ -873,6 +873,13 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 			RemoteSessionClientID: s.det("ema-client-" + service),
 		}); err != nil {
 			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
+		}
+		if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
+			RemoteSessionIssuerID: s.det("ema-vendor-" + service),
+			McpServerID:           s.det("mcpserver-ema-" + service),
+			ProjectID:             proj,
+		}); err != nil {
+			return fmt.Errorf("stamp demo ema %s remote session issuer: %w", service, err)
 		}
 	}
 	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{

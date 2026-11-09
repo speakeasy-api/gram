@@ -217,8 +217,6 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
-	// beforeCallback can seed an existing grant without changing the login state.
-	beforeCallback    func(context.Context, syntheticExpiryEnv, uuid.UUID)
 	forwardClientName bool
 	parentClientName  string
 	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
@@ -720,9 +718,6 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 		issuerMetadataReader: issuerMetadataReader,
 
 		registrationTelemetryReader: registrationTelemetryReader,
-	}
-	if options.beforeCallback != nil {
-		options.beforeCallback(ctx, env, userIssuer)
 	}
 	cbW, callbackErr := env.callback(t, cbQuery.Encode())
 

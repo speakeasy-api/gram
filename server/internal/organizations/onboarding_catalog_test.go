@@ -120,15 +120,25 @@ func TestSetupTaskCatalogMethodsExistInTheSupportMatrix(t *testing.T) {
 		Methods []struct {
 			ID string `json:"id"`
 		} `json:"methods"`
+		Plans []struct {
+			ID string `json:"id"`
+		} `json:"plans"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &catalog))
 	known := make(map[string]bool, len(catalog.Methods))
 	for _, method := range catalog.Methods {
 		known[method.ID] = true
 	}
+	knownPlans := make(map[string]bool, len(catalog.Plans))
+	for _, plan := range catalog.Plans {
+		knownPlans[plan.ID] = true
+	}
 	for _, card := range setupTaskCatalog {
 		for _, method := range card.Methods {
 			require.True(t, known[method], "card %q names integration method %q that the support matrix does not define", card.Key, method)
+		}
+		for _, plan := range card.Plans {
+			require.True(t, knownPlans[plan], "card %q names plan %q that the support matrix does not define", card.Key, plan)
 		}
 	}
 }
@@ -149,10 +159,9 @@ func TestOnboardingStepRecordsPlaceGroupsBeforeTheirCards(t *testing.T) {
 		require.Less(t, position[record.Parent], position[record.Slug], "group %q must precede %q", record.Parent, record.Slug)
 		require.Equal(t, setupTaskCompletionChildren, records[position[record.Parent]].Completion)
 	}
-	// A group is visible by default while any of its cards is; every card
-	// but LiteLLM is, so both groups are.
+	// A group is visible by default while any of its cards is.
 	require.False(t, records[position["agent-observability"]].HiddenByDefault)
-	require.False(t, records[position["mcp-distribution"]].HiddenByDefault)
+	require.False(t, records[position["claude-desktop"]].HiddenByDefault)
 }
 
 // The catalog is the wizard's fallback order, so a prerequisite must come

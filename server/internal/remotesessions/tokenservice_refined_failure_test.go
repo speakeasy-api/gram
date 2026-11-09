@@ -703,7 +703,6 @@ func TestResolveAccessTokens_UnreadableAccessTokenNeedsReconnect(t *testing.T) {
 	})
 
 	_, err := env.q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
-		ID:         env.session.ID,
 		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID,
 		ExpectedUpdatedAt: env.session.UpdatedAt, AccessTokenEncrypted: "not-ciphertext",
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), RefreshTokenEncrypted: env.session.RefreshTokenEncrypted,

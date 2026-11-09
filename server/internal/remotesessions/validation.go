@@ -4,13 +4,10 @@ package remotesessions
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -74,41 +71,4 @@ func (m *ChallengeManager) RecordRemoteSessionValidation(ctx context.Context, re
 		return false, fmt.Errorf("record remote session validation: %w", err)
 	}
 	return rows > 0, nil
-}
-
-// EnrichRemoteSessionForResource verifies that the reference is the focused
-// audience's current bound grant before running any enrichment interfaces.
-func (m *ChallengeManager) EnrichRemoteSessionForResource(ctx context.Context, ref RemoteSessionRef, resource string) (UpstreamVerification, error) {
-	var none UpstreamVerification
-	matches, err := m.remoteSessionRefMatchesResource(ctx, ref, resource)
-	if err != nil || !matches {
-		return none, err
-	}
-	return m.EnrichRemoteSession(ctx, ref)
-}
-
-// RecordRemoteSessionValidationForResource refuses to write a verdict against
-// another resource's reference. The underlying ID and timestamp CAS stays in force.
-func (m *ChallengeManager) RecordRemoteSessionValidationForResource(ctx context.Context, ref RemoteSessionRef, resource string, verdict RemoteSessionValidation) (bool, error) {
-	matches, err := m.remoteSessionRefMatchesResource(ctx, ref, resource)
-	if err != nil || !matches {
-		return false, err
-	}
-	return m.RecordRemoteSessionValidation(ctx, ref, verdict)
-}
-
-func (m *ChallengeManager) remoteSessionRefMatchesResource(ctx context.Context, ref RemoteSessionRef, resource string) (bool, error) {
-	if resource == "" {
-		return false, focusedResourceRequired()
-	}
-	session, err := remotesessions_repo.New(m.db).GetActiveRemoteSessionInTenant(ctx, remotesessions_repo.GetActiveRemoteSessionInTenantParams{
-		ProjectID: ref.ProjectID, OrganizationID: ref.OrganizationID, SubjectUrn: ref.Subject, RemoteSessionClientID: ref.ClientID, Resource: resource,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("check focused verification source: %w", err)
-	}
-	return session.ID == ref.ID && session.UpdatedAt.Time.Equal(ref.UpdatedAt) && session.Resource.Valid && session.Resource.String != "" && strings.TrimRight(session.Resource.String, "/") == strings.TrimRight(resource, "/"), nil
 }
