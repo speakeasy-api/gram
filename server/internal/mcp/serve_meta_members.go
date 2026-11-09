@@ -160,7 +160,6 @@ type metaMemberCandidate struct {
 	tunneledServerID           uuid.NullUUID
 	environmentID              uuid.NullUUID
 	toolVariationsGroupID      uuid.NullUUID
-	remoteSessionIssuerID      uuid.NullUUID
 	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
 }
@@ -222,7 +221,6 @@ func (s *Service) resolveMetaMemberSnapshot(
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
-			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
@@ -381,7 +379,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
-			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
