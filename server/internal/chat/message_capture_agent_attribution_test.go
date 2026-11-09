@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -358,4 +359,35 @@ func TestStartOrResumeChat_ForeignTenantAgentIsNotRecorded(t *testing.T) {
 	row := chatRow(t, ti, chatID)
 	require.False(t, row.AgentID.Valid, "a foreign tenant's agent is never recorded")
 	require.False(t, row.UserID.Valid)
+}
+
+// A deleted agent resolves to no agent at write time: a fresh chat records
+// nothing, and its identity-less turn on another agent's session is rejected,
+// so the first agent's owner never reads it.
+func TestStartOrResumeChat_DeletedAgentIsNotRecordedAndCannotJoin(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	ownerA := "agent-owner-a-" + uuid.NewString()
+	ownerD := "agent-owner-d-" + uuid.NewString()
+	agentA := seedAgent(t, ctx, ti, ownerA, "Live agent")
+	deleted := seedAgent(t, ctx, ti, ownerD, "Deleted agent")
+	require.NoError(t, testrepo.New(ti.conn).SoftDeleteAgentFixture(ctx, deleted))
+
+	fresh := uuid.New()
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, deleted, ownerD), completionRequest(ti, fresh, ""))
+	require.NoError(t, err)
+	require.False(t, chatRow(t, ti, fresh).AgentID.Valid, "a deleted agent is never recorded")
+
+	shared := uuid.New()
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentA, ownerA), completionRequest(ti, shared, ""))
+	require.NoError(t, err)
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, deleted, ownerD), completionRequest(ti, shared, ""))
+	requireOopsCode(t, err, oops.CodeNotFound)
+
+	row := chatRow(t, ti, shared)
+	require.Equal(t, agentA, row.AgentID.UUID)
+	require.False(t, row.UserID.Valid, "the rejected turn does not demote the session")
 }

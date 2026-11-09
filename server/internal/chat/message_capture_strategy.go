@@ -636,7 +636,7 @@ func captureIdentity(ctx context.Context, request openrouter.CompletionRequest) 
 		return captureIdentityColumns{
 			userID:         conv.ToPGText(request.UserID),
 			externalUserID: conv.ToPGText(request.ExternalUserID),
-			agentID:        conv.NilableToNullUUID(uuid.Nil),
+			agentID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		}
 	}
 	return captureIdentityColumns{

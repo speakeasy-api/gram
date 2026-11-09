@@ -5043,7 +5043,14 @@ END
       ELSE chats.user_id
     END
 WHERE chats.project_id = EXCLUDED.project_id
-  AND (chats.agent_id IS NULL OR EXCLUDED.agent_id IS NULL OR chats.agent_id = EXCLUDED.agent_id)
+  AND (
+    chats.agent_id IS NULL
+    OR chats.agent_id = EXCLUDED.agent_id
+    OR (
+      EXCLUDED.agent_id IS NULL
+      AND (EXCLUDED.user_id IS NOT NULL OR COALESCE(EXCLUDED.external_user_id, '') <> '')
+    )
+  )
 RETURNING id
 `
 
@@ -5079,14 +5086,15 @@ type UpsertChatParams struct {
 // agent_id is set on insert only. Naming an agent on an existing session would
 // hand its owner every earlier turn, including ones the agent never sent.
 // An existing row keeps its author, except a non-agent turn on an agent-only
-// session: agent turns write NULL user_id, every other turn a non-NULL one (even
-// ”), so the row is demoted to the ” no-author shape instead of changing hands.
+// session: agent turns without a human identity write NULL user_id, every other
+// turn a non-NULL one (even ”), so the row is demoted to ” (no author).
 // The conflict target is the bare primary key, so a caller supplying another
 // project's chat id would otherwise land on that row and get its id back from
 // RETURNING. Rejecting the conflict yields no row, which the caller maps to an
 // authorization failure.
-// A second agent appending to another agent's session is rejected the same
-// way: its owner would otherwise read turns of an agent that is not theirs.
+// Another agent appending to an agent's session is rejected the same way, as is
+// an identity-less turn whose agent resolved to NULL (deleted or foreign): only
+// a turn carrying a human identity may join, and that one demotes the row above.
 func (q *Queries) UpsertChat(ctx context.Context, arg UpsertChatParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, upsertChat,
 		arg.ID,
