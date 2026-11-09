@@ -247,7 +247,7 @@ test("restart clears a stack lock left by a dead process", async (t) => {
   const lock = join(gitdir, "gram-stack-lock");
   const dead = spawnSync(process.execPath, ["-e", ""]).pid;
   symlinkSync(`${dead}:unpause`, lock);
-  t.mock.method(console, "warn", () => {});
+  t.mock.method(console, "error", () => {});
   let restarted = false;
   const skipped = await restartUnderStackLock(root, async () => {
     restarted = true;
