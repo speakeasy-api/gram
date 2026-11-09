@@ -2,7 +2,9 @@
 import { describe, expect, it } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
+  agentPolicyBroadGrantLabel,
   agentPolicyChangedScopes,
+  agentPolicySaveChanges,
   agentPolicyFingerprint,
   agentPolicyDraftFromGrants,
   agentPolicyGrantsFromDraft,
@@ -879,5 +881,124 @@ describe("changed scopes", () => {
         "skill:read": null,
       }),
     ).toEqual(new Set(["mcp:read", "project:read", "skill:read"]));
+  });
+
+  it("names an unfinished choice started from any stored permission", () => {
+    expect(
+      agentPolicyChangedScopes(
+        { "mcp:read": null, "skill:read": [], "project:read": null },
+        { "mcp:read": [], "skill:read": [], "project:read": null },
+      ),
+    ).toEqual(new Set(["mcp:read"]));
+  });
+});
+
+describe("broad grant label", () => {
+  it.each([
+    [{ resourceKind: "org", resourceId: "*" }, "Whole organization"],
+    // The organization's own id narrows nothing: an agent is in one.
+    [{ resourceKind: "org", resourceId: "org_one" }, "Whole organization"],
+    [
+      { resourceKind: "org", resourceId: "*", projectId: "project_one" },
+      "All resources",
+    ],
+    [
+      { resourceKind: "org", resourceId: "org_one", projectId: "project_one" },
+      undefined,
+    ],
+    [{ resourceKind: "mcp", resourceId: "*" }, "All resources"],
+    [
+      { resourceKind: "mcp", resourceId: "*", projectId: "project_one" },
+      "All resources",
+    ],
+    [{ resourceKind: "mcp", resourceId: "server_one" }, undefined],
+  ] as const)("labels %j as %s", (selector, label) => {
+    expect(agentPolicyBroadGrantLabel(selector)).toBe(label);
+  });
+});
+
+describe("project-wide grants stored without a resource id", () => {
+  it.each(["mcp:read", "inference:execute"])(
+    "edits a %s grant the picker ticks as its project",
+    (scope) => {
+      const stored = [
+        storedGrant("grant_project", scope, {
+          resourceKind: agentPolicyResourceKind(scope),
+          resourceId: "",
+          projectId: "project_one",
+        }),
+        storedGrant("grant_project_two", scope, {
+          resourceKind: agentPolicyResourceKind(scope),
+          resourceId: "*",
+          projectId: "project_two",
+        }),
+      ];
+      const view = agentPolicyViewFromGrants(stored);
+      expect(view.preservedScopes).toEqual([]);
+      expect(
+        diffAgentPolicyGrants(
+          view.editable,
+          agentPolicyGrantsFromDraft(view.draft),
+        ),
+      ).toEqual({ create: [], remove: [] });
+    },
+  );
+
+  it("locks every resource in an empty project, which the picker cannot tick", () => {
+    const view = agentPolicyViewFromGrants([
+      storedGrant("grant_empty", "mcp:read", {
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "",
+      }),
+    ]);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
+  });
+});
+
+describe("save changes", () => {
+  const stored = [
+    storedGrant("kept_one", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+    storedGrant("kept_two", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "server_two",
+    }),
+    storedGrant("skill", "skill:read", {
+      resourceKind: "skill",
+      resourceId: "*",
+    }),
+  ];
+
+  it("writes nothing for a kept scope left alone", () => {
+    const view = agentPolicyViewFromGrants(stored);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
+    expect(agentPolicySaveChanges(view, view.draft, new Set())).toEqual({
+      create: [],
+      remove: [],
+    });
+  });
+
+  it("removes every stored grant of a kept scope the reader removes", () => {
+    const view = agentPolicyViewFromGrants(stored);
+    const changes = agentPolicySaveChanges(
+      view,
+      { ...view.draft, "project:read": null },
+      new Set(["mcp:read"]),
+    );
+    expect(changes.remove.map((grant) => grant.id)).toEqual([
+      "kept_one",
+      "kept_two",
+    ]);
+    expect(changes.create).toEqual([
+      {
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "*" },
+      },
+    ]);
   });
 });

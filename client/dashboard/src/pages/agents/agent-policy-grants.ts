@@ -7,6 +7,7 @@ import type {
   AgentPolicySelectorResourceKind,
 } from "@gram/client/models/components/agentpolicyselector.js";
 import type { Selector } from "@gram/client/models/components/selector.js";
+import { isProjectWideSelector } from "@/pages/access/computePanelState";
 import { isKnownResourceType, type ResourceType } from "@/pages/access/types";
 
 import { ANY_RESOURCE, delegableGrantKey } from "./agent-api-key-grants";
@@ -190,6 +191,24 @@ export function isAgentPolicySelectorUnrestricted(
 }
 
 /**
+ * What a grant naming no single resource reaches, in words, or `undefined`
+ * when it names one. An org grant narrowed by nothing else is the whole
+ * organization whether it stores `*` or the organization's own id: an agent
+ * belongs to one organization. The narrowing a grant adds, such as a project,
+ * is the caller's to show beside it.
+ */
+export function agentPolicyBroadGrantLabel(
+  selector: AgentPolicySelector,
+): string | undefined {
+  const unconstrained =
+    Object.keys(constrainedDimensions(selector)).length === 0;
+  if (selector.resourceKind === "org" && unconstrained)
+    return agentPolicyUnrestrictedLabel("org");
+  if (selector.resourceId !== ANY_RESOURCE) return undefined;
+  return agentPolicyUnrestrictedLabel(undefined);
+}
+
+/**
  * Whether the editor can hold this grant and write it back unchanged.
  *
  * A grant constraining a dimension the draft cannot carry would come back out
@@ -274,12 +293,22 @@ function isAgentPolicyScopeShowable(
         Object.keys(constrainedDimensions(grant.selector)).length === 0,
     );
   }
-  const projectWide = grants.filter(
-    (grant) => grant.selector.resourceId === ANY_RESOURCE,
+  // The picker's own rule, so a project-wide grant stored with no resource id
+  // is read as the project it ticks.
+  const projectWide = grants.filter((grant) =>
+    isProjectWideSelector(grant.selector),
   );
+  const named = grants.filter(
+    (grant) =>
+      grant.selector.resourceId !== "" &&
+      grant.selector.resourceId !== ANY_RESOURCE,
+  );
+  // Neither, such as every resource in an empty project: the picker has no
+  // tick for it.
+  if (projectWide.length + named.length !== grants.length) return false;
   // Whole projects: the picker's project list, offered for MCP servers,
   // assistants and inference.
-  if (projectWide.length === grants.length) {
+  if (named.length === 0) {
     return (
       resourceType === "mcp" ||
       resourceType === "assistant" ||
@@ -385,23 +414,17 @@ export function agentPolicyChangedScopes(
   initial: AgentPolicyDraft,
   draft: AgentPolicyDraft,
 ): Set<string> {
+  // Only called once the scope is known to be in both drafts.
   const keys = (source: AgentPolicyDraft, scope: string) =>
-    scope in source
-      ? agentPolicyGrantsFromDraft({ [scope]: source[scope] ?? null })
-          .map(delegableGrantKey)
-          .sort()
-      : [];
+    agentPolicyGrantsFromDraft({ [scope]: source[scope] ?? null })
+      .map(delegableGrantKey)
+      .sort();
   const changed = new Set<string>();
   for (const scope of new Set([
     ...Object.keys(initial),
     ...Object.keys(draft),
   ])) {
     if (scope in initial !== scope in draft) {
-      changed.add(scope);
-      continue;
-    }
-    // An unfinished choice writes nothing, and still differs from a stored one.
-    if (draft[scope]?.length === 0 && initial[scope]?.length !== 0) {
       changed.add(scope);
       continue;
     }
@@ -444,6 +467,32 @@ export function diffAgentPolicyGrants(
     remove: [...storedByKey]
       .filter(([key]) => !nextKeys.has(key))
       .map(([, grant]) => grant),
+  };
+}
+
+/**
+ * What a save sends: the grants of every scope the draft changed, and every
+ * stored grant of a kept scope the reader chose to remove. A kept scope is
+ * removed whole, because the editor cannot show it to narrow it.
+ */
+export function agentPolicySaveChanges(
+  view: AgentPolicyView,
+  draft: AgentPolicyDraft,
+  removedScopes: ReadonlySet<string>,
+): AgentPolicyDiff {
+  const changedScopes = agentPolicyChangedScopes(view.draft, draft);
+  const changes = diffAgentPolicyGrants(
+    view.editable.filter((grant) => changedScopes.has(grant.scope)),
+    agentPolicyGrantsFromDraft(draft).filter((grant) =>
+      changedScopes.has(grant.scope),
+    ),
+  );
+  return {
+    create: changes.create,
+    remove: [
+      ...changes.remove,
+      ...view.preserved.filter((grant) => removedScopes.has(grant.scope)),
+    ],
   };
 }
 

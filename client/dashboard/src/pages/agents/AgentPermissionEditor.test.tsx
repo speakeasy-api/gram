@@ -751,9 +751,61 @@ describe("loading an agent's grants exactly as stored", () => {
     expect(rule("inference:execute").textContent).toBe("Project: Project one");
     expect(rule("assistant:read").textContent).toBe("1 assistant");
     expect(screen.queryByText("mcp:connect")).toBeNull();
-    expect(screen.getByText(/Kept as they are/).textContent).toMatch(
-      /mcp:auth.*org:hooks_ingest.*environment:read/,
+    expect(screen.getByText(/Kept as they are/)).toBeTruthy();
+    for (const slug of ["mcp:auth", "org:hooks_ingest", "environment:read"]) {
+      expect(
+        screen.getByRole("button", { name: `Remove ${slug}` }),
+      ).toBeTruthy();
+    }
+  });
+
+  it("lists a kept scope's removal before saving, and removes all its grants", async () => {
+    setup(agentGrants);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove environment:read" }),
     );
+    const changes = screen.getByRole("region", { name: "Changes to save" });
+    expect(changes.textContent).toContain("Removes");
+    expect(changes.textContent).toContain("environment:read");
+    mocks.list.mockResolvedValue(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+      deleteAgentPolicyGrantForm: {
+        agentId: agent.id,
+        grantId: "environment_read",
+        expectedPolicy: {
+          scope: "environment:read",
+          selector: agentGrants[10]!.selector,
+        },
+      },
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a kept scope again when its removal is undone", () => {
+    setup(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Remove mcp:auth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep mcp:auth" }));
+    expect(
+      screen.queryByRole("region", { name: "Changes to save" }),
+    ).toBeNull();
+  });
+
+  it("names an org grant stored with the organization's id as the whole organization", () => {
+    setup([
+      stored("device_sync", "org:device_agent_sync", {
+        resourceKind: "org",
+        resourceId: "org_example",
+      }),
+    ]);
+    openPlatform();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove org:device_agent_sync" }),
+    );
+    const changes = screen.getByRole("region", { name: "Changes to save" });
+    expect(changes.textContent).toContain("Whole organization");
+    expect(changes.textContent).not.toContain("org_example");
   });
 
   it("opens a named server's picker on that server, ticked", () => {

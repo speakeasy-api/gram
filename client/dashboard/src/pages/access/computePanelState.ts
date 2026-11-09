@@ -52,9 +52,15 @@ interface ToolsAnnotationPanel {
 /**
  * Whether a selector reaches a whole project: it names the project and no
  * single resource, tool or disposition inside it. A "*" tool constrains
- * nothing.
+ * nothing. Reads only the fields a role selector and an agent policy
+ * selector share, so both editors apply the same rule.
  */
-export function isProjectWideSelector(selector: Selector): boolean {
+export function isProjectWideSelector(
+  selector: Pick<Selector, "projectId" | "tool" | "resourceId"> & {
+    resourceKind?: string;
+    disposition?: string | undefined;
+  },
+): boolean {
   if (!selector.projectId) return false;
   if (selector.tool && selector.tool !== "*") return false;
   if (selector.disposition) return false;

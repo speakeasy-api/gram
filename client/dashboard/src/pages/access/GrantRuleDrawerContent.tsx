@@ -404,8 +404,9 @@ export function GrantRuleDrawerContent({
     if (selectors === null) return;
     if (isProjectSelected(projectId)) {
       onChangeSelectors(
+        // The rule that ticked the project, so unticking removes what ticked it.
         selectors.filter(
-          (s) => !(s.projectId === projectId && s.resourceId === "*"),
+          (s) => !(s.projectId === projectId && isProjectWideSelector(s)),
         ),
       );
     } else {

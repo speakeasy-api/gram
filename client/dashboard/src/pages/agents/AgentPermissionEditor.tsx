@@ -25,16 +25,14 @@ import {
 } from "@/pages/access/useResourceLinkMaps";
 import { ANY_RESOURCE } from "./agent-api-key-grants";
 import {
-  agentPolicyChangedScopes,
+  agentPolicyBroadGrantLabel,
   agentPolicyViewFromGrants,
-  agentPolicyGrantsFromDraft,
   agentPolicyFingerprint,
+  agentPolicySaveChanges,
   agentPolicyUnrestrictedLabel,
-  diffAgentPolicyGrants,
   invalidateAgentPolicy,
   isAgentPolicyEditorScope,
   isAgentPolicyNarrowable,
-  isAgentPolicySelectorUnrestricted,
   type AgentPolicyDiff,
 } from "./agent-policy-grants";
 import { useAgentPolicyScopes } from "./useAgentPolicyScopes";
@@ -58,13 +56,16 @@ export function AgentPermissionEditor({
   const [needsReload, setNeedsReload] = useState(false);
   const rbac = useRBAC();
   const [draft, setDraft] = useState(view.draft);
+  // Kept scopes the reader chose to remove; each goes whole, as stored.
+  const [removedScopes, setRemovedScopes] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
   const [editingScope, setEditingScope] = useState<string | null>(null);
   // The open picker works on its own copy: Done keeps it, and closing the
   // picker any other way leaves the permission as it was.
   const [pickerSelectors, setPickerSelectors] = useState<Selector[] | null>(
     null,
   );
-  const changedScopes = agentPolicyChangedScopes(view.draft, draft);
   // The permissions an agent may hold come from the server, so their names
   // and descriptions are the role editor's; nothing here is a copy.
   const {
@@ -93,12 +94,7 @@ export function AgentPermissionEditor({
       invalidateAgentPolicy(queryClient, organization.id, user.id, agent.id),
       invalidateAllAgentsListPolicyGrants(queryClient),
     ]);
-  const changes = diffAgentPolicyGrants(
-    view.editable.filter((grant) => changedScopes.has(grant.scope)),
-    agentPolicyGrantsFromDraft(draft).filter((grant) =>
-      changedScopes.has(grant.scope),
-    ),
-  );
+  const changes = agentPolicySaveChanges(view, draft, removedScopes);
   const inferenceAdditions = changes.create.filter(
     (grant) => grant.scope === "inference:execute",
   );
@@ -189,6 +185,7 @@ export function AgentPermissionEditor({
       setBase(current);
       setView(next);
       setDraft(next.draft);
+      setRemovedScopes(new Set());
       setEditingScope(null);
       setNeedsReload(false);
       save.reset();
@@ -201,6 +198,11 @@ export function AgentPermissionEditor({
   const incomplete = Object.values(draft).some(
     (selectors) => selectors?.length === 0,
   );
+  const locked =
+    save.isPending ||
+    reload.isPending ||
+    needsReload ||
+    !agent.permissions.write;
   const close = () => {
     if (!save.isPending && !reload.isPending) onClose();
   };
@@ -221,10 +223,49 @@ export function AgentPermissionEditor({
           </Dialog.Description>
         </Dialog.Header>
         {view.preservedScopes.length > 0 && (
-          <Text small muted>
-            Kept as they are, because this dialog cannot show them exactly:{" "}
-            {view.preservedScopes.join(", ")}.
-          </Text>
+          <div className="space-y-1">
+            <Text small muted>
+              Kept as they are, because this dialog cannot show them exactly.
+              Removing one removes every grant it holds.
+            </Text>
+            <ul className="divide-border border-border divide-y border">
+              {view.preservedScopes.map((slug) => {
+                const removed = removedScopes.has(slug);
+                return (
+                  <li
+                    key={slug}
+                    className="flex items-center justify-between gap-2 px-3 py-1"
+                  >
+                    <span
+                      className={
+                        removed
+                          ? "text-muted-foreground font-mono text-sm line-through"
+                          : "font-mono text-sm"
+                      }
+                    >
+                      {slug}
+                    </span>
+                    <Button
+                      variant={removed ? "tertiary" : "destructive-secondary"}
+                      size="xs"
+                      disabled={locked}
+                      aria-label={`${removed ? "Keep" : "Remove"} ${slug}`}
+                      onClick={() =>
+                        setRemovedScopes((previous) => {
+                          const next = new Set(previous);
+                          if (next.has(slug)) next.delete(slug);
+                          else next.add(slug);
+                          return next;
+                        })
+                      }
+                    >
+                      {removed ? "Keep" : "Remove"}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
         )}
         {scopesLoading && (
           <Text small muted>
@@ -418,13 +459,12 @@ function agentPolicyGrantTarget(
   assistantNames: Map<string, { name: string; projectName: string }>,
 ): string {
   const projectName = (id: string) => maps.projectMap.get(id)?.name ?? id;
-  if (isAgentPolicySelectorUnrestricted(selector))
-    return agentPolicyUnrestrictedLabel(selector.resourceKind);
   const inProject =
     selector.projectId && selector.projectId !== ANY_RESOURCE
       ? ` in ${projectName(selector.projectId)}`
       : "";
-  if (selector.resourceId === ANY_RESOURCE) return `All resources${inProject}`;
+  const broad = agentPolicyBroadGrantLabel(selector);
+  if (broad !== undefined) return `${broad}${inProject}`;
   if (selector.resourceKind === "project" || selector.resourceKind === "skill")
     return projectName(selector.resourceId);
   if (selector.resourceKind === "mcp") {
