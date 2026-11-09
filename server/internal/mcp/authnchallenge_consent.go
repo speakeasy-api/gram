@@ -2288,7 +2288,12 @@ func (s *Service) buildRemoteSessionCards(
 		}
 		tokenActive, tokenExpiresAt, tokenExpiresIn := tokenLine(renderedAt, state.Token, state.AccessExpiresAt)
 		resourceScopes := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: discoverScopes}
-		if resourceApplies[c.ID] {
+		// A direct server's validated typed offer owns its resource scopes,
+		// even without legacy issuer attachments or with alternative providers.
+		_, typedOffer := typed[c.ID]
+		typedTarget := typedOffer && endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid &&
+			!endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway()
+		if hasServerResource && (typedTarget || resourceApplies[c.ID]) {
 			resourceScopes = serverResource
 		}
 		if member, ok := memberResources[c.ID]; ok {

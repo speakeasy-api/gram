@@ -359,10 +359,11 @@ func (s *Service) buildRemoteConnectURL(
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
-	// endpoint.UpstreamResource only when no other bound client can claim
-	// it: under multi-binding it may belong to a different client's
-	// upstream, while a client shared by servers with different upstreams
-	// derives none on its own and would record a grant nothing routes to.
+	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
+	// Otherwise, use it only when no other bound client can claim it: under
+	// multi-binding it may belong to a different client's upstream, while a
+	// client shared by servers with different upstreams derives none on its
+	// own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
 	claimedByMember := false
