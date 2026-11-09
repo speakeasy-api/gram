@@ -2061,7 +2061,7 @@ func newStartCommand() *cli.Command {
 						CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
 					})
 				},
-				c.String("custom-domain-cname"),
+				customDomainCNAMEFromCLI(c),
 				customDomainARecords,
 				customDomainTargetSuffix,
 			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
@@ -2254,7 +2254,7 @@ func newStartCommand() *cli.Command {
 						OpenRouter:                     openRouter,
 						OpenRouterSpend:                openRouter,
 						K8sClient:                      k8sClient,
-						ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+						ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 						ExpectedARecords:               customDomainARecords,
 						GitHubEvidenceToken:            c.String("github-evidence-token"),
 						SiteURL:                        siteURL,

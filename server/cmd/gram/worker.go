@@ -883,7 +883,7 @@ func newWorkerCommand() *cli.Command {
 				OpenRouter:                     openRouter,
 				OpenRouterSpend:                openRouter,
 				K8sClient:                      k8sClient,
-				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+				ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 				ExpectedARecords:               customDomainARecords,
 				GitHubEvidenceToken:            c.String("github-evidence-token"),
 				SiteURL:                        siteURL,

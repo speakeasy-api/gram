@@ -70,6 +70,13 @@ func customDomainTargetSuffixFromCLI(c *cli.Context) (string, error) {
 	return suffix, nil
 }
 
+// customDomainCNAMEFromCLI returns the shared CNAME target in the same
+// normalized form as per-domain targets (lowercase, no trailing dot), so API
+// responses and health remediation name both targets consistently.
+func customDomainCNAMEFromCLI(c *cli.Context) string {
+	return customdomains.NormalizeDomainName(c.String("custom-domain-cname"))
+}
+
 // customDomainARecordsFromCLI returns the parsed apex A-record targets. The
 // flag-level validator has already rejected invalid values, so an error here
 // is unreachable in practice but still propagated.
