@@ -14,6 +14,7 @@ func TestCustomDomainViewPreservesObservationFreshnessWithinOneSecond(t *testing
 	t.Parallel()
 	checkedAt := time.Date(2026, time.November, 1, 0, 0, 0, 100, time.UTC)
 	domain := customdomainsrepo.CustomDomain{
+		Verified:        true,
 		DnsCheckedAt:    pgtype.Timestamptz{Time: checkedAt, Valid: true},
 		HealthCheckedAt: pgtype.Timestamptz{Time: checkedAt, Valid: true},
 		HealthStatus:    pgtype.Text{String: "healthy", Valid: true},
@@ -34,6 +35,7 @@ func TestCustomDomainViewDNSFindingsAreNotInfrastructureFailures(t *testing.T) {
 			t.Parallel()
 			checkedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 			domain := customdomainsrepo.CustomDomain{
+				Verified:     true,
 				DnsCheckedAt: checkedAt, HealthCheckedAt: checkedAt,
 				HealthStatus: pgtype.Text{String: "unhealthy", Valid: true},
 				HealthIssue:  pgtype.Text{String: issue, Valid: true},
@@ -43,4 +45,22 @@ func TestCustomDomainViewDNSFindingsAreNotInfrastructureFailures(t *testing.T) {
 			require.Nil(t, got.HealthIssue)
 		})
 	}
+}
+
+func TestCustomDomainViewKeepsHealthOfDomainDisabledForDNS(t *testing.T) {
+	t.Parallel()
+	checkedAt := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC)
+	// An earlier worker disabled this domain for a DNS issue, and a newer DNS
+	// observation has been recorded since.
+	domain := customdomainsrepo.CustomDomain{
+		Verified:        false,
+		Activated:       false,
+		DnsCheckedAt:    pgtype.Timestamptz{Time: checkedAt.Add(time.Hour), Valid: true},
+		HealthCheckedAt: pgtype.Timestamptz{Time: checkedAt, Valid: true},
+		HealthStatus:    pgtype.Text{String: "unhealthy", Valid: true},
+		HealthIssue:     pgtype.Text{String: "dns_not_found", Valid: true},
+	}
+	got := mv.BuildCustomDomainView(domain, false, uuid.Nil)
+	require.Equal(t, new("unhealthy"), got.HealthStatus)
+	require.Equal(t, new("dns_not_found"), got.HealthIssue)
 }

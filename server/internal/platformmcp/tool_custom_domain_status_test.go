@@ -101,6 +101,8 @@ func TestCustomDomainStatusDNSFailureIsNotInfrastructureFailure(t *testing.T) {
 		OrganizationID: "org-example", Domain: "mcp.example.com", ProvisionerKind: "local", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
+	_, err = repo.SetCustomDomainVerified(t.Context(), domain.ID)
+	require.NoError(t, err)
 	checkedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	_, err = repo.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
 		ID: domain.ID, OrganizationID: "org-example",
@@ -126,6 +128,8 @@ func TestCustomDomainStatusOlderWorkerCannotRefreshDNSObservation(t *testing.T) 
 	domain, err := queries.CreateCustomDomain(t.Context(), customdomainsrepo.CreateCustomDomainParams{
 		OrganizationID: "org-example", Domain: "mcp.example.com", ProvisionerKind: "local", IpAllowlist: []string{},
 	})
+	require.NoError(t, err)
+	_, err = queries.SetCustomDomainVerified(t.Context(), domain.ID)
 	require.NoError(t, err)
 	dnsTime := time.Now().Add(-time.Hour).Truncate(time.Second)
 	_, err = queries.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
@@ -178,4 +182,30 @@ func TestCustomDomainStatusBeforeFirstObservation(t *testing.T) {
 	noSuffix, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
 	require.NoError(t, err)
 	require.Empty(t, noSuffix.DNSTarget)
+}
+
+func TestCustomDomainStatusKeepsHealthOfDomainDisabledForDNS(t *testing.T) {
+	t.Parallel()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "domain_disabled_for_dns")
+	require.NoError(t, err)
+	queries := customdomainsrepo.New(conn)
+	domain, err := queries.CreateCustomDomain(t.Context(), customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: "org-example", Domain: "mcp.example.com", ProvisionerKind: "local", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	// An earlier worker disabled the domain for a DNS issue: it is unverified
+	// and its stored health names that issue.
+	checkedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	_, err = queries.UpdateCustomDomainHealth(t.Context(), customdomainsrepo.UpdateCustomDomainHealthParams{
+		ID: domain.ID, OrganizationID: "org-example",
+		HealthStatus: pgtype.Text{String: "unhealthy", Valid: true},
+		HealthIssue:  pgtype.Text{String: "dns_not_found", Valid: true},
+		CheckedAt:    checkedAt,
+	})
+	require.NoError(t, err)
+	got, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
+	require.NoError(t, err)
+	require.False(t, got.Verified)
+	require.Equal(t, "unhealthy", got.InfrastructureStatus)
+	require.Equal(t, "dns_not_found", got.InfrastructureIssue)
 }

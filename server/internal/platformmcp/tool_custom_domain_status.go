@@ -71,8 +71,11 @@ func readCustomDomainStatus(ctx context.Context, db *pgxpool.Pool, organizationI
 	output.InfrastructureIssue = domain.HealthIssue.String
 	output.CheckedAt = timestampString(domain.DnsCheckedAt.Time, domain.DnsCheckedAt.Valid)
 	// A DNS-only health issue can coexist with newer DNS columns during a
-	// rolling upgrade; it is never an infrastructure assessment.
-	if !domain.DnsCheckedAt.Valid || !domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time) || customdomains.IsDNSHealthIssue(customdomains.HealthIssue(domain.HealthIssue.String)) {
+	// rolling upgrade; it is never an infrastructure assessment. A domain an
+	// earlier worker disabled for a DNS issue is unverified and unhealthy, and
+	// keeps the stored health that explains the disable.
+	disabledForHealth := !domain.Verified && domain.HealthStatus.String == "unhealthy"
+	if !disabledForHealth && (!domain.DnsCheckedAt.Valid || !domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time) || customdomains.IsDNSHealthIssue(customdomains.HealthIssue(domain.HealthIssue.String))) {
 		output.InfrastructureStatus = "unknown"
 		output.InfrastructureIssue = ""
 	}

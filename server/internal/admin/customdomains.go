@@ -34,7 +34,10 @@ func (s *Service) ListCustomDomains(ctx context.Context, payload *gen.ListCustom
 		}
 		healthStatus := conv.FromPGText[string](row.HealthStatus)
 		healthIssue := conv.FromPGText[string](row.HealthIssue)
-		if !row.DnsCheckedAt.Valid || !row.HealthCheckedAt.Valid || !row.DnsCheckedAt.Time.Equal(row.HealthCheckedAt.Time) || customdomains.IsDNSHealthIssue(customdomains.HealthIssue(row.HealthIssue.String)) {
+		// A domain an earlier worker disabled for a DNS issue is unverified and
+		// unhealthy, and keeps the stored health that explains the disable.
+		disabledForHealth := !row.Verified && row.HealthStatus.String == "unhealthy"
+		if !disabledForHealth && (!row.DnsCheckedAt.Valid || !row.HealthCheckedAt.Valid || !row.DnsCheckedAt.Time.Equal(row.HealthCheckedAt.Time) || customdomains.IsDNSHealthIssue(customdomains.HealthIssue(row.HealthIssue.String))) {
 			healthStatus = new("unknown")
 			healthIssue = nil
 		}

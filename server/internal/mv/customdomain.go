@@ -26,16 +26,22 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 	}
 	healthStatus := conv.FromPGText[string](domain.HealthStatus)
 	healthIssue := conv.FromPGText[string](domain.HealthIssue)
-	// Compare database timestamps before formatting drops subsecond precision.
-	// An older worker can overwrite health without refreshing DNS.
-	if domain.DnsCheckedAt.Valid && (!domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time)) {
-		healthStatus = new("unknown")
-	}
-	// These persisted routing findings do not establish infrastructure health.
-	switch domain.HealthIssue.String {
-	case "dns_not_found", "dns_target_mismatch":
-		healthStatus = new("unknown")
-		healthIssue = nil
+	// An earlier worker could automatically disable a domain for a DNS issue,
+	// which leaves it unverified and unhealthy. Its stored health still
+	// explains the disable and the need to reverify, so it is not masked.
+	disabledForHealth := !domain.Verified && domain.HealthStatus.String == "unhealthy"
+	if !disabledForHealth {
+		// Compare database timestamps before formatting drops subsecond
+		// precision. An older worker can overwrite health without refreshing DNS.
+		if domain.DnsCheckedAt.Valid && (!domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time)) {
+			healthStatus = new("unknown")
+		}
+		// These persisted routing findings do not establish infrastructure health.
+		switch domain.HealthIssue.String {
+		case "dns_not_found", "dns_target_mismatch":
+			healthStatus = new("unknown")
+			healthIssue = nil
+		}
 	}
 	return &domains.CustomDomain{
 		ID:                       domain.ID.String(),
