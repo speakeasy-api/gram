@@ -1347,6 +1347,8 @@ SELECT
 FROM platform_mcp_feedback AS f
 LEFT JOIN organization_metadata AS om ON om.id = f.organization_id
 LEFT JOIN users AS u ON 'user:' || u.id = f.subject_urn
+    AND u.deleted_at IS NULL
+    AND u.workos_deleted_at IS NULL
 WHERE f.expires_at > clock_timestamp()
 ORDER BY f.created_at DESC, f.id DESC
 LIMIT @row_limit;
