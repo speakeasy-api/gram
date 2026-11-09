@@ -3,7 +3,6 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/url"
 	"sync"
 	"testing"
@@ -137,8 +136,13 @@ func TestCatalogRegistrationCardConnectOpensTheConsentPage(t *testing.T) {
 	require.NoError(t, err)
 	h := newConsentSignInHarness(t, ctx, conn)
 
-	var slug string
-	require.NoError(t, conn.QueryRow(ctx, `SELECT slug FROM mcp_endpoints WHERE id = $1`, h.registration.McpEndpointID.UUID).Scan(&slug))
+	slug, err := platformrepo.New(conn).GetPlatformMCPRegistrationConnectSlug(ctx, platformrepo.GetPlatformMCPRegistrationConnectSlugParams{
+		RegistrationID: uuid.MustParse(h.output.RegistrationID),
+		OrganizationID: h.principal.OrganizationID,
+		ProjectID:      h.project.ID,
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, slug)
 	consentURL := "https://app.example.test/mcp/" + slug + "/connect/first-party?setup=sign-in"
 
 	require.Equal(t, consentURL, h.output.SignInURL, "the agent gets the same link as the card")
@@ -189,5 +193,5 @@ func TestConsentSignInConnectorReportsAFailedConnection(t *testing.T) {
 	admin := NewConsentSignInConnector(conn, h.registrations, orgAdminAuthorizer{err: nil})
 	err = admin.ConnectPendingSignIn(ctx, h.principal.UserID, h.principal.OrganizationID, h.project.ID, h.registration.McpServerID.UUID)
 	require.Error(t, err)
-	require.True(t, errors.Is(err, ErrIdentityProviderAttachmentUnsupported))
+	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
 }

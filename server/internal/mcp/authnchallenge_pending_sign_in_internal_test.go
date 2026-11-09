@@ -3,14 +3,13 @@ package mcp
 import (
 	"context"
 	"errors"
-	"io"
-	"log/slog"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -34,7 +33,7 @@ func (r *recordingPendingSignIn) ConnectPendingSignIn(_ context.Context, userID,
 func TestConnectPendingSignInRunsOnlyForACardConnect(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := testenv.NewLogger(t)
 	endpoint := &ResolvedMcpEndpoint{
 		McpServerID:    uuid.NullUUID{UUID: uuid.New(), Valid: true},
 		OrganizationID: "org_test",
@@ -79,7 +78,7 @@ func TestConnectPendingSignInRunsOnlyForACardConnect(t *testing.T) {
 func TestConnectPendingSignInFailureStopsTheConsentPage(t *testing.T) {
 	t.Parallel()
 
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := testenv.NewLogger(t)
 	user := urn.NewUserSubject("user_test")
 	service := &Service{pendingSignIn: &recordingPendingSignIn{err: errors.New("provider refused registration")}}
 	err := service.connectPendingSignIn(t.Context(), logger, &ResolvedMcpEndpoint{
