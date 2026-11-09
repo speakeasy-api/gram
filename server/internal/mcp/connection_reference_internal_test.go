@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -125,4 +126,61 @@ func TestConnectionReference_AFailedRefreshDoesNotLabelAnUnrelatedError(t *testi
 	raw, err := marshalMetaToolError(ctx, testenv.NewLogger(t), mcpjsonrpc.StringID("1"), "Ask your administrator")
 	require.NoError(t, err)
 	require.NotContains(t, string(raw), "ref-refresh")
+}
+
+// Client A's skipped refresh must not label client B's authorization failure.
+func TestConnectionReference_StatusDoesNotClaimAnUnrelatedRefresh(t *testing.T) {
+	t.Parallel()
+
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetRefreshConnectionReference(ctx, "ref-a")
+
+	row := memberFailureSignIn(ctx, metaGateContext{}, metaMember{slug: "b"}, &metaMemberError{message: "not authorized"})
+	withStatusReference(ctx, &row)
+	require.NotContains(t, row.Detail, "ref-a")
+}
+
+func endingService(t *testing.T, recorder *mcpconnectionattempts.Recorder, coordination cache.Cache) *Service {
+	t.Helper()
+	return &Service{connections: recorder, userSessionRefreshReplayCoordination: coordination, attemptEndings: newAttemptEndings()}
+}
+
+func TestConnectionReference_AnAcceptedEndingLeavesItsID(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	attempt := openState().connectionAttempt(directEndpoint())
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+
+	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
+	require.Equal(t, attempt.ID().String(), contextvalues.ConnectionReference(ctx))
+}
+
+func TestConnectionReference_ARejectedEndingLeavesNone(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.NewLogsOff(t)
+	attempt := openState().connectionAttempt(directEndpoint())
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+
+	endingService(t, rec.Recorder, &addOnlyCache{}).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
+func TestConnectionReference_ALostOrStalledClaimLeavesNone(t *testing.T) {
+	t.Parallel()
+
+	attempt := openState().connectionAttempt(directEndpoint())
+	lost := &addOnlyCache{seen: map[string]bool{attemptEndMarker(attempt): true}}
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	endingService(t, mcpconnectionattemptstest.New(t).Recorder, lost).endAttemptOnce(ctx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
+	require.Empty(t, contextvalues.ConnectionReference(ctx), "another request's ending may be about something else")
+
+	stalled := &addOnlyCache{release: make(chan struct{})}
+	stalledCtx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	service := endingService(t, mcpconnectionattemptstest.New(t).Recorder, stalled)
+	service.endAttemptOnce(stalledCtx, testenv.NewLogger(t), attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
+	require.Empty(t, contextvalues.ConnectionReference(stalledCtx), "past the wait the error goes out with none")
+	close(stalled.release)
+	require.NoError(t, service.attemptEndings.drain(t.Context()))
 }

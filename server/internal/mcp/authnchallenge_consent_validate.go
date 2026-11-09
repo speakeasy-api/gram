@@ -126,7 +126,7 @@ func checkFailureCode(ctx context.Context, err error) mcpconnectionattempts.Code
 
 // checkFailureBrowserError explains a failed check on the error page the way its row records it.
 func checkFailureBrowserError(ctx context.Context, err error) error {
-	if remotesessions.RefreshFailureRecorded(err) || remotesessions.RefreshStepRecorded(err) {
+	if refreshProvenance(err) {
 		contextvalues.ClaimRefreshConnectionReference(ctx)
 	}
 	if failure, ok := classifyCheckFailure(ctx, err); ok && failure.page != oauthui.ReasonDefault {

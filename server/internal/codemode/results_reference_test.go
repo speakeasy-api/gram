@@ -31,3 +31,18 @@ func TestRejectedResult_NoReferenceIsCappedAsBefore(t *testing.T) {
 	require.NoError(t, json.Unmarshal(result.Content, &content))
 	require.Len(t, content[0]["text"], maxRejectionBytes)
 }
+
+func TestRejectedResult_AnOversizedUpstreamMarkerCannotPanic(t *testing.T) {
+	t.Parallel()
+
+	for _, message := range []string{
+		strings.Repeat("x", 2000) + contextvalues.ConnectionReferenceMarker + strings.Repeat("y", 2000),
+		contextvalues.ConnectionReferenceMarker + strings.Repeat("y", maxRejectionBytes*3),
+		strings.Repeat("x", 2000) + contextvalues.ConnectionReferenceMarker + "not-a-uuid",
+	} {
+		result := rejectedResult(message)
+		var content []map[string]string
+		require.NoError(t, json.Unmarshal(result.Content, &content))
+		require.LessOrEqual(t, len(content[0]["text"]), maxRejectionBytes)
+	}
+}

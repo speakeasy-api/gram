@@ -629,35 +629,29 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	return true
 }
 
-// PromiseReference leaves attempt's id for a failure another goroutine is about to End, off the
-// request path. Whichever request wins that End, the row carries this id.
-func (r *Recorder) PromiseReference(ctx context.Context, attempt Attempt, what Happened) {
-	if r == nil || attempt.IsZero() {
-		return
-	}
-	r.leaveReference(ctx, Step{}, attempt.scope.organizationID, attempt.id, what) //nolint:exhaustruct // an ending from no side step
-}
-
 // leaveReference puts a failure's id on ctx if a row can honestly be expected for it. The row is
 // still in memory at this point, so this rules out only what is knowable now: logs off, and a
 // ClickHouse that refused the last insert. A check that fails shows nothing.
 func (r *Recorder) leaveReference(ctx context.Context, step Step, organizationID string, id uuid.UUID, what Happened) {
-	if !failureWorthAReference(what) || id == uuid.Nil || step == StepDiscoveryMember || !contextvalues.ConnectionReferenceWanted(ctx) {
+	if step == StepDiscoveryMember || !contextvalues.ConnectionReferenceWanted(ctx) {
 		return
 	}
-	if r.insertFailing.Load() || !r.logsAllowForReference(ctx, organizationID) {
-		return
+	reference := ""
+	if FailureWorthAReference(what) && id != uuid.Nil && !r.insertFailing.Load() && r.logsAllowForReference(ctx, organizationID) {
+		reference = id.String()
 	}
 	if step == StepProviderRefresh {
-		contextvalues.SetRefreshConnectionReference(ctx, id.String())
+		if _, failed := what.(Code); failed {
+			contextvalues.SetRefreshConnectionReference(ctx, reference)
+		}
 		return
 	}
-	contextvalues.SetConnectionReference(ctx, id.String())
+	contextvalues.SetConnectionReference(ctx, reference)
 }
 
-// failureWorthAReference is true for a failure the person can ask about. A refresh that worked or a
-// person's own decline isn't one.
-func failureWorthAReference(what Happened) bool {
+// FailureWorthAReference is true for a failure the person can ask about. A refresh that worked or
+// a person's own decline isn't one.
+func FailureWorthAReference(what Happened) bool {
 	code, ok := what.(Code)
 	if !ok {
 		return false
@@ -666,12 +660,24 @@ func failureWorthAReference(what Happened) bool {
 	return meaning.Outcome == OutcomeFailed || meaning.Outcome == OutcomeBlocked
 }
 
+// referenceLogsAnswer asks the logs setting off the writer's and record's panic guards, so it has
+// its own: a logs check that panics shows no reference.
+func (r *Recorder) referenceLogsAnswer(organizationID string) (allowed bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			r.drop(context.Background(), dropPanic, 1, fmt.Errorf("connection reference logs check: %v", recovered))
+			allowed = false
+		}
+	}()
+	reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+	return reason == ""
+}
+
 // logsAllowForReference waits a bounded time for one background logs check per organization.
 // A slow check answers false now and fills the cache for the next failure.
 func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
 	if r.referableOrgs == nil {
-		reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-		return reason == ""
+		return r.referenceLogsAnswer(organizationID)
 	}
 	r.referableMu.Lock()
 	cached, ok := r.referableOrgs.Get(organizationID)
@@ -680,8 +686,7 @@ func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID str
 		return cached.allowed
 	}
 	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
-		reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-		allowed := reason == ""
+		allowed := r.referenceLogsAnswer(organizationID)
 		r.referableMu.Lock()
 		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
 		r.referableMu.Unlock()

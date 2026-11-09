@@ -1,8 +1,11 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -70,4 +73,56 @@ func TestWriteToolResultError_AddsTheRecordedFailuresReference(t *testing.T) {
 	require.NoError(t, err)
 	p.writeToolResultError(ctx, w, id, &ToolResultError{Message: "Ask an admin"})
 	require.Contains(t, w.Body.String(), "Reference: ref-1")
+}
+
+// refusingInterceptor refuses a tools/call, recording a row or not as a direct server would.
+type refusingInterceptor struct {
+	reference string
+}
+
+func (i *refusingInterceptor) Name() string { return "refusing" }
+
+func (i *refusingInterceptor) InterceptToolsCallRequest(context.Context, *ToolsCallRequest) error {
+	return &RejectError{Code: RejectCodeForbidden, Message: "Ask an admin", Data: nil}
+}
+
+func (i *refusingInterceptor) InterceptToolsCallRefusal(ctx context.Context, _ error) {
+	if i.reference != "" {
+		contextvalues.SetConnectionReference(ctx, i.reference)
+	}
+}
+
+func postToolsCall(t *testing.T, interceptor *refusingInterceptor) string {
+	t.Helper()
+	ctx := contextvalues.WithConnectionReferenceSlot(t.Context())
+	contextvalues.SetConnectionReference(ctx, "ref-earlier")
+	p := &Proxy{
+		Logger:                       testenv.NewLogger(t),
+		Tracer:                       testenv.NewTracerProvider(t).Tracer("test"),
+		MaxBufferedBodyBytes:         DefaultMaxBufferedBodyBytes,
+		ToolsCallRequestInterceptors: []ToolsCallRequestInterceptor{interceptor},
+		ToolsCallRefusalInterceptors: []ToolsCallRefusalInterceptor{interceptor},
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"tool","arguments":{}}}`
+	r := httptest.NewRequestWithContext(ctx, http.MethodPost, "/", strings.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	require.NoError(t, p.Post(w, r))
+	return w.Body.String()
+}
+
+func TestPost_ARefusalWithNoRowDoesNotInheritAnEarlierFailure(t *testing.T) {
+	t.Parallel()
+
+	body := postToolsCall(t, &refusingInterceptor{reference: ""})
+	require.Contains(t, body, "Ask an admin")
+	require.NotContains(t, body, "ref-earlier")
+}
+
+func TestPost_ARefusalShowsItsOwnRow(t *testing.T) {
+	t.Parallel()
+
+	body := postToolsCall(t, &refusingInterceptor{reference: "ref-own"})
+	require.Contains(t, body, "Reference: ref-own")
+	require.NotContains(t, body, "ref-earlier")
 }

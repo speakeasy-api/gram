@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"sync"
+
+	"github.com/google/uuid"
 )
 
 // connectionReferenceLabel starts the line a person passes on to their admin.
@@ -11,6 +13,9 @@ const connectionReferenceLabel = "Reference: "
 
 // ConnectionReferenceMarker is what splits a message from its reference line.
 const ConnectionReferenceMarker = "\n" + connectionReferenceLabel
+
+// connectionReferenceIDLen is the length of a UUID in its usual text form.
+const connectionReferenceIDLen = 36
 
 type connectionReferenceKey struct{}
 
@@ -22,14 +27,18 @@ type connectionReferenceSlot struct {
 	// refresh doesn't by itself mean the error shown is about it.
 	refresh string
 
-	// refreshAmbiguous says refreshes with different ids failed, so none can be claimed.
+	// refreshAmbiguous says refreshes with different ids failed, or one couldn't leave
+	// an id, so none can be claimed.
 	refreshAmbiguous bool
+
+	// conflict says failures with different ids were recorded, so none can be shown.
+	conflict bool
 }
 
 // WithConnectionReferenceSlot gives ctx a place for the reference of a connection row
 // recorded while serving it, for the error the person sees. A nested slot shadows ctx's.
 func WithConnectionReferenceSlot(ctx context.Context) context.Context {
-	return context.WithValue(ctx, connectionReferenceKey{}, &connectionReferenceSlot{mu: sync.Mutex{}, reference: "", refresh: "", refreshAmbiguous: false})
+	return context.WithValue(ctx, connectionReferenceKey{}, &connectionReferenceSlot{mu: sync.Mutex{}, reference: "", refresh: "", refreshAmbiguous: false, conflict: false})
 }
 
 // ConnectionReferenceWanted reports that someone will read a reference left on ctx.
@@ -38,22 +47,43 @@ func ConnectionReferenceWanted(ctx context.Context) bool {
 	return ok
 }
 
-// SetConnectionReference leaves the reference on ctx's slot. The last one set is the one
-// shown, and "" clears it.
+// set records a failure's id. Two different ids can't be told apart, so neither is shown.
+func (s *connectionReferenceSlot) set(reference string) {
+	switch {
+	case s.conflict || reference == "":
+	case s.reference != "" && s.reference != reference:
+		s.reference, s.conflict = "", true
+	default:
+		s.reference = reference
+	}
+}
+
+// SetConnectionReference leaves a failure's id on ctx's slot.
 func SetConnectionReference(ctx context.Context, reference string) {
 	if slot, ok := ctx.Value(connectionReferenceKey{}).(*connectionReferenceSlot); ok {
 		slot.mu.Lock()
 		defer slot.mu.Unlock()
-		slot.reference = reference
+		slot.set(reference)
 	}
 }
 
-// SetRefreshConnectionReference notes a failed refresh's id without showing it.
+// ReplaceConnectionReference makes reference the slot's whole answer, "" for none, for a
+// nested slot handing its result back.
+func ReplaceConnectionReference(ctx context.Context, reference string) {
+	if slot, ok := ctx.Value(connectionReferenceKey{}).(*connectionReferenceSlot); ok {
+		slot.mu.Lock()
+		defer slot.mu.Unlock()
+		slot.reference, slot.conflict = reference, false
+	}
+}
+
+// SetRefreshConnectionReference notes a failed refresh's id without showing it. "" is a
+// failed refresh that left no id, which rules out claiming any.
 func SetRefreshConnectionReference(ctx context.Context, reference string) {
 	if slot, ok := ctx.Value(connectionReferenceKey{}).(*connectionReferenceSlot); ok {
 		slot.mu.Lock()
 		defer slot.mu.Unlock()
-		if slot.refresh != "" && slot.refresh != reference {
+		if reference == "" || (slot.refresh != "" && slot.refresh != reference) {
 			slot.refreshAmbiguous = true
 		}
 		slot.refresh = reference
@@ -67,7 +97,7 @@ func ClaimRefreshConnectionReference(ctx context.Context) {
 		slot.mu.Lock()
 		defer slot.mu.Unlock()
 		if slot.refresh != "" && !slot.refreshAmbiguous {
-			slot.reference = slot.refresh
+			slot.set(slot.refresh)
 		}
 	}
 }
@@ -94,8 +124,25 @@ func ConnectionReferenceLine(ctx context.Context) string {
 // AppendConnectionReference adds the reference line under a message, unchanged when there is none.
 func AppendConnectionReference(ctx context.Context, message string) string {
 	line := ConnectionReferenceLine(ctx)
-	if line == "" || strings.Contains(message, line) {
+	if line == "" || strings.HasSuffix(message, "\n"+line) {
 		return message
 	}
 	return message + "\n" + line
+}
+
+// SplitConnectionReference separates a trailing reference line from message. Only the marker
+// and a UUID at the very end count, so a marker elsewhere in upstream text is plain text.
+func SplitConnectionReference(message string) (body, referenceLine string) {
+	lineLen := len(ConnectionReferenceMarker) + connectionReferenceIDLen
+	if len(message) < lineLen {
+		return message, ""
+	}
+	at := len(message) - lineLen
+	if !strings.HasPrefix(message[at:], ConnectionReferenceMarker) {
+		return message, ""
+	}
+	if _, err := uuid.Parse(message[at+len(ConnectionReferenceMarker):]); err != nil {
+		return message, ""
+	}
+	return message[:at], message[at:]
 }

@@ -34,6 +34,9 @@ import (
 const connectionAttemptEndTTL = 2 * time.Hour
 
 const (
+	// attemptEndingReferenceWait is how long a failure response waits for its ending to be accepted.
+	attemptEndingReferenceWait = 200 * time.Millisecond
+
 	// attemptEndingTimeout bounds one claim of an attempt's ending.
 	attemptEndingTimeout = 5 * time.Second
 
@@ -531,10 +534,20 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	if attempt.IsZero() {
 		return
 	}
-	if s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+	claimed := make(chan struct{})
+	if !s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+		defer close(claimed)
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
 	}) {
-		s.connections.PromiseReference(ctx, attempt, what)
+		return
+	}
+	// The row's acceptance leaves the reference; past the wait, the error goes out with none.
+	if contextvalues.ConnectionReferenceWanted(ctx) && mcpconnectionattempts.FailureWorthAReference(what) {
+		select {
+		case <-claimed:
+		case <-time.After(attemptEndingReferenceWait):
+		case <-ctx.Done():
+		}
 	}
 }
 

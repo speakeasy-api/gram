@@ -104,6 +104,44 @@ func TestReference_ASlowLogsCheckShowsNoReferenceAndDoesNotBlock(t *testing.T) {
 	})
 }
 
+func TestReference_APanickingLogsCheckShowsNoneAndIsCounted(t *testing.T) {
+	t.Parallel()
+
+	check := &logsCheck{enabled: true, err: nil, block: nil, panics: true, checks: atomic.Int64{}}
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, check.check, testConfig())
+	t.Cleanup(func() { _ = recorder.Shutdown(context.WithoutCancel(t.Context())) })
+
+	require.False(t, recorder.logsAllowForReference(t.Context(), "org"))
+	require.Equal(t, int64(1), recorder.dropTotals[dropPanic].Load())
+}
+
+func TestReference_DifferentFailuresInOneSlotShowNone(t *testing.T) {
+	t.Parallel()
+
+	recorder := NewCapturing(func(Row) {}, logsOn)
+	ctx := withSlot(t)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
+	recorder.Once(ctx, testScope(), StepMCPRequest, CodeProviderUnreachable)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+
+	attempt := Begin(testScope())
+	sameCtx := withSlot(t)
+	recorder.Step(sameCtx, attempt, StepProviderSignIn, CodeProviderUnreachable)
+	recorder.End(sameCtx, attempt, StepProviderSignIn, CodeProviderUnreachable)
+	require.Equal(t, attempt.ID().String(), contextvalues.ConnectionReference(sameCtx), "one attempt is one reference")
+}
+
+func TestReference_ARefreshThatLeftNoIDBlocksClaiming(t *testing.T) {
+	t.Parallel()
+
+	ctx := withSlot(t)
+	contextvalues.SetRefreshConnectionReference(ctx, "ref-a")
+	contextvalues.SetRefreshConnectionReference(ctx, "")
+	contextvalues.ClaimRefreshConnectionReference(ctx)
+	require.Empty(t, contextvalues.ConnectionReference(ctx))
+}
+
 func TestReference_NonFailuresLeaveNone(t *testing.T) {
 	t.Parallel()
 
@@ -176,21 +214,6 @@ func TestReference_NoneWhileInsertsAreFailing(t *testing.T) {
 	ctx := withSlot(t)
 	recorder.Once(ctx, testScope(), StepMCPRequest, CodeInvalidRemoteSession)
 	require.Empty(t, contextvalues.ConnectionReference(ctx))
-}
-
-func TestPromiseReference_LeavesTheAttemptForALaterEnd(t *testing.T) {
-	t.Parallel()
-
-	attempt := Begin(testScope())
-	recorder := NewCapturing(func(Row) {}, logsOn)
-
-	ctx := withSlot(t)
-	recorder.PromiseReference(ctx, attempt, CodeExpired)
-	require.Equal(t, attempt.ID().String(), contextvalues.ConnectionReference(ctx))
-
-	resultCtx := withSlot(t)
-	recorder.PromiseReference(resultCtx, attempt, ResultComplete)
-	require.Empty(t, contextvalues.ConnectionReference(resultCtx), "a success gets no reference")
 }
 
 // A folded request's reference must be the id its row is written under.

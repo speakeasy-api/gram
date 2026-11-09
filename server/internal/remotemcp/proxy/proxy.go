@@ -613,6 +613,8 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 // is a POST to the MCP endpoint (see spec § Sending Messages to the Server).
 func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
+	// A row from earlier in the request is about something else, not this forward's failure.
+	r = r.WithContext(contextvalues.WithConnectionReferenceSlot(r.Context()))
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodPost)...))
 	defer span.End()
 	defer func() {

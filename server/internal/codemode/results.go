@@ -91,13 +91,9 @@ const maxRejectionBytes = 1 << 10
 // tool or invalid arguments, as a completed failed call the program can fix.
 func rejectedResult(message string) *ToolResult {
 	if len(message) > maxRejectionBytes {
-		// The reference is shortened last: a shortened id finds nothing.
-		reference := ""
-		if at := strings.LastIndex(message, contextvalues.ConnectionReferenceMarker); at >= 0 {
-			reference = message[at:]
-			message = message[:at]
-		}
-		message = strings.ToValidUTF8(message[:maxRejectionBytes-len(reference)], "") + reference
+		// A shortened id finds nothing, so only the text before it is cut.
+		body, reference := contextvalues.SplitConnectionReference(message)
+		message = strings.ToValidUTF8(body[:maxRejectionBytes-len(reference)], "") + reference
 	}
 	content, err := json.Marshal([]map[string]string{{"type": "text", "text": message}})
 	if err != nil {

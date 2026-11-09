@@ -267,7 +267,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	callCtx := contextvalues.WithConnectionReferenceSlot(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt))
 	body, err := s.dispatchMetaMemberTool(callCtx, logger, gate, members, req, qualified, arguments, meta, attempt)
 	if err != nil {
-		contextvalues.SetConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
+		contextvalues.ReplaceConnectionReference(ctx, contextvalues.ConnectionReference(callCtx))
 	}
 	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
 		return body, err

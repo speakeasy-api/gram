@@ -109,9 +109,6 @@ func (s *Service) handleMetaConnectionStatusCall(
 // withStatusReference adds the reference of a row this check stored to a member reporting a
 // problem. Most problems here are read from stored state and store no row, so show none.
 func withStatusReference(ctx context.Context, row *metamcp.ConnectionStatusServer) {
-	if row.Status == metamcp.SignInError || row.Status == metamcp.SignInUnavailable {
-		contextvalues.ClaimRefreshConnectionReference(ctx)
-	}
 	line := contextvalues.ConnectionReferenceLine(ctx)
 	if line == "" || row.Status == metamcp.SignInConnected || row.Status == metamcp.SignInNotRequired {
 		return
@@ -197,11 +194,11 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
-			return memberFailureSignIn(*gate, member, err)
+			return memberFailureSignIn(ctx, *gate, member, err)
 		}
 		tokens, err := hostedMemberTokens(gateTokens, member)
 		if err != nil {
-			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
+			return memberFailureSignIn(ctx, *gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
 		}
 		if len(tokens) == 0 {
 			return notConnectedRow(gate, true)
@@ -216,7 +213,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
 			return s.staleMemberStatus(ctx, logger, gate, member)
 		}
-		return memberFailureSignIn(*gate, member, err)
+		return memberFailureSignIn(ctx, *gate, member, err)
 	}
 	if !dial.anonymous {
 		return signInRow(metamcp.SignInConnected, "", nil)
@@ -280,8 +277,11 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 // memberFailureSignIn keeps an outage from reading as a broken sign-in. On an
 // agent gateway, a missing or unusable connection is a row the agent's
 // sign-in step fixes.
-func memberFailureSignIn(gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
+func memberFailureSignIn(ctx context.Context, gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
 	unavailable, ok := errors.AsType[memberUnavailableError](err)
+	if refreshProvenance(err) || (ok && refreshProvenance(unavailable.session)) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
+	}
 	if !ok {
 		if _, reconnect := errors.AsType[agentCredentialError](err); reconnect && gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)
@@ -300,6 +300,11 @@ func memberFailureSignIn(gate metaGateContext, member metaMember, err error) met
 		reconnectURL = gate.memberCallerURL(member)
 	}
 	return signInRow(metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL})
+}
+
+// refreshProvenance reports an error known to come from a refresh that wrote its own failed row.
+func refreshProvenance(err error) bool {
+	return remotesessions.RefreshFailureRecorded(err) || remotesessions.RefreshStepRecorded(err)
 }
 
 // connectionOutageMessage says what's down and when to retry, in words for a person.
