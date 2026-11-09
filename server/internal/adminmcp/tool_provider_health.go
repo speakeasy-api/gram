@@ -26,6 +26,14 @@ var (
 	providerHealthWindowHours = []int{1, 24, 168}
 )
 
+const (
+	// unknownReasonText stands in for a reason the catalog does not know, such as other.
+	unknownReasonText = "Unknown reason."
+
+	// unknownWhoFixes is who fixes an unknown reason.
+	unknownWhoFixes = "unknown"
+)
+
 // ProviderHealthReader reads provider health across organizations, as counts only.
 type ProviderHealthReader interface {
 	ReadProviderHealth(context.Context, mcpconnectionattempts.ProviderHealthQuery) ([]mcpconnectionattempts.ProviderHealthReport, error)
@@ -51,7 +59,7 @@ type ProviderHealthOutput struct {
 	// Thresholds are what an outage needs.
 	Thresholds ProviderHealthThresholds `json:"thresholds"`
 
-	// Providers are busiest first.
+	// Providers are every known provider, busiest in the last hour first, then other when it had attempts.
 	Providers []ProviderHealthEntry `json:"providers"`
 }
 
@@ -117,8 +125,8 @@ type ProviderHealthLastHour struct {
 	// FailureRate is provider failures over attempts.
 	FailureRate float64 `json:"failure_rate"`
 
-	// UsualFailureRate is the same rate over the baseline.
-	UsualFailureRate float64 `json:"usual_failure_rate"`
+	// UsualFailureRate is the same rate over the baseline, null when the baseline has no attempts.
+	UsualFailureRate *float64 `json:"usual_failure_rate"`
 }
 
 // ProviderHealthFailure is one way attempts ended failed.
@@ -226,10 +234,13 @@ func registerProviderHealthTools(server *mcp.Server, health ProviderHealthReader
 func providerHealthEntry(report mcpconnectionattempts.ProviderHealthReport) ProviderHealthEntry {
 	failures := make([]ProviderHealthFailure, 0, len(report.Failures))
 	for _, failure := range report.Failures {
-		meaning, _ := mcpconnectionattempts.MeaningOf(failure.Reason)
+		whatHappened, whoFixes := unknownReasonText, unknownWhoFixes
+		if meaning, ok := mcpconnectionattempts.MeaningOf(failure.Reason); ok {
+			whatHappened, whoFixes = meaning.WhatHappened, string(meaning.WhoFixes)
+		}
 		failures = append(failures, ProviderHealthFailure{
-			Step: failure.Step, Reason: failure.Reason, WhatHappened: meaning.WhatHappened,
-			WhoFixes: string(meaning.WhoFixes), Attempts: failure.Attempts,
+			Step: failure.Step, Reason: failure.Reason, WhatHappened: whatHappened,
+			WhoFixes: whoFixes, Attempts: failure.Attempts,
 		})
 	}
 	abandoned := make([]ProviderHealthStep, 0, len(report.Abandoned))
@@ -247,7 +258,7 @@ func providerHealthEntry(report mcpconnectionattempts.ProviderHealthReport) Prov
 		LastHour: ProviderHealthLastHour{
 			Attempts: report.Counts.Attempts, ProviderFailures: report.Counts.Failures,
 			OrganizationsAffected: report.Counts.Organizations,
-			FailureRate:           report.Counts.Rate(), UsualFailureRate: report.Counts.BaselineRate(),
+			FailureRate:           report.Counts.Rate(), UsualFailureRate: usualFailureRate(report.Counts),
 		},
 		Failures:       failures,
 		ReconnectLoops: report.ReconnectLoops,
@@ -258,16 +269,19 @@ func providerHealthEntry(report mcpconnectionattempts.ProviderHealthReport) Prov
 
 func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) string {
 	c := report.Counts
-	usual := fmt.Sprintf("Usually %s fail.", percent(c.BaselineRate()))
+	usual := "There is no usual rate yet."
+	if rate := usualFailureRate(c); rate != nil {
+		usual = fmt.Sprintf("Usually %s fail.", percent(*rate))
+	}
 	switch report.Status {
 	case mcpconnectionattempts.ProviderOutage:
-		return fmt.Sprintf("%s looks down: %d of %d attempts in the last hour failed on its side, in %s. %s",
-			report.Provider, c.Failures, c.Attempts, countOf(c.Organizations, "organization"), usual)
+		return fmt.Sprintf("%s looks down: %d of %s in the last hour failed on its side, in %s. %s",
+			report.Provider, c.Failures, countOf(c.Attempts, "attempt"), countOf(c.Organizations, "organization"), usual)
 	case mcpconnectionattempts.ProviderElevated:
-		return fmt.Sprintf("%s is failing more than usual: %d of %d attempts in the last hour failed on its side, in %s. %s",
-			report.Provider, c.Failures, c.Attempts, countOf(c.Organizations, "organization"), usual)
+		return fmt.Sprintf("%s is failing more than usual: %d of %s in the last hour failed on its side, in %s. %s",
+			report.Provider, c.Failures, countOf(c.Attempts, "attempt"), countOf(c.Organizations, "organization"), usual)
 	case mcpconnectionattempts.ProviderNormal:
-		return fmt.Sprintf("%s looks normal: %d of %d attempts in the last hour failed on its side.", report.Provider, c.Failures, c.Attempts)
+		return fmt.Sprintf("%s looks normal: %d of %s in the last hour failed on its side.", report.Provider, c.Failures, countOf(c.Attempts, "attempt"))
 	case mcpconnectionattempts.ProviderQuiet:
 		return fmt.Sprintf("No attempts reached %s in the last hour.", report.Provider)
 	default:
@@ -283,7 +297,15 @@ func percent(rate float64) string {
 	return fmt.Sprintf("%.0f%%", 100*rate)
 }
 
-func countOf(n int, noun string) string {
+// usualFailureRate is the baseline failure rate, nil when the baseline has no attempts.
+func usualFailureRate(c mcpconnectionattempts.ProviderCounts) *float64 {
+	if c.BaselineAttempts == 0 {
+		return nil
+	}
+	return new(c.BaselineRate())
+}
+
+func countOf[N int | uint64](n N, noun string) string {
 	if n == 1 {
 		return "1 " + noun
 	}

@@ -88,7 +88,7 @@ func TestDescribeProviderHealth_ReturnsPlainCounts(t *testing.T) {
 		Provider: "accounts.google.com",
 		Status:   "outage",
 		Summary:  "accounts.google.com looks down: 6 of 10 attempts in the last hour failed on its side, in 3 organizations. Usually 1% fail.",
-		LastHour: ProviderHealthLastHour{Attempts: 10, ProviderFailures: 6, OrganizationsAffected: 3, FailureRate: 0.6, UsualFailureRate: 0.01},
+		LastHour: ProviderHealthLastHour{Attempts: 10, ProviderFailures: 6, OrganizationsAffected: 3, FailureRate: 0.6, UsualFailureRate: new(0.01)},
 		Failures: []ProviderHealthFailure{{
 			Step: "provider_refresh", Reason: "provider_unavailable", WhatHappened: "The service is temporarily unavailable.", WhoFixes: "provider", Attempts: 6,
 		}},
@@ -163,4 +163,25 @@ func TestPercent_KeepsASmallRateVisible(t *testing.T) {
 	require.Equal(t, "0%", percent(0))
 	require.Equal(t, "0.4%", percent(0.004))
 	require.Equal(t, "25%", percent(0.25))
+}
+
+func TestDescribeProviderHealth_SaysWhenThereIsNoUsualRate(t *testing.T) {
+	t.Parallel()
+
+	reads := &recordingProviderHealthReader{recordingOrganizationReader: &recordingOrganizationReader{}, reports: []mcpconnectionattempts.ProviderHealthReport{{
+		Provider: "mcp.linear.app",
+		Status:   mcpconnectionattempts.ProviderElevated,
+		Counts:   mcpconnectionattempts.ProviderCounts{Attempts: 1, Failures: 1, Organizations: 1, BaselineAttempts: 0, BaselineFailures: 0},
+		Failures: []mcpconnectionattempts.ProviderFailure{{Step: "provider_token", Reason: mcpconnectionattempts.LabelOther, Attempts: 1}},
+	}}}
+	body, data, isError := callProviderHealthTool(t, reads, true, `{}`)
+	require.False(t, isError)
+	require.Contains(t, body, `"usual_failure_rate":null`)
+
+	var out ProviderHealthOutput
+	require.NoError(t, json.Unmarshal(data, &out))
+	entry := out.Providers[0]
+	require.Nil(t, entry.LastHour.UsualFailureRate)
+	require.Equal(t, "mcp.linear.app is failing more than usual: 1 of 1 attempt in the last hour failed on its side, in 1 organization. There is no usual rate yet.", entry.Summary)
+	require.Equal(t, []ProviderHealthFailure{{Step: "provider_token", Reason: "other", WhatHappened: "Unknown reason.", WhoFixes: "unknown", Attempts: 1}}, entry.Failures)
 }

@@ -267,7 +267,7 @@ const providerAttemptColumns = attemptEndingColumns + `,
 	toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
 		AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop`
 
-// Read returns each provider's health, busiest first. Organizations stay counts.
+// Read returns each provider's health, busiest in the last hour first. Organizations stay counts.
 // A status-only caller passes Window: OutageWindow and TrendDays: 0.
 func (h *ProviderHealth) Read(ctx context.Context, query ProviderHealthQuery) ([]ProviderHealthReport, error) {
 	if query.Window <= 0 || query.Window > OutageBaseline {
@@ -299,7 +299,15 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		detailFrom = statusFrom
 	}
 	scanFrom := detailFrom.Add(-AttemptLiveWindow).UnixNano()
+	// Every known provider is reported, quiet when it has no rows, so silence is visible.
 	tallies := map[string]*providerTally{}
+	if query.Provider != "" {
+		tallies[query.Provider] = newProviderTally()
+	} else {
+		for host := range knownProviderHosts {
+			tallies[host] = newProviderTally()
+		}
+	}
 	tally := func(provider string) *providerTally {
 		t, ok := tallies[provider]
 		if !ok {
@@ -357,7 +365,7 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		reports = append(reports, t.report(provider, daily[provider]))
 	}
 	slices.SortFunc(reports, func(a, b ProviderHealthReport) int {
-		return cmp.Or(cmp.Compare(b.Counts.Attempts+b.Counts.BaselineAttempts, a.Counts.Attempts+a.Counts.BaselineAttempts), cmp.Compare(a.Provider, b.Provider))
+		return cmp.Or(cmp.Compare(b.Counts.Attempts, a.Counts.Attempts), cmp.Compare(a.Provider, b.Provider))
 	})
 	return reports, nil
 }

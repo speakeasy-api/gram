@@ -213,7 +213,29 @@ func TestProviderHealth_LeavesOutTheDemoOrganization(t *testing.T) {
 	health := NewProviderHealth(testenv.NewLogger(t), f.conn)
 	reports, err := health.Read(t.Context(), ProviderHealthQuery{Provider: f.provider, Window: time.Hour, TrendDays: 0})
 	require.NoError(t, err)
-	require.Empty(t, reports)
+	require.Len(t, reports, 1)
+	require.Equal(t, ProviderQuiet, reports[0].Status)
+	require.Equal(t, noProviderCounts, reports[0].Counts)
+}
+
+func TestProviderHealth_ReportsEveryKnownProvider(t *testing.T) {
+	t.Parallel()
+
+	health := NewProviderHealth(testenv.NewLogger(t), clickhouseConn(t))
+	reports, err := health.Read(t.Context(), ProviderHealthQuery{Provider: "", Window: time.Hour, TrendDays: 0})
+	require.NoError(t, err)
+
+	byProvider := map[string]ProviderHealthReport{}
+	for _, report := range reports {
+		byProvider[report.Provider] = report
+	}
+	for host := range knownProviderHosts {
+		require.Contains(t, byProvider, host)
+	}
+	require.Equal(t, ProviderQuiet, byProvider["connect.stripe.com"].Status, "a provider with no rows is quiet, not missing")
+	for i := 1; i < len(reports); i++ {
+		require.GreaterOrEqual(t, reports[i-1].Counts.Attempts, reports[i].Counts.Attempts, "busiest in the last hour first")
+	}
 }
 
 func TestProviderHealth_StoppedAttemptCountsOnceItsLiveWindowEnds(t *testing.T) {
