@@ -25,10 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -485,6 +487,11 @@ func maskFindingSpans(rows []platformrepo.ListOwnedChatTranscriptMessagesForReca
 		}
 		content, visible := messages[messageID]
 		if !visible {
+			continue
+		}
+		// These spans describe input erased before capture. Applying their
+		// original offsets to the cleaned transcript would withhold safe context.
+		if finding.Source == gitleaks.Source && slices.Contains(finding.Tags, risk.CaptureRedactionTag) {
 			continue
 		}
 		ms := byMessage[messageID]

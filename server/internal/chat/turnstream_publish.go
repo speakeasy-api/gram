@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 )
 
@@ -72,6 +73,7 @@ func (w *ChatMessageWriter) publishTurnFrames(
 		if msg.Role != "assistant" {
 			continue
 		}
+		w.publishCapturedText(ctx, msg.ChatID, msg.Source.String, msg.Content)
 		w.publishTurnFrame(ctx, msg.ChatID, TurnFrame{
 			Kind:         TurnFrameMessage,
 			Cursor:       "",
@@ -99,6 +101,17 @@ func (w *ChatMessageWriter) publishTurnFrames(
 			})
 		}
 	}
+}
+
+func (w *ChatMessageWriter) publishCapturedText(ctx context.Context, chatID uuid.UUID, source, text string) {
+	_, workload := messageReadingAttribution(ctx, billing.ModelUsageSource(source))
+	if text == "" || !shouldRedactCapture(source, workload) {
+		return
+	}
+	w.publishTurnFrame(ctx, chatID, TurnFrame{
+		Kind: TurnFrameText, Cursor: "", Text: text, MessageID: "",
+		ToolCalls: nil, FinishReason: "", ToolCallID: "", Output: nil,
+	})
 }
 
 // isTerminalAssistantRow reports whether this row ends the turn: it carries no
@@ -163,6 +176,18 @@ func marshalToolOutput(row chatMessageRow) json.RawMessage {
 		return nil
 	}
 	return encoded
+}
+
+// publishStoredRowFrame uses the complete, already-sanitized storage copy for
+// passive captures. Re-scanning individual raw fields loses detector context.
+// Live assistant rows keep their existing rich stream representation.
+func (w *ChatMessageWriter) publishStoredRowFrame(ctx context.Context, row chatMessageRow, stored repo.CreateChatMessageParams) {
+	_, workload := messageReadingAttribution(ctx, billing.ModelUsageSource(stored.Source.String))
+	if shouldRedactCapture(stored.Source.String, workload) {
+		w.publishTurnFrames(ctx, nil, []repo.CreateChatMessageParams{stored})
+		return
+	}
+	w.publishRowFrames(ctx, []chatMessageRow{row})
 }
 
 // publishRowFrames emits frames for rows persisted through the row-shaped write

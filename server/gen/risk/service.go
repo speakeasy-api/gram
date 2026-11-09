@@ -49,10 +49,11 @@ type Service interface {
 	// `match` value — a non-sensitive server URL or command identifier — is passed
 	// through verbatim.
 	ListRiskResultsForAgent(context.Context, *ListRiskResultsForAgentPayload) (res *ListRiskResultsForAgentResult, err error)
-	// Return the plaintext match for a single risk result on demand. Every finding
-	// requires chat:read for its attributed chat. MCP findings with an empty or
-	// invalid chat ID require an unrestricted chat:read grant and use encrypted
-	// stored evidence. Every successful reveal is audited.
+	// Return an available plaintext match for a single risk result on demand.
+	// Credentials removed from captured content return evidence_not_stored. Every
+	// finding requires chat:read for its attributed chat. MCP findings with an
+	// empty or invalid chat ID require an unrestricted chat:read grant and use
+	// encrypted stored evidence. Every successful reveal is audited.
 	UnmaskRiskResult(context.Context, *UnmaskRiskResultPayload) (res *RiskUnmaskResultResult, err error)
 	// Return the full scanned payload of the MCP tool call phase a risk result was
 	// raised on, so its findings can be shown in context. Positions of every
@@ -1558,11 +1559,12 @@ type RiskSignalsResult struct {
 type RiskUnmaskResultResult struct {
 	// The risk result ID.
 	ID string
-	// The plaintext matched secret or sensitive data for this result. Empty string
-	// when the finding has no top-level match (e.g. a spans-only finding).
+	// The available plaintext match for this result. Empty when capture removed
+	// the credential, stored evidence is unavailable, or the finding has no
+	// top-level match.
 	Match string
-	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
-	// expired.
+	// Whether plaintext was revealed or evidence was removed from capture, was not
+	// stored, or has expired.
 	RevealState string
 }
 

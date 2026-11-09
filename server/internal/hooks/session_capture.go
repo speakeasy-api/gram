@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -69,6 +70,7 @@ func (s *Service) ensureHookChat(
 	projectID uuid.UUID,
 	title string,
 ) error {
+	title = captureredact.RedactText(ctx, title)
 	if queries == nil {
 		queries = s.repo
 	}
@@ -100,7 +102,7 @@ func (s *Service) ensureHookChat(
 		ExternalUserID: conv.ToPGTextEmpty(metadata.UserEmail),
 		UserAccountID:  conv.StringToNullUUID(metadata.UserAccountID),
 		Title:          conv.ToPGText(title),
-		Cwd:            conv.ToPGTextEmpty(metadata.Cwd),
+		Cwd:            conv.ToPGTextEmpty(captureredact.RedactText(ctx, metadata.Cwd)),
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -775,7 +777,7 @@ func (s *Service) logConversationTelemetry(ctx context.Context, payload *gen.Cla
 		Timestamp:  time.Now(),
 		ToolInfo:   telemetryToolInfo(metadata, projectID, ""),
 		UserInfo:   telemetry.UserInfoByIDAndEmail(metadata.UserID, metadata.UserEmail),
-		Attributes: s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata),
+		Attributes: cloneCaptureAttributes(ctx, s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)),
 	})
 }
 

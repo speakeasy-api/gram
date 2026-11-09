@@ -1,12 +1,14 @@
 package chat
 
 import (
+	"context"
 	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 )
@@ -60,6 +62,7 @@ func IsPlaceholderTitle(title string) bool {
 // opens with content in hand. IsDerivedTitle recognizes the result, so every
 // path that derives a title must go through this function.
 func DerivedTitle(content string) string {
+	content = captureredact.RedactText(context.Background(), content)
 	return conv.TruncateString(strings.TrimSpace(content), MaxDerivedTitleRunes)
 }
 
@@ -100,5 +103,6 @@ func displayTitlePtr(title pgtype.Text, manuallySet bool) *string {
 // CronJobTitle is chattitle.CronJobTitle, for capture paths that already
 // derive titles through this package.
 func CronJobTitle(content string) (string, bool) {
-	return chattitle.CronJobTitle(content)
+	title, found := chattitle.CronJobTitle(content)
+	return captureredact.RedactText(context.Background(), title), found
 }

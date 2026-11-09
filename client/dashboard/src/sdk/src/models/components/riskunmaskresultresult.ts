@@ -11,14 +11,14 @@ import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 
 /**
- * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+ * Whether plaintext was revealed or evidence was removed from capture, was not stored, or has expired.
  */
 export const RiskUnmaskResultResultRevealState = {
   Available: "available",
   EvidenceNotStored: "evidence_not_stored",
 } as const;
 /**
- * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+ * Whether plaintext was revealed or evidence was removed from capture, was not stored, or has expired.
  */
 export type RiskUnmaskResultResultRevealState = OpenEnum<
   typeof RiskUnmaskResultResultRevealState
@@ -30,11 +30,11 @@ export type RiskUnmaskResultResult = {
    */
   id: string;
   /**
-   * The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).
+   * The available plaintext match for this result. Empty when capture removed the credential, stored evidence is unavailable, or the finding has no top-level match.
    */
   match: string;
   /**
-   * Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.
+   * Whether plaintext was revealed or evidence was removed from capture, was not stored, or has expired.
    */
   revealState: RiskUnmaskResultResultRevealState;
 };

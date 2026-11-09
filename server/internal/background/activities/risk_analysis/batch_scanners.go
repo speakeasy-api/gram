@@ -62,30 +62,30 @@ const (
 	scanLanePromptPolicy scanLane = "prompt_policy"
 )
 
-// batchScanRequestID derives the correlation id of one anchor's scan request
+// BatchScanRequestID derives the correlation id of one anchor's scan request
 // from the anchor, policy, version and standard/prompt-policy lane, never from
 // the rest of the batch. The handlers fold it into their finding ids, so a
 // retry that lands the anchor in a differently composed batch republishes the
 // same finding ids and ClickHouse converges instead of duplicating.
-func batchScanRequestID(args AnalyzeBatchArgs, lane scanLane, contentPart bool, anchorID uuid.UUID) uuid.UUID {
+func BatchScanRequestID(projectID, policyID uuid.UUID, policyVersion int64, lane scanLane, contentPart bool, anchorID uuid.UUID) uuid.UUID {
 	anchorKind := "chat_message"
 	if contentPart {
 		anchorKind = "content_part"
 	}
 	parts := []string{
 		string(lane),
-		args.ProjectID.String(),
-		args.RiskPolicyID.String(),
-		strconv.FormatInt(args.PolicyVersion, 10),
+		projectID.String(),
+		policyID.String(),
+		strconv.FormatInt(policyVersion, 10),
 		anchorKind,
 		anchorID.String(),
 	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("gram:risk:scanrequest:anchor:"+strings.Join(parts, "\x00")))
 }
 
-// messageScanRequestID is batchScanRequestID for a scanned message or part.
+// messageScanRequestID is BatchScanRequestID for a scanned message or part.
 func messageScanRequestID(args AnalyzeBatchArgs, lane scanLane, msg batchMessage) string {
-	return batchScanRequestID(args, lane, msg.ContentPart, msg.ID).String()
+	return BatchScanRequestID(args.ProjectID, args.RiskPolicyID, args.PolicyVersion, lane, msg.ContentPart, msg.ID).String()
 }
 
 func nilUUIDString(id uuid.UUID) *string {

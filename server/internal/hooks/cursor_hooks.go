@@ -451,6 +451,7 @@ func (s *Service) writeCursorHookToClickHouse(ctx context.Context, payload *gen.
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
+	attrs = cloneCaptureAttributes(ctx, attrs)
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	parsedProjectID, err := uuid.Parse(projectID)

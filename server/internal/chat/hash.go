@@ -10,6 +10,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
+func captureSlot(slot messageSlot, storedHash []byte) messageSlot {
+	if slot.content == "" {
+		return slot
+	}
+	if _, ok := CaptureContentDigest(storedHash); ok {
+		slot.content = string(storedHash)
+	} else {
+		slot.content = string(captureContentHash(slot.content))
+	}
+	return slot
+}
+
 // messageSlot is the durable identity of a chat-history slot. Two slots are
 // interchangeable when their fields match — byte-level differences in
 // content/tool_calls JSON are deliberately ignored. The matcher walks

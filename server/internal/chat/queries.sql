@@ -470,6 +470,16 @@ VALUES (
   , @created_at
 );
 
+-- name: CreateCapturedChatContentPart :exec
+-- Explicit identity lets safe findings commit with their redacted attachment.
+INSERT INTO chat_content_parts (
+  id, chat_id, project_id, kind, content_asset_url, external_id,
+  parent_chat_message_id, version, source, metadata, risk_analyzed_at, created_at
+) VALUES (
+  @id::uuid, @chat_id::uuid, @project_id::uuid, @kind, @content_asset_url, @external_id,
+  @parent_chat_message_id, @version, @source, @metadata, @risk_analyzed_at, @created_at
+);
+
 -- name: ListChatContentPartsByChatID :many
 SELECT
     ccp.id
@@ -1379,7 +1389,7 @@ WHERE chat_id = @chat_id AND project_id = @project_id::uuid
 ORDER BY created_at ASC, seq ASC;
 
 -- name: ListClaudeUserMessagesForPromptAttachmentParent :many
-SELECT cm.id, cm.content
+SELECT cm.id, cm.content, cm.content_hash
 FROM chat_messages cm
 WHERE cm.chat_id = @chat_id
   AND cm.project_id = @project_id::uuid
@@ -1677,7 +1687,7 @@ WHERE EXISTS (
 ORDER BY o.created_at ASC, o.seq ASC;
 
 -- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
+SELECT id, role, content, content_hash, tool_call_id, tool_calls, original_message_id,
   COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
 FROM chat_messages
 WHERE chat_id = @chat_id

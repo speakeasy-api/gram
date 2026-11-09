@@ -136,8 +136,8 @@ func TestBatchScanRequestIDIgnoresBatchComposition(t *testing.T) {
 	require.Equal(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(rebatched, scanLaneStandard, message))
 	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(first, scanLanePromptPolicy, message))
 	require.NotEqual(t, messageScanRequestID(first, scanLaneStandard, message), messageScanRequestID(bumped, scanLaneStandard, message))
-	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, true, anchorID))
-	require.NotEqual(t, batchScanRequestID(first, scanLaneStandard, false, anchorID), batchScanRequestID(first, scanLaneStandard, false, otherID))
+	require.NotEqual(t, BatchScanRequestID(first.ProjectID, first.RiskPolicyID, first.PolicyVersion, scanLaneStandard, false, anchorID), BatchScanRequestID(first.ProjectID, first.RiskPolicyID, first.PolicyVersion, scanLaneStandard, true, anchorID))
+	require.NotEqual(t, BatchScanRequestID(first.ProjectID, first.RiskPolicyID, first.PolicyVersion, scanLaneStandard, false, anchorID), BatchScanRequestID(first.ProjectID, first.RiskPolicyID, first.PolicyVersion, scanLaneStandard, false, otherID))
 	require.Equal(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(rebatched, message, shadowStreamExecutionPath))
 	require.NotEqual(t, batchOperationID(first, message, shadowStreamExecutionPath), batchOperationID(first, message, judgeHandlerStreamExecutionPath))
 }

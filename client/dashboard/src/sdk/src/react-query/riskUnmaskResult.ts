@@ -54,7 +54,7 @@ export type RiskUnmaskResultMutationError =
  * unmaskRiskResult risk
  *
  * @remarks
- * Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
+ * Return an available plaintext match for a single risk result on demand. Credentials removed from captured content return evidence_not_stored. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.
  */
 export function useRiskUnmaskResultMutation(
   options?: MutationHookOptions<

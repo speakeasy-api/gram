@@ -30,7 +30,7 @@ func (a *AnalyzeBatch) publishAccountIdentityScanRequests(ctx context.Context, a
 	publishResults := make([]gcp.PublishResult, 0, len(rows))
 	for _, row := range rows {
 		publishResults = append(publishResults, a.accountIdentityPub.Publish(ctx, riskv1.AccountIdentityAnalysis_builder{
-			RequestId:         new(batchScanRequestID(args, scanLaneStandard, false, row.EarliestMessageID).String()),
+			RequestId:         new(BatchScanRequestID(args.ProjectID, args.RiskPolicyID, args.PolicyVersion, scanLaneStandard, false, row.EarliestMessageID).String()),
 			ChatMessageId:     new(row.EarliestMessageID.String()),
 			ChatId:            new(row.ChatID.String()),
 			ProjectId:         new(args.ProjectID.String()),

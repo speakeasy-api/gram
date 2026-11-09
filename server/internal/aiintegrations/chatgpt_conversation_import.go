@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/timewindowpoller"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -480,7 +481,7 @@ func (src *chatgptConversationSource) upsertConversationChat(ctx context.Context
 		UserID:         conv.ToPGTextEmpty(userID),
 		ExternalUserID: conv.ToPGTextEmpty(state.latest.Actor.UserID),
 		ExternalChatID: conv.ToPGText(conversationID),
-		Title:          conv.ToPGTextEmpty(state.title),
+		Title:          conv.ToPGTextEmpty(captureredact.RedactText(ctx, state.title)),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(createdAt),
 		// Feed titles are authoritative: newest non-null title wins.

@@ -908,6 +908,9 @@ const (
 	HookServerNameOverrideIDKey = attribute.Key("gram.hook.server_name_override_id")
 	HookHasPluginAuthKey        = attribute.Key("gram.hook.has_plugin_auth")
 	HookHostnameKey             = attribute.Key("gram.hook.hostname")
+	// CaptureRedactionsKey carries safe detector locations from legacy hooks
+	// redacted before session attribution and policy context were available.
+	CaptureRedactionsKey = attribute.Key("gram.capture.redactions")
 	// The hooks ingest endpoint stamps these on the copy of a hook row it
 	// republishes into the OTel pipeline, so the row says where it came
 	// from and what Speakeasy decided without a join back to the request.

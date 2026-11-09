@@ -598,6 +598,7 @@ func (a *Reconcile) forEachRegexCandidate(
 				ChatID:           c.ChatID,
 				Source:           c.Source,
 				RuleID:           c.RuleID,
+				Tags:             nil,
 				StartPos:         c.StartPos,
 				EndPos:           c.EndPos,
 				MatchLen:         c.MatchLen,

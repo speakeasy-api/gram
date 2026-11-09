@@ -22,6 +22,7 @@ import (
 	or_operations "github.com/OpenRouterTeam/go-sdk/models/operations"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
@@ -831,6 +832,9 @@ func (c *ChatClient) emitGenAITelemetry(
 	}
 	if len(toolCalls) > 0 {
 		toolCallsJSON, _ := json.Marshal(toolCalls)
+		if captureredact.PassiveCapture(ctx) {
+			toolCallsJSON = redactCapturedTelemetryCalls(ctx, result.Content, toolCallsJSON)
+		}
 		attrs[attr.GenAIToolCallsKey] = string(toolCallsJSON)
 	}
 	// Extract trace context from the request context
@@ -861,6 +865,25 @@ func (c *ChatClient) emitGenAITelemetry(
 		UserInfo:   telemetry.UserInfoByIDAndEmail(userID, userEmail),
 		Attributes: attrs,
 	})
+}
+
+// redactCapturedTelemetryCalls retains text context for credentials whose
+// identifier appears outside the tool arguments. Only the safe arguments are
+// published; the original completion remains available to its caller.
+func redactCapturedTelemetryCalls(ctx context.Context, content string, calls json.RawMessage) json.RawMessage {
+	type capturedCompletion struct {
+		Content   string          `json:"content"`
+		ToolCalls json.RawMessage `json:"tool_calls"`
+	}
+	encoded, err := json.Marshal(capturedCompletion{Content: content, ToolCalls: calls})
+	if err != nil {
+		return json.RawMessage(`[]`)
+	}
+	var captured capturedCompletion
+	if err := json.Unmarshal(captureredact.RedactJSON(ctx, encoded), &captured); err != nil || captured.ToolCalls == nil {
+		return json.RawMessage(`[]`)
+	}
+	return captured.ToolCalls
 }
 
 // completionTelemetryIdentity resolves a completion's usage source into its

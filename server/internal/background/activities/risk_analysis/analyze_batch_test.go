@@ -1133,7 +1133,9 @@ func TestAnalyzeBatch_ContentPartHydratesFullAssetContent(t *testing.T) {
 	writer, shutdown := chat.NewChatMessageWriter(testenv.NewLogger(t), conn, assetStorage)
 	t.Cleanup(func() { _ = shutdown(t.Context()) })
 
-	fullContent := strings.Repeat("safe prefix\n", 500) + "AccessKeyId ASIAZ2XY3WNBQR5TUVWX SecretAccessKey wJalrXUtnFEMIbKp7MDoRZfiCYqTvHgNsQ8xLcWd\n"
+	// Hydration must include the tail beyond the preview. Keep this fixture
+	// credential-free so capture redaction does not alter the expected asset.
+	fullContent := strings.Repeat("safe prefix\n", 500) + "unique attachment tail beyond the preview\n"
 	assetURL, err := writer.WriteContentPartAsset(t.Context(), td.projectID, td.chatID, []byte(fullContent))
 	require.NoError(t, err)
 	partID, err := riskrepo.New(conn).CreateChatContentPartForTest(t.Context(), riskrepo.CreateChatContentPartForTestParams{

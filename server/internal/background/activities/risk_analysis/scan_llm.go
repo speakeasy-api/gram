@@ -2,11 +2,13 @@ package risk_analysis
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/message"
 	"github.com/speakeasy-api/gram/server/internal/scanners/llmanalyzer"
 )
@@ -99,6 +101,11 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 	publishResults := make([]gcp.PublishResult, 0, len(messages))
 	for i, msg := range messages {
 		sources := llmMessageSources(masks, i, coveredSources)
+		if onlyCaptureMarkers(msg.scanSurface()) {
+			// The deterministic capture finding already records what was
+			// removed. A marker by itself is not fresh secret evidence.
+			sources = slices.DeleteFunc(sources, func(source string) bool { return source == SourceGitleaks })
+		}
 		if len(sources) == 0 {
 			continue
 		}
@@ -150,6 +157,11 @@ func (a *AnalyzeBatch) publishLLMScanRequests(ctx context.Context, args AnalyzeB
 		a.metrics.RecordLLMPolicyEvaluation(ctx, args.OrganizationID, args.RiskPolicyID.String(), outcome, acked)
 	}
 	return len(publishResults) - acked, err
+}
+
+func onlyCaptureMarkers(content string) bool {
+	return strings.Contains(content, captureredact.Replacement) &&
+		strings.TrimSpace(strings.ReplaceAll(content, captureredact.Replacement, "")) == ""
 }
 
 // llmMessageInput renders the message the way the judge lane does: a tool

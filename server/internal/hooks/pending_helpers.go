@@ -119,6 +119,11 @@ func (s *Service) claimBlockedPromptTelemetry(ctx context.Context, payload *gen.
 
 // bufferHook stores a hook payload in Redis for later processing using atomic RPUSH
 func (s *Service) bufferHook(ctx context.Context, sessionID string, payload *gen.ClaudePayload) error {
+	payload = redactPendingHook(ctx, payload)
+	if payload == nil {
+		return nil
+	}
+
 	// Use atomic RPUSH operation to append to the list
 	// This eliminates the race condition from read-modify-write
 	ttl := 5 * time.Minute // TTL for buffered hooks. This is very generous. Could be lower since this can trigger through an unauthenticated endpoint.
@@ -164,6 +169,7 @@ func (s *Service) resolveUserByEmail(ctx context.Context, email, orgID string) s
 // persistToolCallEvent writes a hook event to ClickHouse with full session context
 func (s *Service) persistToolCallEvent(ctx context.Context, payload *gen.ClaudePayload, metadata *SessionMetadata) error {
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
+	attrs = cloneCaptureAttributes(ctx, attrs)
 	toolName, ok := attrs[attr.ToolNameKey].(string) //  Make sure this comes from here so that we get the parsed tool name
 	if !ok {
 		return fmt.Errorf("tool name not found in attributes")
@@ -223,6 +229,9 @@ func (s *Service) buildTelemetryAttributesWithMetadata(ctx context.Context, payl
 		attr.ProjectIDKey:      metadata.ProjectID,
 		attr.OrganizationIDKey: metadata.GramOrgID,
 		attr.HookSourceKey:     hookSource,
+	}
+	if report := payload.AdditionalData[pendingCaptureRedactionsField]; report != nil {
+		attrs[attr.CaptureRedactionsKey] = report
 	}
 	if metadata.UserID == "" && metadata.UserEmail != "" {
 		metadata.UserID = s.resolveUserByEmail(ctx, metadata.UserEmail, metadata.GramOrgID)

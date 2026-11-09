@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
+	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -99,6 +101,12 @@ func (s *Service) unmaskRiskResultFromClickHouse(ctx context.Context, authCtx *c
 
 	if err := s.authz.Require(ctx, authz.ChatReadCheck(chatID.String())); err != nil {
 		return nil, err
+	}
+
+	// Capture redaction erased the matched value before persistence. The
+	// original offsets describe that erased input, never replacement text.
+	if row.Source == gitleaks.Source && slices.Contains(row.Tags, CaptureRedactionTag) {
+		return evidenceNotStoredResult(row.ID), nil
 	}
 
 	reveal.HydratePartContent(ctx, &anchor)

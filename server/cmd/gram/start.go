@@ -1230,6 +1230,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
+			chatWriter.WithCaptureInspector(risk.NewCaptureInspector(riskScanner, risk.NewSafeFindingPreparer(db, riskFingerprinter, builtinPresets)))
 			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpFindingEvidence := risk.NewMCPFindingEvidenceStore(db, encryptionClient)

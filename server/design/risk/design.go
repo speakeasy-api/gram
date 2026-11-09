@@ -518,7 +518,7 @@ var _ = Service("risk", func() {
 	})
 
 	Method("unmaskRiskResult", func() {
-		Description("Return the plaintext match for a single risk result on demand. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.")
+		Description("Return an available plaintext match for a single risk result on demand. Credentials removed from captured content return evidence_not_stored. Every finding requires chat:read for its attributed chat. MCP findings with an empty or invalid chat ID require an unrestricted chat:read grant and use encrypted stored evidence. Every successful reveal is audited.")
 
 		Payload(func() {
 			security.ByKeyPayload()
@@ -2112,8 +2112,8 @@ var RiskUnmaskResultResult = Type("RiskUnmaskResultResult", func() {
 	Attribute("id", String, "The risk result ID.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("match", String, "The plaintext matched secret or sensitive data for this result. Empty string when the finding has no top-level match (e.g. a spans-only finding).")
-	Attribute("reveal_state", String, "Whether plaintext was revealed or the MCP finding evidence is unavailable or expired.", func() {
+	Attribute("match", String, "The available plaintext match for this result. Empty when capture removed the credential, stored evidence is unavailable, or the finding has no top-level match.")
+	Attribute("reveal_state", String, "Whether plaintext was revealed or evidence was removed from capture, was not stored, or has expired.", func() {
 		Enum("available", "evidence_not_stored")
 	})
 	Required("id", "match", "reveal_state")

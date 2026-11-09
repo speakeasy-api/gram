@@ -829,11 +829,12 @@ type ListRiskResultsForAgentResponseBody struct {
 type UnmaskRiskResultResponseBody struct {
 	// The risk result ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The plaintext matched secret or sensitive data for this result. Empty string
-	// when the finding has no top-level match (e.g. a spans-only finding).
+	// The available plaintext match for this result. Empty when capture removed
+	// the credential, stored evidence is unavailable, or the finding has no
+	// top-level match.
 	Match *string `form:"match,omitempty" json:"match,omitempty" xml:"match,omitempty"`
-	// Whether plaintext was revealed or the MCP finding evidence is unavailable or
-	// expired.
+	// Whether plaintext was revealed or evidence was removed from capture, was not
+	// stored, or has expired.
 	RevealState *string `form:"reveal_state,omitempty" json:"reveal_state,omitempty" xml:"reveal_state,omitempty"`
 }
 

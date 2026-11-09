@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatRepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/claudetag"
@@ -1450,6 +1451,9 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 		stampAccountAttribution(attrs, *metadata)
 		rows = append(rows, hookTelemetryRow{timestamp: timestamp, toolName: "Skill", attrs: attrs})
 	}
+	for i := range rows {
+		rows[i].attrs = cloneCaptureAttributes(ctx, rows[i].attrs)
+	}
 	return rows
 }
 
@@ -1762,7 +1766,7 @@ func (s *Service) persistCanonicalConversationEvent(ctx context.Context, payload
 	}
 	if channelTitle, isWake := claudeTagTitle(titleContent); stored && hookSource == "claude-tag" && msg.Role == "user" && isWake {
 		if err := s.repo.SetClaudeTagChatTitle(ctx, repo.SetClaudeTagChatTitleParams{
-			ID: msg.ChatID, ProjectID: msg.ProjectID, Title: conv.ToPGText(channelTitle),
+			ID: msg.ChatID, ProjectID: msg.ProjectID, Title: conv.ToPGText(captureredact.RedactText(ctx, channelTitle)),
 		}); err != nil {
 			return false, fmt.Errorf("set Claude Tag chat title: %w", err)
 		}
@@ -1951,31 +1955,21 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 
 	chatID := sessionIDToUUID(sessionID)
 	projectID := *authCtx.ProjectID
-	queries := chatRepo.New(s.db)
-	commit := func() error { return nil }
+	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
+		return err
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin captured prompt attachment transaction: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := chatRepo.New(tx)
 	logicalAttachments := authenticatedIngestOptions(ctx).promptCorrelationID != ""
 	if logicalAttachments {
-		// Attachment-only events have no prompt row to create their chat. Do
-		// this before starting a transaction that cannot recover from an FK error.
-		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
-			return err
-		}
 		// Content parts have no external-ID uniqueness constraint. Serialize
 		// logical AHP attachment writes with the existing project/chat lock.
-		tx, err := s.db.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin logical prompt attachment transaction: %w", err)
-		}
-		defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-		queries = chatRepo.New(tx)
 		if err := queries.AcquireChatPromptCorrelationLock(ctx, chatRepo.AcquireChatPromptCorrelationLockParams{ProjectID: projectID, ChatID: chatID}); err != nil {
 			return fmt.Errorf("lock logical prompt attachments: %w", err)
-		}
-		commit = func() error {
-			if err := tx.Commit(ctx); err != nil {
-				return fmt.Errorf("commit logical prompt attachments: %w", err)
-			}
-			return nil
 		}
 	}
 
@@ -2046,12 +2040,6 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 		return nil
 	}
 
-	if !logicalAttachments {
-		if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
-			return err
-		}
-	}
-
 	contents := make([][]byte, len(pending))
 	for i := range pending {
 		contents[i] = pending[i].content
@@ -2077,20 +2065,13 @@ func (s *Service) persistPromptAttachments(ctx context.Context, payload *gen.Ing
 			CreatedAt:           conv.ToPGTimestamptz(pendingAttachment.createdAt),
 		})
 	}
-	if _, err := queries.CreateChatContentPart(ctx, rows); err == nil {
-		return commit()
-	} else if logicalAttachments || !isForeignKeyViolation(err) {
-		// A failed statement aborts the logical-attachment transaction.
-		// Only autocommit writes can use the missing-chat retry below.
-		return fmt.Errorf("insert prompt attachment content parts: %w", err)
+	if err := s.writer.WriteCapturedContentParts(ctx, tx, metadata.GramOrgID, metadata.UserID, rows, contents); err != nil {
+		return fmt.Errorf("write captured prompt attachments: %w", err)
 	}
-	if err := s.ensureHookChat(ctx, s.repo, metadata, chatID, projectID, canonicalChatTitle(payload, "", strings.TrimSpace(payload.Source.Adapter))); err != nil {
-		return fmt.Errorf("upsert claude code session for prompt attachments: %w", err)
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit captured prompt attachments: %w", err)
 	}
-	if _, err := queries.CreateChatContentPart(ctx, rows); err != nil {
-		return fmt.Errorf("insert prompt attachment content parts after creating chat: %w", err)
-	}
-	return commit()
+	return nil
 }
 
 type promptAttachmentParentResolver struct {
@@ -2120,6 +2101,9 @@ func newPromptAttachmentParentResolver(ctx context.Context, queries *chatRepo.Qu
 		}
 		sum := sha256.Sum256([]byte(strings.TrimSpace(candidate.Content)))
 		hash := hex.EncodeToString(sum[:])
+		if original, ok := chat.CaptureContentDigest(candidate.ContentHash); ok {
+			hash = hex.EncodeToString(original)
+		}
 		if _, ok := resolver.byHash[hash]; !ok {
 			resolver.byHash[hash] = id
 		}

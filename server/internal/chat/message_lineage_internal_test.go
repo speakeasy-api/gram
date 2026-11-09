@@ -42,7 +42,7 @@ func TestTranscriptLineage(t *testing.T) {
 					incoming[i] = slotFromStored("assistant", "", "", nil)
 				}
 			}
-			got := transcriptLineage(previous, incoming, tc.compacted)
+			got := transcriptLineage(previous, incoming, tc.compacted, false)
 			for i, lineage := range got {
 				kind := CaptureOriginal
 				if lineage != nil {

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 )
@@ -499,6 +500,64 @@ func TestMaskFindingSpansWithholdsOnStaleOffsets(t *testing.T) {
 
 	require.Equal(t, 1, masks.withheld)
 	require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
+}
+
+func TestMaskFindingSpansPreservesCaptureRedactedContext(t *testing.T) {
+	t.Parallel()
+	messageID := uuid.New()
+	content := "Useful context before [redacted], and useful context after."
+	row := recallMessageRow(messageID, "user", content)
+	finding := recallFinding(messageID, "content", strings.Repeat("removed credential", 12), 22)
+	finding.Tags = []string{risk.CaptureRedactionTag}
+
+	masks := maskFindingSpans([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row}, []chrepo.RiskFindingUnmaskRow{finding})
+	require.Zero(t, masks.withheld)
+	extract := turnsFromRows([]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{row}, masks.content)
+	require.Len(t, extract.turns, 1)
+	require.Equal(t, content, extract.turns[0].Text)
+}
+
+func TestMaskFindingSpansCaptureTagKeepsOtherFindingsProtected(t *testing.T) {
+	t.Parallel()
+	messageID := uuid.New()
+	content := "Useful [redacted] context with person@example.test."
+	removed := recallFinding(messageID, "content", strings.Repeat("removed credential", 12), 7)
+	removed.Tags = []string{risk.CaptureRedactionTag}
+	email := recallFinding(messageID, "content", "person@example.test", strings.Index(content, "person@"))
+	email.Source, email.RuleID = "presidio", "pii.email_address"
+	email.MatchRedacted = maskdisplay.Display(email.Source, email.RuleID, "person@example.test")
+
+	masks := maskFindingSpans(
+		[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", content)},
+		[]chrepo.RiskFindingUnmaskRow{removed, email},
+	)
+	require.Zero(t, masks.withheld)
+	require.Equal(t, 1, masks.neutralized)
+	require.Equal(t, "Useful [redacted] context with ***@example.test.", masks.content[messageID])
+}
+
+func TestMaskFindingSpansIgnoresOnlyExactCaptureProvenance(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name, source, tag string
+	}{
+		{name: "other source", source: "presidio", tag: risk.CaptureRedactionTag},
+		{name: "similar marker", source: "gitleaks", tag: risk.CaptureRedactionTag + "_other"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			messageID := uuid.New()
+			finding := recallFinding(messageID, "content", "long removed original credential", 20)
+			finding.Source, finding.Tags = tc.source, []string{tc.tag}
+			masks := maskFindingSpans(
+				[]platformrepo.ListOwnedChatTranscriptMessagesForRecallRow{recallMessageRow(messageID, "user", "short context")},
+				[]chrepo.RiskFindingUnmaskRow{finding},
+			)
+			require.Equal(t, 1, masks.withheld)
+			require.Equal(t, withheldContentPlaceholder, masks.content[messageID])
+		})
+	}
 }
 
 // Rows written before the surface column derive it like the Postgres path.

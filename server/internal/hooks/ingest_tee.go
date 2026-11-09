@@ -16,6 +16,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
@@ -94,6 +95,7 @@ func (s *Service) teeCanonicalHookToEventFeed(
 	spans := make([]trace.SpanContext, 0, len(rows))
 	for _, row := range rows {
 		stampHookTeeAttributes(row.attrs, payload, metadata, blockReason)
+		row.attrs = cloneCaptureAttributes(ctx, row.attrs)
 		if scrubToolIO {
 			telemetry.ScrubToolIO(row.attrs)
 		}
@@ -104,10 +106,10 @@ func (s *Service) teeCanonicalHookToEventFeed(
 		spans = append(spans, hookRowSpanContext(row.attrs))
 	}
 
-	resourceAttrs := []attribute.KeyValue{semconv.ServiceName(hookSource)}
+	resourceAttrs := []attribute.KeyValue{semconv.ServiceName(captureredact.RedactText(ctx, hookSource))}
 	if payload.Source != nil {
 		if version := conv.PtrValOr(payload.Source.AdapterVersion, ""); version != "" {
-			resourceAttrs = append(resourceAttrs, semconv.ServiceVersion(version))
+			resourceAttrs = append(resourceAttrs, semconv.ServiceVersion(captureredact.RedactText(ctx, version)))
 		}
 	}
 	logger := otelpub.NewLogger(s.otelLogPublisher, resource.NewSchemaless(resourceAttrs...), dialect.HooksLogScope)

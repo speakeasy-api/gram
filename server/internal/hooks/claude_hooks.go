@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1047,6 +1048,7 @@ func (s *Service) getSessionMetadata(ctx context.Context, sessionID string) (Ses
 // from this entry. The first write claims the session atomically; later writes
 // update only a same-project entry.
 func (s *Service) cacheSessionMetadata(ctx context.Context, metadata SessionMetadata) error {
+	metadata.Cwd = captureredact.RedactText(ctx, metadata.Cwd)
 	key := sessionCacheKey(metadata.SessionID)
 	conditional, ok := s.cache.(cache.ConditionalCache)
 	if !ok {
@@ -1621,6 +1623,7 @@ func (s *Service) writeClaudeBlockToClickHouse(ctx context.Context, payload *gen
 
 	attrs := s.buildTelemetryAttributesWithMetadata(ctx, payload, metadata)
 	attrs[attr.HookBlockReasonKey] = reason
+	attrs = cloneCaptureAttributes(ctx, attrs)
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	projectID, err := uuid.Parse(metadata.ProjectID)

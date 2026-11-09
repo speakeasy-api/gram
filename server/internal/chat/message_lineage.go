@@ -41,7 +41,7 @@ func MarkCompactedLineage(ctx context.Context, db repo.DBTX, projectID, chatID u
 		p := write.Params
 		slots[i] = slotFromStored(p.Role, p.Content, p.ToolCallID.String, p.ToolCalls)
 	}
-	lineages := transcriptLineage(previous, slots, true)
+	lineages := transcriptLineage(previous, slots, true, false)
 	for i := range writes {
 		writes[i].Lineage = lineages[i]
 	}
@@ -51,7 +51,7 @@ func MarkCompactedLineage(ctx context.Context, db repo.DBTX, projectID, chatID u
 // transcriptLineage matches positional prefixes and a retained contiguous tail
 // anchored at the previous transcript's end. An isolated repeated phrase is not
 // sufficient to deduplicate a new user turn. Matches never cross conversations.
-func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []messageSlot, compacted bool) []*MessageLineage {
+func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []messageSlot, compacted, captured bool) []*MessageLineage {
 	stored := make([]repo.ListChatMessagesForMatchRow, 0, len(previous))
 	for _, row := range previous {
 		if !slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls).isBlankAssistant() {
@@ -79,7 +79,11 @@ func transcriptLineage(previous []repo.ListChatMessagesForMatchRow, incoming []m
 	}
 	same := func(i, j int) bool {
 		row := stored[j]
-		return incoming[i] == slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		slot := slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		if captured {
+			slot = captureSlot(slot, row.ContentHash)
+		}
+		return incoming[i] == slot
 	}
 	i, j := 0, 0
 	for i < len(incoming) && j < len(stored) {

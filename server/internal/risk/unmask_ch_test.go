@@ -34,6 +34,7 @@ type unmaskFinding struct {
 	chatID           string
 	source           string
 	ruleID           string
+	tags             []string
 	startPos         int32
 	endPos           int32
 	matchLen         uint32
@@ -72,6 +73,9 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 	if f.ruleID == "" {
 		f.ruleID = "secret.test_rule"
 	}
+	if f.tags == nil {
+		f.tags = []string{}
+	}
 	if f.riskPolicyID == "" {
 		f.riskPolicyID = seedUnmaskPolicy(t, ti, uuid.MustParse(f.projectID), f.orgID, true).String()
 	}
@@ -106,7 +110,7 @@ func insertUnmaskFinding(t *testing.T, ti *testInstance, f unmaskFinding) uuid.U
 	`,
 		f.id, createdAt, f.orgID, f.projectID,
 		f.chatMessageID, f.contentPartID, f.chatID,
-		f.riskPolicyID, int64(1), f.ruleID, f.source, "secrets", 1.0, []string{},
+		f.riskPolicyID, int64(1), f.ruleID, f.source, "secrets", 1.0, f.tags,
 		f.startPos, f.endPos, f.deadLetterReason,
 		f.matchLen, f.matchRedacted,
 		nullableTime(f.excludedAt), nullableTime(f.falsePositiveAt), createdAt,
@@ -1045,4 +1049,49 @@ func TestUnmaskRiskResult_ClickHouseDeletedPolicyNotFound(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+}
+
+func TestUnmaskRiskResult_CaptureRedactionReportsUnavailableEvidence(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	chatID, messages := seedChatTranscript(t, ti, projectID, orgID, [][2]string{{"user", "Keep this useful context: [redacted]."}})
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
+	)
+	id := insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID: orgID, projectID: projectID.String(), chatID: chatID.String(), chatMessageID: messages[0].String(),
+		tags: []string{risk.CaptureRedactionTag}, startPos: 26, endPos: 126, matchLen: 100,
+		surface: "content", matchRedacted: "captured credential was removed",
+	})
+
+	result, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: id.String()})
+	require.NoError(t, err)
+	require.Equal(t, id.String(), result.ID)
+	require.Equal(t, "evidence_not_stored", result.RevealState)
+	require.Empty(t, result.Match)
+}
+
+func TestUnmaskRiskResult_CaptureRedactionStillRequiresChatRead(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	chatID, messageID := seedChatMessage(t, ti, projectID, orgID)
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, orgID)},
+	)
+	for _, tags := range [][]string{nil, {risk.CaptureRedactionTag}} {
+		id := insertUnmaskFinding(t, ti, unmaskFinding{
+			orgID: orgID, projectID: projectID.String(), chatID: chatID.String(), chatMessageID: messageID.String(),
+			tags: tags, startPos: 26, endPos: 126, matchLen: 100, surface: "content",
+		})
+		result, err := ti.service.UnmaskRiskResult(ctx, &gen.UnmaskRiskResultPayload{ID: id.String()})
+		require.Nil(t, result)
+		var denied *oops.ShareableError
+		require.ErrorAs(t, err, &denied)
+		require.Equal(t, oops.CodeForbidden, denied.Code, "tagged and untagged findings must have the same authorization refusal")
+	}
 }

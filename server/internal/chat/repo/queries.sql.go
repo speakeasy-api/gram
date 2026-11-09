@@ -441,6 +441,50 @@ func (q *Queries) CountInferenceMessages(ctx context.Context, arg CountInference
 	return count, err
 }
 
+const createCapturedChatContentPart = `-- name: CreateCapturedChatContentPart :exec
+INSERT INTO chat_content_parts (
+  id, chat_id, project_id, kind, content_asset_url, external_id,
+  parent_chat_message_id, version, source, metadata, risk_analyzed_at, created_at
+) VALUES (
+  $1::uuid, $2::uuid, $3::uuid, $4, $5, $6,
+  $7, $8, $9, $10, $11, $12
+)
+`
+
+type CreateCapturedChatContentPartParams struct {
+	ID                  uuid.UUID
+	ChatID              uuid.UUID
+	ProjectID           uuid.UUID
+	Kind                string
+	ContentAssetUrl     string
+	ExternalID          pgtype.Text
+	ParentChatMessageID uuid.NullUUID
+	Version             pgtype.Int4
+	Source              pgtype.Text
+	Metadata            []byte
+	RiskAnalyzedAt      pgtype.Timestamptz
+	CreatedAt           pgtype.Timestamptz
+}
+
+// Explicit identity lets safe findings commit with their redacted attachment.
+func (q *Queries) CreateCapturedChatContentPart(ctx context.Context, arg CreateCapturedChatContentPartParams) error {
+	_, err := q.db.Exec(ctx, createCapturedChatContentPart,
+		arg.ID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Kind,
+		arg.ContentAssetUrl,
+		arg.ExternalID,
+		arg.ParentChatMessageID,
+		arg.Version,
+		arg.Source,
+		arg.Metadata,
+		arg.RiskAnalyzedAt,
+		arg.CreatedAt,
+	)
+	return err
+}
+
 type CreateChatContentPartParams struct {
 	ChatID              uuid.UUID
 	ProjectID           uuid.UUID
@@ -2529,7 +2573,7 @@ func (q *Queries) ListChatMessagesByGeneration(ctx context.Context, arg ListChat
 }
 
 const listChatMessagesForMatch = `-- name: ListChatMessagesForMatch :many
-SELECT id, role, content, tool_call_id, tool_calls, original_message_id,
+SELECT id, role, content, content_hash, tool_call_id, tool_calls, original_message_id,
   COALESCE(capture_kind, CASE WHEN generation = 0 THEN 'original' ELSE 'unknown' END)::text AS capture_kind
 FROM chat_messages
 WHERE chat_id = $1
@@ -2548,6 +2592,7 @@ type ListChatMessagesForMatchRow struct {
 	ID                uuid.UUID
 	Role              string
 	Content           string
+	ContentHash       []byte
 	ToolCallID        pgtype.Text
 	ToolCalls         []byte
 	OriginalMessageID uuid.NullUUID
@@ -2567,6 +2612,7 @@ func (q *Queries) ListChatMessagesForMatch(ctx context.Context, arg ListChatMess
 			&i.ID,
 			&i.Role,
 			&i.Content,
+			&i.ContentHash,
 			&i.ToolCallID,
 			&i.ToolCalls,
 			&i.OriginalMessageID,
@@ -3509,7 +3555,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 }
 
 const listClaudeUserMessagesForPromptAttachmentParent = `-- name: ListClaudeUserMessagesForPromptAttachmentParent :many
-SELECT cm.id, cm.content
+SELECT cm.id, cm.content, cm.content_hash
 FROM chat_messages cm
 WHERE cm.chat_id = $1
   AND cm.project_id = $2::uuid
@@ -3524,8 +3570,9 @@ type ListClaudeUserMessagesForPromptAttachmentParentParams struct {
 }
 
 type ListClaudeUserMessagesForPromptAttachmentParentRow struct {
-	ID      uuid.UUID
-	Content string
+	ID          uuid.UUID
+	Content     string
+	ContentHash []byte
 }
 
 func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Context, arg ListClaudeUserMessagesForPromptAttachmentParentParams) ([]ListClaudeUserMessagesForPromptAttachmentParentRow, error) {
@@ -3537,7 +3584,7 @@ func (q *Queries) ListClaudeUserMessagesForPromptAttachmentParent(ctx context.Co
 	var items []ListClaudeUserMessagesForPromptAttachmentParentRow
 	for rows.Next() {
 		var i ListClaudeUserMessagesForPromptAttachmentParentRow
-		if err := rows.Scan(&i.ID, &i.Content); err != nil {
+		if err := rows.Scan(&i.ID, &i.Content, &i.ContentHash); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

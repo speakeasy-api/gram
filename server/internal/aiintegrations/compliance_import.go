@@ -18,6 +18,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/aiintegrations/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -569,7 +570,7 @@ func (s *ComplianceImportService) upsertDiscoveredChat(ctx context.Context, cfg 
 		ExternalChatID: conv.ToPGText(found.externalChatID),
 		// NULL when the discovery carried no title so the upsert's COALESCE
 		// keeps the title set from the chat's first message page.
-		Title:     conv.ToPGTextEmpty(found.title),
+		Title:     conv.ToPGTextEmpty(captureredact.RedactText(ctx, found.title)),
 		CreatedAt: conv.ToPGTimestamptz(createdAt),
 		UpdatedAt: conv.ToPGTimestamptz(updatedAt),
 		// Feed titles are authoritative: newest non-null title wins.
@@ -716,7 +717,7 @@ func (s *ComplianceImportService) upsertMessagePageChat(ctx context.Context, cfg
 		UserID:         conv.ToPGTextEmpty(userID),
 		ExternalUserID: conv.ToPGTextEmpty(page.User.ID),
 		ExternalChatID: conv.ToPGText(page.ID),
-		Title:          conv.ToPGText(conv.StripNUL(page.Name)),
+		Title:          conv.ToPGText(captureredact.RedactText(ctx, conv.StripNUL(page.Name))),
 		CreatedAt:      conv.ToPGTimestamptz(createdAt),
 		UpdatedAt:      conv.ToPGTimestamptz(updatedAt),
 		// Feed titles are authoritative: newest non-null title wins.

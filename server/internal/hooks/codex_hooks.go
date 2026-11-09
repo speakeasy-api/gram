@@ -492,6 +492,7 @@ func (s *Service) writeCodexHookToClickHouse(ctx context.Context, payload *gen.C
 	if blockReason != "" {
 		attrs[attr.HookBlockReasonKey] = blockReason
 	}
+	attrs = cloneCaptureAttributes(ctx, attrs)
 	toolName, _ := attrs[attr.ToolNameKey].(string)
 
 	parsedProjectID, err := uuid.Parse(metadata.ProjectID)

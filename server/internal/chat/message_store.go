@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/metering"
@@ -108,11 +109,12 @@ type ExternalMessageWrite struct {
 // observers after a successful write. External packages must use Write,
 // WriteCorrelated, WriteExternal, WriteTurn, or WriteWithAssets.
 type ChatMessageWriter struct {
-	db           *pgxpool.Pool
-	logger       *slog.Logger
-	assetStorage assets.BlobStore
-	stokenCodec  *stokens.Codec
-	observers    []MessageObserver
+	db               *pgxpool.Pool
+	logger           *slog.Logger
+	assetStorage     assets.BlobStore
+	stokenCodec      *stokens.Codec
+	observers        []MessageObserver
+	captureInspector CaptureInspector
 	// turnStream, when set, receives a frame per persisted row so dashboard
 	// subscribers can render a turn without polling. Nil disables publishing.
 	turnStream  *TurnStream
@@ -123,14 +125,15 @@ type ChatMessageWriter struct {
 func NewChatMessageWriter(logger *slog.Logger, db *pgxpool.Pool, assetStorage assets.BlobStore) (w *ChatMessageWriter, shutdown func(context.Context) error) {
 	ctx, cancel := context.WithCancel(context.Background()) //nolint:contextcheck // shutdown context must outlive any single request
 	w = &ChatMessageWriter{
-		db:           db,
-		logger:       logger.With(attr.SlogComponent("chat-message-writer")),
-		assetStorage: assetStorage,
-		stokenCodec:  stokens.NewCodec(),
-		observers:    nil,
-		shutdownCtx:  ctx,
-		cancel:       cancel,
-		turnStream:   nil,
+		db:               db,
+		logger:           logger.With(attr.SlogComponent("chat-message-writer")),
+		assetStorage:     assetStorage,
+		stokenCodec:      stokens.NewCodec(),
+		observers:        nil,
+		captureInspector: nil,
+		shutdownCtx:      ctx,
+		cancel:           cancel,
+		turnStream:       nil,
 	}
 	shutdown = func(_ context.Context) error {
 		cancel()
@@ -164,6 +167,14 @@ func (w *ChatMessageWriter) WriteContentPartAssets(ctx context.Context, projectI
 	if w == nil || w.assetStorage == nil {
 		return nil, fmt.Errorf("content part asset storage unavailable")
 	}
+
+	// Content parts are external capture attachments, never live assistant
+	// execution state. Hash and upload only the redacted copy.
+	captured := make([][]byte, len(contents))
+	for i, content := range contents {
+		captured[i] = []byte(captureredact.RedactText(ctx, string(content)))
+	}
+	contents = captured
 
 	paths := make([]string, len(contents))
 	leaders := make(map[string]int, len(contents))
@@ -480,7 +491,7 @@ func insertChatMessages(ctx context.Context, db repo.DBTX, params []repo.CreateC
 	return n, nil
 }
 
-func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) (int64, []repo.CreateChatMessageParams, error) {
+func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UUID, writes []MessageWrite, original []CaptureInput) (int64, []repo.CreateChatMessageParams, error) {
 	if len(writes) == 0 {
 		return 0, nil, nil
 	}
@@ -493,6 +504,11 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err != nil {
 		return 0, nil, fmt.Errorf("get project organization id: %w", err)
 	}
+	findings, err := w.inspectCaptureWrites(ctx, organizationID, writes, original)
+	if err != nil {
+		return 0, nil, err
+	}
+	writes = redactCaptureWrites(ctx, writes)
 	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
 	if err != nil {
 		return 0, nil, err
@@ -515,6 +531,9 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return 0, nil, err
 	}
+	if err := enqueueCaptureFindings(ctx, tx, organizationID, findings); err != nil {
+		return 0, nil, err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return 0, nil, fmt.Errorf("commit chat message transaction: %w", err)
 	}
@@ -523,7 +542,7 @@ func (w *ChatMessageWriter) writeMessages(ctx context.Context, projectID uuid.UU
 
 // Write inserts messages via the pool and notifies observers on success.
 func (w *ChatMessageWriter) Write(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) (int64, error) {
-	n, params, err := w.writeMessages(ctx, projectID, writes)
+	n, params, err := w.writeMessages(ctx, projectID, writes, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -548,13 +567,17 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 	if err := stampMessageFields(writes, occurredAt); err != nil {
 		return 0, err
 	}
-	write = writes[0]
-	param := write.Params
-
 	organizationID, err := repo.New(w.db).GetProjectOrganizationID(ctx, projectID)
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
+	findings, err := w.inspectCaptureWrites(ctx, organizationID, writes, nil)
+	if err != nil {
+		return 0, err
+	}
+	writes = redactCaptureWrites(ctx, writes)
+	write = writes[0]
+	param := write.Params
 
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
@@ -627,6 +650,9 @@ func (w *ChatMessageWriter) WriteCorrelated(ctx context.Context, projectID uuid.
 		if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 			return 0, err
 		}
+		if err := enqueueCaptureFindings(ctx, tx, organizationID, findings); err != nil {
+			return 0, err
+		}
 	}
 	// A correlated promotion only updates attribution/source metadata on an
 	// existing message; its content is unchanged and its insertion already
@@ -652,7 +678,7 @@ func (w *ChatMessageWriter) WriteExternal(ctx context.Context, projectID uuid.UU
 // WriteExternalWithContentParts commits each imported message and its content
 // parts together. Parts are keyed by the parent's explicit message ID. A retry
 // that conflicts with an existing message also skips its parts and metering.
-func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite, parts map[uuid.UUID][]repo.CreateChatContentPartParams) (int64, error) {
+func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, projectID uuid.UUID, writes []ExternalMessageWrite, parts map[uuid.UUID][]repo.CreateChatContentPartParams, originalParts ...map[uuid.UUID][][]byte) (int64, error) {
 	if len(writes) == 0 {
 		return 0, nil
 	}
@@ -680,6 +706,22 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 		if !param.CreatedAt.Valid {
 			param.CreatedAt = createdAt
 		}
+		captureWrite := externalPublication(*write)
+		captureWrite.WorkloadSource = metering.WorkloadSourceImport
+		captureWrite.Params.ChatID, captureWrite.Params.Role = param.ChatID, param.Role
+		captureWrite.Params.Content, captureWrite.Params.ToolCalls = param.Content, param.ToolCalls
+		captureWrite.Params.UserID, captureWrite.Params.Source, captureWrite.Params.CreatedAt = param.UserID, param.Source, param.CreatedAt
+		findings, err := w.inspectCaptureWrites(ctx, organizationID, []MessageWrite{captureWrite}, nil)
+		if err != nil {
+			return total, err
+		}
+		// Imported sessions are passive observations. Keep the producer's
+		// payload intact while protecting every persisted representation.
+		captured := *write
+		content := redactCapturedContent(ctx, captureMessageContent{Content: param.Content, ToolCalls: param.ToolCalls, Raw: param.ContentRaw})
+		captured.Params.Content, captured.Params.ContentRaw, captured.Params.ToolCalls = content.Content, content.Raw, content.ToolCalls
+		write = &captured
+		param = &captured.Params
 		// Postgres rejects NUL in text and jsonb. Strip it from the text columns;
 		// the raw copy is optional and readers fall back to content, so drop it.
 		param.Content = conv.StripNUL(param.Content)
@@ -741,8 +783,12 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 						return false, fmt.Errorf("external content part does not match its parent message")
 					}
 				}
-				if _, err := repo.New(tx).CreateChatContentPart(ctx, attached); err != nil {
-					return false, fmt.Errorf("create external message content parts: %w", err)
+				var original [][]byte
+				if len(originalParts) > 0 {
+					original = originalParts[0][param.ID]
+				}
+				if err := w.WriteCapturedContentParts(ctx, tx, organizationID, param.UserID.String, attached, original); err != nil {
+					return false, err
 				}
 			}
 			if err := metering.Enqueue(ctx, tx, readings); err != nil {
@@ -759,6 +805,9 @@ func (w *ChatMessageWriter) WriteExternalWithContentParts(ctx context.Context, p
 				return false, fmt.Errorf("enqueue imported session observation: %w", err)
 			}
 			if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, publicationWrites, occurredAt); err != nil {
+				return false, err
+			}
+			if err := enqueueCaptureFindings(ctx, tx, organizationID, findings); err != nil {
 				return false, err
 			}
 			if err := tx.Commit(ctx); err != nil {
@@ -799,6 +848,11 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 	if err != nil {
 		return 0, fmt.Errorf("get project organization id: %w", err)
 	}
+	findings, err := w.inspectCaptureWrites(ctx, organizationID, writes, nil)
+	if err != nil {
+		return 0, err
+	}
+	writes = redactCaptureWrites(ctx, writes)
 	readings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, writes, occurredAt)
 	if err != nil {
 		return 0, err
@@ -814,6 +868,9 @@ func (w *ChatMessageWriter) WriteInTx(ctx context.Context, tx repo.DBTX, writes 
 	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return 0, err
 	}
+	if err := enqueueCaptureFindings(ctx, tx, organizationID, findings); err != nil {
+		return 0, err
+	}
 	return n, nil
 }
 
@@ -825,6 +882,7 @@ func (w *ChatMessageWriter) NotifyStored(ctx context.Context, projectID uuid.UUI
 
 // NotifyStoredRows publishes rows inserted through WriteInTx after commit.
 func (w *ChatMessageWriter) NotifyStoredRows(ctx context.Context, projectID uuid.UUID, writes []MessageWrite) {
+	writes = redactCaptureWrites(ctx, writes)
 	w.publishTurnFrames(ctx, nil, messageWriteParams(writes))
 	w.notifyMessagesStored(ctx, projectID)
 }
@@ -854,6 +912,15 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err != nil {
 		return fmt.Errorf("get project organization id: %w", err)
 	}
+	pendingFindings, err := w.inspectCaptureWrites(ctx, organizationID, pendingWrites, captureInputsFromRows(pending))
+	if err != nil {
+		return err
+	}
+	assistantFindings, err := w.inspectCaptureWrites(ctx, organizationID, assistants, nil)
+	if err != nil {
+		return err
+	}
+	assistants = redactCaptureWrites(ctx, assistants)
 	pendingReadings, err := w.meterMessages(ctx, w.logger, organizationID, projectID, pendingWrites, occurredAt)
 	if err != nil {
 		return err
@@ -889,6 +956,9 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if err := w.enqueueMessageEvents(ctx, tx, organizationID, projectID, writes, occurredAt); err != nil {
 		return err
 	}
+	if err := enqueueCaptureFindings(ctx, tx, organizationID, append(pendingFindings, assistantFindings...)); err != nil {
+		return err
+	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
 	}
@@ -896,7 +966,12 @@ func (w *ChatMessageWriter) WriteTurn(ctx context.Context, projectID uuid.UUID, 
 	if pendingCount+assistantCount > 0 {
 		// After commit: a frame announces a row that exists, so a rolled-back
 		// turn never announces itself.
-		w.publishTurnFrames(ctx, pending, assistantParams)
+		for i, row := range pending {
+			if row.role == "tool" && row.toolCallID != "" {
+				w.publishStoredRowFrame(ctx, row, pendingParams[i])
+			}
+		}
+		w.publishTurnFrames(ctx, nil, assistantParams)
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil
@@ -914,12 +989,14 @@ func (w *ChatMessageWriter) WriteWithAssets(ctx context.Context, projectID uuid.
 	if err != nil {
 		return err
 	}
-	n, _, err := w.writeMessages(ctx, projectID, writes)
+	n, params, err := w.writeMessages(ctx, projectID, writes, captureInputsFromRows(rows))
 	if err != nil {
 		return err
 	}
 	if n > 0 {
-		w.publishRowFrames(ctx, rows)
+		for i, row := range rows {
+			w.publishStoredRowFrame(ctx, row, params[i])
+		}
 		w.notifyMessagesStored(ctx, projectID)
 	}
 	return nil

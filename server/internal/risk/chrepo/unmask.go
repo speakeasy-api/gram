@@ -50,13 +50,15 @@ type ListRiskFindingSpansForRecallParams struct {
 // they index, and the match length the reconstructed candidate is checked
 // against. See internal/risk/unmask_ch.go for how it is consumed.
 type RiskFindingUnmaskRow struct {
-	ID               uuid.UUID
-	CreatedAt        time.Time
-	ChatMessageID    string
-	ContentPartID    string
-	ChatID           string
-	Source           string
-	RuleID           string
+	ID            uuid.UUID
+	CreatedAt     time.Time
+	ChatMessageID string
+	ContentPartID string
+	ChatID        string
+	Source        string
+	RuleID        string
+	// Tags include trusted capture-redaction provenance from the finding writer.
+	Tags             []string
 	StartPos         int32
 	EndPos           int32
 	MatchLen         uint32
@@ -80,6 +82,7 @@ var riskFindingRevealColumns = []string{
 	"chat_id",
 	"source",
 	"rule_id",
+	"tags",
 	"start_pos",
 	"end_pos",
 	"match_len",
@@ -148,6 +151,7 @@ func scanRiskFindingUnmaskRows(rows riskFindingRows) ([]RiskFindingUnmaskRow, er
 			&row.ChatID,
 			&row.Source,
 			&row.RuleID,
+			&row.Tags,
 			&row.StartPos,
 			&row.EndPos,
 			&row.MatchLen,

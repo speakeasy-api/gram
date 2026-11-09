@@ -432,6 +432,7 @@ func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame,
 	}
 	writes := make([]chat.ExternalMessageWrite, 0, max(0, len(messages)-start))
 	parts := make(map[uuid.UUID][]chatrepo.CreateChatContentPartParams)
+	originalParts := make(map[uuid.UUID][][]byte)
 	for index := start; index < len(messages); index++ {
 		msg := messages[index]
 		// The chained identity makes concurrent deliveries and retries share the
@@ -464,6 +465,7 @@ func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame,
 				if err != nil {
 					return 0, fmt.Errorf("store inference attachments: %w", err)
 				}
+				originalParts[messageID] = contents
 				for i, attachment := range attachments {
 					metadata, err := json.Marshal(map[string]string{"display_path": attachment.FileName})
 					if err != nil {
@@ -518,7 +520,7 @@ func (s *postgresStore) archive(ctx context.Context, config Config, frame Frame,
 			})
 		}
 	}
-	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts); err != nil {
+	if _, err := s.writer.WriteExternalWithContentParts(ctx, config.ProjectID, writes, parts, originalParts); err != nil {
 		return 0, fmt.Errorf("write inference messages: %w", err)
 	}
 	// PreferStoredTitle keeps a generated title, so scheduling stops once one

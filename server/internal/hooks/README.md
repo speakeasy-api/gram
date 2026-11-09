@@ -129,6 +129,44 @@ A batch carries at most 500 entries, which store in about a second, so a
 long transcript replayed from offset zero advances, and persists its
 offset, a batch at a time within one Stop's 15-second budget.
 
+## Credential values in captured sessions
+
+New passive session captures remove credential-specific Gitleaks matches before
+writing message text, structured content, tool payloads, attachment blobs, titles,
+descriptive working-directory metadata, or hook telemetry. The redactor scans the
+full input and decoded JSON strings, retaining context across embedded documents;
+generic API-key heuristics and arbitrary binary or base64 decoding are excluded.
+Failed or incomplete redaction never falls back to retaining the original value.
+Live Speakeasy assistant history and the original execution and enforcement inputs
+are unchanged.
+
+Captured completions publish sanitized text to the dashboard after the complete
+message is stored. Raw per-token side-channel frames are disabled for those
+captures because a credential can span multiple chunks.
+
+For attributed captures, recognized credentials produce policy-linked findings
+through the transactional outbox alongside the redacted observation. These retain
+the existing masks, fingerprints, rule locations and suppression decisions without
+publishing the matched value. Policy filters and exact/regex exclusions are a
+snapshot taken before erasure; later consumers cannot reevaluate a regex against
+the erased value. Findings keep the `gitleaks` source and carry the
+`capture_redaction` tag, including when the organization selects the LLM analyzer.
+They describe deterministic capture privacy evidence, not a model verdict.
+Marker-only text is excluded from the later LLM secret lane; mixed content remains
+eligible for analysis.
+
+Legacy hooks buffered before attribution are redacted immediately and retain safe
+rule/count/location markers. An unknown tenant cannot receive a tenant fingerprint
+or a retrospective policy/exclusion decision after the value is erased.
+
+Deploy the additive safe-finding consumers before deploying capture producers.
+The producer uses the configured risk fingerprint keyring; unavailable policy or
+fingerprint preparation rejects that capture write rather than retaining values.
+This does not scrub historical data. AHP upload references can be reused by later
+admission events, so their bounded pre-policy staging cache retains original bytes
+until its fifteen-minute TTL. Native OTel intake, existing raw scanner/enforcement
+topics, and encrypted MCP evidence have separate retention contracts.
+
 ## Legacy Compatibility
 
 The legacy Claude path still uses the Redis-buffered validation pattern for installations that depend on Claude OTEL metadata:

@@ -103,7 +103,9 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		return nil, oops.E(oops.CodeUnexpected, err, "create chat")
 	}
 
-	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, projectID, request.Messages)
+	_, workload := messageReadingAttribution(ctx, request.UsageSource)
+	redact := shouldRedactCapture(string(request.UsageSource), workload)
+	matchResult, err := s.matchIncomingAgainstStored(ctx, chatID, projectID, request.Messages, redact)
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +136,11 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 		slots := make([]messageSlot, len(newMessages))
 		for i, message := range newMessages {
 			slots[i] = slotFromIncoming(message)
+			if redact {
+				slots[i] = captureSlot(slots[i], nil)
+			}
 		}
-		lineages := transcriptLineage(matchResult.previous, slots, false)
+		lineages := transcriptLineage(matchResult.previous, slots, false, redact)
 		for i := range rows {
 			rows[i].lineage = lineages[i]
 		}
@@ -170,7 +175,7 @@ type matchResult struct {
 // on both sides — the server may persist them while clients omit them on
 // replay. Any other mismatch, or stored content past the end of incoming,
 // signals divergence and triggers a new generation.
-func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, incoming []or.ChatMessages) (matchResult, error) {
+func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Context, chatID uuid.UUID, projectID uuid.UUID, incoming []or.ChatMessages, redact bool) (matchResult, error) {
 	currentGen, err := s.repo.GetMaxGenerationForChat(ctx, repo.GetMaxGenerationForChatParams{
 		ChatID:    chatID,
 		ProjectID: projectID,
@@ -192,7 +197,18 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 
 	storedSlotAt := func(i int) messageSlot {
 		row := stored[i]
-		return slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		slot := slotFromStored(row.Role, row.Content, row.ToolCallID.String, row.ToolCalls)
+		if redact {
+			slot = captureSlot(slot, row.ContentHash)
+		}
+		return slot
+	}
+	incomingSlotAt := func(i int) messageSlot {
+		slot := slotFromIncoming(incoming[i])
+		if redact {
+			slot = captureSlot(slot, nil)
+		}
+		return slot
 	}
 
 	si, ii := 0, 0
@@ -203,7 +219,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 			si++
 			continue
 		}
-		incomingSlot := slotFromIncoming(incoming[ii])
+		incomingSlot := incomingSlotAt(ii)
 		if incomingSlot.isBlankAssistant() {
 			ii++
 			continue
@@ -223,7 +239,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		for si < len(stored) && storedSlotAt(si).isBlankAssistant() {
 			si++
 		}
-		for ii < len(incoming) && slotFromIncoming(incoming[ii]).isBlankAssistant() {
+		for ii < len(incoming) && incomingSlotAt(ii).isBlankAssistant() {
 			ii++
 		}
 		if si < len(stored) {

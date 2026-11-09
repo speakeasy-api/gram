@@ -47,6 +47,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
+	"github.com/speakeasy-api/gram/server/internal/captureredact"
 	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -2272,6 +2273,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		reasoning = &openrouter.Reasoning{Effort: "none", MaxTokens: nil, Exclude: nil, Enabled: nil}
 	}
 
+	if !canTeeCompletionText(ctx, source) {
+		ctx = captureredact.WithPassiveCapture(ctx)
+	}
 	completionReq := openrouter.CompletionRequest{
 		MaxTokens:      nil,
 		OrgID:          orgID,
@@ -2331,7 +2335,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 		// the way past, so the dashboard renders text as it is generated. The
 		// bytes still reach this caller untouched; the tee is a side channel.
 		src := io.Reader(streamBody)
-		if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
+		if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) && canTeeCompletionText(ctx, source) {
 			teed, done := s.teeStreamText(ctx, chatID)
 			src = io.TeeReader(streamBody, teed)
 			defer done()
@@ -2360,7 +2364,7 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 	// With no chat to attribute frames to, or no stream to publish on, this is
 	// an ordinary completion.
 	var response *openrouter.CompletionResponse
-	if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) {
+	if s.turnStream != nil && chatID != uuid.Nil && !assistanttokens.InferenceTranscriptOwned(ctx) && canTeeCompletionText(ctx, source) {
 		teed, teeErr := s.teedCompletion(ctx, completionReq, chatID)
 		if teeErr != nil {
 			return teeErr
@@ -3431,6 +3435,13 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 			// Sanitize before hashing so the asset path (and the dedup key
 			// derived from it) addresses the bytes actually stored.
 			jsonData = sanitizeContentJSON(jsonData)
+			_, workload := messageReadingAttribution(ctx, billing.ModelUsageSource(row.metadata.Source))
+			if shouldRedactCapture(row.metadata.Source, workload) {
+				content := redactCapturedContent(ctx, captureMessageContent{
+					Content: openrouter.GetText(row.content), ToolCalls: row.toolCalls, Raw: jsonData,
+				})
+				jsonData = content.Raw
+			}
 			hash := sha256.Sum256(jsonData)
 			hashHex := hex.EncodeToString(hash[:])
 			assetPath := path.Join(row.projectID.String(), "chats", row.chatID.String(), hashHex+".json")
@@ -3523,6 +3534,14 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 	for i, row := range rows {
 		res := results[i]
 		assistantID, workloadSource := messageReadingAttribution(ctx, billing.ModelUsageSource(row.metadata.Source))
+		content := openrouter.GetText(row.content)
+		toolCalls := row.toolCalls
+		var contentHash []byte
+		if shouldRedactCapture(row.metadata.Source, workloadSource) {
+			contentHash = captureContentHash(content)
+			redacted := redactCapturedContent(ctx, captureMessageContent{Content: content, ToolCalls: toolCalls, Raw: res.jsonData})
+			content, toolCalls = redacted.Content, redacted.ToolCalls
+		}
 
 		// Log storage errors but continue - we'll still store the message with plain text.
 		var storageError pgtype.Text
@@ -3549,7 +3568,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				ChatID:           row.chatID,
 				ProjectID:        row.projectID,
 				Role:             row.role,
-				Content:          openrouter.GetText(row.content),
+				Content:          content,
 				ContentRaw:       contentRaw,
 				ContentAssetUrl:  conv.ToPGText(res.assetURL),
 				StorageError:     storageError,
@@ -3559,7 +3578,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				UserID:           conv.ToPGText(row.userID),
 				ExternalUserID:   conv.ToPGText(row.externalUserID),
 				FinishReason:     conv.PtrToPGText(row.finishReason),
-				ToolCalls:        row.toolCalls,
+				ToolCalls:        toolCalls,
 				PromptTokens:     row.promptTokens,
 				CompletionTokens: row.completionTokens,
 				TotalTokens:      row.totalTokens,
@@ -3567,7 +3586,7 @@ func prepareMessages(ctx context.Context, logger *slog.Logger, assetStorage asse
 				UserAgent:        conv.ToPGText(row.metadata.UserAgent),
 				IpAddress:        conv.ToPGText(row.metadata.IPAddress),
 				Source:           conv.ToPGText(row.metadata.Source),
-				ContentHash:      nil,
+				ContentHash:      contentHash,
 				Generation:       row.generation,
 			},
 			BillingUserID:     row.userID,
