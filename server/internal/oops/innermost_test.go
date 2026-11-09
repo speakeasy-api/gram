@@ -28,13 +28,13 @@ func TestInnermost(t *testing.T) {
 	require.Same(t, inner, oops.Innermost(errors.Join(errors.New("plain"), outer)))
 }
 
-// synthesizingCause has an As hook that answers every *ShareableError target
+// synthesizingError has an As hook that answers every *ShareableError target
 // with a new ShareableError wrapping itself, so following causes never ends.
-type synthesizingCause struct{}
+type synthesizingError struct{}
 
-func (synthesizingCause) Error() string { return "synthesizing" }
+func (synthesizingError) Error() string { return "synthesizing" }
 
-func (c synthesizingCause) As(target any) bool {
+func (c synthesizingError) As(target any) bool {
 	shareable, ok := target.(**oops.ShareableError)
 	if !ok {
 		return false
@@ -43,12 +43,12 @@ func (c synthesizingCause) As(target any) bool {
 	return true
 }
 
-// cyclicCause answers every *ShareableError target with the same error.
-type cyclicCause struct{ self **oops.ShareableError }
+// cyclicError answers every *ShareableError target with the same error.
+type cyclicError struct{ self **oops.ShareableError }
 
-func (cyclicCause) Error() string { return "cyclic" }
+func (cyclicError) Error() string { return "cyclic" }
 
-func (c cyclicCause) As(target any) bool {
+func (c cyclicError) As(target any) bool {
 	shareable, ok := target.(**oops.ShareableError)
 	if !ok {
 		return false
@@ -62,9 +62,9 @@ func (c cyclicCause) As(target any) bool {
 func TestInnermost_StopsOnACauseThatNeverEnds(t *testing.T) {
 	t.Parallel()
 
-	require.NotNil(t, oops.Innermost(synthesizingCause{}))
+	require.NotNil(t, oops.Innermost(synthesizingError{}))
 
 	var self *oops.ShareableError
-	self = oops.E(oops.CodeUnexpected, cyclicCause{self: &self}, "cyclic")
+	self = oops.E(oops.CodeUnexpected, cyclicError{self: &self}, "cyclic")
 	require.Same(t, self, oops.Innermost(self))
 }
