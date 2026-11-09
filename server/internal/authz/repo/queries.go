@@ -155,6 +155,11 @@ type ChallengeFilters struct {
 	PrincipalURN   *string
 	Scope          *string
 
+	// ExcludeScopes leaves out checks of these scopes. A caller hides routine
+	// checks this way (an agent's hook ingestion records one per event) so they
+	// neither fill a page nor inflate its total.
+	ExcludeScopes []string
+
 	// MemberUserIDs, when non-nil, suppresses challenges raised by users outside
 	// the organization (e.g. Speakeasy staff impersonating a customer org). Rows
 	// are kept only when user_id is NULL (non-user principals such as api keys and
@@ -210,6 +215,9 @@ func challengeDimensionWhere(sb squirrel.SelectBuilder, f ChallengeFilters) squi
 	}
 	if f.Scope != nil {
 		sb = sb.Where("scope = ?", *f.Scope)
+	}
+	if len(f.ExcludeScopes) > 0 {
+		sb = sb.Where(squirrel.NotEq{"scope": f.ExcludeScopes})
 	}
 	return sb
 }

@@ -100,6 +100,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -300,6 +301,9 @@ type Service struct {
 	// attemptEndings claims once-only endings off the request path.
 	attemptEndings *attemptEndings
 	bindingRefresh *remotesessions.BindingRefreshAttempts
+	// pendingSignIn connects a Platform MCP server's sign-in provider before
+	// its consent page lists sign-in options; nil leaves the page as it is.
+	pendingSignIn PendingSignInConnector
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -314,7 +318,12 @@ type Service struct {
 	// Temporal worker, which constructs *Service for its programmatic
 	// helpers but never serves a runtime request).
 	remoteProxyManager *remotemcp.ProxyManager
-	tunnelManager      *tunnelManager
+	// shutdownDrain interrupts tools/call and resources/read work the gateway
+	// runs itself (functions, HTTP tools, external MCP tools) when the server
+	// shuts down. It is the remote proxy manager's drain when there is one,
+	// so one StartDrain reaches relayed and executed requests alike.
+	shutdownDrain *shutdowndrain.Drain
+	tunnelManager *tunnelManager
 	// Nil when no Redis was wired; every public tunneled request then fails closed.
 	tunnelPublic *tunnelPublicRuntime
 
@@ -601,6 +610,10 @@ func NewService(
 	)
 
 	sessionClientInfo := sessionclientinfo.NewStore(redisClient, 0)
+	shutdownDrain := remoteProxyManager.ShutdownDrain()
+	if shutdownDrain == nil {
+		shutdownDrain = shutdowndrain.New()
+	}
 	service := &Service{
 		assistantWorkloadTokens:   nil,
 		builtinBackends:           map[string]BuiltinBackend{},
@@ -614,6 +627,7 @@ func NewService(
 		authEnforcement:           authenforcement.NewGate(db),
 		consentBindings:           nil,
 		bindingRefresh:            nil,
+		pendingSignIn:             nil,
 		logger:                    logger,
 		tracer:                    tracer,
 		metrics:                   metrics,
@@ -660,6 +674,7 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformSvc,
+			shutdownDrain,
 		),
 		oauthRepo:              oauth_repo.New(db),
 		billingTracker:         billingTracker,
@@ -733,6 +748,7 @@ func NewService(
 		autoVerifications:      newAutoVerifications(),
 		remoteSessionRecheck:   newRemoteSessionRecheck(metaRuntimeConfig.withDefaults().RecheckInterval, redisClient, meterProvider),
 		remoteProxyManager:     remoteProxyManager,
+		shutdownDrain:          shutdownDrain,
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
@@ -803,7 +819,8 @@ func (s *Service) platformBaseURL(ctx context.Context) *url.URL {
 // PublicServerRoute is the chi route pattern for the public MCP endpoint: the
 // JSON-RPC surface of a hosted MCP server. All three Streamable HTTP verbs
 // mount here — POST for JSON-RPC messages, GET for the standalone SSE stream,
-// and DELETE for session termination.
+// and DELETE for session termination. These runtime verbs also accept a single
+// trailing slash for custom-domain Gateway prefix rewrites.
 //
 // The OAuth, metadata, and install routes extend this pattern with a further
 // path segment. They are not the MCP endpoint itself, which is why anything
@@ -913,11 +930,31 @@ func Attach(mux goahttp.Muxer, service *Service, metadataService *mcpmetadata.Se
 	o11y.AttachHandler(mux, "POST", AgentGatewayRoute, oops.MCPErrHandle(service.logger, service.ServeAgentGateway).ServeHTTP)
 	o11y.AttachHandler(mux, "POST", AgentInstallCodeRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallCode).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", AgentInstallScriptRoute, oops.ErrHandle(service.logger, service.HandleAgentInstallScript).ServeHTTP)
-	o11y.AttachHandler(mux, "POST", PublicServerRoute, oops.MCPErrHandle(service.logger, service.ServePublic).ServeHTTP)
-	o11y.AttachHandler(mux, "GET", PublicServerRoute, oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
-		return service.HandleGetServer(w, r, metadataService)
-	}).ServeHTTP)
-	o11y.AttachHandler(mux, "DELETE", PublicServerRoute, oops.MCPErrHandle(service.logger, service.HandleDeleteServer).ServeHTTP)
+
+	// Gateway prefix rewrites append a slash to custom-domain root requests.
+	// Mount both runtime paths directly so POST bodies never depend on redirects.
+	for _, route := range []struct {
+		method  string
+		handler http.Handler
+	}{
+		{method: http.MethodPost, handler: oops.MCPErrHandle(service.logger, service.ServePublic)},
+		{method: http.MethodGet, handler: oops.MCPErrHandle(service.logger, func(w http.ResponseWriter, r *http.Request) error {
+			return service.HandleGetServer(w, r, metadataService)
+		})},
+		{method: http.MethodDelete, handler: oops.MCPErrHandle(service.logger, service.HandleDeleteServer)},
+	} {
+		o11y.AttachHandler(mux, route.method, PublicServerRoute, route.handler.ServeHTTP)
+		o11y.AttachHandler(mux, route.method, PublicServerRoute+"/", func(w http.ResponseWriter, r *http.Request) {
+			// chi also matches empty parameters, even with a nonempty regex.
+			// /mcp// is not a runtime alias and must remain a routing miss.
+			if chi.URLParam(r, "mcpSlug") == "" {
+				http.NotFound(w, r)
+				return
+			}
+
+			route.handler.ServeHTTP(w, r)
+		})
+	}
 	o11y.AttachHandler(mux, "GET", PublicServerRoute+"/install", oops.ErrHandle(service.logger, metadataService.ServeInstallPage).ServeHTTP)
 	o11y.AttachHandler(mux, "GET", "/mcp/install-page-{hash}.js", oops.ErrHandle(service.logger, metadataService.ServeInstallPageScript).ServeHTTP)
 
@@ -1841,6 +1878,8 @@ func (s *Service) enforceHostedToolsCall(ctx context.Context, organizationID str
 				Supported:            nil,
 				Requested:            "",
 				RequiredCapabilities: nil,
+				Reason:               "",
+				Retryable:            nil,
 			},
 		}
 	case killswitches.TransportDispositionInfrastructureRejection:
@@ -2200,7 +2239,7 @@ func (s *Service) handleRequest(ctx context.Context, payload *mcpInputs, req *ra
 		if uri, ok := skillResourceURI(req.Params); ok && s.skillsOverMCPEnabled(ctx, payload) {
 			return handleSkillResourceRead(ctx, s.logger, s.db, s.skillResolver, s.metrics, s.telemLogger, s.sessionClientInfo, payload, req, uri, time.Now())
 		}
-		return handleResourcesRead(ctx, s.logger, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
+		return handleResourcesRead(ctx, s.logger, s.metrics, s.db, payload, req, s.toolProxy, s.env, s.billingTracker, s.billingRepository, s.telemLogger, s.platformExtras, s.scanEvaluator)
 	case mcpversions.MethodSkillsList:
 		return handleSkillsList(ctx, s.logger, s.db, s.skillResolver, payload, req)
 	case mcpversions.MethodSkillsGet:

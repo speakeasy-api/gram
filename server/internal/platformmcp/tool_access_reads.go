@@ -17,6 +17,7 @@ type accessReadRefusalResult struct {
 }
 
 func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
+	registerAccessPermissionsTool(reg)
 	addTool(reg, &mcp.Tool{
 		Name:        "list_access_roles",
 		Title:       "List MCP Access Roles",
@@ -77,6 +78,8 @@ func registerAccessReadTools(reg *Registrar, accessReads *AccessReadService) {
 }
 
 func registerUnavailableAccessReadTools(reg *Registrar) {
+	// The catalogue needs no service, so it is live either way.
+	registerAccessPermissionsTool(reg)
 	// Each stub declares the same audiences as its live registration, so an
 	// audience sees one stable catalogue whether or not the service is wired.
 	// list_access_members also carries its live input schema: the assistant

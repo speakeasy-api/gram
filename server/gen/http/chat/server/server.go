@@ -32,6 +32,7 @@ type Server struct {
 	SummarizeToolCall          http.Handler
 	SubmitFeedback             http.Handler
 	ListSources                http.Handler
+	CountByUser                http.Handler
 	ListSessionLinks           http.Handler
 }
 
@@ -75,6 +76,7 @@ func New(
 			{"SummarizeToolCall", "POST", "/rpc/chat.summarizeToolCall"},
 			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
 			{"ListSources", "GET", "/rpc/chat.listSources"},
+			{"CountByUser", "GET", "/rpc/chat.countByUser"},
 			{"ListSessionLinks", "GET", "/rpc/chat.listSessionLinks"},
 		},
 		ListChats:                  NewListChatsHandler(e.ListChats, mux, decoder, encoder, errhandler, formatter),
@@ -90,6 +92,7 @@ func New(
 		SummarizeToolCall:          NewSummarizeToolCallHandler(e.SummarizeToolCall, mux, decoder, encoder, errhandler, formatter),
 		SubmitFeedback:             NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
 		ListSources:                NewListSourcesHandler(e.ListSources, mux, decoder, encoder, errhandler, formatter),
+		CountByUser:                NewCountByUserHandler(e.CountByUser, mux, decoder, encoder, errhandler, formatter),
 		ListSessionLinks:           NewListSessionLinksHandler(e.ListSessionLinks, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -112,6 +115,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SummarizeToolCall = m(s.SummarizeToolCall)
 	s.SubmitFeedback = m(s.SubmitFeedback)
 	s.ListSources = m(s.ListSources)
+	s.CountByUser = m(s.CountByUser)
 	s.ListSessionLinks = m(s.ListSessionLinks)
 }
 
@@ -133,6 +137,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSummarizeToolCallHandler(mux, h.SummarizeToolCall)
 	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
 	MountListSourcesHandler(mux, h.ListSources)
+	MountCountByUserHandler(mux, h.CountByUser)
 	MountListSessionLinksHandler(mux, h.ListSessionLinks)
 }
 
@@ -808,6 +813,59 @@ func NewListSourcesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listSources")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountCountByUserHandler configures the mux to serve the "chat" service
+// "countByUser" endpoint.
+func MountCountByUserHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/chat.countByUser", f)
+}
+
+// NewCountByUserHandler creates a HTTP handler which loads the HTTP request
+// and calls the "chat" service "countByUser" endpoint.
+func NewCountByUserHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeCountByUserRequest(mux, decoder)
+		encodeResponse = EncodeCountByUserResponse(encoder)
+		encodeError    = EncodeCountByUserError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "countByUser")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

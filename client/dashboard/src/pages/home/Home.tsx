@@ -36,7 +36,7 @@ export default function Home(): JSX.Element {
         <Page.Header.Breadcrumbs />
       </Page.Header>
       <Page.Body>
-        <RequireScope scope="project:read" level="page">
+        <RequireScope scope="project:read" resourceId={projectId} level="page">
           {/* Full content width so the widget lines up with the dashboard
               below (the /chat page centers it; the home page does not). The
               compact variant drops pinned/recents — history lives on /chat. */}

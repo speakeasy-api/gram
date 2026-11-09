@@ -2322,6 +2322,48 @@ VALUES (
     (SELECT c.attachment_scope FROM remote_session_clients AS c WHERE c.id = @remote_session_client_id)
 );
 
+-- name: StampMCPServerUpstreamClientFixture :execrows
+-- Test-only fixture: gives an MCP server an upstream client both ways, setting
+-- mcp_servers.remote_session_issuer_id to the client's provider and adding the
+-- association, so a test survives readers moving from one to the other.
+--
+-- Returns the row count so the caller can insist the stamp landed.
+WITH client AS (
+    SELECT c.id, c.attachment_scope, c.remote_session_issuer_id
+    FROM remote_session_clients AS c
+    WHERE c.id = @remote_session_client_id
+), association AS (
+    INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
+    SELECT @project_id, @organization_id, @mcp_server_id, client.id, client.attachment_scope
+    FROM client
+)
+UPDATE mcp_servers
+SET remote_session_issuer_id = client.remote_session_issuer_id
+FROM client
+WHERE mcp_servers.id = @mcp_server_id
+  AND mcp_servers.project_id = @project_id;
+
+-- name: GetMCPServerSoleUpstreamIssuerFixture :one
+-- Test-only fixture: the one-provider subquery that reader queries copy, kept
+-- here so the parity test pins it against upstreamclients.ServerUpstreamIssuers.
+SELECT sole.id AS remote_session_issuer_id
+FROM mcp_servers AS s
+LEFT JOIN remote_session_issuers AS sole
+  ON sole.id = (
+    SELECT CASE WHEN count(DISTINCT c.remote_session_issuer_id) = 1
+                THEN (array_agg(DISTINCT c.remote_session_issuer_id))[1] END
+    FROM mcp_server_remote_session_clients AS a
+    JOIN remote_session_clients AS c
+      ON c.id = a.remote_session_client_id
+     AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS i
+      ON i.id = c.remote_session_issuer_id
+     AND i.deleted IS FALSE
+    WHERE a.mcp_server_id = s.id
+      AND a.deleted IS FALSE
+  )
+WHERE s.id = @id;
+
 -- name: ClearMCPServerRemoteSessionClientsFixture :exec
 -- Test-only fixture: removes every upstream client association of one MCP
 -- server, so a table-driven test can set each case's associations afresh.

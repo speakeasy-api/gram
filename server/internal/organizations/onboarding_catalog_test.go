@@ -27,7 +27,7 @@ func TestDefaultOnboardingSelectionHidesOptionalIntegrations(t *testing.T) {
 	t.Parallel()
 
 	for _, task := range setupTaskCatalog {
-		require.Equal(t, task.Key == "litellm" || task.Key == "private-network", task.HiddenByDefault, task.Key)
+		require.Equal(t, task.Key == "litellm" || task.Key == "private-network" || task.Key == "cursor-admin-controls", task.HiddenByDefault, task.Key)
 	}
 }
 

@@ -507,16 +507,6 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 	return u.String()
 }
 
-// memberReconnectURL is the connect page for a person; agents and workloads have no page to reconnect on.
-func (g metaGateContext) memberReconnectURL(member metaMember) string {
-	// The Platform gateway has no authentication here and serves only people.
-	person := g.authentication == nil && g.userID != "" && g.agentID == uuid.Nil
-	if !person && !codeConnectAvailable(&g) {
-		return ""
-	}
-	return g.memberConnectURL(member)
-}
-
 // memberConnectURL is the URL a person opens to connect member on this
 // gateway, or empty when the gateway has no connect pages or the member signs
 // in through no service.

@@ -617,8 +617,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -631,9 +630,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 
-	if challengeState.Federation != nil {
+	if challengeState.Federation != nil || browserHandoffAtOrigin(challengeState) {
 		t.Continue()
-		return s.completeFederatedBrowserHandoff(w, r, challengeState)
+		return s.completeFederatedBrowserHandoff(w, r, endpoint, challengeState)
 	}
 
 	catalogReview := challengeState.CodeReconnect.reviewReady()
@@ -679,6 +678,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
+
+	if err := s.connectPendingSignIn(ctx, logger, endpoint, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return err
+	}
 
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshPolicy)
@@ -762,7 +766,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		for i := range cards {
 			// An expired or unconnected card already names its action.
 			if cards[i].ClientID == failed && cards[i].Connected {
-				cards[i].ValidationNotice = noWorkingSignInMessage
+				cards[i].ValidationNotice = verifyNoticeMessage(r.URL.Query().Get("validate_notice"))
 			}
 		}
 	}
@@ -1181,8 +1185,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()

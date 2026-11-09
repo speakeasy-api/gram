@@ -102,3 +102,51 @@ export function catalogServerInstallState(
   }
   return "unknown";
 }
+
+/** The parts of an MCP server row that can tie it to a catalog entry. */
+export type CatalogInstanceCandidate = {
+  remoteMcpServerId?: string | undefined;
+  unproxiedMcpServerId?: string | undefined;
+  toolset?:
+    | { registrySpecifier?: string | undefined; externalMcpSlugs: string[] }
+    | undefined;
+};
+
+/**
+ * The project's MCP servers created from this catalog entry, by the same
+ * evidence `catalogServerInstallState` uses. The listings only return live
+ * rows, so deleted servers never match.
+ */
+export function catalogInstances<T extends CatalogInstanceCandidate>(
+  server: {
+    registrySpecifier: string;
+    remotes?: readonly { url: string }[] | null | undefined;
+  },
+  mcpServers: readonly T[],
+  remoteUrlById: ReadonlyMap<string, string>,
+  unproxiedUrlById: ReadonlyMap<string, string>,
+  externalMcps: readonly CatalogExternalMcp[],
+): T[] {
+  const urls = normalizedUrlSet((server.remotes ?? []).map((r) => r.url));
+  const attachedSlugs = new Set(
+    externalMcps
+      .filter((mcp) => mcp.registryServerSpecifier === server.registrySpecifier)
+      .map((mcp) => mcp.slug),
+  );
+  const urlMatches = (
+    id: string | undefined,
+    byId: ReadonlyMap<string, string>,
+  ) => {
+    const url = id ? byId.get(id) : undefined;
+    return url !== undefined && urls.has(normalizeRemoteUrl(url));
+  };
+  return mcpServers.filter(
+    (candidate) =>
+      urlMatches(candidate.remoteMcpServerId, remoteUrlById) ||
+      urlMatches(candidate.unproxiedMcpServerId, unproxiedUrlById) ||
+      candidate.toolset?.registrySpecifier === server.registrySpecifier ||
+      (candidate.toolset?.externalMcpSlugs ?? []).some((slug) =>
+        attachedSlugs.has(slug),
+      ),
+  );
+}

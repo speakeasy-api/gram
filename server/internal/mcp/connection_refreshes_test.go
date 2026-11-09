@@ -2,6 +2,9 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,12 +15,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	agents_repo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/signins"
+	signinsrepo "github.com/speakeasy-api/gram/server/internal/signins/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 func TestInboundRefresh_Refreshed(t *testing.T) {
@@ -159,6 +169,189 @@ func TestInboundRefresh_Expired(t *testing.T) {
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeFailed), row.Outcome, "expiry is not a policy")
+	require.Equal(t, "failed", row.StepResult)
+}
+
+// Another app's unrotated token burns the owner's session, so the person reconnects.
+func TestInboundRefresh_OtherAppBurnsTheSession(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, _, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	other := seedOtherRefreshClient(t, ctx, ti, issuer.ID)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUsedByOtherApp)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, "refresh_token_client_mismatch", row.SubReason)
+}
+
+// Another app replaying a rotated token leaves the owner's session alone, so the app is wrong.
+func TestInboundRefresh_OtherAppReplayBlamesTheApp(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	other := seedOtherRefreshClient(t, ctx, ti, issuer.ID)
+
+	refreshed := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refreshed.err)
+	require.Equal(t, http.StatusOK, refreshed.code, refreshed.body)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, other.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenClientMismatch)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+	require.Equal(t, "refresh_token_client_mismatch", row.SubReason)
+}
+
+// A stored tool selection that does not parse is our damage, but the person reconnects.
+func TestInboundRefresh_MalformedToolSelection(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	refreshToken := "refresh-" + uuid.NewString()
+	refreshHash := sha256.Sum256([]byte(refreshToken))
+	_, err := usersessions_repo.New(ti.conn).CreateUserSession(ctx, usersessions_repo.CreateUserSessionParams{
+		UserSessionIssuerID: issuer.ID,
+		UserSessionClientID: uuid.NullUUID{UUID: client.ID, Valid: true},
+		SubjectUrn:          urn.NewUserSubject("refresh-replay-user"),
+		Jti:                 uuid.NewString(),
+		RefreshTokenHash:    conv.ToPGText(base64.RawURLEncoding.EncodeToString(refreshHash[:])),
+		RefreshExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		ExpiresAt:           pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true},
+		ToolSelection:       []byte(`{"version":99}`),
+	})
+	require.NoError(t, err)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeStoredSessionInvalid)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes, "the person reconnects; sub_reason keeps our cause")
+	require.Equal(t, "tool_selection_malformed", row.SubReason)
+}
+
+// An admin revocation is the admin's decision, so it is blocked, not a failure the person fixes.
+func TestInboundRefresh_AdminRevokedSignInIsBlocked(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, refreshToken, client := seedRevokedSignInGrant(t, ctx, ti, signins.RevokeReasonAdmin)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInRevokedByAdmin)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeBlocked), row.Outcome)
+	require.Equal(t, "sign_in_revoked_by_admin", row.SubReason)
+}
+
+// Signing out everywhere is the person's own choice, so they reconnect.
+func TestInboundRefresh_SignedOutEverywhereIsAFailure(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, refreshToken, client := seedRevokedSignInGrant(t, ctx, ti, signins.RevokeReasonSignOutEverywhere)
+
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, refused.err)
+	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInRevoked)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeFailed), row.Outcome)
+}
+
+// A replay whose successor session has simply expired is expiry, not damaged state.
+func TestInboundRefresh_ReplayOfAnExpiredSuccessorIsExpiry(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx, _, refreshToken, _ := seedAgentRefreshSession(t, ctx, ti)
+
+	winner := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, winner.err)
+	require.Equal(t, http.StatusOK, winner.code, winner.body)
+	var response tokenResponseFixture
+	require.NoError(t, json.Unmarshal([]byte(winner.body), &response))
+	claims, err := sessiontokens.NewSigner("test-jwt-secret").Validate(response.AccessToken, urn.NewToolset(fx.toolset.ID).String())
+	require.NoError(t, err)
+	successor, err := usersessions_repo.New(ti.conn).GetUserSessionByJTI(ctx, usersessions_repo.GetUserSessionByJTIParams{
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+		Jti:                 claims.ID,
+	})
+	require.NoError(t, err)
+	expired, err := testrepo.New(ti.conn).ExpireUserSessionFixture(ctx, testrepo.ExpireUserSessionFixtureParams{
+		ID:                  successor.ID,
+		OrganizationID:      fx.orgID,
+		ProjectID:           fx.target.ProjectID,
+		UserSessionIssuerID: fx.target.UserSessionIssuerID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, expired)
+
+	replay := performRefreshRequest(ctx, ti, fx.toolset.McpSlug.String, fx.client.ClientID, refreshToken)
+	require.NoError(t, replay.err)
+	require.Equal(t, http.StatusBadRequest, replay.code, replay.body)
+	require.Contains(t, replay.body, "refreshed session is no longer active")
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+	require.Equal(t, "refresh_token_expired", row.SubReason)
+}
+
+// seedRevokedSignInGrant links a grant to a sign-in, then revokes the sign-in but not the grant, as a racing refresh sees it.
+func seedRevokedSignInGrant(t *testing.T, ctx context.Context, ti *testInstance, reason signins.RevokeReason) (hostedToolset, string, usersessions_repo.UserSessionClient) {
+	t.Helper()
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	signins.EnableForTests(ti.features, toolset.OrganizationID)
+	userID := "revoked-user-" + uuid.NewString()
+	signIn, err := signins.Record(ctx, ti.conn, signins.RecordParams{OrganizationID: toolset.OrganizationID, UserID: userID, WorkOSSessionID: "session_" + uuid.NewString(), AuthenticationMethod: signins.MethodSSO, AuthenticatedAt: time.Now()})
+	require.NoError(t, err)
+	tokens := exchangeLinkedCode(t, ctx, ti, toolset, client, userID, &signIn.ID.UUID)
+	_, err = signinsrepo.New(ti.conn).RevokeUserSignIns(ctx, signinsrepo.RevokeUserSignInsParams{
+		RevokeReason:    conv.ToPGText(string(reason)),
+		OrganizationIds: []string{toolset.OrganizationID},
+		UserID:          userID,
+	})
+	require.NoError(t, err)
+	return toolset, tokens.RefreshToken, client
+}
+
+func seedOtherRefreshClient(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) usersessions_repo.UserSessionClient {
+	t.Helper()
+	other, err := usersessions_repo.New(ti.conn).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
+		UserSessionIssuerID:     issuerID,
+		ClientID:                "other-client-" + uuid.NewString(),
+		ClientName:              "other client",
+		RedirectUris:            []string{"http://localhost:3001/callback"},
+		TokenEndpointAuthMethod: "none",
+	})
+	require.NoError(t, err)
+	return other
 }
 
 // A client that authenticated and sent a spent or unknown token gets a row; the limiter bounds it.

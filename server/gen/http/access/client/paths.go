@@ -97,6 +97,11 @@ func ListScopesAccessPath() string {
 	return "/rpc/access.listScopes"
 }
 
+// ListAgentPolicyScopesAccessPath returns the URL path to the access service listAgentPolicyScopes HTTP endpoint.
+func ListAgentPolicyScopesAccessPath() string {
+	return "/rpc/access.listAgentPolicyScopes"
+}
+
 // ListMembersAccessPath returns the URL path to the access service listMembers HTTP endpoint.
 func ListMembersAccessPath() string {
 	return "/rpc/access.listMembers"
