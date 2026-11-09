@@ -48,13 +48,14 @@ func TestCardResourceIsListedAndReadable(t *testing.T) {
 	require.False(t, assistant, "the managed assistant renders no MCP Apps")
 }
 
-// The card view is served only where the tools that link to it are live.
-func TestCardResourceFollowsTheLiveRegistrationTools(t *testing.T) {
+// Every external tool links the card view, so it is served on every
+// deployment, including one with no live services.
+func TestCardResourceIsAlwaysServed(t *testing.T) {
 	t.Parallel()
 
 	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
 	_, served := runtime.registrar.ResourceFor(AudienceExternal, cardResourceURI)
-	require.False(t, served)
+	require.True(t, served)
 }
 
 // The shell must render without any network load: the host's default
@@ -85,7 +86,9 @@ func TestCardToolsLinkTheServedCardView(t *testing.T) {
 
 	linked := map[string]bool{}
 	for _, tool := range listAdvertisedTools(t, server) {
-		if tool.Meta == nil {
+		if reason, textOnly := textOnlyTools[tool.Name]; textOnly {
+			require.NotEmpty(t, reason, tool.Name)
+			require.Nil(t, tool.Meta["ui"], "text-only tool %q links the card view", tool.Name)
 			continue
 		}
 		require.Equal(t, map[string]any{"resourceUri": cardResourceURI}, tool.Meta["ui"], tool.Name)
@@ -95,7 +98,9 @@ func TestCardToolsLinkTheServedCardView(t *testing.T) {
 		require.Less(t, len(encoded), 128, "keep tool _meta small for the host tool budget")
 		linked[tool.Name] = true
 	}
-	require.Equal(t, map[string]bool{"register_catalog_mcp": true, "register_remote_mcp": true, "attach_platform_mcp_identity_provider": true}, linked)
+	for _, name := range []string{"register_catalog_mcp", "register_remote_mcp", "attach_platform_mcp_identity_provider", "list_projects", "get_mcp"} {
+		require.True(t, linked[name], name)
+	}
 }
 
 func TestCardEscapesUntrustedText(t *testing.T) {

@@ -1,6 +1,7 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -405,6 +406,20 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 		if tool.OutputSchema == nil {
 			tool.OutputSchema = inferOutputSchema[Out](tool.Name)
 		}
+		// Every external tool draws its results as an MCP Apps card unless it
+		// is listed as text-only. The card rides in _meta, so text and
+		// structured content stay exactly what other clients read.
+		kind, carded := toolCardKind(tool.Name, tool.Annotations)
+		if carded {
+			tool.Meta = withCardToolMeta(tool.Meta)
+		}
+		cardTitle := cmp.Or(tool.Title, cardHumanize(tool.Name))
+		card := func(result *mcp.CallToolResult, output Out) *mcp.CallToolResult {
+			if !carded {
+				return result
+			}
+			return withResultCard(cardTitle, kind, result, output)
+		}
 		mcp.AddTool(r.server, tool, func(ctx context.Context, request *mcp.CallToolRequest, input In) (*mcp.CallToolResult, Out, error) {
 			var result *mcp.CallToolResult
 			var output Out
@@ -413,12 +428,12 @@ func addTool[In, Out any](r *Registrar, tool *mcp.Tool, meta ToolMeta, handler m
 				result, output, err = handler(ctx, request, input)
 			}
 			if err == nil {
-				return result, output, nil
+				return card(result, output), output, nil
 			}
 			// A denial is projected from its fields wherever it was raised, so a
 			// handler that wraps one still answers with permission_denied.
 			if result, ok := externalAuthorizationToolResult(err); ok {
-				return result, output, nil
+				return card(result, output), output, nil
 			}
 			return nil, output, r.failSafe(ctx, tool.Name, err)
 		})

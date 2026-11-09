@@ -314,11 +314,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if len(connectionMutations) > 0 {
 		connectionMutationService = connectionMutations[0]
 	}
-	// The card view is served only when a live tool links its results to it.
-	cardViewNeeded := false
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		registerWhoamiTool(reg, NewWhoamiService(postgresReader.db))
-		cardViewNeeded = true
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerAgentIdentityReadTools(reg, postgresReader.agentIdentityReads)
@@ -439,7 +436,6 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableRemoteRegistrationTool(reg)
 		registerUnavailableIdentityProviderTool(reg)
 	} else {
-		cardViewNeeded = true
 		registerCatalogRegistrationTool(reg, registrations, onboarding)
 		if registrations.directRemoteInspector == nil {
 			registerUnavailableRemoteRegistrationTool(reg)
@@ -448,9 +444,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerIdentityProviderTool(reg, registrations)
 	}
-	if cardViewNeeded {
-		registerCardResource(reg)
-	}
+	// Every external tool links its results to the card view.
+	registerCardResource(reg)
 	if registrations == nil || registrations.lifecycleMetadata == nil {
 		registerUnavailableLifecycleMetadataTool(reg)
 	} else {
