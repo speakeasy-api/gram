@@ -88,8 +88,8 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 		}
 	}
 	if failure != nil {
-		// A shareable error's text is what the client was told.
-		attrs = append(attrs, attr.ErrorMessage(failure.Error()))
+		// The same text the call's Tool logs row records.
+		attrs = append(attrs, attr.ErrorMessage(toolCallFailureMessage(failure)))
 		// A call abandoned at shutdown failed because of a deploy, not the
 		// tool, so the record names the interrupt the way the telemetry log
 		// does.
