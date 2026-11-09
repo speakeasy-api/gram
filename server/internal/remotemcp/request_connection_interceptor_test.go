@@ -682,6 +682,7 @@ func TestRequestMethodDetail(t *testing.T) {
 		"server/discover":                      "server_discover",
 		"tasks/get":                            "tasks_get",
 		"resources/subscribe":                  "resources_subscribe",
+		"tools/call":                           "tools_call",
 		"notifications/initialized":            "notification",
 		"notifications/anything":               "notification",
 		"x-vendor/" + strings.Repeat("a", 200): "other",

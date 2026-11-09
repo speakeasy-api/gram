@@ -153,17 +153,11 @@ func (c *requestConnections) upstreamFailureHappened(status int, sent, response 
 
 // requestMethodDetail bounds a client-supplied method to a known label.
 func requestMethodDetail(method string) string {
-	switch method {
-	case mcpversions.MethodInitialize, mcpversions.MethodToolsList, mcpversions.MethodPing,
-		mcpversions.MethodResourcesList, mcpversions.MethodResourcesRead, mcpversions.MethodResourcesTemplatesList,
-		mcpversions.MethodPromptsList, mcpversions.MethodPromptsGet, mcpversions.MethodCompletionComplete,
-		mcpversions.MethodLoggingSetLevel, mcpversions.MethodResourcesSubscribe, mcpversions.MethodResourcesUnsubscribe,
-		mcpversions.MethodServerDiscover, mcpversions.MethodSubscriptionsListen,
-		mcpversions.MethodTasksGet, mcpversions.MethodTasksList, mcpversions.MethodTasksResult, mcpversions.MethodTasksCancel:
-		return strings.ReplaceAll(method, "/", "_")
-	}
 	if strings.HasPrefix(method, "notifications/") {
 		return "notification"
+	}
+	if mcpversions.KnownMethod(method) {
+		return strings.ReplaceAll(method, "/", "_")
 	}
 	return "other"
 }
