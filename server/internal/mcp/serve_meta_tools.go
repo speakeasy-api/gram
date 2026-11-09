@@ -300,7 +300,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
 	attempt.member = &member
-	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+	if err := s.validateCatalogMember(ctx, gate, member, catalogCheckRecorded); err != nil {
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
 			message := s.callFailureMessage(ctx, logger, gate, member, err)
 			attempt.fail(metaMemberErrorStatus(err), message)

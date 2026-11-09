@@ -1,17 +1,24 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"log/slog"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/expirable"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -170,7 +177,7 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 			gate.execute = true
 			approveChangedMember(gate, &member, toolfilter.CatalogModeLive, tc.signInChanged)
 			logger := testenv.NewLogger(t)
-			err := s.validateCatalogMember(t.Context(), gate, member)
+			err := s.validateCatalogMember(t.Context(), gate, member, catalogCheckRecorded)
 			require.Equal(t, tc.text, s.memberFailureMessage(t.Context(), logger, gate, member, err))
 
 			unnamed := catalogConsentMessage("", tc.detail, tc.remedy, gate.authentication.subject.Kind == urn.SessionSubjectKindUser)
@@ -306,4 +313,51 @@ func TestCatalogConsentNoSignInMemberReconnectsUnderEnforcement(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
 	require.Equal(t, string(consentRejectionConfigurationChanged), row.SubReason)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+}
+
+func reconsentForecastTotal(t *testing.T, reader *sdkmetric.ManualReader) int64 {
+	t.Helper()
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	total := int64(0)
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if m.Name != "mcp.upstream_issuer.reconsent_forecast" {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				total += point.Value
+			}
+		}
+	}
+	return total
+}
+
+// Reading a member's status counts nothing toward the re-consent forecast and writes no diagnostic; a real check does both once.
+func TestCatalogConsentStatusReadsRecordNothing(t *testing.T) {
+	t.Parallel()
+	const diagnostic = "gateway consent validation failed"
+	reader := sdkmetric.NewManualReader()
+	var logs bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&logs, nil))
+	s := &Service{logger: logger, staleNoAuthLog: newOnceLog(), upstreamIssuerParityLog: newOnceLog(), metrics: mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), logger)}
+	serverID := uuid.New()
+	member := changedMember(serverID, false)
+	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{serverID: true})
+	gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
+	approveChangedMember(gate, &member, toolfilter.CatalogModeLive, false)
+	backend := &metaCodeBackend{service: s}
+
+	require.Equal(t, metamcp.SignInNeedsConsent, s.memberSignInStatus(t.Context(), logger, gate, member, nil).Status)
+	require.Equal(t, "required", backend.knownConnectionState(t.Context(), gate, member, nil).Consent)
+	_, err := backend.connectRefusal(t.Context(), gate, member)
+	require.NoError(t, err)
+	require.Zero(t, reconsentForecastTotal(t, reader))
+	require.NotContains(t, logs.String(), diagnostic)
+
+	require.Error(t, s.validateCatalogMember(t.Context(), gate, member, catalogCheckRecorded))
+	require.Equal(t, int64(1), reconsentForecastTotal(t, reader))
+	require.Equal(t, 1, strings.Count(logs.String(), diagnostic))
 }

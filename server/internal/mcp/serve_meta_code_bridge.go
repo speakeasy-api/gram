@@ -254,7 +254,7 @@ func (b *metaCodeBackend) memberCallRefusal(ctx context.Context, gate *metaGateC
 		message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
 		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
 	}
-	if consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member)); ok {
+	if consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member, catalogCheckRecorded)); ok {
 		return catalogConsentCodeRefusal(b.service.refuseCatalogConsentCall(ctx, b.service.logger, gate, member, consent, false))
 	}
 	return nil
