@@ -430,3 +430,24 @@ func TestServePublic_SelfClientRenewalOutageOnInitializeRecordsTheOutage(t *test
 	require.Equal(t, "initialize", row.SubReason)
 	require.Len(t, rec.Rows(), 1)
 }
+
+// A tool call whose credential renewal hit an outage is recorded as that outage, not as a rejected credential.
+func TestServePublic_SelfClientRenewalOutageOnToolsCallRecordsTheOutage(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	source := &scriptedClientCredentials{tokens: []string{"revoked-token"}, remintErr: &remotesessions.TokenEndpointError{Transport: true}, forgettable: true}
+	ti.clientCredentials.use(source)
+	gate := newAuthorizationGate(t, func(string) bool { return false })
+	endpoint := newSelfClientEndpoint(t, ctx, ti, gate.URL)
+
+	w, err := servePublicHTTP(t, context.Background(), ti, endpoint.slug, toolsCallBody(t), endpoint.token, nil)
+	requireOopsCode(t, err, oops.CodeUnavailable)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, []string{"Bearer revoked-token"}, gate.authorizations())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeRemoteSessionUnavailable)
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
