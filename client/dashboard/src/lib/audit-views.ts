@@ -10,26 +10,26 @@ export const VIEW_OPTIONS: {
 }[] = [
   {
     value: "changes",
-    label: "Changes",
+    label: "Team changes",
     tooltip:
       "Changes people, API keys and agents made to settings, without Speakeasy's own background activity",
   },
   {
     value: "system",
-    label: "System",
+    label: "Automated changes",
     tooltip:
       "Changes Speakeasy made on its own, such as publishing plugins and creating the keys they use",
   },
   {
     value: "security",
-    label: "Security activity",
+    label: "Access",
     tooltip:
       "Machine access, such as an agent's runtime admitting its workload identity",
   },
   {
     value: "all",
     label: "All changes",
-    tooltip: "Every configuration change, including system activity",
+    tooltip: "Every configuration change, from your team and automated",
   },
 ];
 
@@ -43,12 +43,12 @@ export const VIEW_EMPTY: Record<
       "Activity will appear here as changes are made across your organization.",
   },
   system: {
-    title: "No system activity found",
+    title: "No automated changes found",
     description:
       "Changes Speakeasy makes on its own appear here, such as publishing plugins.",
   },
   security: {
-    title: "No security activity found",
+    title: "No access activity found",
     description:
       "Machine access appears here, such as an agent's runtime admitting its workload identity.",
   },
@@ -61,12 +61,12 @@ export const VIEW_EMPTY: Record<
 
 export const VIEW_INSIGHTS: Record<AuditView, string> = {
   changes:
-    "Showing configuration changes made by people, API keys and agents. Speakeasy's own background activity is in the System view.",
+    "Showing configuration changes made by people, API keys and agents. Speakeasy's own background activity is in the Automated changes view.",
   system:
-    "Showing system activity: changes Speakeasy made on its own, such as publishing plugins.",
+    "Showing automated changes: changes Speakeasy made on its own, such as publishing plugins.",
   security:
-    "Showing security activity: machine access such as agents' runtimes admitting their workload identity.",
-  all: "Showing all configuration changes, including system activity.",
+    "Showing access activity: machine access such as agents' runtimes admitting their workload identity.",
+  all: "Showing all configuration changes, from the team and automated.",
 };
 
 export function parseAuditView(value: string): AuditView {
