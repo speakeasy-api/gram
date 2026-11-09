@@ -13,6 +13,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import {
   allLabelFor,
+  hidesAllOption,
   flattenOptions,
   isGroupedOptions,
   type DateRangeValue,
@@ -94,9 +95,7 @@ export function FilterControl({
             />
           </SelectTrigger>
           <SelectContent>
-            {/* A required dimension always resolves to a real value, so an
-                "All" row would only ever snap back to the first option. */}
-            {!dim.required && (
+            {!hidesAllOption(dim) && (
               <SelectItem value={SELECT_ALL_VALUE}>
                 {allLabelFor(dim)}
               </SelectItem>

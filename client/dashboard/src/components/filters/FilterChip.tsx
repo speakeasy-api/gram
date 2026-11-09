@@ -26,6 +26,7 @@ import { Check } from "lucide-react";
 import {
   chipLabel,
   allLabelFor,
+  hidesAllOption,
   type FilterDimension,
   type FilterOption,
 } from "./filter-schema";
@@ -170,7 +171,7 @@ export function SelectFilterChip({
           <CommandList>
             <CommandEmpty>No options match.</CommandEmpty>
             <CommandGroup>
-              {!dim.required && (
+              {!hidesAllOption(dim) && (
                 <CommandItem
                   value="__all__"
                   keywords={[allLabelFor(dim)]}

@@ -6,9 +6,16 @@ import { FilterControl } from "./FilterControl";
 
 afterEach(cleanup);
 
-const [optional, required] = defineFilters([
+const [optional, required, named] = defineFilters([
   { id: "optional", label: "Signal", kind: "select" },
   { id: "required", label: "Sensor", kind: "select", required: true },
+  {
+    id: "named",
+    label: "Anonymous",
+    kind: "select",
+    required: true,
+    allLabel: "Anonymous excluded",
+  },
 ]);
 
 const options = [
@@ -46,5 +53,22 @@ describe("FilterControl select", () => {
     await userEvent.click(screen.getByRole("combobox"));
     await screen.findByRole("option", { name: "Alpha" });
     expect(screen.queryByRole("option", { name: "All sensors" })).toBeNull();
+  });
+
+  it("keeps the All row when a required dimension names its empty state", async () => {
+    const onChange = vi.fn<(value: unknown) => void>();
+    render(
+      <FilterControl
+        dim={named!}
+        value="included"
+        options={[{ value: "included", label: "Anonymous included" }]}
+        onChange={onChange}
+      />,
+    );
+    await userEvent.click(screen.getByRole("combobox"));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Anonymous excluded" }),
+    );
+    expect(onChange).toHaveBeenCalledWith(null);
   });
 });
