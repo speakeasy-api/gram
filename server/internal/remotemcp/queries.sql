@@ -63,6 +63,18 @@ FROM remote_mcp_server_headers
 WHERE remote_mcp_server_id = @remote_mcp_server_id AND deleted IS FALSE
 ORDER BY name;
 
+-- name: ListServerHeaderMetadata :many
+-- Discovery checks header sources without reading credential values.
+SELECT h.remote_mcp_server_id, h.name, h.is_required, h.is_secret, h.value_from_request_header,
+       (h.value IS NOT NULL)::boolean AS has_stored_value
+FROM remote_mcp_server_headers AS h
+JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
+JOIN projects AS p ON p.id = r.project_id AND p.deleted IS FALSE
+WHERE h.remote_mcp_server_id = ANY(@remote_mcp_server_ids::uuid[])
+  AND p.organization_id = @organization_id
+  AND h.deleted IS FALSE
+ORDER BY h.name;
+
 -- name: ListServerHeaders :many
 SELECT *
 FROM remote_mcp_server_headers

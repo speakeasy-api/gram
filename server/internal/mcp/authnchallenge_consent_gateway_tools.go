@@ -216,7 +216,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		if member.typedAuthClient {
+		// Enforcement uses registration-scoped tokens even for legacy resolver
+		// outcomes (for example EMA), matching the runtime selection path.
+		if memberAuth != nil {
 			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
