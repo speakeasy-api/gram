@@ -191,6 +191,9 @@ func (a Attempt) ID() uuid.UUID { return a.id }
 // StartedAt is when the attempt started.
 func (a Attempt) StartedAt() time.Time { return a.startedAt }
 
+// Scope is what every step of the attempt shares.
+func (a Attempt) Scope() Scope { return a.scope }
+
 // IsZero reports an attempt that was never begun. Recording on it does nothing.
 func (a Attempt) IsZero() bool { return a.id == uuid.Nil }
 
