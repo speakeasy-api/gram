@@ -72,15 +72,17 @@ func TestRequestConnections_RepeatedRejectionsFold(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	var rows []struct {
-		Reason  string `ch:"reason"`
-		Repeats uint32 `ch:"repeats"`
+		Reason    string `ch:"reason"`
+		SubReason string `ch:"sub_reason"`
+		Repeats   uint32 `ch:"repeats"`
 	}
-	require.NoError(t, conn.Select(t.Context(), &rows, `SELECT reason, repeats FROM mcp_connection_events WHERE server_id = ?`, serverID.String()))
+	require.NoError(t, conn.Select(t.Context(), &rows, `SELECT reason, sub_reason, repeats FROM mcp_connection_events WHERE server_id = ?`, serverID.String()))
 	require.NotEmpty(t, rows)
 	require.Less(t, len(rows), attempts, "repeats fold instead of writing a row each")
 	total := 0
 	for _, row := range rows {
 		require.Equal(t, mcpconnectionattempts.CodeProviderRejected.String(), row.Reason)
+		require.Equal(t, "initialize", row.SubReason)
 		total += 1 + int(row.Repeats)
 	}
 	require.Equal(t, attempts, total, "folded rows still count every failure")

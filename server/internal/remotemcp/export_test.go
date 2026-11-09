@@ -33,5 +33,5 @@ func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
 
 // RequestFailureConnections is the interceptor a direct server's proxy records rejected handshakes with.
 func RequestFailureConnections(attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamURL, upstreamAuth string) []proxy.RequestFailureInterceptor {
-	return newToolsCallConnections(&attribution, recorder, proxy.ServerIdentity{}, upstreamURL, upstreamAuth, nil).requestFailures()
+	return newRequestConnections(&attribution, recorder, proxy.ServerIdentity{}, upstreamURL, upstreamAuth, nil).requestFailures()
 }

@@ -30,7 +30,7 @@ import (
 
 const connectionToolsCall = `{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"protected","arguments":{}}}`
 
-func serveToolsCall(ctx context.Context, t *testing.T, connections *toolsCallConnections, upstream http.HandlerFunc, checkpoint ToolsCallKillswitchCheckpoint) {
+func serveToolsCall(ctx context.Context, t *testing.T, connections *requestConnections, upstream http.HandlerFunc, checkpoint ToolsCallKillswitchCheckpoint) {
 	t.Helper()
 
 	server := httptest.NewServer(upstream)
@@ -48,8 +48,8 @@ func serveToolsCall(ctx context.Context, t *testing.T, connections *toolsCallCon
 	require.NoError(t, p.Post(rr, req))
 }
 
-func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth string) *toolsCallConnections {
-	return newToolsCallConnections(&ConnectionAttribution{
+func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth string) *requestConnections {
+	return newRequestConnections(&ConnectionAttribution{
 		Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 		Details:          nil,
 		UpstreamFailures: true,
@@ -187,7 +187,7 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
 
 	rec := mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", routing), reject, continueCheckpoint())
 	rec.RequireNothing()
 
 	refused := func(w http.ResponseWriter, _ *http.Request) {
@@ -196,12 +196,12 @@ func TestToolsCallConnections_TunneledConfiguredCredential(t *testing.T) {
 	}
 	secret := proxy.ConfiguredHeader{IsRequired: true, IsSecret: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}
 	rec = mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), reject, continueCheckpoint())
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 	require.Empty(t, row.ProviderHost)
 
 	rec = mcpconnectionattemptstest.New(t)
-	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
+	serveToolsCall(t.Context(), t, newRequestConnections(attribution, rec.Recorder, identity, "https://gateway.internal/mcp", "", proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, routing, []proxy.ConfiguredHeader{secret})), refused, continueCheckpoint())
 	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 }
 
@@ -305,7 +305,7 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 			for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 				rec := mcpconnectionattemptstest.New(t)
 				reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }
-				serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
+				serveToolsCall(t.Context(), t, newRequestConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
 				if tc.admin {
 					row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
 					require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
@@ -513,10 +513,12 @@ func TestToolsCallConnections_TunnelCapacityAndCheck(t *testing.T) {
 const (
 	connectionInitialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`
 	connectionToolsList  = `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
+	connectionRead       = `{"jsonrpc":"2.0","id":3,"method":"resources/read","params":{"uri":"file:///notes.txt"}}`
+	connectionNotice     = `{"jsonrpc":"2.0","method":"notifications/initialized"}`
 )
 
 // serveRequest posts body through a proxy carrying every connection interceptor and returns what the client got.
-func serveRequest(t *testing.T, connections *toolsCallConnections, upstreamURL, body string) *httptest.ResponseRecorder {
+func serveRequest(t *testing.T, connections *requestConnections, upstreamURL, body string) *httptest.ResponseRecorder {
 	t.Helper()
 
 	p := newKillswitchTestProxy(t, upstreamURL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
@@ -556,18 +558,21 @@ func TestRequestConnections_CredentialRejected(t *testing.T) {
 		headers      []proxy.ConfiguredHeader
 		want         mcpconnectionattempts.Code
 		who          mcpconnectionattempts.WhoFixes
+		method       string
 	}{
-		{name: "initialize 401", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "tools/list 401", body: connectionToolsList, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "tools/list 403", body: connectionToolsList, status: http.StatusForbidden, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "shared credential", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", self: true, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "static key", body: connectionToolsList, status: http.StatusUnauthorized, headers: []proxy.ConfiguredHeader{{Name: "X-Api-Key", IsSecret: true, StaticValue: "key"}}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "initialize 401", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson, method: "initialize"},
+		{name: "tools/list 401", body: connectionToolsList, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson, method: "tools_list"},
+		{name: "tools/list 403", body: connectionToolsList, status: http.StatusForbidden, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson, method: "tools_list"},
+		{name: "resources/read 401", body: connectionRead, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson, method: "resources_read"},
+		{name: "notification 401", body: connectionNotice, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson, method: "notification"},
+		{name: "shared credential", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", self: true, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin, method: "initialize"},
+		{name: "static key", body: connectionToolsList, status: http.StatusUnauthorized, headers: []proxy.ConfiguredHeader{{Name: "X-Api-Key", IsSecret: true, StaticValue: "key"}}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin, method: "tools_list"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			rec := mcpconnectionattemptstest.New(t)
-			connections := newToolsCallConnections(&ConnectionAttribution{
+			connections := newRequestConnections(&ConnectionAttribution{
 				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
 				Details:          nil,
 				UpstreamFailures: true,
@@ -580,9 +585,84 @@ func TestRequestConnections_CredentialRejected(t *testing.T) {
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
 			require.Equal(t, string(tc.who), row.WhoFixes)
+			require.Equal(t, tc.method, row.SubReason, "the row says which request failed")
 			require.Equal(t, "provider.example.com", row.ProviderHost)
 			require.Len(t, rec.Rows(), 1)
 		})
+	}
+}
+
+// A failed tool call carries no method label, so health views can tell it from a failed handshake.
+func TestRequestConnections_ToolCallHasNoMethodLabel(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	serveToolsCall(t.Context(), t, recordingConnections(rec, "token"), func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}, continueCheckpoint())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Empty(t, row.SubReason)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// Through a tunnel, the server's 401 is a rejected credential and the tunnel gateway's own refusal is ours.
+func TestRequestConnections_Tunneled(t *testing.T) {
+	t.Parallel()
+
+	identity := proxy.ServerIdentity{RemoteMCPServerID: "", TunneledMCPServerID: uuid.NewString(), McpServerID: uuid.NewString(), MetaMCPServerID: ""}
+	secret := proxy.ConfiguredHeader{IsRequired: true, IsSecret: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}
+	headers := proxy.MergeAuthClientHeaders(proxy.HeaderPolicyTunneled, tunnelrouting.Headers(identity.TunneledMCPServerID, "forward-token", "affinity"), []proxy.ConfiguredHeader{secret})
+
+	for _, tc := range []struct {
+		name        string
+		status      int
+		tunnelError string
+		want        mcpconnectionattempts.Code
+	}{
+		{name: "server rejects the key", status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "tunnel gateway refuses", status: http.StatusForbidden, tunnelError: wire.TunnelErrorForwardRejected, want: mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				if tc.tunnelError != "" {
+					w.Header().Set(tunnelrouting.ErrorHeader, tc.tunnelError)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(upstream.Close)
+
+			rec := mcpconnectionattemptstest.New(t)
+			connections := newRequestConnections(&ConnectionAttribution{
+				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+				Details:          nil,
+				UpstreamFailures: true,
+				SelfCredential:   false,
+				Request:          nil,
+			}, rec.Recorder, identity, "https://gateway.internal/mcp", "", headers)
+
+			serveRequest(t, connections, upstream.URL, connectionInitialize)
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Empty(t, row.ProviderHost)
+			require.Equal(t, "initialize", row.SubReason)
+		})
+	}
+}
+
+func TestRequestMethodDetail(t *testing.T) {
+	t.Parallel()
+
+	for method, want := range map[string]string{
+		"initialize":                           "initialize",
+		"tools/list":                           "tools_list",
+		"resources/templates/list":             "resources_templates_list",
+		"notifications/initialized":            "notification",
+		"notifications/anything":               "notification",
+		"x-vendor/" + strings.Repeat("a", 200): "other",
+		"":                                     "other",
+	} {
+		require.Equal(t, want, requestMethodDetail(method), method)
 	}
 }
 
