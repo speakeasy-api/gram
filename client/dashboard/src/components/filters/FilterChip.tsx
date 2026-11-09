@@ -154,7 +154,9 @@ export function SelectFilterChip({
             color={color}
             active={!!value}
             onClick={() => setOpen(!open)}
-            onRemove={value ? () => onChange(null) : undefined}
+            // A required dimension has nothing to clear *to*: clearing it only
+            // resolves back to a value, so hide the × as the toolbar does.
+            onRemove={value && !dim.required ? () => onChange(null) : undefined}
           />
         </span>
       </PopoverAnchor>

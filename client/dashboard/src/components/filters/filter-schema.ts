@@ -126,12 +126,13 @@ interface BaseDimension<K extends FilterKind> {
    */
   allLabel?: string;
   /**
-   * The dimension always holds a value — there is no "all" for it, so its chip
-   * hides the × rather than offering a clear that resolves straight back to a
-   * value. Use for a scope the query cannot run without (e.g. the project a
-   * list is read within), never merely for a filter that happens to be
-   * important. Select controls also drop their "All …" row unless `allLabel`
-   * names the empty state as a selection in its own right.
+   * Clearing the dimension never leaves it empty: the page resolves a missing
+   * value straight back to one, so its chip hides the × rather than offering a
+   * clear that looks like a no-op. Select controls also drop their "All …" row,
+   * unless `allLabel` names the empty state as a selection in its own right
+   * (e.g. "Anonymous excluded"), in which case the row is the way back to it.
+   * Use for a scope the query cannot run without (e.g. the project a list is
+   * read within), never merely for a filter that happens to be important.
    */
   required?: boolean;
 }
