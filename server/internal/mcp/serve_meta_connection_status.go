@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -36,8 +37,10 @@ func (s *Service) handleMetaConnectionStatusCall(
 	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
 	requiresAuth := s.memberAuthRequirements(gate.organizationID, members)
 	for _, member := range members {
-		row := s.memberSignInStatus(ctx, logger, gate, member, requiresAuth)
+		memberCtx := contextvalues.WithConnectionReferenceSlot(ctx)
+		row := s.memberSignInStatus(memberCtx, logger, gate, member, requiresAuth)
 		row.Slug, row.Name = member.slug, member.name
+		withStatusReference(memberCtx, &row)
 		servers = append(servers, row)
 	}
 	// A cached connection reports members its consent did not approve,
@@ -101,6 +104,19 @@ func (s *Service) handleMetaConnectionStatusCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// withStatusReference adds the reference of a row this check stored to a member reporting a
+// problem. Most problems here are read from stored state and store no row, so show none.
+func withStatusReference(ctx context.Context, row *metamcp.ConnectionStatusServer) {
+	line := contextvalues.ConnectionReferenceLine(ctx)
+	if line == "" || row.Status == metamcp.SignInConnected || row.Status == metamcp.SignInNotRequired {
+		return
+	}
+	row.Detail = strings.TrimSpace(row.Detail + " " + line)
+	if row.Outage != nil {
+		row.Outage.Message += " " + line
+	}
 }
 
 // agentConnectURL is the agent's sign-in step for the first row it fixes, or

@@ -736,6 +736,7 @@ func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjs
 // marshalMetaToolError emits a member-scoped failure as an isError tool
 // result rather than a protocol error.
 func marshalMetaToolError(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, message string) (json.RawMessage, error) {
+	message = contextvalues.AppendConnectionReference(ctx, message)
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
 		invocation.message = message
 		return nil, invocation.failure()

@@ -15,10 +15,12 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -62,6 +64,12 @@ const (
 
 	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add up to 5s on the writer.
 	defaultLogsCheckTimeout = 500 * time.Millisecond
+
+	// referenceLogsTimeout bounds the logs lookup behind a reference; a slower answer shows none.
+	referenceLogsTimeout = 100 * time.Millisecond
+
+	// referenceLogsTTL is how long one logs answer serves references, so a failure loop costs one lookup.
+	referenceLogsTTL = 30 * time.Second
 
 	// unknownTableCode is ClickHouse's UNKNOWN_TABLE, seen when code ships before its migration.
 	unknownTableCode = 60
@@ -371,6 +379,21 @@ type Recorder struct {
 
 	// dropTotals counts rows per reason, so Shutdown can report what its drain lost.
 	dropTotals map[dropReason]*atomic.Int64
+
+	// insertFailing is set while the last insert failed, so references stop promising rows.
+	insertFailing atomic.Bool
+
+	// referableOrgs remembers each organization's logs answer for references. Nil checks every time.
+	referableOrgs *simplelru.LRU[string, referableOrg]
+
+	// referableMu guards referableOrgs. It is never held during a logs check.
+	referableMu sync.Mutex
+}
+
+// referableOrg is one logs answer and when it was read.
+type referableOrg struct {
+	allowed bool
+	at      time.Time
 }
 
 func newDropCounters() map[dropReason]*atomic.Int64 {
@@ -442,6 +465,10 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		lastDrop:     newDropCounters(),
 		unfinished:   atomic.Int64{},
 		dropTotals:   newDropCounters(),
+
+		insertFailing: atomic.Bool{},
+		referableOrgs: newReferableOrgs(),
+		referableMu:   sync.Mutex{},
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -474,7 +501,20 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		lastDrop:     newDropCounters(),
 		unfinished:   atomic.Int64{},
 		dropTotals:   newDropCounters(),
+
+		insertFailing: atomic.Bool{},
+		referableOrgs: nil,
+		referableMu:   sync.Mutex{},
 	}
+}
+
+func newReferableOrgs() *simplelru.LRU[string, referableOrg] {
+	orgs, err := simplelru.NewLRU[string, referableOrg](onceMaxOrgs, nil)
+	if err != nil {
+		// Only a non-positive size fails, and this is a constant.
+		panic("connection reference cache size must be positive")
+	}
+	return orgs
 }
 
 // limit is how much a row is held back before it is queued.
@@ -509,7 +549,8 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats and rows past its queue share are held back and written later as a
 // count; a held key evicted before then is lost as repeats_lost. It reports capture/queue
-// acceptance, not eventual persistence; held-back and rejected rows return false.
+// acceptance, not eventual persistence; held-back and rejected rows return false. A held-back
+// row still leaves a reference: every row folded together is stored under one id, the first's.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
@@ -550,18 +591,23 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
+			r.leaveReference(ctx, row.OrganizationID, decision.foldID, what)
 			return false
 		}
 		row.Repeats = decision.repeats
+		if decision.foldID != uuid.Nil {
+			row.AttemptID = decision.foldID
+		}
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
 	}
 	r.countStep(ctx, row)
 	if r.capture != nil {
-		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
+		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			r.stampClient(&row)
 			r.capture(row)
+			r.leaveReference(ctx, row.OrganizationID, row.AttemptID, what)
 			return true
 		}
 		return false
@@ -571,7 +617,49 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, reason, events(row), nil)
 		return false
 	}
+	r.leaveReference(ctx, row.OrganizationID, row.AttemptID, what)
 	return true
+}
+
+// PromiseReference leaves attempt's id for a failure another goroutine is about to End, off the
+// request path. Whichever request wins that End, the row carries this id.
+func (r *Recorder) PromiseReference(ctx context.Context, attempt Attempt, what Happened) {
+	if r == nil || attempt.IsZero() {
+		return
+	}
+	r.leaveReference(ctx, attempt.scope.organizationID, attempt.id, what)
+}
+
+// leaveReference puts a failure's id on ctx if a row can honestly be expected for it. The row is
+// still in memory at this point, so this rules out only what is knowable now: logs off, and a
+// ClickHouse that refused the last insert. A check that fails shows nothing.
+func (r *Recorder) leaveReference(ctx context.Context, organizationID string, id uuid.UUID, what Happened) {
+	if _, failed := what.(Code); !failed || id == uuid.Nil || !contextvalues.ConnectionReferenceWanted(ctx) {
+		return
+	}
+	if r.insertFailing.Load() || !r.logsAllowForReference(organizationID) {
+		return
+	}
+	contextvalues.SetConnectionReference(ctx, id.String())
+}
+
+func (r *Recorder) logsAllowForReference(organizationID string) bool {
+	if r.referableOrgs != nil {
+		r.referableMu.Lock()
+		cached, ok := r.referableOrgs.Get(organizationID)
+		r.referableMu.Unlock()
+		if ok && time.Since(cached.at) < referenceLogsTTL {
+			return cached.allowed
+		}
+	}
+	reason, _ := r.organizationAllowed(organizationID, referenceLogsTimeout)
+	allowed := reason == ""
+	if r.referableOrgs != nil {
+		r.referableMu.Lock()
+		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
+		r.referableMu.Unlock()
+	}
+	return allowed
 }
 
 // admitOnce applies the Once limits under stopMu, so a row held back before stopping is in the final pass.
@@ -580,10 +668,10 @@ func (r *Recorder) admitOnce(row Row) (decision onceDecision, stopped bool) {
 	defer r.stopMu.RUnlock()
 
 	if r.stopped {
-		return onceDecision{allowed: false, repeats: 0, lost: 0}, true
+		return onceDecision{allowed: false, repeats: 0, lost: 0, foldID: uuid.Nil}, true
 	}
 	if r.queueReserved() {
-		return onceDecision{allowed: false, repeats: 0, lost: r.limiter.holdBack(row)}, false
+		return r.limiter.holdBack(row), false
 	}
 	return r.limiter.take(row, time.Now()), false
 }
@@ -750,7 +838,7 @@ func (r *Recorder) run() {
 			reason, checked := organizations[row.OrganizationID]
 			if !checked {
 				var err error
-				reason, err = r.organizationAllowed(row.OrganizationID)
+				reason, err = r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout)
 				organizations[row.OrganizationID] = reason
 				if err != nil {
 					r.drop(context.Background(), reason, events(row), err)
@@ -813,11 +901,11 @@ func (r *Recorder) surviving(n int, fn func()) {
 
 // organizationAllowed is the one place that decides whether an organization's attempts
 // are stored. It returns why not, or "" to store them. A check that fails means do not store.
-func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error) {
+func (r *Recorder) organizationAllowed(organizationID string, timeout time.Duration) (dropReason, error) {
 	if r.logsEnabled == nil {
 		return dropLogsOff, nil
 	}
-	ctx, cancel := context.WithTimeout(r.writerCtx, r.cfg.logsCheckTimeout)
+	ctx, cancel := context.WithTimeout(r.writerCtx, timeout)
 	defer cancel()
 
 	enabled, err := r.logsEnabled(ctx, organizationID)
@@ -842,6 +930,7 @@ func (r *Recorder) insert(rows []Row) bool {
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))
 	err := appendRowsInto(ctx, r.conn, r.cfg.table, rows)
+	r.insertFailing.Store(err != nil)
 	if err == nil {
 		return true
 	}

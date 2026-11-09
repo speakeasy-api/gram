@@ -369,6 +369,8 @@ func (b *metaCodeBackend) Call(ctx context.Context, path string, arguments json.
 	// different members into one row.
 	ctx, span := b.service.tracer.Start(ctx, "gateway.code.tool_call", trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)), trace.WithAttributes(attr.ToolName(path)))
 	defer span.End()
+	// Calls in one execution run at once, so each keeps its own reference.
+	ctx = contextvalues.WithConnectionReferenceSlot(ctx)
 	result, err := b.call(ctx, path, arguments)
 	if err != nil {
 		span.SetStatus(codes.Error, "code mode tool call failed")
@@ -388,7 +390,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		if member, ok := findMetaMember(members, slug); ok {
 			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
 				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect}
+				return nil, &codemode.MemberRefusalError{Message: contextvalues.AppendConnectionReference(ctx, message), ConsentRequired: remedy == staleChoiceReconnect}
 			}
 			if err := b.service.validateCatalogMember(ctx, &callGate, member); needsNewConsent(err) {
 				b.service.recordConsentRefusal(ctx, &callGate, member, err)

@@ -531,21 +531,24 @@ func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attem
 	if attempt.IsZero() {
 		return
 	}
-	s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
+	if s.runAttemptEnding(ctx, logger, func(ctx context.Context) {
 		s.claimAttemptEnding(ctx, logger, attempt, step, what, opts...)
-	})
+	}) {
+		s.connections.PromiseReference(ctx, attempt, what)
+	}
 }
 
 // runAttemptEnding bounds all ending work, including readiness reads, off the response path.
-func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) {
+// It reports whether the work was taken on.
+func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, work func(context.Context)) bool {
 	if s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
-		return
+		return false
 	}
 	select {
 	case s.attemptEndings.slots <- struct{}{}:
 	default:
 		logger.WarnContext(ctx, "too many connection attempt endings waiting; leaving this one open")
-		return
+		return false
 	}
 	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
 	s.attemptEndings.wg.Go(func() {
@@ -553,6 +556,7 @@ func (s *Service) runAttemptEnding(ctx context.Context, logger *slog.Logger, wor
 		defer func() { <-s.attemptEndings.slots }()
 		work(claimCtx)
 	})
+	return true
 }
 
 func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
