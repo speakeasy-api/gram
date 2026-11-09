@@ -18,11 +18,13 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -164,6 +166,13 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 			}
 		}
 	}
+	// The re-consent forecast's other hash reads the database, so it is
+	// computed before the consent client lock is taken.
+	var otherInventoryHash string
+	var otherInventoryErr error
+	if reuse {
+		otherInventoryHash, otherInventoryErr = s.otherConsentInventoryHash(ctx, endpoint, inventory)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin consent approval: %w", err)
@@ -188,6 +197,13 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 		if err != nil {
 			return nil, fmt.Errorf("read resource approval: %w", err)
 		}
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: endpoint.OrganizationID,
+			serverID:       endpoint.McpServerID.UUID,
+			site:           upstreamIssuerReconsentSiteReuseResource,
+			consenter:      reconsentConsenter(state),
+			outcome:        upstreamIssuerReconsent(saved.InventoryHash, inventoryHash, otherInventoryHash, otherInventoryErr),
+		})
 		if saved.InventoryHash != inventoryHash || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
 			return nil, nil
 		}
@@ -292,11 +308,18 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if inventory.CompletedAt.IsZero() || time.Since(inventory.CompletedAt) > time.Minute {
 		return nil, nil
 	}
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+	backendHashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
 		return nil, err
 	}
-	if inventory.BackendHash != backendHash {
+	s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+		organizationID: endpoint.OrganizationID,
+		serverID:       endpoint.McpServerID.UUID,
+		site:           upstreamIssuerReconsentSiteReuseInventory,
+		consenter:      reconsentConsenter(state),
+		outcome:        upstreamIssuerReconsent(inventory.BackendHash, backendHashes.decided, backendHashes.other, backendHashes.otherErr),
+	})
+	if inventory.BackendHash != backendHashes.decided {
 		return nil, nil
 	}
 	if endpoint.ToolsetID.Valid {
@@ -313,18 +336,36 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	return &inventory, nil
 }
 
+// consentBackendHashes are a server's consent backend fingerprint with its
+// upstream issuer from each source.
+type consentBackendHashes struct {
+	// decided is the fingerprint from the source the organization's flag
+	// makes authoritative. It is the one stored and checked.
+	decided string
+
+	// other is the fingerprint from the other source, for the re-consent
+	// forecast.
+	other string
+
+	// otherErr is why other could not be computed.
+	otherErr error
+}
+
 // consentBackendFingerprint binds discovery to access-relevant configuration.
 // Display names and update timestamps do not change the authorization surface.
-func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (string, error) {
+func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *ResolvedMcpEndpoint) (consentBackendHashes, error) {
+	var hashes consentBackendHashes
 	evidence := map[string]any{"resource": endpoint.UpstreamResource, "toolset": endpoint.ToolsetID}
 	if !endpoint.McpServerID.Valid {
-		return consentEvidenceHash(evidence), nil
+		hashes.decided = consentEvidenceHash(evidence)
+		hashes.other = hashes.decided
+		return hashes, nil
 	}
 	server, err := mcpservers_repo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpservers_repo.GetMCPServerByIDAndProjectIDParams{
 		ID: endpoint.McpServerID.UUID, ProjectID: endpoint.ProjectID,
 	})
 	if err != nil {
-		return "", fmt.Errorf("read consent backend: %w", err)
+		return hashes, fmt.Errorf("read consent backend: %w", err)
 	}
 	evidence["server"] = server.ID
 	evidence["remote"] = server.RemoteMcpServerID
@@ -339,14 +380,30 @@ func (s *Service) consentBackendFingerprint(ctx context.Context, endpoint *Resol
 			ID: server.RemoteMcpServerID.UUID, ProjectID: endpoint.ProjectID,
 		})
 		if err != nil {
-			return "", fmt.Errorf("read consent remote backend: %w", err)
+			return hashes, fmt.Errorf("read consent remote backend: %w", err)
 		}
 		headerFingerprint, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ConfigurationFingerprint(ctx, remote.ID)
 		if err != nil {
-			return "", fmt.Errorf("read consent backend headers: %w", err)
+			return hashes, fmt.Errorf("read consent backend headers: %w", err)
 		}
 		evidence["url"] = remote.Url
 		evidence["headers"] = headerFingerprint
 	}
-	return consentEvidenceHash(evidence), nil
+	providerIDs, associationErr := mcpservers_repo.New(s.db).ListMCPServerAssociationProviders(ctx, mcpservers_repo.ListMCPServerAssociationProvidersParams{
+		ID: server.ID, ProjectID: endpoint.ProjectID,
+	})
+	columnHash := consentEvidenceHash(evidence)
+	evidence["issuer"] = remotesessions.AssociationIssuerFromProviders(providerIDs).Provider
+	associationHash := consentEvidenceHash(evidence)
+	hashes.decided, hashes.other = columnHash, associationHash
+	if feature.UpstreamIssuerFromAssociations(ctx, s.features, endpoint.OrganizationID) {
+		if associationErr != nil {
+			return hashes, fmt.Errorf("read consent backend associations: %w", associationErr)
+		}
+		hashes.decided, hashes.other = associationHash, columnHash
+	}
+	if associationErr != nil {
+		hashes.otherErr = associationErr
+	}
+	return hashes, nil
 }

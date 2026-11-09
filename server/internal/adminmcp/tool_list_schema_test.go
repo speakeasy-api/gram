@@ -21,18 +21,12 @@ import (
 // implemented write operation attached, following every page.
 func listAllAdminTools(t *testing.T) []json.RawMessage {
 	t.Helper()
-	operations := make(map[WriteOperation]bool)
-	for _, op := range AllWriteOperations {
-		if op.implemented() {
-			operations[op] = true
-		}
-	}
 	principal := staffPrincipal()
 	principal.Scopes = append(principal.Scopes, ScopeWrite)
 	runtime := NewRuntime(&testAuthenticator{principal: principal}, "https://admin.example.test/admin-mcp")
 	runtime.catalogPromotions = &catalogpromotion.Service{}
-	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ImageUploads: &fakeImageUploads{}}
-	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, WriteConfig{Enabled: true, Operations: operations}))
+	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil), ProjectRedeployer: &fakeProjectRedeployer{}, ImageUploads: &fakeImageUploads{}}
+	require.NoError(t, AttachWrites(runtime, &StaffOAuth{runner: &writeRunner{}}, deps, WriteConfig{Enabled: true}))
 	handler := runtime.Handler()
 
 	tools := []json.RawMessage{}
@@ -144,17 +138,17 @@ func TestToolListSatisfiesMCPToolSchema(t *testing.T) {
 		names[tool.Name] = true
 	}
 	// Every write tool is present, including those past the first page.
-	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_set_registry_icons", "prepare_update_support_matrix", "create_image_upload_url"} {
+	for _, name := range []string{"set_organization_feature", "create_registry_entry", "set_registry_icons", "update_support_matrix", "create_image_upload_url"} {
 		require.True(t, names[name], "%s missing from tools/list", name)
 	}
 }
 
 func TestToolDefinitionCheckRejectsNonObjectPropertySchemas(t *testing.T) {
 	t.Parallel()
-	require.NoError(t, checkMCPToolDefinition(json.RawMessage(`{"name":"ok","inputSchema":{"type":"object","properties":{"any":{}}},"outputSchema":{"type":"object","properties":{"preview":{"type":"object"}}}}`)))
+	require.NoError(t, checkMCPToolDefinition(json.RawMessage(`{"name":"ok","inputSchema":{"type":"object","properties":{"any":{}}},"outputSchema":{"type":"object","properties":{"result":{"type":"object"}}}}`)))
 	for _, value := range []string{"true", "false", "null"} {
 		for _, field := range []string{"inputSchema", "outputSchema"} {
-			tool := `{"name":"bad","inputSchema":{"type":"object"},"` + field + `":{"type":"object","properties":{"preview":` + value + `}}}`
+			tool := `{"name":"bad","inputSchema":{"type":"object"},"` + field + `":{"type":"object","properties":{"result":` + value + `}}}`
 			require.ErrorContains(t, checkMCPToolDefinition(json.RawMessage(tool)), "want a JSON object", "%s under %s", value, field)
 		}
 	}

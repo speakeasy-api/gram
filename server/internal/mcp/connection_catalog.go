@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -226,7 +227,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 		seen[member.ServerID] = true
 		ids = append(ids, member.ServerID)
 	}
-	hashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
+	hashes, otherHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -243,6 +244,15 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	subjectCtx = withMandatoryAdmission(subjectCtx)
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
+		if member.ServerID != uuid.Nil {
+			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+				organizationID: endpoint.OrganizationID,
+				serverID:       member.ServerID,
+				site:           upstreamIssuerReconsentSiteCatalogFreeze,
+				consenter:      state.Subject.String(),
+				outcome:        upstreamIssuerReconsent(member.BackendHash, hashes[member.ServerID], otherHashes[member.ServerID], nil),
+			})
+		}
 		if member.ServerID == uuid.Nil || hashes[member.ServerID] != member.BackendHash {
 			return nil, errConsentConfigurationChanged
 		}
@@ -463,6 +473,13 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
+	s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+		organizationID: gate.organizationID,
+		serverID:       member.serverID,
+		site:           upstreamIssuerReconsentSiteCatalogMember,
+		consenter:      gate.userID,
+		outcome:        upstreamIssuerReconsent(approved.BackendHash, member.configurationHash, member.otherConfigurationHash, nil),
+	})
 	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
 		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
 			map[string]bool{"configuration_hash_present": member.configurationHash != "", "approved_hash_recorded": approved.BackendHash != ""})
@@ -597,19 +614,28 @@ func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Log
 	return message, remedy
 }
 
-func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, error) {
+// catalogMemberConfigurations returns each server's consent configuration
+// hash with its upstream issuer from the source the organization's flag makes
+// authoritative, and the hash from the other source for the re-consent
+// forecast.
+func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, map[uuid.UUID]string, error) {
 	hashes := make(map[uuid.UUID]string, len(ids))
+	others := make(map[uuid.UUID]string, len(ids))
 	if len(ids) == 0 {
-		return hashes, nil
+		return hashes, others, nil
 	}
 	rows, err := mcpserversrepo.New(s.db).ListMCPServerConsentConfigurations(ctx, mcpserversrepo.ListMCPServerConsentConfigurationsParams{OrganizationID: organizationID, McpServerIds: ids})
 	if err != nil {
-		return nil, fmt.Errorf("read approved server configurations: %w", err)
+		return nil, nil, fmt.Errorf("read approved server configurations: %w", err)
 	}
+	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	for _, row := range rows {
-		hashes[row.ID] = row.ConfigurationHash
+		hashes[row.ID], others[row.ID] = row.ConfigurationHash, row.AssociationConfigurationHash
+		if fromAssociations {
+			hashes[row.ID], others[row.ID] = row.AssociationConfigurationHash, row.ConfigurationHash
+		}
 	}
-	return hashes, nil
+	return hashes, others, nil
 }
 
 // validateCatalogMemberAuth checks that a member's captured credential can

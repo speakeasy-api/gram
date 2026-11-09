@@ -3,10 +3,7 @@ import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmTrafficSection } from "./confirm-traffic-section";
 import { ConfirmTrafficStep } from "./steps/confirm-traffic-step";
-import {
-  isAnthropicOrCursorSource,
-  isOtherPlatformSource,
-} from "./hook-event-sources";
+import { isAnthropicSource, isOtherPlatformSource } from "./hook-event-sources";
 
 const mocks = vi.hoisted(() => ({
   query: {
@@ -176,7 +173,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
       { wrapper: MemoryRouter },
     );
@@ -186,7 +183,7 @@ describe("ConfirmTrafficSection", () => {
       <ConfirmTrafficSection
         index={3}
         description="Start a Cowork session."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
     );
 
@@ -248,7 +245,7 @@ describe("ConfirmTrafficSection detected clients", () => {
       <ConfirmTrafficSection
         index={3}
         description="Run a tool."
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
       { wrapper: MemoryRouter },
     );
@@ -258,7 +255,7 @@ describe("ConfirmTrafficSection detected clients", () => {
     // the vendor rather than the harness the detector matched.
     expect(screen.getByText("Claude")).toBeTruthy();
     expect(screen.queryByText("Claude Code")).toBeNull();
-    expect(screen.getByText("Cursor")).toBeTruthy();
+    expect(screen.queryByText("Cursor")).toBeNull();
     expect(screen.queryByText("Codex")).toBeNull();
   });
 
@@ -272,7 +269,7 @@ describe("ConfirmTrafficSection detected clients", () => {
         index={3}
         description="Run a tool."
         callout={{ title: "Turn Cowork on", body: "Switch the toggle on." }}
-        matchesSource={isAnthropicOrCursorSource}
+        matchesSource={isAnthropicSource}
       />,
       { wrapper: MemoryRouter },
     );

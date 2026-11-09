@@ -221,6 +221,11 @@ type AuthnChallengeState struct {
 	// for, so the consent page lands on that server's connect page. Empty
 	// lands on the gateway's own page.
 	FocusServer string `json:"focus_server,omitempty"`
+	// ConnectPendingSignIn marks a first-party connect opened from a Platform
+	// MCP server card (`setup=sign-in`): the consent page first connects the
+	// server's sign-in provider when an organization admin opens it and the
+	// server has none yet, so the page can offer that provider's sign-in.
+	ConnectPendingSignIn bool `json:"connect_pending_sign_in,omitempty"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -1104,6 +1109,11 @@ type issuerGateAuthentication struct {
 	// typed resolver checked against the endpoint's server for a client it
 	// does not serve itself, which authorizes it without a sign-in link.
 	checkedRegistration bool
+
+	// serverAssociation is the upstream issuer the proxied server's client
+	// associations give, read when its own clients' tokens were resolved.
+	// Nil when this request resolved tokens another way.
+	serverAssociation *remotesessions.ServerAssociationIssuer
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1261,6 +1271,7 @@ func (s *Service) authenticateIssuerGate(
 		request:                r,
 		agentKeyClients:        nil,
 		checkedRegistration:    false,
+		serverAssociation:      nil,
 	}, toolSelection, nil
 }
 

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -112,11 +113,22 @@ func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedM
 		return
 	}
 	attempt := challengeState.connectionAttempt(endpoint)
-	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) {
+	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) || browserBindingExpired(challengeState, time.Now()) {
 		s.endAttemptOnce(ctx, s.logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
 		return
 	}
 	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
+}
+
+// consentBrowserError records a consent request that failed its browser check
+// and refuses it: a challenge out of time as expired, any other as a request
+// from another browser.
+func (s *Service) consentBrowserError(r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, err error) error {
+	s.recordWrongConsentBrowser(r, endpoint, challengeState)
+	if errors.Is(err, errChallengeBrowserExpired) {
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge expired"), oauthui.ReasonExpired))
+	}
+	return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 }
 
 // reconnectFailure maps a failed catalogue reconnect, and whether a retry can't fix it.
@@ -657,23 +669,42 @@ func (s *Service) recordRemoteSessionVerdict(
 	verdict remotesessions.ValidationOutcome,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive || (verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled)) {
+	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	what := verdictHappened(verdict, target.tunnelID.Valid)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what,
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
+		mcpconnectionattempts.Member(target.memberID),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+	)
+}
+
+// recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
+func (s *Service) recordRemoteSessionCheck(
+	ctx context.Context,
+	fromRequest mcpconnectionattempts.Option,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	client remotesessions.Client,
+	trigger remotesessionmetrics.ValidationTrigger,
+	what mcpconnectionattempts.Happened,
+	opts ...mcpconnectionattempts.Option,
+) {
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+		return
+	}
+	opts = append([]mcpconnectionattempts.Option{
 		fromRequest,
 		mcpconnectionattempts.Detail(string(trigger)),
-		mcpconnectionattempts.Member(target.memberID),
 		mcpconnectionattempts.Provider(client.IssuerURL),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
 		mcpconnectionattempts.RemoteSessionClient(client.ID),
 		mcpconnectionattempts.RemoteSessionIssuer(client.RemoteSessionIssuerID),
 		mcpconnectionattempts.Subject(challengeState.Subject),
-	)
+	}, opts...)
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
 func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {

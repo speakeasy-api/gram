@@ -26,6 +26,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/interceptors"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolcallobserver"
@@ -178,7 +179,7 @@ type ProxyManager struct {
 
 	// drain is shared by every proxy this manager builds, so starting it
 	// reaches every stream relayed by this process.
-	drain *proxy.Drain
+	drain *shutdowndrain.Drain
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -238,7 +239,7 @@ func NewProxyManager(
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
 		protectedResources:                    protectedResources,
-		drain:                                 proxy.NewDrain(),
+		drain:                                 shutdowndrain.New(),
 	}
 }
 
@@ -249,6 +250,16 @@ func NewProxyManager(
 // JSON-RPC error. Call it when the server starts shutting down.
 func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
 	f.drain.Start(interruptAfter)
+}
+
+// ShutdownDrain returns the drain shared by every proxy this manager builds,
+// so other request paths in the same process can be drained by the same
+// start. A nil manager has no drain.
+func (f *ProxyManager) ShutdownDrain() *shutdowndrain.Drain {
+	if f == nil {
+		return nil
+	}
+	return f.drain
 }
 
 // Build constructs a configured [*proxy.Proxy] for a single request against

@@ -842,8 +842,11 @@ func (s *Service) authClientNoAccessError(ctx context.Context, serverID uuid.UUI
 	if link := strings.TrimSpace(s.requestAccessURL(ctx, serverID.String(), res.serverName)); link != "" {
 		message += "\n\nRequest access:\n" + link
 	}
-	return oops.E(oops.CodeForbidden, nil, "%s", message).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String()), attr.SlogAuthClientReason(res.reason))
+	return oops.E(oops.CodeForbidden, errAuthClientNoAccess, "%s", message).LogWarn(ctx, s.logger, attr.SlogAuthClientID(res.clientID.String()), attr.SlogAuthClientReason(res.reason))
 }
+
+// errAuthClientNoAccess marks a caller refused the connection a server uses.
+var errAuthClientNoAccess = errors.New("caller has no access to the server's connection")
 
 // refreshNeedsAuthClientReconnect is the resolver's decision on a refresh of a
 // direct proxied server's session, for an organization it serves: whether the

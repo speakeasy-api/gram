@@ -252,11 +252,12 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	require.Equal(t, want, f.service.memberFailureMessage(t.Context(), logger, gate, member, member.upstreamUnavailable))
 
-	status, detail, outage := f.service.staleMemberStatus(t.Context(), logger, gate, member)
-	require.Nil(t, outage)
-	require.Equal(t, metamcp.SignInActionRequired, status)
-	require.Equal(t, want, detail)
-	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: status, Detail: detail}}}.Text()
+	row := f.service.staleMemberStatus(t.Context(), logger, gate, member)
+	require.Nil(t, row.Outage)
+	require.Equal(t, metamcp.SignInActionRequired, row.Status)
+	require.Equal(t, want, row.Detail)
+	require.False(t, row.Reconnect, "a stale choice is not reconnectable")
+	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: row.Status, Detail: row.Detail, Reconnect: row.Reconnect}}}.Text()
 	require.NotContains(t, text, "To sign in")
 	require.NotContains(t, text, "Reconnect this gateway")
 
@@ -277,9 +278,9 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	f.service.telemLogger = noTelemetryLogs(t)
 	gate.metaServerID = uuid.New()
 	require.Contains(t, callApprovedMember(t, f.service, gate, member), want)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
-	require.Equal(t, memberSetupChangedDetail, row.SubReason)
-	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes, "our failed lookup blames neither the person nor an admin")
+	attempt := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, memberSetupChangedDetail, attempt.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), attempt.WhoFixes, "our failed lookup blames neither the person nor an admin")
 	require.Zero(t, f.service.staleChoiceConsent.Len(), "a retry must look again")
 }
 
@@ -485,11 +486,11 @@ func TestStaleChoiceStatusFollowsTheMessage(t *testing.T) {
 	member := metaMember{slug: "db", serverID: uuid.New(), upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	unrefreshable := staleChoiceRemedyGate(s, nil)
 	unrefreshable.authentication.refreshableUserSession = false
-	status, detail, _ := s.staleMemberStatus(t.Context(), s.logger, unrefreshable, member)
-	require.Equal(t, metamcp.SignInNeedsConsent, status)
-	require.Contains(t, detail, "If that doesn't help, ask your administrator")
+	row := s.staleMemberStatus(t.Context(), s.logger, unrefreshable, member)
+	require.Equal(t, metamcp.SignInNeedsConsent, row.Status)
+	require.Contains(t, row.Detail, "If that doesn't help, ask your administrator")
 
 	owner := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
-	status, _, _ = s.staleMemberStatus(t.Context(), s.logger, owner, member)
-	require.Equal(t, metamcp.SignInActionRequired, status)
+	row = s.staleMemberStatus(t.Context(), s.logger, owner, member)
+	require.Equal(t, metamcp.SignInActionRequired, row.Status)
 }

@@ -62,6 +62,10 @@ type Service interface {
 	// List the distinct agent sources present in this project's chats, for
 	// populating the agent-type filter on the Agent Sessions page.
 	ListSources(context.Context, *ListSourcesPayload) (res *ListSourcesResult, err error)
+	// Count agent sessions per user for a time range. Uses the same population and
+	// visibility scoping as listChats, so each user's count matches listChats
+	// filtered to that user and the total matches the unfiltered listChats total.
+	CountByUser(context.Context, *CountByUserPayload) (res *CountChatsByUserResult, err error)
 	// List session-lineage links touching the given chats (session portability). A
 	// link records that a session was moved to another harness; the child side is
 	// present when the continuation's session id was known at move time. Returns
@@ -92,7 +96,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
+var MethodNames = [15]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "countByUser", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -436,6 +440,18 @@ type ChatTotals struct {
 	RiskOnly int64
 }
 
+type ChatUserSessionCount struct {
+	// Speakeasy user ID. Empty for sessions with no Speakeasy user (external
+	// users, agent actors).
+	UserID string
+	// The user's email, empty when unknown
+	Email string
+	// The user's display name, empty when unknown
+	DisplayName string
+	// Number of sessions; equals the chat.list total when filtered to this user
+	Count int
+}
+
 type ClaudeAgentUsage struct {
 	// Per-prompt Claude usage turns ordered by start time.
 	Turns []*ClaudeTurnUsage
@@ -483,6 +499,31 @@ type ClaudeTurnUsage struct {
 	Models []string
 	// Distinct Claude query sources used by this turn.
 	QuerySources []string
+}
+
+// CountByUserPayload is the payload type of the chat service countByUser
+// method.
+type CountByUserPayload struct {
+	SessionToken      *string
+	ProjectSlugInput  *string
+	ChatSessionsToken *string
+	// Count chats last active after this timestamp (ISO 8601)
+	From *string
+	// Count chats created before this timestamp (ISO 8601)
+	To *string
+	// Maximum number of users to return
+	Limit int
+}
+
+// CountChatsByUserResult is the result type of the chat service countByUser
+// method.
+type CountChatsByUserResult struct {
+	// Users ranked by session count, highest first, truncated to the requested
+	// limit
+	Users []*ChatUserSessionCount
+	// Total sessions across all users; equals the unfiltered chat.list total for
+	// the same range
+	Total int
 }
 
 // CreditUsagePayload is the payload type of the chat service creditUsage

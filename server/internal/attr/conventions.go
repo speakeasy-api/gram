@@ -70,6 +70,30 @@ const (
 	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
 	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
 
+	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
+	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
+
+	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
+	UpstreamIssuerSurfaceKey = attribute.Key("gram.upstream_issuer.surface")
+
+	// UpstreamIssuerSiteKey is the code site an upstream issuer comparison or re-consent forecast ran at.
+	UpstreamIssuerSiteKey = attribute.Key("gram.upstream_issuer.site")
+
+	// UpstreamIssuerOutcomeKey is how the server's column and association upstream issuers compared at a site.
+	UpstreamIssuerOutcomeKey = attribute.Key("gram.upstream_issuer.outcome")
+
+	// UpstreamIssuerSourceKey is which upstream issuer was authoritative: the column or the associations.
+	UpstreamIssuerSourceKey = attribute.Key("gram.upstream_issuer.source")
+
+	// UpstreamIssuerAssociationProviderKey is the one remote session issuer an MCP server's client associations name, if any.
+	UpstreamIssuerAssociationProviderKey = attribute.Key("gram.upstream_issuer.association_provider")
+
+	// UpstreamIssuerAssociationProvidersKey is how many distinct remote session issuers an MCP server's client associations name.
+	UpstreamIssuerAssociationProvidersKey = attribute.Key("gram.upstream_issuer.association_providers")
+
+	// UpstreamIssuerConsenterKey identifies whose consent a re-consent forecast is about, such as a user session.
+	UpstreamIssuerConsenterKey = attribute.Key("gram.upstream_issuer.consenter")
+
 	// MandatoryAuthzSurfaceKey is where a shadowed mandatory check ran: hosted_connect, proxied_connect, gateway_member, auth_client, token_issuance, or consent.
 	MandatoryAuthzSurfaceKey = attribute.Key("gram.authz.mandatory.surface")
 	// MandatoryAuthzCallerKey classifies the caller: anonymous, unrepresented, represented, or cross_org.
@@ -871,7 +895,11 @@ const (
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
 	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
-	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
+	ToolCallIDKey = attribute.Key("gram.tool_call.id")
+	// ToolCallInterruptReasonKey is why the server stopped waiting for a tool
+	// call it was running, such as "server_shutdown" when a deploy interrupted
+	// it, so the failure is not attributed to the tool.
+	ToolCallInterruptReasonKey     = attribute.Key("gram.tool_call.interrupt_reason")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
@@ -1327,6 +1355,44 @@ func AuthClientLegacyOutcome(v string) attribute.KeyValue {
 }
 
 func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
+
+func AuthClientResolverMode(v string) attribute.KeyValue { return AuthClientResolverModeKey.String(v) }
+
+func UpstreamIssuerSurface(v string) attribute.KeyValue { return UpstreamIssuerSurfaceKey.String(v) }
+
+// SlogUpstreamIssuerSurface is the serving surface of an upstream issuer comparison.
+func SlogUpstreamIssuerSurface(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerSurfaceKey), v)
+}
+
+func UpstreamIssuerSite(v string) attribute.KeyValue { return UpstreamIssuerSiteKey.String(v) }
+
+// SlogUpstreamIssuerSite is the code site of an upstream issuer comparison.
+func SlogUpstreamIssuerSite(v string) slog.Attr { return slog.String(string(UpstreamIssuerSiteKey), v) }
+
+func UpstreamIssuerOutcome(v string) attribute.KeyValue { return UpstreamIssuerOutcomeKey.String(v) }
+
+// SlogUpstreamIssuerOutcome is how an upstream issuer comparison came out.
+func SlogUpstreamIssuerOutcome(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerOutcomeKey), v)
+}
+
+func UpstreamIssuerSource(v string) attribute.KeyValue { return UpstreamIssuerSourceKey.String(v) }
+
+// SlogUpstreamIssuerAssociationProvider is the one provider an MCP server's associations name.
+func SlogUpstreamIssuerAssociationProvider(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerAssociationProviderKey), v)
+}
+
+// SlogUpstreamIssuerAssociationProviders is how many providers an MCP server's associations name.
+func SlogUpstreamIssuerAssociationProviders(v int64) slog.Attr {
+	return slog.Int64(string(UpstreamIssuerAssociationProvidersKey), v)
+}
+
+// SlogUpstreamIssuerConsenter identifies whose consent a re-consent forecast is about.
+func SlogUpstreamIssuerConsenter(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerConsenterKey), v)
+}
 
 func MandatoryAuthzSurface(v string) attribute.KeyValue { return MandatoryAuthzSurfaceKey.String(v) }
 func SlogMandatoryAuthzSurface(v string) slog.Attr {
@@ -3700,6 +3766,13 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 
 func ToolCallID(v string) attribute.KeyValue { return ToolCallIDKey.String(v) }
 func SlogToolCallID(v string) slog.Attr      { return slog.String(string(ToolCallIDKey), v) }
+
+func ToolCallInterruptReason(v string) attribute.KeyValue {
+	return ToolCallInterruptReasonKey.String(v)
+}
+func SlogToolCallInterruptReason(v string) slog.Attr {
+	return slog.String(string(ToolCallInterruptReasonKey), v)
+}
 
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)

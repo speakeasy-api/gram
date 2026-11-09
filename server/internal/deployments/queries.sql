@@ -203,6 +203,24 @@ AND ds.status = 'completed'
 ORDER BY d.seq DESC
 LIMIT 1;
 
+-- name: GetInFlightDeploymentAfter :one
+-- A newer deployment of the project that has not finished processing.
+SELECT d.id
+FROM deployments d
+INNER JOIN LATERAL (
+  SELECT ds.status
+  FROM deployment_statuses ds
+  WHERE ds.deployment_id = d.id
+  ORDER BY ds.seq DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE d.project_id = @project_id
+  AND d.seq > (SELECT a.seq FROM deployments a WHERE a.id = @after_deployment_id)
+  AND d.created_at > @created_after::timestamptz
+  AND latest.status IN ('created', 'pending')
+ORDER BY d.seq DESC
+LIMIT 1;
+
 -- name: GetDeploymentByIdempotencyKey :one
 WITH latest_status as (
     SELECT deployment_id, status

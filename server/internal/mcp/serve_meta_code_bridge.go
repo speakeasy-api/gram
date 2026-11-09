@@ -122,6 +122,9 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 }
 
 func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bool) (context.Context, *metaGateContext, []metaMember, error) {
+	// A callback keeps the execution's record of checked servers when its
+	// context carries one, and otherwise records each server it names once.
+	ctx = authz.WithOneChallengePerResource(ctx)
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, nil, fmt.Errorf("callback cancelled: %w", err)
 	}
@@ -285,7 +288,9 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)
 		defer cancel()
-		return b.catalog(bound, gate, members, slug)
+		// The program lists every server here without naming one, so no
+		// authorization check is recorded for any of them.
+		return b.catalog(authz.WithoutChallenges(bound), gate, members, slug)
 	}
 	return servers, list, nil
 }
@@ -302,6 +307,9 @@ func (b *metaCodeBackend) List(ctx context.Context, slug string) (*codemode.Cata
 	ctx, gate, members, err := b.current(ctx, false)
 	if err != nil {
 		return nil, err
+	}
+	if _, ok := b.service.findNamedMember(ctx, gate, members, slug); !ok {
+		return nil, codemode.ErrToolUnavailable
 	}
 	return b.catalog(ctx, gate, members, slug)
 }
@@ -352,7 +360,7 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	if err != nil {
 		return nil, codemode.ErrToolUnavailable
 	}
-	member, ok := findMetaMember(members, slug)
+	member, ok := b.service.findNamedMember(ctx, gate, members, slug)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}

@@ -4,6 +4,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
@@ -20,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   permissionsLoading: false,
   scopesLoading: false,
   scopesError: false,
+  serverGroups: [] as unknown[],
+  assistantGroups: [] as unknown[],
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -81,6 +84,8 @@ vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
                 "mcp:read",
               ]),
               policyScope("project:read", "project", "View projects"),
+              policyScope("skill:read", "skill", "View skills"),
+              policyScope("assistant:read", "assistant", "View assistants"),
               policyScope(
                 "org:device_agent_sync",
                 "org",
@@ -95,15 +100,29 @@ vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
 }));
 vi.mock("@/pages/access/useOrgMcpServers", () => ({
   useOrgMcpServers: () => ({
-    groups: [],
+    groups: mocks.serverGroups,
     settled: true,
     isError: false,
     refetch: vi.fn(),
   }),
 }));
+vi.mock("@/pages/access/useResourceLinkMaps", () => ({
+  useResourceLinkMaps: () => ({
+    projectMap: new Map([
+      ["project_one", { slug: "project-one", name: "Project one" }],
+    ]),
+    toolsetMap: new Map([
+      [
+        "server_docs",
+        { slug: "docs", name: "Docs server", projectId: "project_one" },
+      ],
+    ]),
+    mcpServerMap: new Map(),
+  }),
+}));
 vi.mock("@/pages/access/useOrgAssistants", () => ({
   useOrgAssistants: () => ({
-    groups: [],
+    groups: mocks.assistantGroups,
     settled: true,
     isError: false,
     refetch: vi.fn(),
@@ -154,6 +173,8 @@ beforeEach(() => {
   mocks.permissionsLoading = false;
   mocks.scopesLoading = false;
   mocks.scopesError = false;
+  mocks.serverGroups = [];
+  mocks.assistantGroups = [];
   mocks.create.mockResolvedValue({});
   mocks.remove.mockResolvedValue({});
 });
@@ -191,7 +212,11 @@ describe("Agent permission editor", () => {
     openPlatform();
     fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
     fireEvent.click(screen.getByText("org:device_agent_sync"));
-    expect(await screen.findByText("Whole organization")).toBeTruthy();
+    expect(
+      within(
+        await screen.findByRole("region", { name: "Changes to save" }),
+      ).getByText("Whole organization"),
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
     expect(mocks.create).toHaveBeenCalledOnce();
@@ -249,9 +274,54 @@ describe("Agent permission editor", () => {
     });
     expect(mocks.create).not.toHaveBeenCalled();
   });
+  it("neither lists nor offers mcp:connect, and never writes it", async () => {
+    const connect: AgentPolicyGrant = {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      id: "connect_grant",
+      scope: "mcp:connect",
+      effect: "allow",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "server_example",
+        projectId: "project_one",
+      },
+    };
+    setup([inferenceGrant("project_one"), connect]);
+    expect(screen.queryByText("mcp:connect")).toBeNull();
+    expect(screen.queryByRole("tab", { name: /MCP access/ })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Choose resources for inference:execute",
+      }),
+    );
+    fireEvent.click(screen.getByText("Project two"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledExactlyOnceWith({
+      createAgentPolicyGrantForm: {
+        agentId: agent.id,
+        scope: "inference:execute",
+        effect: "allow",
+        selector: inferenceGrant("project_two").selector,
+      },
+    });
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+  it("does not offer mcp:connect among the permissions to add", () => {
+    setup();
+    fireEvent.click(screen.getByRole("button", { name: "Add permissions" }));
+    expect(screen.getByText("mcp:read")).toBeTruthy();
+    expect(screen.queryByText("mcp:connect")).toBeNull();
+  });
   it("rejects a stale base without creating or deleting permissions", async () => {
     setup([inferenceGrant("project_one")]);
     mocks.list.mockResolvedValue([inferenceGrant("project_two")]);
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+    fireEvent.click(screen.getByText("Project three"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     expect(await screen.findByRole("alert")).toHaveProperty(
       "textContent",
@@ -291,10 +361,15 @@ describe("Agent permission editor", () => {
         selector: { resourceKind: "inference", resourceId: "*" },
       },
     ]);
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
+    // Nothing was written, so nothing is refetched.
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+    invalidate.mockRestore();
   });
   it("disables policy changes without write permission", () => {
     setup([inferenceGrant("project_one")], {
@@ -569,4 +644,267 @@ it("stops deletions on a server 409 and retries only against reloaded policy", a
     },
   });
   expect(mocks.create).not.toHaveBeenCalled();
+});
+
+describe("loading an agent's grants exactly as stored", () => {
+  const stored = (
+    id: string,
+    scope: string,
+    selector: AgentPolicyGrant["selector"],
+  ): AgentPolicyGrant => ({
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    id,
+    scope,
+    effect: "allow",
+    selector,
+  });
+  // The shape the agent setup flow writes: each server grant carries the
+  // server's project beside its id.
+  const agentGrants: AgentPolicyGrant[] = [
+    stored("connect_docs", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_docs",
+      projectId: "project_one",
+    }),
+    stored("connect_ops", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_ops",
+      projectId: "project_one",
+    }),
+    stored("auth_any", "mcp:auth", {
+      resourceKind: "mcp_auth_client",
+      resourceId: "*",
+    }),
+    stored("read_docs", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "server_docs",
+      projectId: "project_one",
+    }),
+    stored("project_read", "project:read", {
+      resourceKind: "project",
+      resourceId: "project_one",
+    }),
+    stored("skill_read", "skill:read", {
+      resourceKind: "skill",
+      resourceId: "project_two",
+    }),
+    stored("inference", "inference:execute", {
+      resourceKind: "inference",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+    stored("assistant_read", "assistant:read", {
+      resourceKind: "assistant",
+      resourceId: "assistant_one",
+      projectId: "project_one",
+    }),
+    stored("device_sync", "org:device_agent_sync", {
+      resourceKind: "org",
+      resourceId: "*",
+    }),
+    stored("hooks", "org:hooks_ingest", {
+      resourceKind: "org",
+      resourceId: "org_example",
+      projectId: "project_one",
+    }),
+    stored("environment_read", "environment:read", {
+      resourceKind: "environment",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+  ];
+  const server = (id: string, name: string) => ({
+    id,
+    name,
+    slug: id,
+    tools: [],
+    dynamicTools: false,
+    remoteBacked: false,
+  });
+  beforeEach(() => {
+    mocks.serverGroups = [
+      {
+        projectId: "project_one",
+        projectName: "Project one",
+        servers: [
+          server("server_docs", "Docs server"),
+          server("server_ops", "Ops server"),
+        ],
+      },
+    ];
+    mocks.assistantGroups = [
+      {
+        projectId: "project_one",
+        projectName: "Project one",
+        assistants: [{ id: "assistant_one", name: "Helper assistant" }],
+      },
+    ];
+  });
+  const rule = (scope: string) =>
+    screen.getByRole("button", { name: `Choose resources for ${scope}` });
+  const closePicker = () => {
+    const closes = screen.getAllByRole("button", { name: "Close" });
+    fireEvent.click(closes[closes.length - 1]!);
+  };
+
+  it("shows each grant's resources as stored and keeps the rest", () => {
+    setup(agentGrants);
+    expect(rule("mcp:read").textContent).toBe("1 server");
+    expect(rule("project:read").textContent).toBe("Project: Project one");
+    expect(rule("skill:read").textContent).toBe("Project: Project two");
+    expect(rule("inference:execute").textContent).toBe("Project: Project one");
+    expect(rule("assistant:read").textContent).toBe("1 assistant");
+    expect(screen.queryByText("mcp:connect")).toBeNull();
+    expect(screen.getByText(/Kept as they are/)).toBeTruthy();
+    for (const slug of ["mcp:auth", "org:hooks_ingest", "environment:read"]) {
+      expect(
+        screen.getByRole("button", { name: `Remove ${slug}` }),
+      ).toBeTruthy();
+    }
+  });
+
+  it("lists a kept scope's removal before saving, and removes all its grants", async () => {
+    setup(agentGrants);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove environment:read" }),
+    );
+    const changes = screen.getByRole("region", { name: "Changes to save" });
+    expect(changes.textContent).toContain("Removes");
+    expect(changes.textContent).toContain("environment:read");
+    mocks.list.mockResolvedValue(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+      deleteAgentPolicyGrantForm: {
+        agentId: agent.id,
+        grantId: "environment_read",
+        expectedPolicy: {
+          scope: "environment:read",
+          selector: agentGrants[10]!.selector,
+        },
+      },
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("keeps a kept scope again when its removal is undone", () => {
+    setup(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Remove mcp:auth" }));
+    fireEvent.click(screen.getByRole("button", { name: "Keep mcp:auth" }));
+    expect(
+      screen.queryByRole("region", { name: "Changes to save" }),
+    ).toBeNull();
+  });
+
+  it("names an org grant stored with the organization's id as the whole organization", () => {
+    setup([
+      stored("device_sync", "org:device_agent_sync", {
+        resourceKind: "org",
+        resourceId: "org_example",
+      }),
+    ]);
+    openPlatform();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Remove org:device_agent_sync" }),
+    );
+    const changes = screen.getByRole("region", { name: "Changes to save" });
+    expect(changes.textContent).toContain("Whole organization");
+    expect(changes.textContent).not.toContain("org_example");
+  });
+
+  it("opens a named server's picker on that server, ticked", () => {
+    setup(agentGrants);
+    fireEvent.click(rule("mcp:read"));
+    for (const box of screen.getAllByRole("checkbox", {
+      name: /Docs server/,
+    })) {
+      expect(box.getAttribute("aria-checked")).toBe("true");
+    }
+    expect(
+      screen
+        .getByRole("checkbox", { name: /Ops server/ })
+        .getAttribute("aria-checked"),
+    ).toBe("false");
+    expect(screen.queryByRole("checkbox", { name: "Project one" })).toBeNull();
+  });
+
+  it("keeps a grant when its picker closes without Done, and saves nothing", async () => {
+    setup(agentGrants);
+    fireEvent.click(rule("mcp:read"));
+    fireEvent.click(screen.getByRole("button", { name: /Specific projects/ }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Project one" }));
+    closePicker();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Choose resources" }),
+      ).toBeNull(),
+    );
+    expect(rule("mcp:read").textContent).toBe("1 server");
+    expect(
+      screen.queryByRole("region", { name: "Changes to save" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing after every picker is opened and confirmed unchanged", async () => {
+    setup(agentGrants);
+    const scopes = screen
+      .getAllByRole("button", { name: /^Choose resources for / })
+      .map((button) =>
+        button.getAttribute("aria-label")!.replace("Choose resources for ", ""),
+      );
+    expect(scopes).toEqual(
+      expect.arrayContaining([
+        "mcp:read",
+        "project:read",
+        "skill:read",
+        "inference:execute",
+        "assistant:read",
+      ]),
+    );
+    for (const scope of scopes) {
+      fireEvent.click(rule(scope));
+      fireEvent.click(screen.getByRole("button", { name: "Done" }));
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("dialog", { name: "Choose resources" }),
+        ).toBeNull(),
+      );
+    }
+    expect(
+      screen.queryByRole("region", { name: "Changes to save" }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).not.toHaveBeenCalled();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
+
+  it("lists a removal before saving it, and removes only that grant", async () => {
+    setup(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Remove mcp:read" }));
+    const changes = screen.getByRole("region", { name: "Changes to save" });
+    expect(changes.textContent).toContain("Removes");
+    expect(changes.textContent).toContain("mcp:read");
+    expect(changes.textContent).toContain("Docs server in Project one");
+    mocks.list.mockResolvedValue(agentGrants);
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.remove).toHaveBeenCalledExactlyOnceWith({
+      deleteAgentPolicyGrantForm: {
+        agentId: agent.id,
+        grantId: "read_docs",
+        expectedPolicy: {
+          scope: "mcp:read",
+          selector: agentGrants[3]!.selector,
+        },
+      },
+    });
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
 });

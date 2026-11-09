@@ -196,10 +196,10 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 			}
 			for _, mode := range modes {
 				gate.catalogRef.Mode = mode
-				status, detail, outage := s.memberSignInStatus(t.Context(), logger, gate, member, nil)
-				require.Nil(t, outage, mode)
-				require.Equal(t, unnamed, detail, mode)
-				require.Equal(t, wantStatus, status, mode)
+				row := s.memberSignInStatus(t.Context(), logger, gate, member, nil)
+				require.Nil(t, row.Outage, mode)
+				require.Equal(t, unnamed, row.Detail, mode)
+				require.Equal(t, wantStatus, row.Status, mode)
 			}
 			require.Empty(t, rec.Rows())
 		})

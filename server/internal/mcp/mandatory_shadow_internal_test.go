@@ -258,14 +258,14 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 			serverID: id, projectID: project, projectSlug: "p", slug: "s-" + id.String()[:8], name: "s", sortOrder: 0,
 			visibility: visibility, unproxied: false, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
 			tunneledServerID: uuid.NullUUID{}, environmentID: uuid.NullUUID{}, toolVariationsGroupID: uuid.NullUUID{},
-			remoteSessionIssuerID: uuid.NullUUID{}, tunneledResourceIdentifier: "",
+			upstreamIssuer: upstreamIssuerKeys{}, tunneledResourceIdentifier: "",
 		}
 	}
 	public, granted, denied := candidate("public"), candidate("private"), candidate("private")
 	ctx := sessionContext(t, shadowOrg, authz.NewGrant(authz.ScopeMCPConnect, granted.serverID.String()))
 
 	admitted := func(h shadowHarness) []uuid.UUID {
-		_, members, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied})
+		_, members, _, err := h.service.admitMetaMembers(ctx, testenv.NewLogger(t), mandatorySurfaceConsent, shadowOrg, []metaMemberCandidate{public, granted, denied})
 		require.NoError(t, err)
 		ids := make([]uuid.UUID, 0, len(members))
 		for _, member := range members {

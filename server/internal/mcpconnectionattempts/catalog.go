@@ -274,7 +274,7 @@ var (
 	CodeRefreshInvalidClient             = define("refresh_invalid_client", OutcomeFailed, WhoPerson, "The service no longer recognizes this connection.", "Reconnect to the service.")
 	CodeNoGrant                          = define("no_grant", OutcomeFailed, WhoPerson, "There is no saved sign-in to renew.", "Reconnect to the service.")
 	CodeRefreshRejected                  = define("refresh_rejected", OutcomeFailed, WhoAdmin, "The service refused to renew the connection.", "Check the connection settings for this service.")
-	CodeInternalError                    = define("internal_error", OutcomeFailed, WhoSpeakeasy, "Something went wrong on our side.", "Try again in a few minutes.")
+	CodeInternalError                    = define("internal_error", OutcomeFailed, WhoSpeakeasy, "Something went wrong on our side.", "Contact Speakeasy support.")
 	CodeOfflineNotRequested              = define("offline_not_requested", OutcomeFailed, WhoAdmin, "Company sign-in is not set to stay signed in.", "Turn on offline access in the sign-in setup.")
 	CodeOfflineUnsupported               = define("offline_unsupported", OutcomeFailed, WhoAdmin, "The company sign-in service cannot keep people signed in.", "Check whether the sign-in service can allow offline access.")
 	CodeRenewalRefused                   = define("renewal_refused", OutcomeFailed, WhoPerson, "The company sign-in service did not allow staying signed in.", "Sign in again when asked.")

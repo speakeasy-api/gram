@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcptypes "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -201,6 +202,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 	if !ok {
 		return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 			Name:          detail.Server.Name,
+			Title:         conv.PtrValOr(detail.Server.Title, ""),
 			Description:   detail.Server.Description,
 			Version:       detail.Server.Version,
 			RemoteURL:     "",
@@ -211,6 +213,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 	}
 	return &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          detail.Server.Name,
+		Title:         conv.PtrValOr(detail.Server.Title, ""),
 		Description:   detail.Server.Description,
 		Version:       detail.Server.Version,
 		RemoteURL:     remote.URL,
