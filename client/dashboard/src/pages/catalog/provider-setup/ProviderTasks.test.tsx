@@ -391,3 +391,34 @@ it("retains the unresolved support branch with a real correction action and no s
   ).toBeDefined();
   expect(screen.queryByText(/Simulate/)).toBeNull();
 });
+
+it.each([
+  ["github", "GitHub", "permission to manage OAuth apps"],
+  ["slack", "Slack", "permission to manage an app"],
+  ["salesforce", "Salesforce", "administrator access to your Salesforce org"],
+] as const)(
+  "uses the shared setup-plan card with %s content",
+  (provider, name, requirement) => {
+    const s = { ...initialState(provider), step: "begin" };
+    const dispatch = vi.fn<(action: Action) => void>();
+    render(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName={name} />
+      </SetupContext>,
+    );
+    const heading = screen.getByRole("heading", {
+      name: `Let’s connect ${name} to Speakeasy.`,
+    });
+    expect(heading).toBeDefined();
+    expect(screen.getByText(requirement, { exact: false })).toBeDefined();
+    if (provider === "salesforce") {
+      expect(
+        screen.getByText("Salesforce’s native MCP servers", { exact: false }),
+      ).toBeDefined();
+      expect(
+        screen.queryByText("Using an existing app or an IP allowlist?"),
+      ).toBeNull();
+      expect(screen.queryByText("Organization approval and SSO")).toBeNull();
+    }
+  },
+);

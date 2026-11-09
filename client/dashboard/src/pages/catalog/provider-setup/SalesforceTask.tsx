@@ -29,21 +29,6 @@ export function SalesforceTask(): JSX.Element {
     (x) => x.id === s.values.salesforceServer,
   );
   switch (s.step) {
-    case "begin":
-      return (
-        <>
-          <p>
-            Choose Salesforce’s native MCP servers or Speakeasy’s hosted
-            Salesforce CRM connection. We’ll walk you through configuring your
-            app, saving its credentials, signing in, and testing access.
-          </p>
-          <p className="mt-5">
-            You’ll need administrator access to your Salesforce org, or a
-            teammate who can help. Native MCP servers also require API access
-            and Hosted MCP Servers availability.
-          </p>
-        </>
-      );
     case "choices":
       return (
         <>
