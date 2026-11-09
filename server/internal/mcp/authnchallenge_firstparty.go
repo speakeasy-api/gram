@@ -144,8 +144,9 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		WorkloadReconnect:       reconnect,
 		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
-		AutoConnectDone: false,
-		FocusServer:     focusServer,
+		AutoConnectDone:      false,
+		FocusServer:          focusServer,
+		ConnectPendingSignIn: query.Get("setup") == pendingSignInSetupStep,
 	}
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)

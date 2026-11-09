@@ -20,6 +20,7 @@ import {
   ListChecksIcon,
   ChartColumnStackedIcon,
   ActivityIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -108,6 +109,12 @@ export const ADMIN_NAV_GROUPS = [
         keywords:
           "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
         icon: ActivityIcon,
+      },
+      {
+        to: "/platform-mcp-feedback",
+        label: "Platform MCP feedback",
+        keywords: "feedback reports ratings notes users platform mcp",
+        icon: MessageSquareIcon,
       },
       {
         to: "/mcp-setup",

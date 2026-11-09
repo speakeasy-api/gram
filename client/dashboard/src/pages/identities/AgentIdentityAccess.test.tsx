@@ -399,6 +399,18 @@ describe("Agent profile permissions", () => {
       );
     },
   );
+  it("shows an org permission stored with the organization's id as the whole organization", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_sync",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "org_example" },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("Whole organization")).toBeTruthy();
+    expect(screen.queryByText(/org_example/)).toBeNull();
+  });
   it("updates after saving permissions in Agent Identity", async () => {
     const client = setup();
     await screen.findByText("No permissions configured for this agent.");

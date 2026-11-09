@@ -256,10 +256,45 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	return view, nil
 }
 
-// DefaultServerIconSetter schedules best-effort post-create icon discovery for
+// DefaultServerIconSetter runs best-effort post-create icon discovery for
 // remote-backed MCP servers.
 type DefaultServerIconSetter interface {
 	ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID)
+	SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID)
+}
+
+// defaultServerIconWait bounds how long a caller waits for an icon it needs
+// in its own response.
+const defaultServerIconWait = 5 * time.Second
+
+// SetDefaultRemoteServerIcon is ScheduleDefaultRemoteServerIcon for a caller
+// that shows the icon in its own response: it waits up to
+// defaultServerIconWait for the icon to be stored. The fetch itself stays
+// detached, so a slow fetch or a cancelled request still stores the icon.
+func (s *Service) SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	if s == nil {
+		return
+	}
+	done := s.startDefaultServerIcon(ctx, projectID, mcpServerID, remoteServerIconIDs(remoteMCPServerID))
+	timer := time.NewTimer(defaultServerIconWait)
+	defer timer.Stop()
+	select {
+	case <-done:
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+}
+
+func remoteServerIconIDs(remoteMCPServerID uuid.UUID) serverIDs {
+	return serverIDs{
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteMCPServerID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	}
 }
 
 // ScheduleDefaultRemoteServerIcon gives remote-MCP provisioning the same
@@ -284,17 +319,27 @@ func (s *Service) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID
 // transaction commits. It uses a detached bounded context so the request can
 // complete without waiting for a vendor favicon.
 func (s *Service) scheduleDefaultServerIcon(ctx context.Context, projectID, mcpServerID uuid.UUID, ids serverIDs) {
+	s.startDefaultServerIcon(ctx, projectID, mcpServerID, ids)
+}
+
+// startDefaultServerIcon runs icon discovery detached and closes the returned
+// channel when it finishes.
+func (s *Service) startDefaultServerIcon(ctx context.Context, projectID, mcpServerID uuid.UUID, ids serverIDs) <-chan struct{} {
+	done := make(chan struct{})
 	// Unproxied servers are skipped: Speakeasy never connects to them, and
 	// their host is often reachable only from the client's network.
 	if !ids.RemoteMcpServerID.Valid {
-		return
+		close(done)
+		return done
 	}
 	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	logger := s.logger.With(attr.SlogProjectID(projectID.String()))
 	go func() {
+		defer close(done)
 		defer cancel()
 		s.setDefaultServerIcon(bgCtx, logger, projectID, mcpServerID, ids)
 	}()
+	return done
 }
 
 // setDefaultServerIcon fetches the vendor's favicon and sets it as the

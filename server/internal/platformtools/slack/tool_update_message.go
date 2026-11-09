@@ -24,7 +24,7 @@ type updateMessageInput struct {
 	FileIDs        []string     `json:"file_ids,omitempty" jsonschema:"New file ids to attach to the updated message."`
 }
 
-func NewChatUpdateTool(httpClient *guardian.HTTPClient) core.PlatformToolExecutor {
+func NewChatUpdateTool(httpClient *guardian.HTTPClient) *slackTool {
 	readOnly := false
 	destructive := false
 	idempotent := true

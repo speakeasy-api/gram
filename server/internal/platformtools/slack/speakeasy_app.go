@@ -26,7 +26,7 @@ type ProjectTokenSource interface {
 // the assistant runtime. Only tools the app's chat:write scope covers are
 // included.
 func NewSpeakeasyAppTools(httpClient *guardian.HTTPClient, router ThreadRouter, tokens ProjectTokenSource) []core.PlatformToolExecutor {
-	inner := []core.PlatformToolExecutor{
+	inner := []*slackTool{
 		NewSendMessageTool(httpClient, router),
 		NewChatPostEphemeralTool(httpClient),
 		NewChatUpdateTool(httpClient),
@@ -43,7 +43,7 @@ func NewSpeakeasyAppTools(httpClient *guardian.HTTPClient, router ThreadRouter, 
 // speakeasyAppTool runs a Slack tool with the Speakeasy app's bot token for
 // the calling project in place of any token in the call's environment.
 type speakeasyAppTool struct {
-	inner  core.PlatformToolExecutor
+	inner  *slackTool
 	tokens ProjectTokenSource
 }
 
@@ -67,7 +67,9 @@ func (t *speakeasyAppTool) Call(ctx context.Context, env toolconfig.ToolCallEnv,
 	systemEnv.Set(slackBotTokenEnvVar, token)
 	env.SystemEnv = systemEnv
 	env.UserConfig = toolconfig.NewCaseInsensitiveEnv()
-	if err := t.inner.Call(ctx, env, payload, wr); err != nil {
+	// call, not Call: the advice Call gives about the server's environment
+	// does not apply to the app's token.
+	if err := t.inner.call(ctx, env, payload, wr); err != nil {
 		return fmt.Errorf("%s: %w", t.inner.Descriptor().Name, err)
 	}
 	return nil

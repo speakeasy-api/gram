@@ -94,6 +94,10 @@ func (s *recordingIconSetter) ScheduleDefaultRemoteServerIcon(_ context.Context,
 	s.calls = append(s.calls, iconSetterCall{projectID: projectID, mcpServerID: mcpServerID, remoteMCPServerID: remoteMCPServerID})
 }
 
+func (s *recordingIconSetter) SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	s.ScheduleDefaultRemoteServerIcon(ctx, projectID, mcpServerID, remoteMCPServerID)
+}
+
 func (s *recordingIconSetter) Calls() []iconSetterCall {
 	s.mu.Lock()
 	defer s.mu.Unlock()
