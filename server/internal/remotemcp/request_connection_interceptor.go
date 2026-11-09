@@ -156,7 +156,10 @@ func requestMethodDetail(method string) string {
 	switch method {
 	case mcpversions.MethodInitialize, mcpversions.MethodToolsList, mcpversions.MethodPing,
 		mcpversions.MethodResourcesList, mcpversions.MethodResourcesRead, mcpversions.MethodResourcesTemplatesList,
-		mcpversions.MethodPromptsList, mcpversions.MethodPromptsGet, mcpversions.MethodCompletionComplete:
+		mcpversions.MethodPromptsList, mcpversions.MethodPromptsGet, mcpversions.MethodCompletionComplete,
+		mcpversions.MethodLoggingSetLevel, mcpversions.MethodResourcesSubscribe, mcpversions.MethodResourcesUnsubscribe,
+		mcpversions.MethodServerDiscover, mcpversions.MethodSubscriptionsListen,
+		mcpversions.MethodTasksGet, mcpversions.MethodTasksList, mcpversions.MethodTasksResult, mcpversions.MethodTasksCancel:
 		return strings.ReplaceAll(method, "/", "_")
 	}
 	if strings.HasPrefix(method, "notifications/") {
