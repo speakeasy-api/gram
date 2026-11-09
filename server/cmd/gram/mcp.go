@@ -575,8 +575,11 @@ func newMCPServerMux(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, serv
 	mux.Use(customdomains.Middleware(logger, db, c.String("environment"), serverURL, platformHosts))
 	// Middleware outside the meter must not consume request bodies or buffer,
 	// truncate, or replace successful response bodies; those bytes would not
-	// be counted. ResponseCompression is the one deliberate exception: it
-	// transforms bytes after the meter has counted them.
+	// be counted. Two exceptions are deliberate. ResponseCompression
+	// transforms bytes after the meter has counted them. RequestBodyLimit
+	// answers a body that overflows during a read with a 413, so the meter
+	// counts the handler's discarded response (a small error body) rather
+	// than the 413.
 	mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 	mux.Use(middleware.SessionMiddleware)
 	return mux, nil
