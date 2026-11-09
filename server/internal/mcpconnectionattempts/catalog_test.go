@@ -124,6 +124,9 @@ var frozenCodes = []string{
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
+	"upstream_credential_denied",
+	"upstream_credential_not_chosen",
+	"sign_in_method_not_accepted",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -287,6 +290,9 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeRefreshTokenUsedByOtherApp, WhoPerson, []string{"another app", "connect to the server again"}, []string{"update the app"}},
 		{CodeStoredSessionInvalid, WhoPerson, []string{"our side", "connect to the server again"}, []string{"few minutes"}},
 		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
+		{CodeUpstreamCredentialDenied, WhoAdmin, []string{"not allowed", "ask for access"}, []string{"this server.", "account"}},
+		{CodeUpstreamCredentialNotChosen, WhoAdmin, []string{"more than one", "choose"}, []string{"the app", "not set up"}},
+		{CodeSignInMethodNotAccepted, WhoApp, []string{"does not accept"}, []string{"ask for it to be allowed", "not allowed"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.code.String(), func(t *testing.T) {

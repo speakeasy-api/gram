@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
-	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -29,7 +28,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 )
 
 // connectionAttemptEndTTL outlives the longest a browser attempt can stay live.
@@ -776,48 +774,41 @@ func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracke
 }
 
 // workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+// Workload refusals before the assertion's signature is verified never reach it: they are a metric.
 func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
 	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
 		detail := mcpconnectionattempts.Detail(refusal.reason)
 		switch refusal.reason {
-		case "issuer_untrusted", "issuer_jwks_uri_invalid":
-			return mcpconnectionattempts.CodeIssuerNotTrusted, detail
-		case "issuer_key_source_unknown":
-			return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail
-		case "subject_not_admitted", "device_key_not_registered":
+		case "assertion_subject_invalid":
+			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		case "subject_not_admitted":
 			return mcpconnectionattempts.CodeSubjectNotAdmitted, detail
 		case "endpoint_not_agent_addressable":
 			return mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail
 		case "agent_admission_denied":
 			return mcpconnectionattempts.CodeNoServerAccess, detail
 		case "issuer_policy_changed":
-			return mcpconnectionattempts.CodeConnectionChanged, detail
-		case string(workload.ReasonKeyUnresolvable):
-			return mcpconnectionattempts.CodeIDPTransientFailure, detail
+			return mcpconnectionattempts.CodeTransientFailure, detail
 		}
 		switch refusal.outcome {
 		case workloadGrantUnavailable, workloadGrantRateLimited:
 			return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
 		case workloadGrantRefused:
 		}
-		if strings.HasPrefix(refusal.reason, "assertion_") || refusal.reason == "device_key_id_mismatch" {
-			return mcpconnectionattempts.CodeAssertionInvalid, detail
-		}
 		return mcpconnectionattempts.CodeAssertionOther, detail
 	}
-	if refusal, ok := errors.AsType[*oops.OAuthError](err); ok {
-		detail := mcpconnectionattempts.Detail(refusal.Response.Code)
-		switch refusal.Response.Code {
-		case tokenErrorSetupRequired:
+	if problem, ok := errors.AsType[headlessChoiceError](err); ok {
+		detail := mcpconnectionattempts.Detail(string(problem))
+		switch problem {
+		case errChoiceNotSetUp, errChoiceNotReady, errChoiceNoneReady:
 			return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail
-		case oautherr.CodeAccessDenied:
-			return mcpconnectionattempts.CodeNoServerAccess, detail
-		default:
+		case errChoiceDenied, errChoiceNoneAllowed:
+			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
+		case errChoiceNotNamed:
+			return mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail
+		case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
 			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
 		}
-	}
-	if workload.ReasonOf(err) == workload.ReasonVerifierMisconfigured {
-		return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, mcpconnectionattempts.Detail(string(workload.ReasonVerifierMisconfigured))
 	}
 	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
 }

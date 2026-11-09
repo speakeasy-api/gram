@@ -40,6 +40,10 @@ type AssistantWorkloadTokenRequest struct {
 // AssistantID is the independent workload identity; it is not an authorizing user.
 type AssistantWorkloadToken struct {
 	AssistantID uuid.UUID
+
+	// AgentID is the agent the assistant is bound to, the session's subject.
+	AgentID uuid.UUID
+
 	AccessToken string
 	ExpiresAt   time.Time
 }
@@ -69,7 +73,7 @@ type AssistantWorkloadTokenIssuer interface {
 }
 
 func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, baseURL, presentedAuthMethod string, logger *slog.Logger) error {
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppWorkload), mcpconnectionattempts.StepInboundToken,
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID)), mcpconnectionattempts.StepInboundToken,
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials),
 		mcpconnectionattempts.UserSessionClient(client.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
 	defer t.Finish(ctx)
@@ -80,7 +84,7 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "assistant workload authorization refused")
 	}
 	if s.assistantWorkloadTokens == nil || endpoint.IsOrganizationGateway() {
-		return reject("unauthorized_client", mcpconnectionattempts.CodeEndpointNotAgentAddressable, mcpconnectionattempts.Detail(""))
+		return reject("unauthorized_client", mcpconnectionattempts.CodeSignInMethodNotAccepted, mcpconnectionattempts.Detail("organization_gateway"))
 	}
 	kind, err := clientcred.KindOf(client.TokenEndpointAuthMethod, client.ClientSecretHash.Valid)
 	if err != nil || (kind != clientcred.KindSecret && kind != clientcred.KindKey) {
@@ -136,8 +140,10 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("issued_token_invalid"))
 		return writeTokenError(ctx, w, logger, http.StatusInternalServerError, "server_error", "workload token issuance unavailable")
 	}
-	subject := urn.NewAgentSubject(result.AssistantID)
-	t.With(mcpconnectionattempts.Subject(&subject))
+	if result.AgentID != uuid.Nil {
+		subject := urn.NewAgentSubject(result.AgentID)
+		t.With(mcpconnectionattempts.Subject(&subject))
+	}
 	body, err := json.Marshal(struct {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`

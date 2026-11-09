@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,12 +15,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -35,25 +34,24 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		want   mcpconnectionattempts.Code
 		detail string
 	}{
-		{name: "malformed", err: refuseWorkloadGrant(string(workload.ReasonMalformed), cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "assertion_malformed"},
-		{name: "replayed", err: refuseWorkloadGrant(string(workload.ReasonReplayed), cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "assertion_replayed"},
-		{name: "device key mismatch", err: refuseWorkloadGrant("device_key_id_mismatch", cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "device_key_id_mismatch"},
-		{name: "untrusted issuer", err: refuseWorkloadGrant("issuer_untrusted", cause), want: mcpconnectionattempts.CodeIssuerNotTrusted, detail: "issuer_untrusted"},
-		{name: "invalid key set address", err: refuseWorkloadGrant("issuer_jwks_uri_invalid", cause), want: mcpconnectionattempts.CodeIssuerNotTrusted, detail: "issuer_jwks_uri_invalid"},
-		{name: "unknown key source", err: refuseWorkloadGrant("issuer_key_source_unknown", cause), want: mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail: "issuer_key_source_unknown"},
+		{name: "subject invalid", err: refuseWorkloadGrant("assertion_subject_invalid", cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "assertion_subject_invalid"},
 		{name: "subject not admitted", err: refuseWorkloadGrant("subject_not_admitted", cause), want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "subject_not_admitted"},
-		{name: "device key not registered", err: refuseWorkloadGrant("device_key_not_registered", cause), want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "device_key_not_registered"},
 		{name: "endpoint not agent addressable", err: refuseWorkloadGrant("endpoint_not_agent_addressable", cause), want: mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail: "endpoint_not_agent_addressable"},
 		{name: "agent admission denied", err: refuseWorkloadGrant("agent_admission_denied", cause), want: mcpconnectionattempts.CodeNoServerAccess, detail: "agent_admission_denied"},
-		{name: "issuer policy changed", err: refuseWorkloadGrant("issuer_policy_changed", cause), want: mcpconnectionattempts.CodeConnectionChanged, detail: "issuer_policy_changed"},
+		{name: "issuer policy changed", err: refuseWorkloadGrant("issuer_policy_changed", cause), want: mcpconnectionattempts.CodeTransientFailure, detail: "issuer_policy_changed"},
 		{name: "unnamed refusal", err: refuseWorkloadGrant("policy", cause), want: mcpconnectionattempts.CodeAssertionOther, detail: "policy"},
-		{name: "issuer keys unreachable", err: workloadGrantStageUnavailable(string(workload.ReasonKeyUnresolvable), cause), want: mcpconnectionattempts.CodeIDPTransientFailure, detail: "assertion_key_unresolvable"},
 		{name: "stage unavailable", err: workloadGrantStageUnavailable("session_persist_unavailable", cause), want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
 		{name: "rate limited", err: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: cause}, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
-		{name: "upstream setup missing", err: setupRequired("not set up"), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: tokenErrorSetupRequired},
-		{name: "upstream access denied", err: accessDenied("no"), want: mcpconnectionattempts.CodeNoServerAccess, detail: "access_denied"},
-		{name: "upstream choice refused", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "bad choice", nil), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "invalid_request"},
-		{name: "verifier misconfigured", err: fmt.Errorf("verify: %w", &workload.Error{Reason: workload.ReasonVerifierMisconfigured}), want: mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail: "assertion_verifier_misconfigured"},
+		{name: "choices not accepted", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceNotAccepted), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_not_accepted"},
+		{name: "server not reached", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceServerNotReached), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_server_not_reached"},
+		{name: "credential not needed", err: setupRequired("no", errChoiceTakesNoCredential), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "credential_not_needed"},
+		{name: "credential needed", err: setupRequired("no", errChoiceNeedsCredential), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "credential_needed"},
+		{name: "sign-in not set up", err: setupRequired("no", errChoiceNotSetUp), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "sign_in_not_set_up"},
+		{name: "credential not ready", err: setupRequired("no", errChoiceNotReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "credential_not_ready"},
+		{name: "no credential ready", err: setupRequired("no", errChoiceNoneReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "no_credential_ready"},
+		{name: "credential denied", err: accessDenied("no", errChoiceDenied), want: mcpconnectionattempts.CodeUpstreamCredentialDenied, detail: "credential_denied"},
+		{name: "no credential allowed", err: accessDenied("no", errChoiceNoneAllowed), want: mcpconnectionattempts.CodeUpstreamCredentialDenied, detail: "no_credential_allowed"},
+		{name: "credential not chosen", err: oops.NewOAuthError(http.StatusBadRequest, tokenErrorSelectionRequired, "name one", errChoiceNotNamed), want: mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail: "credential_not_chosen"},
 		{name: "unexpected", err: cause, want: mcpconnectionattempts.CodeInternalError, detail: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -103,9 +101,9 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	t.Parallel()
 
 	rec := mcpconnectionattemptstest.New(t)
-	assistantID := uuid.New()
+	agentID := uuid.New()
 	c := newAssistantGrantCase(t, rec.Recorder, func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
-		return AssistantWorkloadToken{AssistantID: assistantID, AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+		return AssistantWorkloadToken{AssistantID: uuid.New(), AgentID: agentID, AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
 	})
 
 	w := c.post(t, assistantGrantForm)
@@ -114,9 +112,9 @@ func TestAssistantClientCredentialsRecordsSuccess(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
 	require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
-	require.Equal(t, urn.NewAgentSubject(assistantID).String(), row.SubjectURN)
+	require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
 	require.Equal(t, c.client.ID.String(), row.UserSessionClientID)
-	require.Equal(t, mcpconnectionattempts.AppWorkload.String(), row.AppKey)
+	require.Equal(t, mcpconnectionattempts.AppOf(c.client.ClientID).String(), row.AppKey)
 	require.Len(t, rec.Rows(), 1)
 }
 
@@ -190,4 +188,20 @@ func TestAssistantClientCredentialsLogsOffRecordsNothing(t *testing.T) {
 	require.Equal(t, http.StatusOK, c.post(t, assistantGrantForm).Code)
 	require.Equal(t, http.StatusBadRequest, c.post(t, url.Values{"scope": {"mcp:connect"}}).Code)
 	rec.RequireNothing()
+}
+
+func TestAssistantClientCredentialsOrganizationGatewayRecordsUnacceptedMethod(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	c := newAssistantGrantCase(t, rec.Recorder, func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
+		return AssistantWorkloadToken{}, errors.New("unreachable")
+	})
+	c.endpoint.McpServerID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	c.endpoint.ProjectID = uuid.Nil
+	c.endpoint.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	c.endpoint.RouteBase = mcproute.OrganizationGateway
+
+	require.Equal(t, http.StatusBadRequest, c.post(t, assistantGrantForm).Code)
+	require.Equal(t, "organization_gateway", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted).SubReason)
 }
