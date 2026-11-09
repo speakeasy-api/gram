@@ -66,7 +66,10 @@ exchanges the code. The connections are revoked at the end. The spec then pins
 three things per persona in `platform-mcp.baseline.json`:
 
 - whether the connection is granted
-- which tools `tools/list` offers it, reported as tools added or removed
+- which tools `tools/list` offers it, reported as tools added or removed. Only
+  tools present both in the baseline and on the stack are compared, so a tool
+  added to or retired from the product does not fail the run; it is listed in
+  the test's annotations until the baseline is re-recorded
 - the outcome of a fixed set of tool calls
 
 The calls are organization reads, access and risk reads, and project reads.

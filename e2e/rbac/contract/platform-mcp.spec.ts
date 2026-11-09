@@ -207,13 +207,33 @@ test.describe("platform mcp", () => {
     }
     compare(LISTED, observed, baseline?.calls[LISTED], detail);
     // Name the tools that appeared or disappeared, persona by persona, rather
-    // than dumping two long lists.
+    // than dumping two long lists. Only tools that existed both when the
+    // baseline was recorded and now are compared: a tool added to or retired
+    // from the product changes every persona's list without saying anything
+    // about who may use what. Those are listed as annotations instead, and
+    // re-recording the baseline brings new tools under comparison.
+    const known = new Set(Object.values(baseline?.tools ?? {}).flat());
+    const present = new Set(Object.values(names).flat());
+    const unrecorded = [...present].filter((n) => !known.has(n)).sort();
+    const retired = [...known].filter((n) => !present.has(n)).sort();
+    if (unrecorded.length > 0) {
+      test.info().annotations.push({
+        type: "tools not in the baseline",
+        description: unrecorded.join(", "),
+      });
+    }
+    if (retired.length > 0) {
+      test.info().annotations.push({
+        type: "baseline tools no persona is offered",
+        description: retired.join(", "),
+      });
+    }
     const drift: Record<string, { added: string[]; removed: string[] }> = {};
     for (const [persona, list] of Object.entries(names)) {
       const before = new Set(baseline?.tools[persona as Persona] ?? []);
       const now = new Set(list);
-      const added = list.filter((n) => !before.has(n));
-      const removed = [...before].filter((n) => !now.has(n));
+      const added = list.filter((n) => known.has(n) && !before.has(n));
+      const removed = [...before].filter((n) => present.has(n) && !now.has(n));
       if (added.length || removed.length) drift[persona] = { added, removed };
     }
     expect(drift, "tool exposure changed").toEqual({});
