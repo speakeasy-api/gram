@@ -204,6 +204,26 @@ func EffectiveAgent(ctx context.Context) (urn.Principal, bool) {
 	return zero, false
 }
 
+// EffectiveAgentID is EffectiveAgent as the agents table id, which capture
+// paths stamp onto the records an agent produces. It reads the server-set
+// actor rather than anything a client reports, because a client that could
+// name its own agent could attribute its activity to any agent in the
+// organization. An agent principal's id is validated as a canonical UUID when
+// the actor is parsed, so a parse failure here means the principal was
+// malformed and the record is left unattributed rather than stamped with a
+// guess.
+func EffectiveAgentID(ctx context.Context) (uuid.UUID, bool) {
+	agent, ok := EffectiveAgent(ctx)
+	if !ok {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(agent.ID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 // APIKeyAuthorization returns the profile selected by trusted API-key
 // authentication. APIKeyID remains independent credential provenance.
 func APIKeyAuthorization(ctx context.Context) (APIKeyAuthorizationMode, bool) {
