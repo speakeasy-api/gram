@@ -186,13 +186,10 @@ func memberSessionKey(route any, token string) string {
 //
 // A person connects the member on its own page, so the message gives them
 // that page's URL to open; an agent shows it to them rather than retrying.
-func memberAuthFailure(member metaMember, dial memberDial) error {
-	// A member whose only credential is configured headers is not the
-	// owner's to fix: the agent's sign-in step does not set them. When the
-	// agent's own token was sent too, the refusal is the token's.
-	if dial.connectURL == "" && !dial.clientCredential && (!dial.configuredHeaders || !dial.anonymous) && dial.ownerReconnect != nil {
-		if fix := dial.ownerReconnect(); fix.url != "" {
-			return agentMemberAuthFailure(member, dial, fix)
+func memberAuthFailure(member metaMember, dial memberDial, status int) error {
+	if dial.connectURL == "" && !dial.clientCredential && dial.ownerReconnect != nil {
+		if failure := agentMemberAuthFailure(member, dial, status); failure != nil {
+			return failure
 		}
 	}
 	switch {
@@ -209,10 +206,30 @@ func memberAuthFailure(member metaMember, dial memberDial) error {
 }
 
 // agentMemberAuthFailure is memberAuthFailure for an agent, which cannot sign
-// in itself: it sends the agent to its owner with the page to reconnect on.
-func agentMemberAuthFailure(member metaMember, dial memberDial, fix agentReconnect) error {
+// in itself. It is nil when it has nothing better to say than the generic
+// wording.
+func agentMemberAuthFailure(member metaMember, dial memberDial, status int) error {
+	// With no agent token sent, a server that has no OAuth sign-in, or one
+	// whose configured credential was sent, refused the server's own
+	// credential. The agent's sign-in step does not set that, so the fix is
+	// the server's.
+	if dial.anonymous && dial.configuredHeaders {
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry", member.slug)}}
+	}
+	if dial.anonymous && !member.remoteSessionIssuerID.Valid {
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires a credential, such as an API key, and none is configured for it in Speakeasy. This agent cannot add one. Ask an admin of the server's project to add the server's credential, then retry", member.slug)}}
+	}
+	fix := dial.ownerReconnect()
+	if fix.url == "" {
+		return nil
+	}
 	if dial.anonymous {
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this agent has no connection to it. %s", member.slug, fix.ask("connect"))}}
+	}
+	// A 403 to a credential the upstream accepted is the upstream account's
+	// permissions. Signing in again as the same account does not change them.
+	if status == http.StatusForbidden {
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q answered 403 Forbidden: the upstream account this agent's connection signs in as may not do this, and signing in again as the same account does not change that. Ask %s to check which account it connects with at %s, or to get that account access upstream, then retry", member.slug, agentEditors, fix.url)}}
 	}
 	return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected this agent's connection, so it needs re-authentication. %s", member.slug, fix.ask("reconnect"))}}
 }

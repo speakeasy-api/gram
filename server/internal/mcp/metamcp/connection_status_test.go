@@ -164,9 +164,10 @@ func TestConnectionStatusView_PreservesOutageAndConsentHints(t *testing.T) {
 	require.Contains(t, ConnectionStatusHTML, `: "Ask again shortly to refresh this list."`)
 }
 
-// An agent cannot sign in itself: its gateway names the owner who reconnects
-// the server and the page they do it on, never a gateway administrator.
-func TestConnectionStatusText_AgentOwnerReconnects(t *testing.T) {
+// An agent cannot sign in itself: its gateway sends it to someone who can
+// edit it, with the page where they reconnect the server, never to a gateway
+// administrator. It names no one, since the owner is not the only editor.
+func TestConnectionStatusText_AgentEditorReconnects(t *testing.T) {
 	t.Parallel()
 
 	link := "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
@@ -175,20 +176,21 @@ func TestConnectionStatusText_AgentOwnerReconnects(t *testing.T) {
 		Servers: []ConnectionStatusServer{
 			{Slug: "linear", Name: "Linear", Status: SignInError, Detail: "needs re-authentication"},
 		},
-		Owner: &ConnectionStatusOwner{Name: "Maya Chen", ReconnectURL: link},
+		Reconnect: &ConnectionStatusReconnect{URL: link},
 	}
 	text := result.Text()
 	require.Contains(t, text, "- Linear: needs attention (needs re-authentication)")
-	require.Contains(t, text, "Ask its owner, Maya Chen, to open "+link+" and connect or reconnect them, then call connection_status again to refresh.")
+	require.Contains(t, text, "Ask someone who can edit this agent to open "+link+" and connect or reconnect them, then call connection_status again to refresh.")
+	require.NotContains(t, text, "owner")
 	require.NotContains(t, text, "These servers need re-authentication", "a server's own line says what is wrong")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "sign-in page")
 
-	result.Owner = &ConnectionStatusOwner{Name: "", ReconnectURL: ""}
+	result.Reconnect = &ConnectionStatusReconnect{URL: ""}
 	text = result.Text()
-	require.Contains(t, text, "Ask its owner to check them in Speakeasy")
+	require.Contains(t, text, "Ask someone who can edit this agent to check them in Speakeasy")
 	require.NotContains(t, text, "administrator")
 
-	result.Owner = nil
+	result.Reconnect = nil
 	require.Contains(t, result.Text(), "ask the gateway's administrator", "a gateway with no agent keeps its wording")
 }

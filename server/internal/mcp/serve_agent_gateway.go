@@ -298,11 +298,27 @@ func agentServerCredentialError(slug string) error {
 	return agentCredentialError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}}
 }
 
-// agentCredentialError is an agent's connection to a server that is missing,
-// unusable or not permitted, which the agent's owner fixes rather than a retry.
+// agentCredentialError is an agent's connection to a server that is missing
+// or unusable, which a person fixes by reconnecting it rather than a retry.
 type agentCredentialError struct{ *metaMemberError }
 
 func (e agentCredentialError) Unwrap() error { return e.metaMemberError }
+
+// agentServerAccessError refuses an agent the use of a connection to a server:
+// no single auth client serves it, or policy does not permit the use.
+// Reconnecting does not change either. Its text matches
+// agentServerCredentialError, so surfaces other than the agent gateway read
+// the same as before.
+func agentServerAccessError(slug string) error {
+	return agentAccessError{&metaMemberError{message: fmt.Sprintf("server %q's connection is unavailable or not permitted; reconnect it before retrying", slug)}}
+}
+
+// agentAccessError is an agent refused the use of a connection to a server,
+// which a person fixes in the agent's permissions or the server's auth
+// clients, not by reconnecting.
+type agentAccessError struct{ *metaMemberError }
+
+func (e agentAccessError) Unwrap() error { return e.metaMemberError }
 
 // authorizeAgentMemberClient checks the existing catalog and the exact attached
 // source before acquiring a legacy agent credential. It does not create a choice
@@ -389,7 +405,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, noCredential, fmt.Errorf("load agent member auth client: %w", err)
 	}
 	if len(rows) != 1 {
-		return none, noCredential, agentServerCredentialError(target.slug)
+		return none, noCredential, agentServerAccessError(target.slug)
 	}
 	res := decideAuthClient(rows[0])
 	mode, err := s.authClientMode(ctx, target.organizationID)
@@ -405,7 +421,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 		return none, res.servedCredential(), nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
-		return none, noCredential, agentServerCredentialError(target.slug)
+		return none, noCredential, agentServerAccessError(target.slug)
 	}
 	permit := authClientPermitRequest{
 		OrganizationID: target.organizationID, ProjectID: target.projectID, ServerID: target.serverID,
@@ -441,7 +457,7 @@ func (s *Service) authorizeAgentServerClient(ctx context.Context, target agentSe
 			return none, noCredential, fmt.Errorf("authorize agent member client: %w", err)
 		}
 		if !allowed {
-			return none, noCredential, agentServerCredentialError(target.slug)
+			return none, noCredential, agentServerAccessError(target.slug)
 		}
 	}
 	// A gap leaves the registration serving its token without the auth client

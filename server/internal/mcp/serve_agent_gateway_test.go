@@ -648,9 +648,9 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 }
 
 // An agent whose delegated connection stops working cannot sign in itself.
-// The tool error and connection_status name its owner and the agent's MCP
-// sign-in page, where the owner reconnects it, and never send the agent to a
-// gateway administrator or hand it a credential.
+// The tool error and connection_status send it to someone who can edit it,
+// with the agent's MCP sign-in page, and never to a gateway administrator.
+// They name no one and hand the agent no credential.
 func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
@@ -670,11 +670,7 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	}
 	require.NotEmpty(t, projectSlug)
 	link := fmt.Sprintf("/%s/projects/%s/identities/agents/%s/edit?step=2", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
-	owner := "Ask its owner"
-	profile, err := agentsrepo.New(ti.conn).GetAgentOwnerProfile(ctx, agentsrepo.GetAgentOwnerProfileParams{OrganizationID: fx.agent.OrganizationID, OwnerUserID: fx.agent.OwnerUserID})
-	if err == nil && profile.DisplayName != "" {
-		owner = "Ask its owner, " + profile.DisplayName + ","
-	}
+	owner := "Ask someone who can edit this agent"
 
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
@@ -696,17 +692,17 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	require.Contains(t, text, "that this agent cannot give itself. "+owner+" to open ")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "sign-in page")
+	require.NotContains(t, text, "its owner")
 	var result struct {
 		StructuredContent struct {
-			Owner *struct {
-				Name         string `json:"name"`
-				ReconnectURL string `json:"reconnectUrl"`
-			} `json:"owner"`
+			Reconnect *struct {
+				URL string `json:"url"`
+			} `json:"reconnect"`
 		} `json:"structuredContent"`
 	}
 	require.NoError(t, json.Unmarshal(rpc["result"], &result))
-	require.NotNil(t, result.StructuredContent.Owner)
-	require.True(t, strings.HasSuffix(result.StructuredContent.Owner.ReconnectURL, link), result.StructuredContent.Owner.ReconnectURL)
+	require.NotNil(t, result.StructuredContent.Reconnect)
+	require.True(t, strings.HasSuffix(result.StructuredContent.Reconnect.URL, link), result.StructuredContent.Reconnect.URL)
 	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }
 

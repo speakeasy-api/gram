@@ -70,7 +70,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 		})
 	}
 
-	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers, Owner: agentConnectionOwner(*gate, members, servers)}
+	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers, Reconnect: agentConnectionReconnect(*gate, members, servers)}
 	structured, err := json.Marshal(payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize connection_status result").LogError(ctx, logger)
@@ -102,11 +102,11 @@ func (s *Service) handleMetaConnectionStatusCall(
 	return bs, nil
 }
 
-// agentConnectionOwner names the owner who reconnects an agent gateway's
-// servers when one needs signing in, with the first such server's page, or
-// no page when it could not be built. Every other gateway, and an agent
-// whose servers all work, gets nil.
-func agentConnectionOwner(gate metaGateContext, members []metaMember, servers []metamcp.ConnectionStatusServer) *metamcp.ConnectionStatusOwner {
+// agentConnectionReconnect is where an agent gateway's servers are
+// reconnected when one needs signing in: the first such server's page, or no
+// page when it could not be built. Every other gateway, and an agent whose
+// servers all work, gets nil.
+func agentConnectionReconnect(gate metaGateContext, members []metaMember, servers []metamcp.ConnectionStatusServer) *metamcp.ConnectionStatusReconnect {
 	if gate.agentOwner == nil || gate.connectURL != "" {
 		return nil
 	}
@@ -118,7 +118,7 @@ func agentConnectionOwner(gate metaGateContext, members []metaMember, servers []
 			continue
 		}
 		fix := gate.agentReconnectFor(member)
-		return &metamcp.ConnectionStatusOwner{Name: fix.owner, ReconnectURL: fix.url}
+		return &metamcp.ConnectionStatusReconnect{URL: fix.url}
 	}
 	return nil
 }

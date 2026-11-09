@@ -96,20 +96,16 @@ type ConnectionStatusResult struct {
 	ConnectURL string                   `json:"connectUrl,omitempty"`
 	Servers    []ConnectionStatusServer `json:"servers"`
 
-	// Owner is set on an agent gateway when a server needs signing in
-	// again: the agent cannot, so its owner reconnects it.
-	Owner *ConnectionStatusOwner `json:"owner,omitempty"`
+	// Reconnect is set on an agent gateway when a server needs signing in
+	// again: the agent cannot, so someone who can edit it reconnects it.
+	Reconnect *ConnectionStatusReconnect `json:"reconnect,omitempty"`
 }
 
-// ConnectionStatusOwner is the person who reconnects an agent's servers and
-// the page they do it on.
-type ConnectionStatusOwner struct {
-	// Name is the owner's display name, empty when unknown.
-	Name string `json:"name,omitempty"`
-
-	// ReconnectURL opens the agent's MCP sign-in settings in the dashboard;
-	// empty when the page could not be named.
-	ReconnectURL string `json:"reconnectUrl,omitempty"`
+// ConnectionStatusReconnect is where an agent's servers are reconnected.
+type ConnectionStatusReconnect struct {
+	// URL opens the agent's MCP sign-in settings in the dashboard; empty
+	// when the page could not be named.
+	URL string `json:"url,omitempty"`
 }
 
 var connectionStatusSchema = []byte(`{
@@ -193,17 +189,16 @@ func (r ConnectionStatusResult) signInHint() string {
 	if r.ConnectURL != "" {
 		return fmt.Sprintf("\nTo sign in, open %s in a browser, then call %s again to refresh.\n", r.ConnectURL, ToolConnectionStatus)
 	}
-	if r.Owner == nil {
+	if r.Reconnect == nil {
 		return "\nThis gateway has no sign-in page; ask the gateway's administrator to connect these servers.\n"
 	}
-	who := "its owner"
-	if r.Owner.Name != "" {
-		who = fmt.Sprintf("its owner, %s,", r.Owner.Name)
-	}
-	// Each server's line says what is wrong; a server never signed in, or one
-	// that failed for another reason, is not necessarily a broken sign-in.
-	if r.Owner.ReconnectURL == "" {
+	// The owner is not the only person who may reconnect an agent's servers,
+	// so the hint names no one. Each server's line says what is wrong; a
+	// server never signed in, or one that failed for another reason, is not
+	// necessarily a broken sign-in.
+	const who = "someone who can edit this agent"
+	if r.Reconnect.URL == "" {
 		return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to check them in Speakeasy, then call %s again to refresh.\n", who, ToolConnectionStatus)
 	}
-	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.Owner.ReconnectURL, ToolConnectionStatus)
+	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.Reconnect.URL, ToolConnectionStatus)
 }
