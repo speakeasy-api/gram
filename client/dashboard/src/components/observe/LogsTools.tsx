@@ -891,9 +891,10 @@ export function LogsTools({
       // The server narrows the rows to the caller's scope, so the scope is
       // part of the key: losing log:read must not keep serving everyone's
       // rows from the cache, and holding it must not serve a stale own set.
+      // The own set is per viewer, so a user switch cannot replay another's rows.
       queryKey: [
         "tool-usage-traces",
-        ownScope ? "own" : "project",
+        ownScope ? `own:${user.id}` : "project",
         ...narrowedQueryKey,
       ],
       queryFn: ({ pageParam }) =>
