@@ -290,6 +290,9 @@ func personalReadiness(clientType string, registrationID uuid.NullUUID, cards []
 			continue
 		}
 		status := cardStatus(card)
+		if status == gatewayServerUnavailable && card.reconnectsDespiteOutage() {
+			status = gatewayServerReconnect
+		}
 		if clientType == authz.AuthClientTypeEMA {
 			switch status {
 			case gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
