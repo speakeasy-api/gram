@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
@@ -24,7 +23,6 @@ import (
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	approvalrepo "github.com/speakeasy-api/gram/server/internal/risk/approval/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // builtinCalls records the identity each request reached the backend with.
@@ -212,22 +210,11 @@ func TestOrganizationGatewayBuiltinBackendIsNotAProxiedMember(t *testing.T) {
 	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.organizationID, fx.subject.ID, builtin.ID.String())
 	// A real connected-client choice makes the consent page construct member cards.
 	createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, fx.organizationID, "gateway-card-client", "", []uuid.UUID{fx.issuerID})
-	_, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{
-		UserSessionIssuerID:     fx.issuerID,
-		ClientID:                "org-gateway-mcp-client",
-		ClientSecretHash:        pgtype.Text{String: "", Valid: false},
-		ClientName:              "Gateway test client",
-		RedirectUris:            []string{"http://example.com/cb"},
-		ClientSecretExpiresAt:   pgtype.Timestamptz{},
-		TokenEndpointAuthMethod: "none",
-		ClientJwks:              nil,
-		ClientJwksUri:           pgtype.Text{String: "", Valid: false},
-	})
-	require.NoError(t, err)
+	insertUserSessionClient(t, ctx, ti.conn, fx.issuerID, "org-gateway-mcp-client")
 	endpoint, stateID := storeHiddenGatewayChallenge(t, ti, fx)
 	request := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+url.QueryEscape(stateID), nil)
 	response := httptest.NewRecorder()
-	require.NoError(t, ti.service.ServeConsent(response, request, endpoint), "a builtin has no remote resource and must not enter proxied card construction")
+	require.NoError(t, ti.service.ServeConsent(response, request, endpoint), "a builtin is not a gateway member, so consent renders without it")
 	require.Equal(t, http.StatusOK, response.Code)
 	require.Contains(t, response.Body.String(), fx.granted)
 	require.Contains(t, response.Body.String(), fx.open)

@@ -139,7 +139,6 @@ type metaMemberCandidate struct {
 	name                       string
 	sortOrder                  int32
 	visibility                 string
-	unproxied                  bool
 	toolsetID                  uuid.NullUUID
 	remoteServerID             uuid.NullUUID
 	tunneledServerID           uuid.NullUUID
@@ -150,8 +149,9 @@ type metaMemberCandidate struct {
 }
 
 // resolveMetaMemberSnapshot loads a stored meta server's servable members and
-// applies the per-member RBAC filter; unproxied members (no meta MCP dispatch
-// path) are excluded, so pre-validation memberships degrade to invisibility.
+// applies the per-member RBAC filter. Only hosted, remote, and tunneled backends
+// have a gateway dispatch path; all other members are excluded, so pre-validation
+// memberships degrade to invisibility.
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -189,7 +189,6 @@ func (s *Service) resolveMetaMemberSnapshot(
 			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
 			sortOrder:                  row.SortOrder,
 			visibility:                 row.McpServerVisibility,
-			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
@@ -346,7 +345,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			// requests.
 			sortOrder:                  0,
 			visibility:                 row.McpServerVisibility,
-			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
@@ -454,16 +452,15 @@ func (s *Service) admitMetaMembers(
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
-		// Gateways dispatch only hosted, remote, and tunneled backends. Builtin
-		// servers have none of these IDs and use their dedicated serving path;
-		// they must not be classified as proxied members with no resource.
-		if candidate.unproxied || (!candidate.toolsetID.Valid && !candidate.remoteServerID.Valid && !candidate.tunneledServerID.Valid) {
-			continue
-		}
-
-		backend := metaMemberBackendProxied
-		if candidate.toolsetID.Valid {
+		// Only hosted, remote, and tunneled backends have a gateway dispatch path.
+		var backend metaMemberBackend
+		switch {
+		case candidate.toolsetID.Valid:
 			backend = metaMemberBackendHosted
+		case candidate.remoteServerID.Valid || candidate.tunneledServerID.Valid:
+			backend = metaMemberBackendProxied
+		default:
+			continue
 		}
 
 		// Visibility gates exposure and fails closed: public members are open,

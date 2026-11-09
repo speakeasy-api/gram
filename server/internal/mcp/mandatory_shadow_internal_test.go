@@ -256,7 +256,7 @@ func TestAdmitMetaMembersShadowLeavesAdmissionUnchanged(t *testing.T) {
 		id := uuid.New()
 		return metaMemberCandidate{
 			serverID: id, projectID: project, projectSlug: "p", slug: "s-" + id.String()[:8], name: "s", sortOrder: 0,
-			visibility: visibility, unproxied: false, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
+			visibility: visibility, toolsetID: uuid.NullUUID{}, remoteServerID: uuid.NullUUID{UUID: id, Valid: true},
 			tunneledServerID: uuid.NullUUID{}, environmentID: uuid.NullUUID{}, toolVariationsGroupID: uuid.NullUUID{},
 			remoteSessionIssuerID: uuid.NullUUID{}, tunneledResourceIdentifier: "",
 		}
