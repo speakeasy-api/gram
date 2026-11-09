@@ -1131,6 +1131,9 @@ func TestUnreadableUpstreamTokenDirectServerAsksToReconnect(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStoredSignInUnreadable)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 	require.Equal(t, subject.String(), row.SubjectURN)
+	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: fixture.RemoteSessionClient.ID})
+	require.NoError(t, err)
+	require.Equal(t, stored.ID.String(), row.RemoteSessionID)
 }
 
 // With nothing stored readable, a gateway never calls the member without credentials and asks for a reconnect.
@@ -1187,6 +1190,9 @@ func TestUnreadableUpstreamTokenGatewayMemberAsksToReconnect(t *testing.T) {
 			require.Equal(t, meta.ID.String(), row.ServerID)
 			require.NotEmpty(t, row.MemberID)
 			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+			stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+			require.NoError(t, err)
+			require.Equal(t, stored.ID.String(), row.RemoteSessionID)
 
 			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": metamcp.ToolConnectionStatus, "arguments": map[string]any{}})
 			resp, err := servePublicHTTP(t, ctx, ti, metaSlug, body, bearer, nil)

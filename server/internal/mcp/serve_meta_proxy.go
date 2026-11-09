@@ -274,7 +274,7 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	held := routed.HeldWithoutToken()
 	switch {
 	case routed.SignInUnreadable():
-		routeErr = memberSignInUnreadableError(member, gate.memberCallerURL(member))
+		routeErr = newMemberSignInUnreadableError(member, gate.memberCallerURL(member), routed.ClientCredentialErr)
 	case held:
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {
@@ -298,16 +298,20 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok && stale.saved {
 		return
 	}
+	var opts []mcpconnectionattempts.Option
+	if id, ok := remotesessions.UnreadableRemoteSessionID(err); ok {
+		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
 		code := mcpconnectionattempts.CodeInvalidRemoteSession
 		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {
 			code = failure.code
 		}
-		s.recordMemberFailure(ctx, gate, member, code)
+		s.recordMemberFailure(ctx, gate, member, code, opts...)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {
-		s.recordMemberFailure(ctx, gate, member, failure.code)
+		s.recordMemberFailure(ctx, gate, member, failure.code, opts...)
 	}
 }
 

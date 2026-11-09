@@ -162,6 +162,15 @@ const validationLimitedNotice = "Try again in a moment"
 // refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
 const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
 
+// refreshReconnectNotice names the card's own control for a saved sign-in that can't be renewed.
+func refreshReconnectNotice(connected bool) string {
+	if connected {
+		// A connected card offers Disconnect, not Reconnect.
+		return "Your saved sign-in can't be renewed. Disconnect this service, then connect it again."
+	}
+	return "Your saved sign-in can't be used anymore. Reconnect this service to fix it."
+}
+
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
 func newValidationLimiter(redisClient *redis.Client, meterProvider metric.MeterProvider) *ratelimit.Limiter {
 	if redisClient == nil {

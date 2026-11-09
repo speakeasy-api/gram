@@ -153,7 +153,7 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 // and the caller that observed that exchange marks it retryable.
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrStoredSignInUnreadable) {
-		return memberSignInUnreadableError(member, "")
+		return newMemberSignInUnreadableError(member, "", err)
 	}
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
@@ -168,13 +168,25 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry", member.slug)}
 }
 
-// memberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
-func memberSignInUnreadableError(member metaMember, connectURL string) error {
+// memberSignInUnreadableError is a member whose saved sign-in can't be read; cause names the remote session.
+type memberSignInUnreadableError struct {
+	memberConnectionError
+
+	// cause is the resolution failure, which carries the remote session.
+	cause error
+}
+
+func (e memberSignInUnreadableError) Unwrap() []error {
+	return []error{e.memberConnectionError, e.cause}
+}
+
+// newMemberSignInUnreadableError asks for a new sign-in: nothing stored for the member can be read.
+func newMemberSignInUnreadableError(member metaMember, connectURL string, cause error) error {
 	message := fmt.Sprintf("server %q can't use its saved sign-in anymore. Ask whoever connected it to reconnect it, then retry", member.slug)
 	if connectURL != "" {
 		message = fmt.Sprintf("server %q can't use its saved sign-in anymore. Ask the user to open %s to reconnect it, then retry", member.slug, connectURL)
 	}
-	return memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}
+	return memberSignInUnreadableError{memberConnectionError: memberConnectionError{memberCredentialError{&metaMemberError{message: message}}, mcpconnectionattempts.CodeStoredSignInUnreadable}, cause: cause}
 }
 
 // outageWaitWords is when to retry, in words: a provider can ask for minutes.
@@ -207,8 +219,8 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 
 // withMemberConnectLink adds the member's connect page to a connection outage.
 func withMemberConnectLink(err error, member metaMember, connectURL string) error {
-	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable && connectURL != "" {
-		return memberSignInUnreadableError(member, connectURL)
+	if unreadable, ok := errors.AsType[memberSignInUnreadableError](err); ok && connectURL != "" {
+		return newMemberSignInUnreadableError(member, connectURL, unreadable.cause)
 	}
 	if outage, ok := errors.AsType[memberUnavailableError](err); ok && outage.session != nil && connectURL != "" {
 		return linkedMemberOutage(member, outage.session, connectURL)

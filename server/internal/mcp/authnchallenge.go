@@ -1422,9 +1422,14 @@ func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication
 		return
 	}
 	endpoint := authentication.endpoint
-	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request,
+	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject),
-		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope))
+		s.reportedClient(ctx, authentication.request, endpoint.clientInfoProjectID(), endpoint.clientInfoScope),
+	}
+	if id, ok := remotesessions.UnreadableRemoteSessionID(errors.Join(causes...)); ok {
+		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
+	s.recordRequestOutcome(ctx, connectionScope(endpoint, requestApp(ctx)), code, authentication.request, opts...)
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required

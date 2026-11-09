@@ -451,3 +451,37 @@ func TestRemoteSessionStatuses_NothingUsableIsExpired(t *testing.T) {
 	require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable, "nothing stored is not a decrypt failure")
 	require.Empty(t, logs.levelOf("remote session stored"))
 }
+
+// Refreshing when neither token can be read needs a new sign-in, at ERROR, even before the access token's expiry.
+func TestRefreshRemoteSession_BothUnreadableNeedsSignIn(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, logs := unreadableEnv(t, "unreadable-both-manual", &refreshes, healingRefresh)
+	storeTokens(t, env, "", "", time.Hour)
+
+	_, err := env.mgr.RefreshRemoteSession(t.Context(), remotesessions.RefreshAttribution{}, env.subject, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.clientID)
+	require.Error(t, err)
+	require.True(t, remotesessions.StoredTokenUnreadable(err))
+	require.Zero(t, refreshes.Load())
+	require.Equal(t, "ERROR", logs.levelOf("remote session stored refresh token could not be decrypted"))
+	require.EqualValues(t, 1, storedTokenUnreadableCount(t, env, remotesessionmetrics.StoredTokenRefresh, remotesessionmetrics.StoredTokenNeedsSignIn))
+	require.Zero(t, storedTokenUnreadableCount(t, env, remotesessionmetrics.StoredTokenRefresh, remotesessionmetrics.StoredTokenAccessStillLive))
+}
+
+// The resolution error names the remote session, so its connection row can.
+func TestUnreadableRemoteSessionID(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "unreadable-session-id", &refreshes, healingRefresh)
+	storeTokens(t, env, "", "", time.Hour)
+
+	_, err := resolveAll(t, env)
+	id, ok := remotesessions.UnreadableRemoteSessionID(err)
+	require.True(t, ok)
+	require.Equal(t, env.session.ID, id)
+	id, ok = remotesessions.UnreadableRemoteSessionID(resolveAvailable(t, env).ClientCredentialErr)
+	require.True(t, ok)
+	require.Equal(t, env.session.ID, id)
+}

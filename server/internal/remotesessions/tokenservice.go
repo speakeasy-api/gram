@@ -293,7 +293,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		// Nothing stored can be read, so only a new sign-in recreates the grant.
 		// The entry keeps a gateway from calling the member without it.
 		if errors.Is(err, errStoredTokenUnreadable) {
-			unreadable := withRecordedRefresh(fmt.Errorf("%w: %w", ErrStoredSignInUnreadable, err), zero)
+			unreadable := withRecordedRefresh(&storedSignInUnreadableError{remoteSessionID: selectedID, err: err}, zero)
 			return failedSessionCredential(selectedID, clientID, selectedResource, unreadable, zero.refreshFailureRecorded, zero.refreshStepRecorded), unreadable
 		}
 		// A known-expired access token with no usable refresh grant is the

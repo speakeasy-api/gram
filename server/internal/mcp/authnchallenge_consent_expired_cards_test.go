@@ -553,3 +553,51 @@ func TestServeConsentAction_VerifyTypedRegistrationCannotBeChecked(t *testing.T)
 		})
 	}
 }
+
+// postRefresh posts the card's Refresh and returns where it sends the browser.
+func postRefresh(t *testing.T, fx validationFixture, clientID uuid.UUID) string {
+	t.Helper()
+	form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"refresh"}, "client_id": {clientID.String()}}
+	if fx.server != "" {
+		form.Set("server", fx.server)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	w := httptest.NewRecorder()
+	require.NoError(t, fx.ti.service.ServeConsentAction(w, req, fx.endpoint))
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	return w.Header().Get("Location")
+}
+
+// Refresh on a sign-in whose refresh token can't be read points to the card's own control, not a dead end.
+func TestServeConsentAction_RefreshUnreadableSignInPointsToTheCard(t *testing.T) {
+	t.Parallel()
+
+	t.Run("expired card offers Reconnect", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx := seedMetaValidationFixture(t, "refresh-unreadable-"+uuid.NewString()[:8])
+		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
+
+		location := postRefresh(t, fx, fx.clientID)
+		require.Contains(t, location, "refresh_reconnect="+fx.clientID.String())
+		page := strings.ReplaceAll(renderConsentAt(t, fx, location), "&#39;", "'")
+		require.Contains(t, page, "Your saved sign-in can't be used anymore. Reconnect this service to fix it.")
+		require.NotContains(t, page, "re-link")
+	})
+	t.Run("connected card offers Disconnect", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx := seedMetaValidationFixture(t, "refresh-unreadable-live-"+uuid.NewString()[:8])
+		access, err := fx.ti.enc.Encrypt([]byte("live-token"))
+		require.NoError(t, err)
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
+			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+			RefreshTokenEncrypted: conv.ToPGText("not-ciphertext"), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),
+		})
+		require.NoError(t, err)
+
+		location := postRefresh(t, fx, fx.clientID)
+		require.Contains(t, location, "refresh_reconnect="+fx.clientID.String())
+		require.Contains(t, strings.ReplaceAll(renderConsentAt(t, fx, location), "&#39;", "'"), "Your saved sign-in can't be renewed. Disconnect this service, then connect it again.")
+	})
+}

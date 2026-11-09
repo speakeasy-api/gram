@@ -28,7 +28,7 @@ func (s *RefreshService) recordRefresh(
 	err error,
 ) (standalone, step bool) {
 	// Nobody can act on an unreadable sign-in while its access token still serves or no person is present.
-	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || accessTokenLive(sess, time.Now())) {
+	if errors.Is(err, errStoredTokenUnreadable) && (trigger == remotesessionmetrics.RefreshTriggerScheduled || readStoredTokens(s.enc, sess, time.Now()).usable) {
 		return false, false
 	}
 	what, ok := refreshHappened(outcome, client, err)

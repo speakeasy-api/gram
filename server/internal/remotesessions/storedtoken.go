@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -16,6 +18,37 @@ import (
 
 // errStoredTokenUnreadable marks a stored token the current key can't decrypt. A retry never helps; a new token does.
 var errStoredTokenUnreadable = errors.New("stored token unreadable")
+
+// StoredTokenUnreadable reports a failure caused by a stored token the current key can't decrypt.
+func StoredTokenUnreadable(err error) bool {
+	return errors.Is(err, errStoredTokenUnreadable)
+}
+
+// storedSignInUnreadableError is ErrStoredSignInUnreadable for one remote session.
+type storedSignInUnreadableError struct {
+	// remoteSessionID is the grant nothing stored of which can be read.
+	remoteSessionID uuid.UUID
+
+	// err is the decrypt or renewal failure behind it.
+	err error
+}
+
+func (e *storedSignInUnreadableError) Error() string {
+	return fmt.Sprintf("%s: %s", ErrStoredSignInUnreadable, e.err)
+}
+
+func (e *storedSignInUnreadableError) Unwrap() []error {
+	return []error{ErrStoredSignInUnreadable, e.err}
+}
+
+// UnreadableRemoteSessionID is the remote session behind an ErrStoredSignInUnreadable failure.
+func UnreadableRemoteSessionID(err error) (uuid.UUID, bool) {
+	unreadable, ok := errors.AsType[*storedSignInUnreadableError](err)
+	if !ok || unreadable.remoteSessionID == uuid.Nil {
+		return uuid.Nil, false
+	}
+	return unreadable.remoteSessionID, true
+}
 
 // errStoredTokenHeldForAdministrator marks an unreadable access token whose renewal the configuration refused:
 // the grant is held for the administrator rather than dropped to an anonymous call.
@@ -110,10 +143,10 @@ func refreshLeftGrantUnjudged(err error) bool {
 }
 
 // refreshTokenUnreadable logs and counts an unreadable refresh token met while refreshing.
-// While the access token is still live nobody needs to sign in yet, so it is a warning.
+// While the access token can still serve nobody needs to sign in yet, so it is a warning.
 func (s *RefreshService) refreshTokenUnreadable(ctx context.Context, sess remotesessions_repo.RemoteSession, err error) {
 	level, outcome := slog.LevelError, remotesessionmetrics.StoredTokenNeedsSignIn
-	if accessTokenLive(sess, time.Now()) {
+	if readStoredTokens(s.enc, sess, time.Now()).usable {
 		level, outcome = slog.LevelWarn, remotesessionmetrics.StoredTokenAccessStillLive
 	}
 	s.logger.Log(ctx, level, "remote session stored refresh token could not be decrypted", storedTokenAttrs(s.enc, sess, err)...)
