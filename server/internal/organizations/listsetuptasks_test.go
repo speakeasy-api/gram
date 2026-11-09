@@ -34,8 +34,9 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging", "anthropic-observability",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
-		"anthropic-admin-controls", "configure-policies",
+		"mcp-distribution", "create-marketplace", "distribute-servers",
+		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
+		"platform-mcp", "anthropic-admin-controls", "configure-policies",
 	}, keys)
 	require.Nil(t, setupTask(result.Tasks, "litellm"))
 	require.Nil(t, setupTask(result.Tasks, "private-network"))
@@ -45,6 +46,8 @@ func TestService_ListSetupTasksProjectsCatalog(t *testing.T) {
 			require.Equal(t, []string{"instrument-agents"}, task.BlockedBy)
 		case "distribute-servers":
 			require.Equal(t, []string{"create-marketplace"}, task.BlockedBy)
+		case "claude-org-instructions":
+			require.Equal(t, []string{"claude-plugin-registration"}, task.BlockedBy)
 		default:
 			require.Empty(t, task.BlockedBy, task.Key)
 		}
@@ -82,7 +85,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 	includeHidden := true
 	result, err := ti.service.ListSetupTasks(platformCtx, &gen.ListSetupTasksPayload{IncludeHidden: &includeHidden})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 16)
+	require.Len(t, result.Tasks, 19)
 	require.Equal(t, "configure-policies", result.Tasks[len(result.Tasks)-1].Key)
 	require.True(t, setupTask(result.Tasks, "litellm").Hidden)
 	for _, task := range result.Tasks {
@@ -99,6 +102,7 @@ func TestService_ListSetupTasksRevealsDefaultHiddenToPlatformAdmin(t *testing.T)
 		"identity-provider", "enable-logging",
 		"anthropic-observability", "agent-observability", "instrument-agents", "confirm-traffic", "litellm",
 		"additional-agent-config", "mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp", "private-network",
+		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
 		"anthropic-admin-controls", "cursor-admin-controls", "configure-policies",
 	}, keys)
 	require.True(t, setupTask(result.Tasks, "private-network").Hidden)
@@ -401,6 +405,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 		"identity-provider", "anthropic-observability", "anthropic-admin-controls", "cursor-admin-controls",
 		"instrument-agents", "litellm", "additional-agent-config", "confirm-traffic",
 		"distribute-servers", "configure-policies", "platform-mcp", "private-network",
+		"claude-plugin-registration", "claude-org-instructions",
 	} {
 		task, err := ti.service.UpdateSetupTask(ctx, &gen.UpdateSetupTaskPayload{TaskKey: key, Status: &done})
 		require.NoError(t, err, key)
@@ -410,7 +415,7 @@ func TestService_UpdateSetupTaskCompletesMergedCatalog(t *testing.T) {
 
 	result, err := ti.service.ListSetupTasks(ctx, &gen.ListSetupTasksPayload{})
 	require.NoError(t, err)
-	require.Len(t, result.Tasks, 13)
+	require.Len(t, result.Tasks, 16)
 	for _, task := range result.Tasks {
 		require.Equal(t, "done", task.Status, task.Key)
 	}

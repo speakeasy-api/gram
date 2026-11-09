@@ -5,6 +5,8 @@ import { AdditionalAgentConfigStep } from "./components/steps/additional-agent-c
 import { AnthropicAdminControlsStep } from "./components/steps/anthropic-admin-controls-step";
 import { AnthropicInferenceHooksStep } from "./components/steps/anthropic-inference-hooks-step";
 import { ConfigurePoliciesStep } from "./components/steps/configure-policies-step";
+import { ClaudeOrgInstructionsStep } from "./components/steps/claude-org-instructions-step";
+import { ClaudePluginRegistrationStep } from "./components/steps/claude-plugin-registration-step";
 import { ConfirmTrafficStep } from "./components/steps/confirm-traffic-step";
 import { CreateMarketplaceStep } from "./components/steps/create-marketplace-step";
 import { CursorAdminControlsStep } from "./components/steps/cursor-admin-controls-step";
@@ -78,6 +80,18 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
       <AnthropicAdminControlsStep onComplete={onComplete} />
     ),
   },
+  "claude-plugin-registration": {
+    slug: "claude-plugins",
+    Step: ({ onComplete }) => (
+      <ClaudePluginRegistrationStep onComplete={onComplete} />
+    ),
+  },
+  "claude-org-instructions": {
+    slug: "claude-instructions",
+    Step: ({ onComplete }) => (
+      <ClaudeOrgInstructionsStep onComplete={onComplete} />
+    ),
+  },
   "cursor-admin-controls": {
     Step: ({ onComplete }) => (
       <CursorAdminControlsStep onComplete={onComplete} />
@@ -124,6 +138,7 @@ export const SETUP_CARDS: Record<string, SetupCard> = {
 const SETUP_GROUP_SLUGS: Record<string, string> = {
   "agent-observability": "agent-observability",
   "mcp-distribution": "mcp-distribution",
+  "claude-desktop": "claude-desktop",
 };
 
 export function setupCard(taskKey: string): SetupCard | undefined {

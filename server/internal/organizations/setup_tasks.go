@@ -65,6 +65,11 @@ type setupTaskDefinition struct {
 	// configures. A card with none, such as identity, applies to every stack.
 	Methods []string
 
+	// Plans, when set, narrows the card to organizations whose recorded stack
+	// names one of these support matrix plan slugs, on top of the Methods
+	// check. Empty means any plan.
+	Plans []string
+
 	// Completion is manual or fact; groups derive theirs from their cards.
 	Completion setupTaskCompletion
 }
@@ -83,6 +88,7 @@ type setupTaskGroup struct {
 var setupTaskGroups = []setupTaskGroup{
 	{Key: "agent-observability", Title: "Set up agent observability", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives."},
 	{Key: "mcp-distribution", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it."},
+	{Key: "claude-desktop", Title: "Set up Claude Desktop", Description: "Register Speakeasy's plugins in Claude.ai and move every conversation into Cowork, where they run."},
 }
 
 // setupTaskCatalog lists every setup card in wizard order. To add a card:
@@ -96,25 +102,34 @@ var setupTaskGroups = []setupTaskGroup{
 // disagree. The catalog is mirrored into onboarding_steps at start-up.
 var setupTaskCatalog = []setupTaskDefinition{
 	// Identity
-	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
+	{Key: "identity-provider", Title: "Set up identity provider", Description: "Verify a domain, connect single sign-on, and sync people and groups from the identity provider.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Plans: nil, Completion: setupTaskCompletionFact},
 	// Observe
-	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionFact},
-	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"inference"}, Completion: setupTaskCompletionManual},
-	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Install the device agent so Claude Code, Cursor, OpenAI Codex, and other coding agents get the observability plugin and distributed MCP servers, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
-	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
-	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"litellm"}, Completion: setupTaskCompletionManual},
-	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Import usage, spend, and conversations from the Anthropic, Cursor, and OpenAI admin and compliance APIs.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, Completion: setupTaskCompletionManual},
+	{Key: "enable-logging", Title: "Enable logging", Description: "Record tool calls, I/O, and agent sessions.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Plans: nil, Completion: setupTaskCompletionFact},
+	{Key: "anthropic-observability", Title: "Set up Anthropic observability", Description: "Turn on Anthropic inference hooks in Claude.ai so Claude conversations reach Speakeasy, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"inference"}, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "instrument-agents", Title: "Set up observability in other platforms", Description: "Install the device agent so Claude Code, Cursor, OpenAI Codex, and other coding agents get the observability plugin and distributed MCP servers, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"litellm"}, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Import usage, spend, and conversations from the Anthropic, Cursor, and OpenAI admin and compliance APIs.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, Plans: nil, Completion: setupTaskCompletionManual},
 	// Distribute. The device agent installs plugins from the same marketplace,
 	// so these cards apply to every stack the device agent covers, not only to
 	// Anthropic's admin plugin distribution.
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Completion: setupTaskCompletionFact},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Distribute approved MCP servers through the plugin marketplace.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Completion: setupTaskCompletionManual},
-	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
-	{Key: "private-network", Title: "Set up private network access", Description: "Connect Tailscale in organization settings to serve MCP endpoints privately. Enter credentials only in the dashboard, never in an agent conversation.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Plans: nil, Completion: setupTaskCompletionFact},
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Distribute approved MCP servers through the plugin marketplace.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Plans: nil, Completion: setupTaskCompletionManual},
+	// Claude Desktop runs only plugins registered on the Claude organization,
+	// and only inside Cowork. The organization instruction moves every
+	// conversation into Cowork. Both cards complete once a Cowork transcript
+	// arrives, and either can still be marked done by hand. Like the Anthropic
+	// and Cursor admin-controls cards, the registration card publishes the
+	// marketplace inline rather than requiring the MCP distribution group, so a
+	// playbook can walk it without distributing servers.
+	{Key: "claude-plugin-registration", Title: "Register Speakeasy's plugins in Claude", Description: "Sync the plugin marketplace in Claude.ai, mark the observability plugin Required, and allow Speakeasy in Claude's network egress settings.", Prerequisites: nil, HiddenByDefault: false, Parent: "claude-desktop", Methods: []string{"plugins"}, Plans: nil, Completion: setupTaskCompletionFact},
+	{Key: "claude-org-instructions", Title: "Add Claude organization instructions", Description: "Add an organization instruction in Claude.ai that moves every conversation into Cowork, where the observability plugin captures it.", Prerequisites: []string{"claude-plugin-registration"}, HiddenByDefault: false, Parent: "claude-desktop", Methods: []string{"cowork-org-instructions"}, Plans: []string{"anthropic-team"}, Completion: setupTaskCompletionFact},
+	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "private-network", Title: "Set up private network access", Description: "Connect Tailscale in organization settings to serve MCP endpoints privately. Enter credentials only in the dashboard, never in an agent conversation.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: nil, Plans: nil, Completion: setupTaskCompletionManual},
 	// Secure
-	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Publish the plugin marketplace, connect Claude Code and Claude Cowork through Claude.ai, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"settings", "plugins"}, Completion: setupTaskCompletionManual},
-	{Key: "cursor-admin-controls", Title: "Set up Cursor admin controls", Description: "Publish the plugin marketplace, import it as a Cursor team marketplace, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"cursor-marketplace"}, Completion: setupTaskCompletionManual},
-	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
+	{Key: "anthropic-admin-controls", Title: "Set up Anthropic admin controls", Description: "Connect Claude Code through Claude.ai server-managed settings, turn on Claude Cowork's native monitoring, optionally add the Organization Gateway, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"settings", "otel"}, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "cursor-admin-controls", Title: "Set up Cursor admin controls", Description: "Publish the plugin marketplace, import it as a Cursor team marketplace, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"cursor-marketplace"}, Plans: nil, Completion: setupTaskCompletionManual},
+	{Key: "configure-policies", Title: "Configure policies", Description: "Choose the organization's initial risk policies.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Plans: nil, Completion: setupTaskCompletionManual},
 }
 
 var validSetupTaskStatuses = []string{
@@ -497,6 +512,12 @@ func setupTaskFact(key string, facts orgrepo.GetSetupTaskCompletionFactsRow) boo
 		return facts.MarketplacePublished
 	case "enable-logging":
 		return facts.LoggingEnabled
+	case "claude-plugin-registration", "claude-org-instructions":
+		// A Cowork transcript only arrives once the plugin is registered in
+		// Claude.ai, egress allows Speakeasy, and Claude moved a conversation
+		// into Cowork, so it proves both cards. Completing the registration
+		// card too keeps the instruction card from waiting on its prerequisite.
+		return facts.ClaudeTranscriptCaptured
 	default:
 		return false
 	}

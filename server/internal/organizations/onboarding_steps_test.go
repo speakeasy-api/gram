@@ -20,7 +20,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 
 	steps, err := organizations.ListOnboardingSteps(ctx, ti.conn)
 	require.NoError(t, err)
-	require.Len(t, steps, 16, "fourteen cards and two groups")
+	require.Len(t, steps, 19, "sixteen cards and three groups")
 	position := make(map[string]int, len(steps))
 	bySlug := make(map[string]*admingen.AdminOnboardingStep, len(steps))
 	for index, step := range steps {
@@ -48,7 +48,12 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	require.Empty(t, identity.Requires)
 
 	require.Equal(t, []string{"inference"}, bySlug["anthropic-observability"].MethodSlugs)
-	require.Equal(t, []string{"settings", "plugins"}, bySlug["anthropic-admin-controls"].MethodSlugs, "support matrix order")
+	require.Equal(t, []string{"settings", "otel"}, bySlug["anthropic-admin-controls"].MethodSlugs, "support matrix order")
+	require.Equal(t, []string{"plugins"}, bySlug["claude-plugin-registration"].MethodSlugs)
+	require.Equal(t, []string{"cowork-org-instructions"}, bySlug["claude-org-instructions"].MethodSlugs, "applies only to stacks with Anthropic")
+	require.Equal(t, []string{"claude-plugin-registration"}, bySlug["claude-org-instructions"].Requires)
+	require.Equal(t, "claude-desktop", *bySlug["claude-org-instructions"].ParentSlug)
+	require.Equal(t, "fact", bySlug["claude-org-instructions"].Completion)
 	require.True(t, bySlug["cursor-admin-controls"].HiddenByDefault, "the device agent covers Cursor by default")
 	require.Equal(t, []string{"cursor-marketplace"}, bySlug["cursor-admin-controls"].MethodSlugs, "applies only to stacks with Cursor")
 	require.Equal(t, []string{"device", "plugins"}, bySlug["create-marketplace"].MethodSlugs, "the device agent installs from the marketplace too")
