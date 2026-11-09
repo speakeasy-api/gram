@@ -1433,18 +1433,18 @@ func (s *Service) rotateRefreshToken(
 
 			failureReason, description := "refresh_token_unknown_or_already_used", "refresh_token is unknown or already used"
 			var failureSubject *urn.SessionSubject
-			spent, spentErr := usersessions_repo.New(s.db).GetSpentUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetSpentUserSessionByRefreshTokenHashParams{
+			expiredSubject, expiredErr := usersessions_repo.New(s.db).GetExpiredUserSessionByRefreshTokenHash(ctx, usersessions_repo.GetExpiredUserSessionByRefreshTokenHashParams{
 				UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				UserSessionClientID: clientRow.ID,
 				RefreshTokenHash:    refreshTokenHash,
 			})
 			switch {
-			case spentErr == nil && (!spent.RefreshExpiresAt.Valid || !spent.RefreshExpiresAt.Time.After(time.Now())):
-				// The session reached its length limit; that outlives the replay grace.
+			case expiredErr == nil:
+				// The session was retired by reaching its length limit; that outlives the replay grace.
 				failureReason, description = "refresh_token_expired", "refresh_token has expired"
-				failureSubject = &spent.SubjectUrn
-			case spentErr != nil && !errors.Is(spentErr, pgx.ErrNoRows):
-				logger.WarnContext(ctx, "failed to load spent refresh token session", attr.SlogError(spentErr))
+				failureSubject = &expiredSubject
+			case !errors.Is(expiredErr, pgx.ErrNoRows):
+				logger.WarnContext(ctx, "failed to load expired refresh token session", attr.SlogError(expiredErr))
 			}
 
 			published := s.storeRefreshTokenReplayFailure(ctx, replayKey, clientRow.ID, failureSubject, failureReason, description, logger)
@@ -1491,7 +1491,7 @@ func (s *Service) rotateRefreshToken(
 			postCommitCtx,
 			replayKey,
 			clientRow.ID,
-			nil,
+			&oldSession.SubjectUrn,
 			"refresh_token_client_mismatch",
 			"refresh_token was issued to a different client",
 			logger,

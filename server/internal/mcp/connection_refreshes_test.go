@@ -278,14 +278,6 @@ func TestInboundRefresh_SuspendedAgentReplayIsNotAdmitted(t *testing.T) {
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted)
 }
 
-// expireRefreshReplay removes the replay entry and lock a refresh left behind, as the grace TTL would.
-func expireRefreshReplay(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, refreshToken string) {
-	t.Helper()
-	replayKey, lockKey := refreshReplayKeys(issuerID, refreshToken)
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
-}
-
 func TestInboundRefresh_ExpiredStaysExpiredAfterReplayGrace(t *testing.T) {
 	t.Parallel()
 
@@ -307,7 +299,15 @@ func TestInboundRefresh_ExpiredStaysExpiredAfterReplayGrace(t *testing.T) {
 	require.Equal(t, urn.NewUserSubject("refresh-replay-user").String(), row.SubjectURN)
 }
 
-func TestInboundRefresh_RotatedTokenAfterReplayGraceIsUnknown(t *testing.T) {
+// pastSessionDeadlines moves the issuer's session timestamps two hours back, so
+// a row retired before its deadline is read after that deadline has passed.
+func pastSessionDeadlines(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID) {
+	t.Helper()
+	_, err := ti.conn.Exec(ctx, "UPDATE user_sessions SET deleted_at = deleted_at - interval '2 hours', refresh_expires_at = refresh_expires_at - interval '2 hours' WHERE user_session_issuer_id = $1", issuerID) //nolint:glint // notestingrawsql: deliberate clock shift to read a retired row after its deadline; not expressible as an SQLc query
+	require.NoError(t, err)
+}
+
+func TestInboundRefresh_RotatedTokenAfterDeadlineIsUnknown(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -316,13 +316,36 @@ func TestInboundRefresh_RotatedTokenAfterReplayGraceIsUnknown(t *testing.T) {
 	require.NoError(t, first.err)
 	require.Equal(t, http.StatusOK, first.code, first.body)
 	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+	pastSessionDeadlines(t, ctx, ti, issuer.ID)
 
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	reused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, reused.err)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, reused.body)
-	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	require.Empty(t, row.SubjectURN)
+}
+
+func TestInboundRefresh_RevokedTokenAfterDeadlineIsUnknown(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	revoked := postForm(t, ti, toolset.McpSlug.String, "revoke", url.Values{
+		"token":     {refreshToken},
+		"client_id": {client.ClientID},
+	})
+	require.Equal(t, http.StatusOK, revoked.Code, revoked.Body.String())
+	pastSessionDeadlines(t, ctx, ti, issuer.ID)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	reused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
+	require.NoError(t, reused.err)
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, reused.body)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	require.Empty(t, row.SubjectURN)
 }
 
 func TestInboundRefresh_ExpiredTokenFromAnotherClientIsUnknown(t *testing.T) {
@@ -349,7 +372,9 @@ func TestInboundRefresh_ExpiredTokenFromAnotherClientIsUnknown(t *testing.T) {
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, refused.body)
 }
 
-func TestInboundRefresh_ExpiredTokenAtAnotherIssuerIsUnknown(t *testing.T) {
+// End-to-end scoping check: the other issuer's client also fails the client
+// predicate, so this cannot isolate the issuer predicate on its own.
+func TestInboundRefresh_ExpiredTokenIsScopedToItsIssuerEndToEnd(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
