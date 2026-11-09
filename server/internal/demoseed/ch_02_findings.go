@@ -793,7 +793,7 @@ func chfEmailClient(email string) string {
 }
 
 // chfGatewayDiscovery is gateway (meta MCP) traffic for the Acme Agent
-// Gateway, which fronts the four mcp_servers seeded in postgres.sql. Ids
+// Gateway, which fronts the remote Linear and Slack mcp_servers. Ids
 // reproduce s.det("metamcp-1") / ("mcpserver-<member>") /
 // ("remotemcp-<member>") so ClickHouse rows join the Postgres rows.
 //
@@ -845,24 +845,20 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 }
 
 var (
-	// Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
-	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "ops", "ops", "ops", "linear", "slack"}
+	// Weighted member pick: linear 6, slack 4 of every 10.
+	chfGatewayMembers = [10]string{"linear", "linear", "linear", "linear", "linear", "linear", "slack", "slack", "slack", "slack"}
 	chfGatewayTools   = map[string][]string{
-		"support": {"search_logs", "get_customer", "query_db", "fetch_traces"},
-		"ops":     {"list_deploys", "check_health", "get_metrics", "process_refund"},
-		"linear":  {"list_issues", "create_issue", "get_issue"},
-		"slack":   {"send_message", "list_channels"},
+		"linear": {"list_issues", "create_issue", "get_issue"},
+		"slack":  {"send_message", "list_channels"},
 	}
-	chfGatewayToolsets = map[string]string{"support": "acme-support-tools", "ops": "acme-ops"}
 )
 
 // chfGatewayMemberCalls: member calls dispatched through the gateway. They
-// are ordinary tool_call rows for the member (hosted members keep the
-// "tools:http:acme:" urn + toolset slug the direct path emits; remote members
-// the "tools:externalmcp:<remote id>:" urn the proxy emits), plus
+// are ordinary tool_call rows for the member, with the
+// "tools:externalmcp:<remote id>:" urn the proxy emits, plus
 // gram.meta_mcp_server.id. One row serves the member's own usage, the gateway
 // Activity section, and the MCP listing marker alike, so call totals never
-// double. Ops carries most of the failures.
+// double. Slack carries most of the failures.
 func (s *seeder) chfGatewayMemberCalls(ctx context.Context, ch driver.Conn) error {
 	rows := s.chfDispatchedCalls(s.det("metamcp-1").String(), "gw", 240)
 	return s.chfInsertTelemetry(ctx, ch, "gateway member call telemetry", rows)
@@ -886,15 +882,11 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 		mkey := chfGatewayMembers[hash64(salt+"mem", n)%10]
 		member := s.det("mcpserver-" + mkey).String()
 		remote := s.det("remotemcp-" + mkey).String()
-		toolsetSlug := chfGatewayToolsets[mkey]
 		tools := chfGatewayTools[mkey]
 		tool := tools[hash64(salt+"t", n)%uint64(len(tools))]
 		toolURNStr := "tools:externalmcp:" + remote + ":" + tool
-		if toolsetSlug != "" {
-			toolURNStr = toolURN(tool)
-		}
 		status := 200
-		if (mkey == "ops" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
+		if (mkey == "slack" && hash64(salt+"err", n)%5 == 0) || hash64(salt+"bg", n)%40 == 0 {
 			status = 500
 		}
 		// Gateway endpoints see more kinds of client than a hosted server
@@ -905,18 +897,13 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 		var sb strings.Builder
 		sb.WriteString(`{"gram.tool.urn":"` + toolURNStr + `"`)
 		sb.WriteString(`,"gram.tool.name":"` + tool + `"`)
-		if toolsetSlug != "" {
-			sb.WriteString(`,"gram.toolset.slug":"` + toolsetSlug + `"`)
-		}
 		sb.WriteString(`,"gram.event.source":"tool_call"`)
 		sb.WriteString(`,"gram.mcp_server.id":"` + member + `"`)
-		if toolsetSlug == "" {
-			sb.WriteString(`,"gram.remote_mcp_server.id":"` + remote + `"`)
-			// The proxy stamps the urn's source segment as the tool call
-			// source; the tool-usage classifier reads it to attribute the call
-			// to the member.
-			sb.WriteString(`,"gram.tool_call.source":"` + remote + `"`)
-		}
+		sb.WriteString(`,"gram.remote_mcp_server.id":"` + remote + `"`)
+		// The proxy stamps the urn's source segment as the tool call source;
+		// the tool-usage classifier reads it to attribute the call to the
+		// member.
+		sb.WriteString(`,"gram.tool_call.source":"` + remote + `"`)
 		sb.WriteString(`,"gram.meta_mcp_server.id":"` + gateway + `"`)
 		sb.WriteString(`,"http.response.status_code":` + strconv.Itoa(status))
 		sb.WriteString(`,"http.server.request.duration":` + chfRound3(0.05+float64(hash64(salt+"c", i)%300)/100))

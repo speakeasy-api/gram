@@ -45,7 +45,7 @@ func TestConnectionOutcomeRowsCoverRequestRefreshAndRenewal(t *testing.T) {
 			switch row.ServerKind {
 			case "meta":
 				require.Equal(t, s.det("metamcp-1").String(), row.ServerID)
-				require.Equal(t, s.det("mcpserver-support").String(), row.MemberID)
+				require.Equal(t, s.det("mcpserver-linear").String(), row.MemberID)
 			case "mcp":
 				require.Equal(t, s.det("mcpserver-github").String(), row.ServerID)
 				require.Empty(t, row.MemberID, "a direct server has no member")

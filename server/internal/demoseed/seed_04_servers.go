@@ -258,16 +258,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo meta mcp server: %w", err)
 	}
 	if err := s.q.ServersInsertMetaMCPServerMembers(ctx, repo.ServersInsertMetaMCPServerMembersParams{
-		SupportMemberID: s.det("metamember-support"),
-		ProjectID:       proj,
-		MetaID:          s.det("metamcp-1"),
-		SupportServerID: s.det("mcpserver-support"),
-		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
-		LinearMemberID:  s.det("metamember-linear"),
-		LinearServerID:  s.det("mcpserver-linear"),
-		SlackMemberID:   s.det("metamember-slack"),
-		SlackServerID:   s.det("mcpserver-slack"),
+		ProjectID:      proj,
+		MetaID:         s.det("metamcp-1"),
+		LinearMemberID: s.det("metamember-linear"),
+		LinearServerID: s.det("mcpserver-linear"),
+		SlackMemberID:  s.det("metamember-slack"),
+		SlackServerID:  s.det("mcpserver-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo meta mcp server members: %w", err)
 	}
@@ -280,12 +276,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo code gateway: %w", err)
 	}
 	if err := s.q.ServersInsertCodeGatewayMembers(ctx, repo.ServersInsertCodeGatewayMembersParams{
-		SupportMemberID: s.det("metamember-code-support"),
-		ProjectID:       proj,
-		MetaID:          s.det("metamcp-code"),
-		SupportServerID: s.det("mcpserver-support"),
-		OpsMemberID:     s.det("metamember-code-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		ProjectID:      proj,
+		MetaID:         s.det("metamcp-code"),
+		LinearMemberID: s.det("metamember-code-linear"),
+		LinearServerID: s.det("mcpserver-linear"),
+		SlackMemberID:  s.det("metamember-code-slack"),
+		SlackServerID:  s.det("mcpserver-slack"),
 	}); err != nil {
 		return fmt.Errorf("insert demo code gateway members: %w", err)
 	}

@@ -116,9 +116,10 @@ func (s *seeder) chTelemetryChecks() []chCheck {
 			cond: `(SELECT uniqExact(mcp_server_id) FROM telemetry_logs
    WHERE gram_project_id = toUUID(@proj)
      AND meta_mcp_server_id != ''
-     AND event_source = 'tool_call') < 4`,
+     AND event_source = 'tool_call') < 3`,
 			settings: "",
-			msg:      "demo seed postflight: gateway member calls do not cover every member",
+			// Linear and Slack, plus GitHub's dispatches from before it left.
+			msg: "demo seed postflight: gateway member calls do not cover every member",
 		},
 		{
 			cond: `(SELECT count() FROM telemetry_logs

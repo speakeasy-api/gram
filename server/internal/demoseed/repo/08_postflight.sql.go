@@ -1050,13 +1050,14 @@ SELECT count(*)
 FROM meta_mcp_server_members m
 JOIN mcp_servers s ON s.id = m.mcp_server_id
 WHERE m.project_id = $1::uuid AND m.deleted IS FALSE
-  AND (s.deleted IS TRUE OR s.slug IS NULL
-       OR num_nonnulls(s.toolset_id, s.remote_mcp_server_id,
+  AND (s.deleted IS TRUE OR s.slug IS NULL OR s.toolset_id IS NOT NULL
+       OR num_nonnulls(s.remote_mcp_server_id,
                        s.tunneled_mcp_server_id, s.unproxied_mcp_server_id) <> 1)
 `
 
 // A member whose server lost its backend can never be dispatched to, so it
-// would sit in the gateway's table permanently unavailable.
+// would sit in the gateway's table permanently unavailable. A hosted server is
+// never served through a gateway, so a hosted member is unservable too.
 func (q *Queries) PostflightCountUnservableGatewayMembers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightCountUnservableGatewayMembers, projectID)
 	var count int64
