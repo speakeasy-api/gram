@@ -6325,7 +6325,7 @@ type SessionHandoffLink struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
-	ProjectID uuid.UUID
+	ProjectID uuid.NullUUID
 	// @access: confidential
 	OrganizationID string
 	// @access: confidential
@@ -6334,12 +6334,49 @@ type SessionHandoffLink struct {
 	Token string
 	// @access: secret-restricted
 	BlobUrl string
+	// @access: confidential
+	ActorUserID pgtype.Text
 	// @access: confidential-pii
 	CreatedByEmail string
 	// @access: confidential
+	IdempotencyOperation pgtype.Text
+	// @access: confidential
+	IdempotencyKey pgtype.Text
+	// @access: confidential
+	IdempotencyInputHash pgtype.Text
+	// @access: confidential
 	ExpiresAt pgtype.Timestamptz
 	// @access: confidential
+	BlobCleanupState string
+	// @access: confidential
+	BlobCleanupError pgtype.Text
+	// @access: confidential
+	BlobCleanupAttemptedAt pgtype.Timestamptz
+	// @access: confidential
 	ConsumedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type SessionHandoffUploadIntent struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	ActorUserID pgtype.Text
+	// @access: secret-restricted
+	ObjectPath string
+	// @access: secret-restricted
+	BlobUrl string
+	// @access: confidential
+	State string
+	// @access: confidential
+	LastError pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

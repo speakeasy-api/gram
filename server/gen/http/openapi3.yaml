@@ -106171,6 +106171,12 @@ components:
                     type: string
                     description: The rendered handoff document (markdown). Size-capped; the daemon renders deterministically from the local transcript.
                     maxLength: 262144
+                idempotency_key:
+                    type: string
+                    description: Optional printable-ASCII retry key. Reuse the same key only when retrying an identical session, content, effective TTL, source, and device request.
+                    pattern: ^[ -~]+$
+                    minLength: 1
+                    maxLength: 128
                 session_id:
                     type: string
                     description: Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.

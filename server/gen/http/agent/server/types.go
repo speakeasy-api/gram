@@ -154,6 +154,9 @@ type CreateSessionHandoffRequestBody struct {
 	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
 	// when omitted.
 	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
+	// Optional printable-ASCII retry key. Reuse the same key only when retrying an
+	// identical session, content, effective TTL, source, and device request.
+	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 }
 
 // GetPluginsResponseBody is the type of the "agent" service "getPlugins"
@@ -6747,10 +6750,11 @@ func NewReportCrashPayload(body *ReportCrashRequestBody, deviceAgentToken *strin
 // endpoint payload.
 func NewCreateSessionHandoffPayload(body *CreateSessionHandoffRequestBody, apikeyToken *string, serialNumber *string, hostname *string) *agent.CreateSessionHandoffPayload {
 	v := &agent.CreateSessionHandoffPayload{
-		SessionID:     *body.SessionID,
-		Content:       *body.Content,
-		SourceSurface: body.SourceSurface,
-		TTLSeconds:    body.TTLSeconds,
+		SessionID:      *body.SessionID,
+		Content:        *body.Content,
+		SourceSurface:  body.SourceSurface,
+		TTLSeconds:     body.TTLSeconds,
+		IdempotencyKey: body.IdempotencyKey,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber
@@ -7038,6 +7042,19 @@ func ValidateCreateSessionHandoffRequestBody(body *CreateSessionHandoffRequestBo
 	if body.SourceSurface != nil {
 		if utf8.RuneCountInString(*body.SourceSurface) > 64 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.idempotency_key", *body.IdempotencyKey, "^[ -~]+$"))
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 1, true))
+		}
+	}
+	if body.IdempotencyKey != nil {
+		if utf8.RuneCountInString(*body.IdempotencyKey) > 128 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 128, false))
 		}
 	}
 	return

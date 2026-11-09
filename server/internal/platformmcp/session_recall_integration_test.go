@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
@@ -39,13 +40,34 @@ func newRecallService(t *testing.T, conn *pgxpool.Pool, enabled *bool) (*Session
 }
 
 type recordingHandoffMinter struct {
-	inputs []sessionhandoff.SessionHandoffMintInput
+	inputs  []sessionhandoff.SessionHandoffMintInput
+	replays map[string]recordedHandoffReplay
+}
+
+type recordedHandoffReplay struct {
+	inputHash string
+	result    sessionhandoff.SessionHandoffMintResult
 }
 
 func (m *recordingHandoffMinter) Valid() bool { return true }
+func (m *recordingHandoffMinter) Replay(_ context.Context, _, _, operation, key, inputHash string) (sessionhandoff.SessionHandoffMintResult, error) {
+	replay, ok := m.replays[operation+"\x00"+key]
+	if !ok {
+		return sessionhandoff.SessionHandoffMintResult{}, pgx.ErrNoRows
+	}
+	if replay.inputHash != inputHash {
+		return sessionhandoff.SessionHandoffMintResult{}, fmt.Errorf("idempotency input hash conflict")
+	}
+	return replay.result, nil
+}
 func (m *recordingHandoffMinter) Mint(_ context.Context, input sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error) {
 	m.inputs = append(m.inputs, input)
-	return sessionhandoff.SessionHandoffMintResult{URL: "https://example.test/shared/handoffs/token", ExpiresAt: "2026-08-20T10:15:00Z"}, nil
+	result := sessionhandoff.SessionHandoffMintResult{URL: "https://example.test/shared/handoffs/token", ExpiresAt: "2026-08-20T10:15:00Z"}
+	if m.replays == nil {
+		m.replays = make(map[string]recordedHandoffReplay)
+	}
+	m.replays[input.IdempotencyOperation+"\x00"+input.IdempotencyKey] = recordedHandoffReplay{inputHash: input.IdempotencyInputHash, result: result}
+	return result, nil
 }
 
 // seedRecallChat inserts a captured chat the way hook ingest records one: the
@@ -228,10 +250,14 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	require.Contains(t, byChatID, ownedChatID.String())
 	require.Contains(t, byChatID, teamChatID.String())
 	require.Equal(t, ownedSession, byChatID[ownedChatID.String()].SessionID, "the harness-native session id is served, not the chat uuid")
-	require.Equal(t, "fix flaky auth test", byChatID[ownedChatID.String()].Title)
-	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
-	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
-	require.Equal(t, project.Slug, byChatID[ownedChatID.String()].ProjectSlug)
+	ownedChoice := byChatID[ownedChatID.String()]
+	require.Equal(t, "fix flaky auth test", ownedChoice.DisplayTitle)
+	require.Equal(t, ownedChoice.DisplayTitle, ownedChoice.Title, "legacy title must match the sanitized canonical title")
+	require.Contains(t, ownedChoice.DisplayDescription, ownedChoice.LastActive)
+	require.Contains(t, ownedChoice.DisplayDescription, project.Name)
+	require.Empty(t, ownedChoice.Summary, "stored transcript-derived summaries must not be returned")
+	require.Empty(t, ownedChoice.Cwd, "local working directories must not be returned")
+	require.Equal(t, project.Slug, ownedChoice.ProjectSlug)
 	require.NotContains(t, byChatID, deletedChatID.String())
 
 	_, err = svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: deletedSession})
@@ -308,7 +334,7 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	require.Contains(t, out.NotCarriedOver, "files touched (derived from tool inputs, which are redacted)")
 	require.Contains(t, out.Notes, "1 messages are awaiting risk analysis; their content was withheld")
 
-	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true})
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true, IdempotencyKey: uuid.NewString()})
 	require.NoError(t, err)
 	require.Len(t, minter.inputs, 1)
 	require.Equal(t, out.Digest, minter.inputs[0].Content)

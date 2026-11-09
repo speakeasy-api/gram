@@ -637,6 +637,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.CleanupExpiredKillswitchOperations)
 	temporalWorker.RegisterActivity(activities.CleanupTrustedDelegationCredentials)
 	temporalWorker.RegisterActivity(activities.CleanupMCPFindingEvidence)
+	temporalWorker.RegisterActivity(activities.CleanupExpiredUnreadSessionHandoffs)
+	temporalWorker.RegisterActivity(activities.CleanupStaleSessionHandoffUploadIntents)
 	temporalWorker.RegisterActivity(activities.SweepDirectoryReviews)
 	temporalWorker.RegisterActivity(activities.SendDirectoryReviewEmails)
 	// Publish outbox relay activities
@@ -796,6 +798,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(KillswitchMaintenanceWorkflow)
 	temporalWorker.RegisterWorkflow(TrustedDelegationCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(MCPFindingEvidenceCleanupWorkflow)
+	temporalWorker.RegisterWorkflow(SessionHandoffCleanupWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewSweepWorkflow)
 	temporalWorker.RegisterWorkflow(DirectoryReviewEmailsWorkflow)
 	// Publish outbox -> Pub/Sub workflow and dead letter GC
@@ -978,6 +981,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 
 	if err := AddMCPFindingEvidenceCleanupSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add MCP finding evidence cleanup schedule", attr.SlogError(err))
+	}
+
+	if opts.DB != nil && opts.AssetStorage != nil {
+		if err := AddSessionHandoffCleanupSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "failed to add session handoff cleanup schedule", attr.SlogError(err))
+		}
 	}
 
 	if err := AddDirectoryReviewSweepSchedule(ctx, env); err != nil {

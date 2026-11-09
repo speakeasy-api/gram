@@ -746,7 +746,7 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 	{
 		err = json.Unmarshal([]byte(agentCreateSessionHandoffBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"content\": \"aaa\",\n      \"idempotency_key\": \"aa\",\n      \"session_id\": \"aaa\",\n      \"source_surface\": \"aaa\",\n      \"ttl_seconds\": 900\n   }'")
 		}
 		if utf8.RuneCountInString(body.SessionID) > 256 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.session_id", body.SessionID, utf8.RuneCountInString(body.SessionID), 256, false))
@@ -757,6 +757,19 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 		if body.SourceSurface != nil {
 			if utf8.RuneCountInString(*body.SourceSurface) > 64 {
 				err = goa.MergeErrors(err, goa.InvalidLengthError("body.source_surface", *body.SourceSurface, utf8.RuneCountInString(*body.SourceSurface), 64, false))
+			}
+		}
+		if body.IdempotencyKey != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.idempotency_key", *body.IdempotencyKey, "^[ -~]+$"))
+		}
+		if body.IdempotencyKey != nil {
+			if utf8.RuneCountInString(*body.IdempotencyKey) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 1, true))
+			}
+		}
+		if body.IdempotencyKey != nil {
+			if utf8.RuneCountInString(*body.IdempotencyKey) > 128 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.idempotency_key", *body.IdempotencyKey, utf8.RuneCountInString(*body.IdempotencyKey), 128, false))
 			}
 		}
 		if err != nil {
@@ -782,10 +795,11 @@ func BuildCreateSessionHandoffPayload(agentCreateSessionHandoffBody string, agen
 		}
 	}
 	v := &agent.CreateSessionHandoffPayload{
-		SessionID:     body.SessionID,
-		Content:       body.Content,
-		SourceSurface: body.SourceSurface,
-		TTLSeconds:    body.TTLSeconds,
+		SessionID:      body.SessionID,
+		Content:        body.Content,
+		SourceSurface:  body.SourceSurface,
+		TTLSeconds:     body.TTLSeconds,
+		IdempotencyKey: body.IdempotencyKey,
 	}
 	v.ApikeyToken = apikeyToken
 	v.SerialNumber = serialNumber
