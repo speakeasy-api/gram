@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -135,4 +136,60 @@ func TestRecordUpstreamIssuerParity_CountsErrorsWithoutPanicking(t *testing.T) {
 		outcome:          upstreamIssuerError,
 		fromAssociations: true,
 	})
+}
+
+func TestDirectUpstreamIssuer_RoutesBothSourcesAndFollowsTheFlag(t *testing.T) {
+	t.Parallel()
+
+	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	association := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	tokens := map[uuid.UUID]remotesessions.UpstreamToken{
+		association.UUID: {Token: "association-token", RemoteSessionClientID: uuid.New(), RemoteSessionID: uuid.New()},
+	}
+	input := func(org string) directUpstreamIssuerInput {
+		return directUpstreamIssuerInput{
+			organizationID:   org,
+			serverID:         uuid.New(),
+			site:             upstreamIssuerSiteRoute,
+			tokens:           tokens,
+			upstreamResource: "",
+			tunneled:         true,
+			backendIssuerID:  column,
+			choiceGoverns:    false,
+			association:      &remotesessions.ServerAssociationIssuer{Known: true, Providers: 1, Provider: association},
+		}
+	}
+	flags := new(feature.InMemory)
+	flags.SetFlag(feature.FlagUpstreamIssuerFromAssociations, "org_on", true)
+	s := &Service{upstreamIssuerParityLog: newOnceLog(), features: flags}
+
+	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_off")), "off, the column routes")
+	require.Equal(t, association, s.directUpstreamIssuer(t.Context(), discardLogger, input("org_on")), "on, the associations route")
+
+	choice := input("org_on")
+	choice.choiceGoverns = true
+	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, choice), "a governing choice is kept")
+
+	unread := input("org_on")
+	unread.association = nil
+	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, unread), "unread associations never decide")
+
+	unbound := input("org_on")
+	unbound.association = &remotesessions.ServerAssociationIssuer{Known: false, Providers: 0, Provider: uuid.NullUUID{}}
+	require.Equal(t, column, s.directUpstreamIssuer(t.Context(), discardLogger, unbound))
+}
+
+func TestDirectUpstreamIssuer_RemoteGrantsRouteByResourceUnderEitherSource(t *testing.T) {
+	t.Parallel()
+
+	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	association := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	grant := remotesessions.UpstreamToken{Token: "grant", Resource: "https://upstream.example.com/mcp", RemoteSessionClientID: uuid.New(), RemoteSessionID: uuid.New()}
+	tokens := map[uuid.UUID]remotesessions.UpstreamToken{association.UUID: grant}
+
+	keys := upstreamIssuerKeys{column: column, association: associationUpstreamIssuer{Provider: association, Providers: 1}, known: true}
+	columnToken, columnErr := routeUpstreamToken(t.Context(), discardLogger, tokens, grant.Resource, false, keys.column)
+	associationToken, associationErr := routeUpstreamToken(t.Context(), discardLogger, tokens, grant.Resource, false, keys.association.Provider)
+	require.Equal(t, upstreamIssuerMatch, keys.outcome(sameRoutedUpstream(columnToken, columnErr, associationToken, associationErr)),
+		"a subject's grant routes by its recorded resource, so the source does not matter")
 }

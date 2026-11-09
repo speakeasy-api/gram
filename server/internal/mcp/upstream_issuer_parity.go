@@ -61,8 +61,22 @@ const (
 	// issuer binds no client, so the association source was never read.
 	upstreamIssuerNoBoundClients upstreamIssuerOutcome = "no_bound_clients"
 
+	// upstreamIssuerAssociationUnread is a request that resolved its tokens
+	// without reading the server's associations, such as through a typed auth
+	// client, so only the column could decide.
+	upstreamIssuerAssociationUnread upstreamIssuerOutcome = "association_unread"
+
 	// upstreamIssuerError is a comparison that could not be computed.
 	upstreamIssuerError upstreamIssuerOutcome = "error"
+)
+
+// Sites an upstream issuer comparison runs at.
+const (
+	// upstreamIssuerSiteRoute routes a direct request's credential.
+	upstreamIssuerSiteRoute = "route"
+
+	// upstreamIssuerSiteConsentPreview routes the consent page's tool preview.
+	upstreamIssuerSiteConsentPreview = "consent_preview"
 )
 
 // Authoritative sources, as recorded.
@@ -300,4 +314,81 @@ func (s *Service) recordUpstreamIssuerReconsent(ctx context.Context, logger *slo
 		attr.SlogUpstreamIssuerOutcome(string(c.outcome)),
 		attr.SlogUpstreamIssuerConsenter(c.consenter),
 	)
+}
+
+// directUpstreamIssuerInput is one direct routing to compare.
+type directUpstreamIssuerInput struct {
+	// organizationID is the server's organization.
+	organizationID string
+
+	// serverID is the proxied MCP server.
+	serverID uuid.UUID
+
+	// site is where the routing happens.
+	site string
+
+	// tokens are the credentials already resolved for the request.
+	tokens map[uuid.UUID]remotesessions.UpstreamToken
+
+	// upstreamResource is the backend's upstream resource.
+	upstreamResource string
+
+	// tunneled reports a tunneled backend.
+	tunneled bool
+
+	// backendIssuerID is the server's column value, or the issuer of the
+	// credential's own choice when choiceGoverns.
+	backendIssuerID uuid.NullUUID
+
+	// choiceGoverns reports that a credential's own client choice replaced
+	// the column, so neither source decides.
+	choiceGoverns bool
+
+	// association is what the server's associations give, or nil when the
+	// request resolved its tokens without reading them.
+	association *remotesessions.ServerAssociationIssuer
+}
+
+// directUpstreamIssuer routes a direct request's resolved tokens with each of
+// the server's two upstream issuer sources, records how the results compared,
+// and returns the source the organization's flag makes authoritative. It never
+// resolves a token itself. A governing choice, and a request that did not read
+// the associations, return backendIssuerID unchanged.
+func (s *Service) directUpstreamIssuer(ctx context.Context, logger *slog.Logger, in directUpstreamIssuerInput) uuid.NullUUID {
+	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, in.organizationID)
+	parity := upstreamIssuerParity{
+		organizationID:   in.organizationID,
+		serverID:         in.serverID,
+		surface:          upstreamIssuerSurfaceDirect,
+		site:             in.site,
+		keys:             upstreamIssuerKeys{column: in.backendIssuerID, association: associationUpstreamIssuer{Provider: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, Providers: 0}, known: false},
+		outcome:          upstreamIssuerMatch,
+		fromAssociations: fromAssociations,
+	}
+	switch {
+	case in.choiceGoverns:
+		parity.outcome = upstreamIssuerChoice
+		s.recordUpstreamIssuerParity(ctx, logger, parity)
+		return in.backendIssuerID
+	case in.association == nil:
+		parity.outcome = upstreamIssuerAssociationUnread
+		s.recordUpstreamIssuerParity(ctx, logger, parity)
+		return in.backendIssuerID
+	}
+	keys := upstreamIssuerKeys{
+		column:      in.backendIssuerID,
+		association: associationUpstreamIssuer{Provider: in.association.Provider, Providers: in.association.Providers},
+		known:       in.association.Known,
+	}
+	parity.keys = keys
+	if !keys.known {
+		parity.outcome = upstreamIssuerNoBoundClients
+		s.recordUpstreamIssuerParity(ctx, logger, parity)
+		return in.backendIssuerID
+	}
+	columnToken, columnErr := routeUpstreamToken(ctx, discardLogger, in.tokens, in.upstreamResource, in.tunneled, keys.column)
+	associationToken, associationErr := routeUpstreamToken(ctx, discardLogger, in.tokens, in.upstreamResource, in.tunneled, keys.association.Provider)
+	parity.outcome = keys.outcome(sameRoutedUpstream(columnToken, columnErr, associationToken, associationErr))
+	s.recordUpstreamIssuerParity(ctx, logger, parity)
+	return keys.authoritative(fromAssociations)
 }

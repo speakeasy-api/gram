@@ -422,11 +422,13 @@ func (s *Service) serveConsentProxiedMCP(
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
 	backendIssuerID := serverRow.RemoteSessionIssuerID
 	var chosenClient uuid.UUID
+	var association *remotesessions.ServerAssociationIssuer
 	switch {
 	case auth == nil:
 		var resolved remotesessions.ServerAccessTokens
 		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
 		tokens = resolved.Tokens
+		association = &resolved.Association
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:
@@ -470,6 +472,17 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var upstreamToken remotesessions.UpstreamToken
 	if !chain {
+		backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
+			organizationID:   endpoint.OrganizationID,
+			serverID:         serverRow.ID,
+			site:             upstreamIssuerSiteConsentPreview,
+			tokens:           tokens,
+			upstreamResource: endpoint.UpstreamResource,
+			tunneled:         serverRow.TunneledMcpServerID.Valid,
+			backendIssuerID:  backendIssuerID,
+			choiceGoverns:    chosenClient != uuid.Nil,
+			association:      association,
+		})
 		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
 		var routeErr *upstreamRoutingError
 		switch {
