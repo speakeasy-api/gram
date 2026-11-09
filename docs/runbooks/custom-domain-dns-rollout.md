@@ -2,7 +2,9 @@
 
 The migrations must finish applying in each environment before deploying the application image built from the schema PR (#8394) or any descendant. SQLc generates directly from the declared schema, so even that first image reads the four new columns and its custom-domain queries fail against the pre-migration schema. The `skip-migration-check` label permits the generated readers in the migration PR; it does not enforce deployment ordering or wait for schema readiness. The nullable columns are safe for the previously deployed image. Use the normal release and Atlas Operator process; do not run migrations directly against remote databases.
 
-After that prerequisite, token/API foundations, observation workers, and dashboard/admin surfaces can deploy separately. API fields remain absent before the first observation. DNS configuration is advisory, TXT proves ownership, and infrastructure failures never automatically deactivate a domain. Previously disabled domains still require explicit reverification.
+After that prerequisite, the token and API foundations (#8401) can deploy on their own. The observation workers (#8406) and the dashboard and admin surfaces (#8411) must deploy in the same release. The new workers stop recording DNS findings (`dns_not_found`, `dns_target_mismatch`) as health issues and write a separate DNS observation instead, which only the #8411 surfaces read. Deploying the workers first would leave customers with no DNS signal in the dashboard, where a domain pointed at the wrong target shows only a healthy check. API fields remain absent before the first observation.
+
+DNS configuration is advisory and TXT proves ownership. Health checks never deactivate or unverify a domain. A domain whose DNS points elsewhere (verified ahead of a migration, behind a proxy, or moved away later) stays verified and activated, and its ingress and certificate stay in place until an organization administrator deletes the domain. This is intended: removing routing based on DNS would break proxied domains, whose target we cannot see. Previously disabled domains still require explicit reverification.
 
 ## Automatic refresh and rolling deployments
 
@@ -49,4 +51,4 @@ mise exec -- temporal --profile '<PROFILE>' workflow show \
 
 The sweep starts detached per-domain children; the parent's completion alone does not establish that every check finished. In Temporal, follow the child workflow links and confirm successful completion. Once #8411 is deployed, in the dashboard or staff custom-domain view, confirm DNS timestamps are after the rollout and match health timestamps for checked domains. Inactive and unverified rows are intentionally excluded. The sweep also reports orphaned managed resources; it does not delete them.
 
-The sweep can send the normal infrastructure-unhealthy notification when it detects a new infrastructure failure. DNS findings alone do not send that notification.
+The sweep can send the normal infrastructure-unhealthy notification when it detects a new infrastructure failure. DNS findings alone do not send that notification. A missing or not-ready certificate does not send it either while DNS does not match a Speakeasy target, because the certificate cannot issue before the cutover. The notification goes out on the first check after DNS matches if the certificate is still not ready.
