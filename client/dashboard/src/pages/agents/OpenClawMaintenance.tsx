@@ -3,8 +3,9 @@ import { CodeBlock } from "./credentials/CodeBlock";
 
 /**
  * Removes what the one-line setup adds to OpenClaw: the hooks plugin, with
- * its settings and files, and the `speakeasy` MCP server entry. `--force`
- * skips the confirmation prompt, so OpenClaw can run it from a chat too.
+ * its settings and files, and the `speakeasy` MCP server entry. They run in a
+ * terminal: from a chat, OpenClaw's own `openclaw` tool still asks to confirm
+ * the uninstall despite `--force` (2026.10.8), and the call hangs.
  */
 const OPENCLAW_UNINSTALL_COMMANDS = [
   "openclaw plugins uninstall speakeasy-observability --force",
@@ -33,7 +34,9 @@ export function OpenClawMaintenance(): JSX.Element {
         </p>
         <p>
           To remove Speakeasy from OpenClaw, for example to stop recording its
-          chats, run these where OpenClaw runs, or ask OpenClaw to run them:
+          chats, run these in a terminal where OpenClaw runs. Do not ask
+          OpenClaw to run them from a chat: it waits for a confirmation it
+          cannot get.
         </p>
         <CodeBlock
           value={OPENCLAW_UNINSTALL_COMMANDS}
@@ -41,9 +44,11 @@ export function OpenClawMaintenance(): JSX.Element {
           language="shell"
         />
         <p className="text-muted-foreground">
-          If OpenClaw runs in a container, restart the container instead of
-          running <code className="text-xs">openclaw gateway restart</code>. If
-          a reinstall fails, uninstall first, then run a new setup command.
+          If OpenClaw runs in a container, run the first two with{" "}
+          <code className="text-xs">docker exec</code>, then restart the
+          container instead of running{" "}
+          <code className="text-xs">openclaw gateway restart</code>. If a
+          reinstall fails, uninstall first, then run a new setup command.
         </p>
       </div>
     </details>
