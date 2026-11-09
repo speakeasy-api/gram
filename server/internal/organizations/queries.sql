@@ -1141,7 +1141,21 @@ SELECT
         WHERE organization_features.organization_id = @organization_id
           AND organization_features.feature_name IN ('logs', 'tool_io_logs', 'session_capture')
           AND organization_features.deleted IS FALSE
-    )::boolean AS logging_enabled
+    )::boolean AS logging_enabled,
+    -- Any message stored from a Claude transcript upload (Cowork sessions
+    -- shipped on Stop) in one of the organization's projects. Served by the
+    -- partial chat_messages_claude_transcript_project_idx.
+    EXISTS (
+        SELECT 1
+        FROM chat_messages
+        WHERE chat_messages.origin = 'claude-transcript'
+          AND chat_messages.project_id IN (
+              SELECT projects.id
+              FROM projects
+              WHERE projects.organization_id = @organization_id
+                AND projects.deleted IS FALSE
+          )
+    ) AS claude_transcript_captured
 FROM organization_metadata
 WHERE organization_metadata.id = @organization_id;
 

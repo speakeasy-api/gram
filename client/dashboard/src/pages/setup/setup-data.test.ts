@@ -1,7 +1,12 @@
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { getAgentPlatforms, platformSteps } from "./setup-data";
+import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import {
+  getAgentPlatforms,
+  getCoworkTeamSteps,
+  platformSteps,
+} from "./setup-data";
 
 const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
 
@@ -58,7 +63,7 @@ describe("getAgentPlatforms", () => {
     });
   });
 
-  it("has Cowork admins allow Speakeasy through network egress before telemetry export", () => {
+  it("has Cowork admins allow Speakeasy through network egress before the organization instruction", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
@@ -66,11 +71,15 @@ describe("getAgentPlatforms", () => {
     const index = titles.indexOf(
       "Allow Speakeasy in Claude's network egress settings",
     );
-    expect(index).toBe(
+    expect(index).toBe(titles.indexOf("Set access for your MCP plugins") + 1);
+    expect(titles.indexOf("Set access for your MCP plugins")).toBe(
       titles.indexOf("Mark the observability plugin as Required") + 1,
     );
-    expect(index).toBe(titles.indexOf("Enable OTEL export") - 1);
-    expect(titles.at(-1)).toBe("Verify in a new Cowork session");
+    expect(index).toBe(titles.indexOf("Add the organization instruction") - 1);
+    expect(titles.indexOf("Enable OTEL export")).toBe(
+      titles.indexOf("Add the organization instruction") + 1,
+    );
+    expect(titles.at(-1)).toBe("Check it in a new conversation");
 
     const step = steps[index]!;
     expect(step.description).toContain(
@@ -79,7 +88,10 @@ describe("getAgentPlatforms", () => {
     expect(step.description).toContain("turn on Allow network egress");
     expect(step.description).toContain("Package managers only");
     expect(step.description).toContain("no other domain is needed");
-    expect(step.description).toContain("plugin hooks do not");
+    expect(step.description).toContain("the plugin does not");
+    expect(step.description).toContain(
+      "The organization instruction also needs Code execution",
+    );
     expect(step.helpLink?.url).toBe(
       "https://claude.ai/admin-settings/capabilities",
     );
@@ -89,9 +101,51 @@ describe("getAgentPlatforms", () => {
     ]);
     expect(step.afterFields).toContain("new Cowork sessions only");
 
-    expect(JSON.stringify(steps.at(-1))).toContain(
-      "confirm hook events and native monitoring separately",
+    const check = JSON.stringify(steps.at(-1));
+    expect(check).toContain("Agent Sessions");
+    expect(check).toContain("Claude runs a short command before replying");
+  });
+
+  it("has Cowork admins paste the validated organization instruction verbatim", () => {
+    const step = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps.find(
+      ({ title }) => title === "Add the organization instruction",
+    )!;
+    expect(step.code).toBe(CLAUDE_ORG_INSTRUCTION);
+    expect(step.language).toBe("text");
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/organization",
     );
+    expect(step.description).toContain(
+      "paste the text below into Organization instructions",
+    );
+    expect(step.afterFields).toContain(
+      "Conversations started before you save aren't captured",
+    );
+    expect(CLAUDE_ORG_INSTRUCTION).toContain(
+      `run this exact\ncommand once with the Bash tool: python3 -c "print('hello world')"`,
+    );
+  });
+
+  it("splits the Cowork Team steps across setup cards in the order the Plugins page shows them", () => {
+    const platformSteps = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps;
+    const { registration, instruction, monitoring, check } = getCoworkTeamSteps(
+      "https://app.getgram.ai",
+    );
+    // The first step is the plan check; the rest is the Team rollout.
+    expect(platformSteps.slice(1)).toEqual([
+      ...registration,
+      instruction,
+      monitoring,
+      check,
+    ]);
+    expect(registration.at(-1)?.title).toBe(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(monitoring.title).toBe("Enable OTEL export");
   });
 
   it("has personal Cowork users allow Speakeasy through network egress before verifying", () => {
