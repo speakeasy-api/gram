@@ -333,7 +333,6 @@ const (
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
 	URLKey                      = attribute.Key("url")
 	CacheKeyKey                 = attribute.Key("gram.cache.key")
@@ -3860,9 +3859,6 @@ func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCP
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }
-
-func ExternalMCPSlug(v string) attribute.KeyValue { return ExternalMCPSlugKey.String(v) }
-func SlogExternalMCPSlug(v string) slog.Attr      { return slog.String(string(ExternalMCPSlugKey), v) }
 
 func ExternalMCPName(v string) attribute.KeyValue { return ExternalMCPNameKey.String(v) }
 func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(ExternalMCPNameKey), v) }

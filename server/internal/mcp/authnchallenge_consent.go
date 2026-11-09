@@ -826,12 +826,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
-		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
 		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
-		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
+		if consentToolPickerEligible(endpoint) && lockdownErr == nil && !lockedDown {
 			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
 				t.Continue()
 				return renderConsentReuse(w, endpoint, challengeState)
@@ -918,11 +914,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
 	if (!challengeState.FirstParty || catalogReview) && focusServer == "" {
-		var eligibilityErr error
-		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
+		showToolsIsland = consentToolPickerEligible(endpoint)
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
@@ -1399,12 +1391,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 	if selectedAgentID == "" && !reuse && (r.PostForm.Get("tool_filtering") == "on" || materializeGateway) {
-		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
-		if eerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
-		}
-		if !eligible {
+		if !consentToolPickerEligible(endpoint) {
 			t.Continue()
 			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
 		}
