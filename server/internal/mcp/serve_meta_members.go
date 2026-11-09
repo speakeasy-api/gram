@@ -208,7 +208,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
 		return ctx, members, err
 	}
 	ctx, members, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
@@ -243,7 +243,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			issuer = gate.userSessionIssuerID
 			scopeProjectID = gate.projectID
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway, issuer, scopeProjectID)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -286,19 +286,22 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
-// (the agent gateway) skips that check. A nonzero scopeProjectID restricts
-// candidates before admission and credential association for project gateways.
+// skips that check: the agent gateway signs nobody in, and Platform MCP
+// serves an organization without one issuer through typed auth clients. A
+// nonzero scopeProjectID restricts candidates before admission and credential
+// association for project gateways.
 //
-// The organization gateway also drops servers backed by a toolset with
-// Platform tools, mirroring automatic plugin delivery: those toolsets serve
-// assistants and explicit MCP consumers, never a broad distribution surface.
-// The agent gateway keeps them: its members are what an agent key was
-// explicitly granted.
+// organizationGateway drops servers backed by a toolset with Platform tools,
+// mirroring automatic plugin delivery: those toolsets serve assistants and
+// explicit MCP consumers, never a broad distribution surface. The agent
+// gateway keeps them: its members are what an agent key was explicitly
+// granted.
 func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
 	authzSurface string,
 	organizationID string,
+	organizationGateway bool,
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, []metaMember, error) {
@@ -329,7 +332,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
-		if userSessionIssuerID != uuid.Nil && row.HasPlatformTool {
+		if organizationGateway && row.HasPlatformTool {
 			continue
 		}
 		candidates = append(candidates, metaMemberCandidate{

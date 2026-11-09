@@ -25,17 +25,18 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // platformGatewayTools are the organization gateway tools Platform MCP may
@@ -88,7 +89,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	if err != nil {
 		return nil, fmt.Errorf("load organization: %w", err)
 	}
-	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, orggateway.PlatformAvailability)
+	metaServer, endpoint, unavailable, err := s.organizationGatewayRows(ctx, organization, platformGatewayAvailability)
 	if err != nil {
 		return nil, fmt.Errorf("resolve organization gateway: %w", err)
 	}
@@ -97,21 +98,12 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, "Your organization's gateway is not available ("+string(unavailable)+"); ask an organization administrator to review the Organization Gateway on the MCP Servers page.", serverInfoMetaServer))
 	}
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
-	if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
-		return nil, fmt.Errorf("load organization gateway issuer: %w", err)
-	}
 
 	// Platform MCP holds no gateway connection to record credential choices
-	// on. Once the organization enforces, each member is decided by what it
-	// offers the caller; before that it routes through its project's clients.
-	mode, err := s.authClientMode(ctx, organization.ID)
-	if err != nil {
-		return nil, fmt.Errorf("load upstream auth enforcement: %w", err)
-	}
-	var choices *memberChoices
-	if mode == feature.AuthClientResolverEnforced {
-		choices = s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
-	}
+	// on and signs nobody in through an organization issuer, so each proxied
+	// member is decided by what it offers the caller. Before the organization
+	// enforces, use of the decided client keeps the connect-equivalent rule.
+	choices := s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
 
 	connectRoot, connectURL := "", ""
 	if root, err := resolved.RootURL(requestorigin.BaseURL(ctx, s.serverURL.String())); err != nil {
@@ -171,6 +163,17 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, shareable.Error(), serverInfoMetaServer))
 	}
 	return platformGatewayResult(body, err)
+}
+
+// platformGatewayAvailability is the organization gateway's availability as
+// Platform MCP serves it: without an issuer, which only signs people in to the
+// gateway's own URL.
+func platformGatewayAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
+	unavailable, err := orggateway.PlatformServed(ctx, db, organization)
+	if err != nil {
+		return uuid.Nil, unavailable, fmt.Errorf("platform gateway availability: %w", err)
+	}
+	return uuid.Nil, unavailable, nil
 }
 
 // platformGatewayResult unwraps the tools/call result from a JSON-RPC response.
