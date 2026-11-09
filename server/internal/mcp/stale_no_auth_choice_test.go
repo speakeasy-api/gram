@@ -448,7 +448,7 @@ func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
 				requireExecuted(t, w)
 				return
 			}
-			require.Contains(t, w.Body.String(), "configuration changed")
+			require.Contains(t, w.Body.String(), "changed since you approved it")
 		})
 	}
 }
