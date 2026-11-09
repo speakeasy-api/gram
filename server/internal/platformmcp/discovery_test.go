@@ -655,3 +655,44 @@ func TestMetaToolsCarryResultCards(t *testing.T) {
 	calls = 2
 	require.Nil(t, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute never picks between several cards")
 }
+
+// The catalog carousel rides the same card key, so search_mcp_catalog keeps
+// its carousel when reached through call_platform_tool or execute.
+func TestMetaToolsCarryTheCatalogCarousel(t *testing.T) {
+	t.Parallel()
+
+	executor := scriptedExecutor{run: func(ctx context.Context, host codemode.Host) (any, error) {
+		if _, err := host.Call(ctx, codeToolPrefix+"search_mcp_catalog", json.RawMessage(`{"query":"linear"}`)); err != nil {
+			return nil, fmt.Errorf("call: %w", err)
+		}
+		return "done", nil
+	}}
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithDiscovery(DiscoveryConfig{
+		Flags:             harnessFlags{"codex": feature.VariantPlatformMCPDiscoveryCodeMode},
+		CodeExecutor:      &executor,
+		CodeModeAvailable: func(context.Context, string) bool { return true },
+	})
+	codec, err := newCatalogCursorCodec("test-cursor-key")
+	require.NoError(t, err)
+	candidates := []CatalogCandidate{{ProviderKey: "provider", CatalogRef: "linear/mcp", Name: "Linear", Description: "Issues."}}
+	registerCatalogTools(runtime.registrar, searchTestCatalog{candidates: candidates}, allowBudget(), codec, nil, nil)
+
+	carouselOf := func(name string, arguments map[string]any) string {
+		response := allowlistRPCRaw(t, runtime.Handler(), runtime, testCodexClientID, callBody(name, arguments))
+		require.Nil(t, response.Error)
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal(response.Result, &result))
+		require.False(t, result.IsError, string(response.Result))
+		carousel, ok := result.Meta[cardMetaKey].(string)
+		require.True(t, ok, string(response.Result))
+		return carousel
+	}
+	for _, carousel := range []string{
+		carouselOf(callPlatformToolName, map[string]any{"name": "search_mcp_catalog", "arguments": map[string]any{"query": "linear"}}),
+		carouselOf(executePlatformCodeName, map[string]any{"code": "pass"}),
+	} {
+		require.Contains(t, carousel, `<section class="carousel"`)
+		require.Contains(t, carousel, "<h2>Linear</h2>")
+		require.Contains(t, carousel, "data-message=")
+	}
+}
