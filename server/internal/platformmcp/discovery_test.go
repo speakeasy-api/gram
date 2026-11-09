@@ -598,3 +598,60 @@ func TestDiscoverySurfaceListsFirstRunToolsTheCallerMayUse(t *testing.T) {
 	require.NotContains(t, member, "register_catalog_mcp", "discovery rules still hide administrator tools")
 	require.Contains(t, member, searchPlatformToolsName)
 }
+
+// A card tool reached through call_platform_tool or execute keeps its card:
+// both meta-tools link the card view, and each carries the card in its result.
+func TestMetaToolsCarryResultCards(t *testing.T) {
+	t.Parallel()
+
+	const cardTool = "show_test_card"
+	card := resultCard{Eyebrow: cardStatus{Label: "Connected as", Tone: cardToneNeutral}, Title: "Test User"}
+	calls := 1
+	executor := scriptedExecutor{run: func(ctx context.Context, host codemode.Host) (any, error) {
+		for range calls {
+			if _, err := host.Call(ctx, codeToolPrefix+cardTool, json.RawMessage(`{}`)); err != nil {
+				return nil, fmt.Errorf("call: %w", err)
+			}
+		}
+		return "done", nil
+	}}
+	runtime := newAllowlistTestRuntime(t, []authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)}).WithDiscovery(DiscoveryConfig{
+		Flags:             harnessFlags{"codex": feature.VariantPlatformMCPDiscoveryCodeMode},
+		CodeExecutor:      &executor,
+		CodeModeAvailable: func(context.Context, string) bool { return true },
+	})
+	addTool(runtime.registrar, &mcp.Tool{Name: cardTool, Description: "Show a test card.", Annotations: readOnlyAnnotations(), Meta: cardToolMeta()},
+		ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeNone},
+		func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, struct{}, error) {
+			return cardResult(card), struct{}{}, nil
+		})
+
+	var list struct {
+		Tools []*mcp.Tool `json:"tools"`
+	}
+	allowlistRPC(t, runtime.Handler(), runtime, testCodexClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+	require.NotContains(t, toolNames(list.Tools), cardTool, "card tools stay behind the meta-tools")
+	for _, tool := range list.Tools {
+		if tool.Name == callPlatformToolName || tool.Name == executePlatformCodeName {
+			require.Equal(t, map[string]any{"resourceUri": cardResourceURI}, tool.Meta["ui"], tool.Name)
+			require.Equal(t, cardResourceURI, tool.Meta["openai/outputTemplate"], tool.Name)
+		}
+	}
+
+	cardOf := func(name string, arguments map[string]any) any {
+		response := allowlistRPCRaw(t, runtime.Handler(), runtime, testCodexClientID, callBody(name, arguments))
+		require.Nil(t, response.Error)
+		var result mcp.CallToolResult
+		require.NoError(t, json.Unmarshal(response.Result, &result))
+		require.False(t, result.IsError, string(response.Result))
+		return result.Meta[cardMetaKey]
+	}
+	want := cardResult(card).Meta[cardMetaKey]
+	require.NotEmpty(t, want)
+	require.Equal(t, want, cardOf(callPlatformToolName, map[string]any{"name": cardTool}), "call_platform_tool returns the tool's card")
+	require.Equal(t, want, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute returns the card of its one card call")
+	require.Nil(t, cardOf(callPlatformToolName, map[string]any{"name": "get_platform_context"}), "a result without a card carries none")
+
+	calls = 2
+	require.Nil(t, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute never picks between several cards")
+}

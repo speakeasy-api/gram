@@ -267,9 +267,11 @@
           var card = meta && meta[CARD_KEY];
           root.innerHTML = typeof card === "string" ? card : "";
           frame.hidden = root.innerHTML === "";
+          // Hosts read a zero height as unknown and keep a default-sized
+          // frame, so an empty result reports one pixel instead.
           notify("ui/notifications/size-changed", {
             width: document.documentElement.scrollWidth,
-            height: frame.offsetHeight,
+            height: frame.hidden ? 1 : frame.offsetHeight,
           });
         }
 

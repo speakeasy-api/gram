@@ -293,24 +293,19 @@ var (
 	executePlatformCodeSchema  = json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":65536,"description":"Python program; its final JSON-compatible expression is returned."},"tools":{"type":"array","maxItems":10000,"uniqueItems":true,"items":{"type":"string"},"description":"Optional exact platform--<tool> allowlist narrowing this execution. Omit for every permitted tool; [] permits none."}},"required":["code"],"additionalProperties":false}`)
 )
 
-const executePlatformCodeDescription = `Execute Python against every Platform tool you may use. Top-level await works; await every helper. Fresh state each run; the final expression returns JSON.
+const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper; top-level await works. Each run starts fresh and returns its final expression as JSON.
 
-Discover, then inspect:
+Search and describe in one run, then call with the described inputSchema in the next:
 
     page = await tools.search("add an MCP server from the catalog")
-    details = await tools.describe(page["items"][0]["path"]) if page["items"] else None
-    {"page": page, "details": details}
-
-Next run, call with the described inputSchema:
-
+    await tools.describe(page["items"][0]["path"]) if page["items"] else page
     r = await tools.call("platform--search_mcp_catalog", {"query": "linear"})
-    r["data"] if r["ok"] else r
 
-Paths are platform--<tool name>. search(query="", limit=10, cursor=None), max limit 50; empty query lists tools; paginate with next_cursor. Calls return {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
+Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
 
-Write tools keep their own safeguards: preview with confirmed false and get the user's explicit confirmation before a confirmed call. Errors and cancellation never undo writes; when an outcome is unknown, read the state again and never replay automatically.
+Write tools keep their safeguards: preview with confirmed false and make a confirmed call only after the user explicitly agrees. Errors and cancellation never undo writes; on an unknown outcome read the state again, never replay.
 
-Python subset; import asyncio enables await asyncio.gather(...). No external packages, filesystem, environment, network or sleep. Limits: 64 KiB source, 30 s wall, 64 helper calls, 256 KiB result.`
+Python subset; import asyncio for asyncio.gather. No packages, filesystem, environment, network or sleep. Limits: 64 KiB source, 30 s wall, 64 helper calls, 256 KiB result.`
 
 // discoveryTools are the meta-tools every caller in the small surface lists.
 // The first-run tools listed next to them depend on the caller; for every other
@@ -334,19 +329,24 @@ func discoveryTools(mode discoveryMode) []*mcp.Tool {
 		},
 		{
 			Name:        callPlatformToolName,
-			Title:       "Run a Speakeasy Tool",
+			Title:       "Speakeasy Tool",
 			Description: "Run one Platform tool by exact name with arguments matching its input schema. The tool keeps its own authorization, confirmation, idempotency and audit rules, and returns its own result.",
 			InputSchema: callPlatformToolSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
+			// A host draws a card only for a tool whose spec links the card
+			// view, so the meta-tools link it for the card tools they reach.
+			// A result without a card collapses the view to nothing.
+			Meta: cardToolMeta(),
 		},
 	}
 	if mode == discoveryCode {
 		tools = append(tools, &mcp.Tool{
 			Name:        executePlatformCodeName,
-			Title:       "Run Python with Speakeasy Tools",
+			Title:       "Speakeasy Code",
 			Description: executePlatformCodeDescription,
 			InputSchema: executePlatformCodeSchema,
 			Annotations: &mcp.ToolAnnotations{DestructiveHint: new(true), OpenWorldHint: new(true)},
+			Meta:        cardToolMeta(),
 		})
 	}
 	return tools
@@ -568,11 +568,15 @@ func (s *discoverySurface) execute(ctx context.Context, arguments json.RawMessag
 	if err != nil {
 		return nil, fmt.Errorf("encode code execution: %w", err)
 	}
-	return &mcp.CallToolResult{
+	result := &mcp.CallToolResult{
 		Content:           []mcp.Content{&mcp.TextContent{Text: string(structured)}},
 		StructuredContent: json.RawMessage(structured),
 		IsError:           execution.Error != nil,
-	}, nil
+	}
+	if card, ok := backend.card(); ok {
+		result.Meta = mcp.Meta{cardMetaKey: card}
+	}
+	return result, nil
 }
 
 // codeAdmissionMessage explains why a program was never submitted. Every one
@@ -597,6 +601,22 @@ func codeAdmissionMessage(ctx context.Context, logger *slog.Logger, err error) s
 // call carries the request's identity, grants and audit attribution.
 type codeBackend struct {
 	surface *discoverySurface
+
+	// cards are the result cards the program's calls returned. Helpers may
+	// run concurrently, so mu guards them.
+	mu    sync.Mutex
+	cards []string
+}
+
+// card is the one card the program's calls returned. The execute result shows
+// it only when there is exactly one, so it never has to pick between them.
+func (b *codeBackend) card() (string, bool) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.cards) != 1 {
+		return "", false
+	}
+	return b.cards[0], true
 }
 
 var _ codemode.Backend = (*codeBackend)(nil)
@@ -648,6 +668,11 @@ func (b *codeBackend) Call(ctx context.Context, path string, arguments json.RawM
 	}
 	if rejection != "" {
 		return nil, &codemode.DispatchError{Rejection: rejection}
+	}
+	if card, ok := result.Meta[cardMetaKey].(string); ok {
+		b.mu.Lock()
+		b.cards = append(b.cards, card)
+		b.mu.Unlock()
 	}
 	raw, err := json.Marshal(result)
 	if err != nil {
