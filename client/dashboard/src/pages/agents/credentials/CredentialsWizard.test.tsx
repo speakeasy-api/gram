@@ -2391,6 +2391,11 @@ describe("Editing an agent that already exists", () => {
       expect(screen.getByRole("button", { name: /Verify/ })).toBeTruthy();
       // Nothing to go back to: the steps before describe the agent.
       expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+      // The API key is the choice and stays live; only platforms are off.
+      const apiKey = screen.getByRole("radio", { name: /API key/ });
+      expect(apiKey.getAttribute("aria-checked")).toBe("true");
+      expect((apiKey as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.getByText(/This issues another API key/)).toBeTruthy();
     });
 
     it("issues the key for the servers the agent already reaches, without asking for a name or expiry", async () => {

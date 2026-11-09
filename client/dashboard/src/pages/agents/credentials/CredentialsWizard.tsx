@@ -2063,7 +2063,10 @@ export function CredentialsWizard({
               // Settled for an agent that exists: what it signs in with was
               // decided when it was registered, and changing it here would
               // mean removing a credential rather than editing one.
-              disabled={editing}
+              // Issuing another key keeps the API key live, so the step does
+              // not read as if a key could not be issued.
+              disabled={editing && !signInOnly}
+              keyOnly={signInOnly}
               onChooseApiKey={() => {
                 setCredential("api-key");
                 setHighlight("Agent sign-in");
