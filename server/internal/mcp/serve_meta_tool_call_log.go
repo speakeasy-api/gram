@@ -39,8 +39,8 @@ type metaFailureRow struct {
 	// counts from another row.
 	unstamped bool
 
-	// source names the tool's source when its URN cannot carry one, as for a
-	// hosted member's tool that failed before it resolved.
+	// source names the tool's source when its URN cannot carry one. Only a
+	// discovery failure row on a hosted member sets it.
 	source string
 }
 

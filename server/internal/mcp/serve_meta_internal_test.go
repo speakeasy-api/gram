@@ -131,7 +131,7 @@ func TestMetaToolCallFailureLogParams_DiscoveryRowOnAHostedMember(t *testing.T) 
 	params := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: true, source: member.slug})
 	require.NotNil(t, params)
 	require.Equal(t, "gateway_describe_server", params.ToolInfo.Name)
-	require.True(t, strings.HasSuffix(params.ToolInfo.URN, ":gateway_describe_server"), params.ToolInfo.URN)
+	require.Equal(t, "tools:"+unresolvedToolKind+":"+member.serverID.String()+":gateway_describe_server", params.ToolInfo.URN)
 	require.NotContains(t, params.Attributes, attr.MetaMcpServerIDKey)
 	require.Equal(t, member.slug, params.Attributes[attr.ToolCallSourceKey])
 
