@@ -1,12 +1,21 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { wizardStepIndex, wizardStepParam } from "./wizard-steps";
+import {
+  PLATFORM_STEPS_START,
+  WIZARD_STEPS,
+  wizardStepIndex,
+  wizardStepParam,
+} from "./wizard-steps";
+
+/** The step's current position, so reordering the steps keeps these tests. */
+const at = (id: (typeof WIZARD_STEPS)[number]["id"]) =>
+  WIZARD_STEPS.findIndex((step) => step.id === id);
 
 describe("wizardStepIndex", () => {
   it("opens a step by its id", () => {
-    expect(wizardStepIndex("servers", 0)).toBe(1);
-    expect(wizardStepIndex("mcp-sign-in", 0)).toBe(2);
-    expect(wizardStepIndex("verify", 0)).toBe(5);
+    for (const step of WIZARD_STEPS) {
+      expect(wizardStepIndex(step.id, 0)).toBe(at(step.id));
+    }
   });
 
   it("still opens a step by the index older links carry", () => {
@@ -28,14 +37,28 @@ describe("wizardStepIndex", () => {
 });
 
 describe("wizardStepParam", () => {
-  it("writes the id of a fixed step and the index of a platform step", () => {
-    expect(wizardStepParam(2)).toBe("mcp-sign-in");
-    expect(wizardStepParam(7)).toBe("7");
+  it("writes the id of a fixed step", () => {
+    expect(wizardStepParam(at("mcp-sign-in"), false)).toBe("mcp-sign-in");
+    expect(wizardStepParam(at("verify"), false)).toBe("verify");
   });
 
-  it("round-trips every step", () => {
-    for (let index = 0; index < 8; index++) {
-      expect(wizardStepIndex(wizardStepParam(index), 0)).toBe(index);
+  it("writes the index of a platform's own setup step", () => {
+    expect(wizardStepParam(PLATFORM_STEPS_START, true)).toBe(
+      String(PLATFORM_STEPS_START),
+    );
+    expect(wizardStepParam(PLATFORM_STEPS_START + 3, true)).toBe(
+      String(PLATFORM_STEPS_START + 3),
+    );
+    expect(wizardStepParam(at("servers"), true)).toBe("servers");
+  });
+
+  it("round-trips every step, with or without platform steps", () => {
+    for (const platformSteps of [false, true]) {
+      for (let index = 0; index < 8; index++) {
+        expect(wizardStepIndex(wizardStepParam(index, platformSteps), 0)).toBe(
+          index,
+        );
+      }
     }
   });
 });

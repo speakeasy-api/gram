@@ -57,6 +57,7 @@ import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import {
+  PLATFORM_STEPS_START,
   WIZARD_STEPS as STEPS,
   wizardStepIndex,
   wizardStepParam,
@@ -431,20 +432,6 @@ export function CredentialsWizard({
   // `?step=` names the step (`?step=servers`); an index from an older link
   // still opens the step it meant.
   const step = wizardStepIndex(params.get("step"), defaultStep);
-  // Stable, so an effect that corrects the step can depend on it.
-  const setStep = useCallback(
-    (next: number) => {
-      setParams(
-        (current) => {
-          const updated = new URLSearchParams(current);
-          updated.set("step", wizardStepParam(next));
-          return updated;
-        },
-        { replace: true },
-      );
-    },
-    [setParams],
-  );
   const [name, setName] = useState(agent?.name ?? "");
   // Names are unique in the organization, case aside. Asking once typing
   // pauses catches a taken name here instead of on Create agent, which still
@@ -1527,19 +1514,36 @@ export function CredentialsWizard({
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
   // their own: one stepper, one Back and one Continue throughout.
-  const stepNames =
-    credential === "workload" && workload.steps.length > 0
-      ? [
-          ...STEPS.slice(0, 4),
-          ...workload.steps.map((entry) => ({
-            label: entry.title,
-            short: entry.short,
-          })),
-        ]
-      : [...STEPS];
+  const platformSteps = credential === "workload" && workload.steps.length > 0;
+  const stepNames = platformSteps
+    ? [
+        ...STEPS.slice(0, PLATFORM_STEPS_START),
+        ...workload.steps.map((entry) => ({
+          label: entry.title,
+          short: entry.short,
+        })),
+      ]
+    : [...STEPS];
   /** The platform setup step on screen, when one is. */
   const workloadStep =
-    credential === "workload" ? workload.steps[step - 4] : undefined;
+    credential === "workload"
+      ? workload.steps[step - PLATFORM_STEPS_START]
+      : undefined;
+  // Stable while the steps are, so an effect that corrects the step can
+  // depend on it.
+  const setStep = useCallback(
+    (next: number) => {
+      setParams(
+        (current) => {
+          const updated = new URLSearchParams(current);
+          updated.set("step", wizardStepParam(next, platformSteps));
+          return updated;
+        },
+        { replace: true },
+      );
+    },
+    [setParams, platformSteps],
+  );
   // How many steps there are is only known here, once the platform's own have
   // been counted, so an out-of-range link is corrected rather than refused:
   // the URL is rewritten to the last real step instead of leaving the wizard

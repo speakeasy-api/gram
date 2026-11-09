@@ -39,9 +39,17 @@ export function wizardStepIndex(
 }
 
 /**
- * The `?step=` value for a step index. A platform's own setup steps follow
- * the fixed ones and have no id, so they keep their index.
+ * Where a platform's own setup steps start when they replace Install and
+ * Verify.
  */
-export function wizardStepParam(index: number): string {
+export const PLATFORM_STEPS_START = 4;
+
+/**
+ * The `?step=` value for a step index. A platform's own setup steps replace
+ * Install and Verify and have no id, so they keep their index: a fixed id
+ * only names a step that is on screen.
+ */
+export function wizardStepParam(index: number, platformSteps: boolean): string {
+  if (platformSteps && index >= PLATFORM_STEPS_START) return String(index);
   return WIZARD_STEPS[index]?.id ?? String(index);
 }
