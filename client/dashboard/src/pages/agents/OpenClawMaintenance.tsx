@@ -30,9 +30,9 @@ export function OpenClawMaintenance(): JSX.Element {
           OpenClaw does not update the Speakeasy hooks plugin on its own. To
           update or reinstall it, generate a new setup command here and run it
           again on the same machine. It replaces the plugin and the gateway
-          entry, then restart the OpenClaw Gateway. If it says it could not
-          configure the gateway, update OpenClaw first: an older release keeps
-          the previous entry.
+          entry. Then restart the OpenClaw Gateway. If the command says it could
+          not configure the gateway, update OpenClaw first: an older release
+          keeps the previous entry.
         </p>
         <p>
           To remove Speakeasy from OpenClaw, for example to stop recording its
