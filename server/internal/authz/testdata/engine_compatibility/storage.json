@@ -1,5 +1,5 @@
 {
-  "description": "Grant write expansion (nil versus empty selectors), malformed stored selectors and Assistant system-role defaults.",
+  "description": "Grant write expansion (nil versus empty selectors) and malformed stored selectors.",
   "cases": [
     {
       "name": "nil_selectors_write_one_wildcard_row",

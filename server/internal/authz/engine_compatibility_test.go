@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -161,6 +162,7 @@ func loadCompatFixtures(t *testing.T) []compatFixture {
 		decoder.DisallowUnknownFields()
 		var file compatFixtureFile
 		require.NoError(t, decoder.Decode(&file), path)
+		require.ErrorIs(t, decoder.Decode(&struct{}{}), io.EOF, "%s: trailing data after the fixture document", path)
 		require.NotEmpty(t, file.Cases, path)
 
 		for _, fixture := range file.Cases {
@@ -259,18 +261,6 @@ func runCompatCase(t *testing.T, f compatFixture) {
 	default:
 		t.Fatalf("unknown operation %q", f.Operation)
 	}
-}
-
-func compatAllows(t *testing.T, grants []Grant, checks []Check) bool {
-	t.Helper()
-	for _, check := range checks {
-		allowed, err := GrantsAuthorize(grants, check)
-		require.NoError(t, err)
-		if !allowed {
-			return false
-		}
-	}
-	return true
 }
 
 func runEngineOperation(t *testing.T, engine *Engine, ctx context.Context, f compatFixture, checks []Check) {
