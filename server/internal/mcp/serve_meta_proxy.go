@@ -274,7 +274,7 @@ func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMembe
 	held := routed.HeldWithoutToken()
 	switch {
 	case routed.SignInUnreadable():
-		routeErr = newMemberSignInUnreadableError(member, gate.memberCallerURL(member), routed.ClientCredentialErr)
+		routeErr = newMemberSignInUnreadableError(member, gate.memberReconnectAsk(member), routed.ClientCredentialErr)
 	case held:
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {

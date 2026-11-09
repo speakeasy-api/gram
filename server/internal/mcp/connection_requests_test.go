@@ -1306,7 +1306,8 @@ func TestUnreadableUpstreamTokenGatewayMemberMisconfiguredNamesAdministrator(t *
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Equal(t, `server "member" has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator`, text)
+	require.Contains(t, text, `server "member" has an upstream credential that is misconfigured or was rejected.`)
+	require.Contains(t, text, "Ask an admin of the server's project")
 	require.Zero(t, memberCalls.Load(), "never an anonymous call")
 	require.Positive(t, refreshes.Load())
 

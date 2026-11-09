@@ -256,6 +256,11 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 // sign-in step fixes.
 func memberFailureSignIn(gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
 	if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code == mcpconnectionattempts.CodeStoredSignInUnreadable {
+		if gate.agentFix != nil {
+			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)
+			row.Reconnect = true
+			return row
+		}
 		return signInRow(metamcp.SignInNotConnected, memberErrorMessage(err), nil)
 	}
 	unavailable, ok := errors.AsType[memberUnavailableError](err)
