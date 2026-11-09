@@ -106,4 +106,7 @@ func TestWithOwnTrace_FreshTraceWhenTheTracerKeptTheParent(t *testing.T) {
 		Remote:     false,
 	}))
 	require.Equal(t, trace.TraceID{2}, trace.SpanContextFromContext(withOwnTrace(renewed, parent)).TraceID(), "a real new root keeps its trace")
+
+	untraced := trace.SpanContextFromContext(withOwnTrace(t.Context(), trace.SpanContext{}))
+	require.True(t, untraced.IsValid(), "a request without a trace still gets one of its own")
 }

@@ -279,10 +279,11 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 
 // withOwnTrace keeps ctx's trace when it differs from parent's, and otherwise
 // gives ctx a fresh random trace. A span started with trace.WithNewRoot gets a
-// new trace from a real tracer; a no-op tracer keeps the parent's.
+// new trace from a real tracer; a no-op tracer keeps the parent's, which is
+// empty when the request carried no trace.
 func withOwnTrace(ctx context.Context, parent trace.SpanContext) context.Context {
 	current := trace.SpanContextFromContext(ctx)
-	if !parent.IsValid() || current.TraceID() != parent.TraceID() {
+	if current.TraceID() != parent.TraceID() {
 		return ctx
 	}
 	var traceID trace.TraceID
