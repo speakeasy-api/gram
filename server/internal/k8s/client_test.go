@@ -6,30 +6,35 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestCustomDomainBackendServices(t *testing.T) {
+func TestWithCustomDomainBackendDefaults(t *testing.T) {
 	t.Parallel()
 
-	t.Run("empty backends use the historical server default", func(t *testing.T) {
-		t.Parallel()
+	tests := []struct {
+		name     string
+		input    customDomainBackendServices
+		expected customDomainBackendServices
+	}{
+		{
+			name:     "empty backends use the historical server default",
+			input:    customDomainBackendServices{},
+			expected: customDomainBackendServices{mcp: "gram-server", server: "gram-server"},
+		},
+		{
+			name:     "server backend falls back to existing MCP backend",
+			input:    customDomainBackendServices{mcp: "custom-domain-mcp"},
+			expected: customDomainBackendServices{mcp: "custom-domain-mcp", server: "custom-domain-mcp"},
+		},
+		{
+			name:     "server backend can roll out independently",
+			input:    customDomainBackendServices{mcp: "custom-domain-mcp", server: "custom-domain-server"},
+			expected: customDomainBackendServices{mcp: "custom-domain-mcp", server: "custom-domain-server"},
+		},
+	}
 
-		mcpBackend, serverBackend := customDomainBackendServices("", "")
-		require.Equal(t, "gram-server", mcpBackend)
-		require.Equal(t, "gram-server", serverBackend)
-	})
-
-	t.Run("server backend falls back to existing MCP backend", func(t *testing.T) {
-		t.Parallel()
-
-		mcpBackend, serverBackend := customDomainBackendServices("custom-domain-mcp", "")
-		require.Equal(t, "custom-domain-mcp", mcpBackend)
-		require.Equal(t, "custom-domain-mcp", serverBackend)
-	})
-
-	t.Run("server backend can roll out independently", func(t *testing.T) {
-		t.Parallel()
-
-		mcpBackend, serverBackend := customDomainBackendServices("custom-domain-mcp", "custom-domain-server")
-		require.Equal(t, "custom-domain-mcp", mcpBackend)
-		require.Equal(t, "custom-domain-server", serverBackend)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, withCustomDomainBackendDefaults(tt.input))
+		})
+	}
 }

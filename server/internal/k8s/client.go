@@ -66,15 +66,18 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, n
 			return
 		}
 
-		mcpBackendService, serverBackendService = customDomainBackendServices(mcpBackendService, serverBackendService)
+		backendServices := withCustomDomainBackendDefaults(customDomainBackendServices{
+			mcp:    mcpBackendService,
+			server: serverBackendService,
+		})
 		k8sClients = &KubernetesClients{
 			Clientset:            clientset,
 			DynamicClient:        dynamicClient,
 			logger:               logger,
 			enabled:              true,
 			namespace:            conv.Default(namespace, fmt.Sprintf("gram-%s", env)),
-			mcpBackendService:    mcpBackendService,
-			serverBackendService: serverBackendService,
+			mcpBackendService:    backendServices.mcp,
+			serverBackendService: backendServices.server,
 		}
 
 		logger.InfoContext(ctx, "Kubernetes clients initialized successfully.")
@@ -83,9 +86,15 @@ func InitializeK8sClient(ctx context.Context, logger *slog.Logger, env string, n
 	return k8sClients, initErr
 }
 
-func customDomainBackendServices(mcpBackendService string, serverBackendService string) (string, string) {
-	mcpBackendService = conv.Default(mcpBackendService, "gram-server")
-	return mcpBackendService, conv.Default(serverBackendService, mcpBackendService)
+type customDomainBackendServices struct {
+	mcp    string
+	server string
+}
+
+func withCustomDomainBackendDefaults(services customDomainBackendServices) customDomainBackendServices {
+	services.mcp = conv.Default(services.mcp, "gram-server")
+	services.server = conv.Default(services.server, services.mcp)
+	return services
 }
 
 // Provisioner returns a CustomDomainProvisioner for the given kind.

@@ -15,22 +15,98 @@ import (
 
 const ingressTestNamespace = "gram-test"
 
-func newIngressProvisioner(t *testing.T) (*IngressProvisioner, *fake.Clientset) {
+func newIngressProvisioner(t *testing.T) (CustomDomainProvisioner, *fake.Clientset) {
 	t.Helper()
 	cs := fake.NewSimpleClientset()
-	return &IngressProvisioner{
-		clientset:            cs,
+	clients := &KubernetesClients{
+		Clientset:            cs,
 		namespace:            ingressTestNamespace,
 		mcpBackendService:    "custom-domain-mcp",
 		serverBackendService: "custom-domain-server",
 		logger:               testenv.NewLogger(t),
-	}, cs
+		enabled:              true,
+	}
+	return clients.Provisioner(ProvisionerKindIngress), cs
 }
 
 func TestIngressProvisioner_Kind(t *testing.T) {
 	t.Parallel()
 	p, _ := newIngressProvisioner(t)
 	require.Equal(t, ProvisionerKindIngress, p.Kind())
+}
+
+func TestIngressProvisioner_GeneratedRouteBackendTable(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	provisioner, cs := newIngressProvisioner(t)
+	domain := "routes.example.com"
+	rootTarget := "/mcp/default"
+
+	result, err := provisioner.Apply(ctx, RouteConfig{Domain: domain, RootTarget: &rootTarget})
+	require.NoError(t, err)
+
+	rootName, err := RootIngressName(result.ResourceName)
+	require.NoError(t, err)
+	wellKnownRootName, err := WellKnownRootIngressName(result.ResourceName)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name  string
+		paths []networkingv1.HTTPIngressPath
+	}{
+		{
+			name: result.ResourceName,
+			paths: []networkingv1.HTTPIngressPath{
+				expectedIngressPath("/mcp", networkingv1.PathTypePrefix, "custom-domain-mcp"),
+				expectedIngressPath("/oauth", networkingv1.PathTypePrefix, "custom-domain-mcp"),
+				expectedIngressPath("/shared/skills", networkingv1.PathTypePrefix, "custom-domain-server"),
+				expectedIngressPath("/.well-known/openai-apps-challenge", networkingv1.PathTypeExact, "custom-domain-mcp"),
+				expectedIngressPath(`/\.well-known/oauth-authorization-server/mcp(/.*)?`, networkingv1.PathTypeImplementationSpecific, "custom-domain-mcp"),
+				expectedIngressPath(`/\.well-known/oauth-protected-resource/mcp(/.*)?`, networkingv1.PathTypeImplementationSpecific, "custom-domain-mcp"),
+			},
+		},
+		{
+			name: rootName,
+			paths: []networkingv1.HTTPIngressPath{
+				expectedIngressPath("/$", networkingv1.PathTypeImplementationSpecific, "custom-domain-mcp"),
+			},
+		},
+		{
+			name: wellKnownRootName,
+			paths: []networkingv1.HTTPIngressPath{
+				expectedIngressPath(`/\.well-known/(oauth-protected-resource|oauth-authorization-server)$`, networkingv1.PathTypeImplementationSpecific, "custom-domain-mcp"),
+			},
+		},
+	}
+
+	ingresses, err := cs.NetworkingV1().Ingresses(ingressTestNamespace).List(ctx, metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, ingresses.Items, len(tests), "unexpected generated ingress")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ingress, err := cs.NetworkingV1().Ingresses(ingressTestNamespace).Get(ctx, tt.name, metav1.GetOptions{})
+			require.NoError(t, err)
+			require.Len(t, ingress.Spec.Rules, 1)
+			require.Equal(t, domain, ingress.Spec.Rules[0].Host)
+			require.NotNil(t, ingress.Spec.Rules[0].HTTP)
+			require.Equal(t, tt.paths, ingress.Spec.Rules[0].HTTP.Paths)
+		})
+	}
+}
+
+func expectedIngressPath(path string, pathType networkingv1.PathType, backendService string) networkingv1.HTTPIngressPath {
+	return networkingv1.HTTPIngressPath{
+		Path:     path,
+		PathType: &pathType,
+		Backend: networkingv1.IngressBackend{
+			Service: &networkingv1.IngressServiceBackend{
+				Name: backendService,
+				Port: networkingv1.ServiceBackendPort{Number: 80},
+			},
+		},
+	}
 }
 
 func TestIngressProvisioner_Setup_CreateNew(t *testing.T) {
