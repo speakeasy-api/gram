@@ -16,7 +16,6 @@
 // the `local/ssl/tailscale` symlink. A daemon starting at any moment reads a
 // matching pair through that link.
 
-import { execFileSync, spawnSync } from "node:child_process";
 import { createPrivateKey, randomUUID, X509Certificate } from "node:crypto";
 import {
   existsSync,
@@ -31,6 +30,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join } from "node:path";
+import { $ } from "zx";
 
 /** Daemons whose listeners load GRAM_SSL_CERT_FILE at startup. */
 export const TLS_DAEMONS = [
@@ -118,33 +118,21 @@ export function publish(sslDir: string, pair: CertPair): boolean {
   return true;
 }
 
-export function fetchPair(
+export async function fetchPair(
   domain: string,
   minValidity: string,
   env: NodeJS.ProcessEnv = process.env,
-): CertPair {
+): Promise<CertPair> {
   // Output goes to stdout because the sandboxed macOS CLI redirects file
   // writes into its container.
-  const result = spawnSync(
-    "tailscale",
-    [
-      "cert",
-      "--min-validity",
-      minValidity,
-      "--cert-file",
-      "-",
-      "--key-file",
-      "-",
-      domain,
-    ],
-    {
-      env: { ...env, TAILSCALE_BE_CLI: "1" },
-      encoding: "utf8",
-      timeout: 120_000,
-    },
-  );
-  if (result.error || result.status !== 0) {
-    const detail = (result.stderr || result.error?.message || "").trim();
+  const result = await $({
+    env: { ...env, TAILSCALE_BE_CLI: "1" },
+    nothrow: true,
+    quiet: true,
+    timeout: "120s",
+  })`tailscale cert --min-validity ${minValidity} --cert-file - --key-file - ${domain}`;
+  if (result.exitCode !== 0) {
+    const detail = result.stderr.trim();
     throw new Error(
       [
         `tailscale cert failed for ${domain}${detail ? `: ${detail}` : "."}`,
@@ -157,19 +145,18 @@ export function fetchPair(
 }
 
 /** True while a pause, wake or start owns this worktree's stack. */
-function stackBusy(root: string): boolean {
-  try {
-    const gitdir = execFileSync("git", ["rev-parse", "--absolute-git-dir"], {
-      cwd: root,
-      encoding: "utf8",
-    }).trim();
-    return (
-      existsSync(join(gitdir, "gram-stack-lock")) ||
-      existsSync(join(gitdir, "gram-stack-paused"))
-    );
-  } catch {
-    return true;
-  }
+async function stackBusy(root: string): Promise<boolean> {
+  const result = await $({
+    cwd: root,
+    nothrow: true,
+    quiet: true,
+  })`git rev-parse --absolute-git-dir`;
+  if (result.exitCode !== 0) return true;
+  const gitdir = result.stdout.trim();
+  return (
+    existsSync(join(gitdir, "gram-stack-lock")) ||
+    existsSync(join(gitdir, "gram-stack-paused"))
+  );
 }
 
 async function main(): Promise<void> {
@@ -179,7 +166,7 @@ async function main(): Promise<void> {
   const minValidity = process.env["usage_min_validity"] || "336h";
   const sslDir = join(root, "local", "ssl");
 
-  const pair = fetchPair(domain, minValidity);
+  const pair = await fetchPair(domain, minValidity);
   const expires = new X509Certificate(pair.cert).validTo;
   if (!publish(sslDir, pair)) {
     console.log(
@@ -194,9 +181,9 @@ async function main(): Promise<void> {
   if (process.env["usage_restart"] !== "true") return;
   // A lifecycle operation in progress starts the daemons itself, and they will
   // read the new certificate then.
-  if (stackBusy(root)) return;
+  if (await stackBusy(root)) return;
   console.log(`Restarting ${TLS_DAEMONS.join(", ")} to load it.`);
-  execFileSync("pitchfork", ["restart", ...TLS_DAEMONS], { stdio: "inherit" });
+  await $({ stdio: "inherit" })`pitchfork restart ${TLS_DAEMONS}`;
 }
 
 if (import.meta.main) {
