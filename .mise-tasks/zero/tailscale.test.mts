@@ -677,3 +677,100 @@ test("zero runs interactive Tailscale setup before TLS", () => {
     /interactive_only mise run zero:tailscale\s+mise run zero:tls/,
   );
 });
+
+const certStatus = JSON.stringify({ ...status, CertDomains: [hostname] });
+
+test("tailnet certificates switch TLS to Tailscale and route runtime callbacks to the Tailnet URL", async (t) => {
+  const f = fixture(t);
+  const prompt = t.mock.fn(async (_host: string, _ip: string) => true);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt,
+  });
+  const saved = f.read();
+  assert.equal(saved.GRAM_TLS_PROVIDER, "tailscale");
+  assert.equal(
+    saved.GRAM_ASSISTANT_RUNTIME_SERVER_URL,
+    "{{env.GRAM_SERVER_URL}}",
+  );
+  assert.equal(saved.GRAM_HOST, hostname);
+  assert.doesNotMatch(f.messages.join("\n"), /mkcert CA/);
+
+  const repeat = t.mock.fn(async () => true);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt: repeat,
+  });
+  assert.equal(repeat.mock.callCount(), 0);
+});
+
+test("tailnet certificates keep an explicit runtime callback URL", async (t) => {
+  const f = fixture(t);
+  f.writeConfig("mise.local.toml", {
+    ...f.local,
+    GRAM_ASSISTANT_RUNTIME_SERVER_URL: "https://runtime.example.com:9999",
+  });
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt: async () => true,
+  });
+  assert.equal(
+    f.read().GRAM_ASSISTANT_RUNTIME_SERVER_URL,
+    "https://runtime.example.com:9999",
+  );
+});
+
+test("completed setup prompts again once tailnet certificates become available", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({ root: f.root, env: f.env, prompt: async () => true });
+  assert.equal(f.read().GRAM_TLS_PROVIDER, undefined);
+  assert.match(f.messages.join("\n"), /HTTPS certificates are not enabled/);
+
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt,
+  });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_TLS_PROVIDER, "tailscale");
+});
+
+test("certificates for another tailnet name do not switch TLS to Tailscale", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({
+    root: f.root,
+    env: {
+      ...f.env,
+      TEST_STATUS: JSON.stringify({
+        ...status,
+        CertDomains: ["other.example.ts.net"],
+      }),
+    },
+    prompt: async () => true,
+  });
+  assert.equal(f.read().GRAM_TLS_PROVIDER, undefined);
+  assert.equal(f.read().GRAM_ASSISTANT_RUNTIME_SERVER_URL, undefined);
+});
+
+test("losing tailnet certificates switches TLS back to mkcert", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt: async () => true,
+  });
+  assert.equal(f.read().GRAM_TLS_PROVIDER, "tailscale");
+
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_TLS_PROVIDER, "mkcert");
+
+  const repeat = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt: repeat });
+  assert.equal(repeat.mock.callCount(), 0);
+});
