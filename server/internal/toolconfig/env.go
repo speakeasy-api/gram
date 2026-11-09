@@ -163,7 +163,48 @@ type ToolCallEnv struct {
 	GramChatID string
 	// MCPClient identifies the MCP caller, when the tool was called over MCP.
 	MCPClient MCPClientIdentity
+
+	// Credentials, when set, is filled with the credentials an HTTP tool call sent upstream.
+	Credentials *CredentialReport
 }
+
+// CredentialReport is what an HTTP tool call sent upstream to authenticate.
+type CredentialReport struct {
+	// Sent lists each credential the request carried, including a client secret whose grant failed.
+	Sent []AppliedCredential
+
+	// GrantFailure says why a client credentials grant failed. Empty when none did.
+	GrantFailure ClientGrantFailure
+}
+
+// AppliedCredential is one credential an HTTP tool call used.
+type AppliedCredential struct {
+	// Variable is the environment variable the value came from.
+	Variable string
+
+	// System reports that the value came from SystemEnv rather than UserConfig.
+	System bool
+
+	// ClientGrant reports a client secret exchanged for a token, not sent as is.
+	ClientGrant bool
+}
+
+// ClientGrantFailure is why a client credentials token request failed.
+type ClientGrantFailure string
+
+const (
+	// ClientGrantRejected means the token endpoint refused the client (400, 401 or 403).
+	ClientGrantRejected ClientGrantFailure = "rejected"
+
+	// ClientGrantUnavailable means the token endpoint was unreachable, timed out, or answered 429 or 5xx.
+	ClientGrantUnavailable ClientGrantFailure = "unavailable"
+
+	// ClientGrantBlocked means the token URL resolves to an address Speakeasy may not call.
+	ClientGrantBlocked ClientGrantFailure = "blocked"
+
+	// ClientGrantMisconfigured means the token endpoint gave any other answer.
+	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
+)
 
 // Merged returns a case-insensitive view where UserConfig values override
 // SystemEnv values. Handles nil SystemEnv / UserConfig. Never returns nil.

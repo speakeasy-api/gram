@@ -40,13 +40,24 @@ func processSecurity(
 	mergedEnv := env.Merged()
 
 	securityHeadersProcessed := make(map[string]string)
-	setHeader := func(key, value string) {
+	// applied keeps the credential behind each header or query parameter the request ends up carrying.
+	applied := make(map[string]toolconfig.AppliedCredential)
+	credentialFrom := func(variable string, grant bool) toolconfig.AppliedCredential {
+		return toolconfig.AppliedCredential{Variable: variable, System: env.UserConfig == nil || env.UserConfig.Get(variable) == "", ClientGrant: grant}
+	}
+	setHeader := func(key, value, variable string) {
 		req.Header.Set(key, value)
 		securityHeadersProcessed[http.CanonicalHeaderKey(key)] = value
+		applied[http.CanonicalHeaderKey(key)] = credentialFrom(variable, false)
 	}
 	defer func() {
 		// if tool calling logging is enabled this will record the headers that were set with redaction
 		attrRecorder.RecordRequestHeaders(securityHeadersProcessed, true)
+		if env.Credentials != nil {
+			for _, credential := range applied {
+				env.Credentials.Sent = append(env.Credentials.Sent, credential)
+			}
+		}
 	}()
 	// Each tool declares one or more security schemes derived from its OpenAPI
 	// definition, and Speakeasy maps every scheme to the environment variable(s) that
@@ -76,11 +87,12 @@ func processSecurity(
 				key := security.EnvVariables[0]
 				switch security.Placement.Value {
 				case "header":
-					setHeader(security.Name.Value, mergedEnv.Get(key))
+					setHeader(security.Name.Value, mergedEnv.Get(key), key)
 				case "query":
 					values := req.URL.Query()
 					values.Set(security.Name.Value, mergedEnv.Get(key))
 					req.URL.RawQuery = values.Encode()
+					applied["?"+security.Name.Value] = credentialFrom(key, false)
 				default:
 					logger.ErrorContext(ctx, "unsupported api key placement", attr.SlogSecurityPlacement(security.Placement.Value))
 				}
@@ -94,18 +106,19 @@ func processSecurity(
 					logger.InfoContext(ctx, "tool defines bearer auth but its env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(security.EnvVariables[0]), attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
 					token := mergedEnv.Get(security.EnvVariables[0])
-					setHeader("Authorization", formatForBearer(token))
+					setHeader("Authorization", formatForBearer(token), security.EnvVariables[0])
 				}
 			case "basic":
 				if len(security.EnvVariables) < 2 {
 					logger.InfoContext(ctx, "tool defines basic auth but its env vars are not fully configured, proceeding without Authorization header", attr.SlogSecurityScheme(security.Scheme.Value))
 				} else {
-					var username, password string
+					var username, password, passwordVar string
 					for _, envVar := range security.EnvVariables {
 						if strings.Contains(envVar, "USERNAME") {
 							username = mergedEnv.Get(envVar)
 						} else if strings.Contains(envVar, "PASSWORD") {
 							password = mergedEnv.Get(envVar)
+							passwordVar = envVar
 						}
 					}
 
@@ -117,6 +130,7 @@ func processSecurity(
 						req.SetBasicAuth(username, password)
 						// special case doesn't go through normal setHeader function
 						securityHeadersProcessed[http.CanonicalHeaderKey("Authorization")] = req.Header.Get("Authorization")
+						applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(passwordVar, false)
 					}
 				}
 			default:
@@ -129,7 +143,7 @@ func processSecurity(
 					if token := mergedEnv.Get(envVar); token == "" {
 						logger.InfoContext(ctx, "tool defines openid connect auth but its access token env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(envVar))
 					} else {
-						setHeader("Authorization", formatForBearer(token))
+						setHeader("Authorization", formatForBearer(token), envVar)
 					}
 				}
 			}
@@ -146,17 +160,18 @@ func processSecurity(
 							if token := mergedEnv.Get(envVar); token == "" {
 								logger.InfoContext(ctx, "tool defines oauth2 auth but its access token env var is empty, proceeding without Authorization header", attr.SlogEnvVarName(envVar))
 							} else {
-								setHeader("Authorization", formatForBearer(token))
+								setHeader("Authorization", formatForBearer(token), envVar)
 							}
 						}
 					}
 				case "client_credentials":
-					token, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
+					token, variable, grant, err := processClientCredentials(ctx, logger, guardianPolicy, req, cacheImpl, tool, plan.SecurityScopes, security, mergedEnv, serverURL)
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
-							if failure, ok := errors.AsType[*clientCredentialsError](err); ok {
-								w.Header().Set(ClientGrantFailureHeader, string(failure.failure))
+							if failure, ok := errors.AsType[*clientCredentialsError](err); ok && env.Credentials != nil {
+								applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
+								env.Credentials.GrantFailure = failure.failure
 							}
 							w.Header().Set("Content-Type", "application/json")
 							w.WriteHeader(http.StatusUnauthorized)
@@ -172,7 +187,8 @@ func processSecurity(
 						}
 					}
 					if token != "" {
-						setHeader("Authorization", formatForBearer(token))
+						setHeader("Authorization", formatForBearer(token), variable)
+						applied[http.CanonicalHeaderKey("Authorization")] = credentialFrom(variable, grant)
 					}
 				}
 			}
@@ -187,6 +203,9 @@ func processSecurity(
 		canonicalKey := http.CanonicalHeaderKey(headerKey)
 		if _, alreadyProcessed := securityHeadersProcessed[canonicalKey]; !alreadyProcessed {
 			req.Header.Set(headerKey, value)
+			if canonicalKey == "Authorization" && value != "" {
+				applied[canonicalKey] = toolconfig.AppliedCredential{Variable: key, System: true, ClientGrant: false}
+			}
 		}
 	}
 
@@ -250,34 +269,36 @@ type clientCredentialsTokenResponseCamelCase struct {
 	ExpiresIn   int    `json:"expiresIn"`
 }
 
-func processClientCredentials(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, error) {
+func processClientCredentials(ctx context.Context, logger *slog.Logger, guardianPolicy *guardian.Policy, req *http.Request, cacheImpl cache.Cache, tool *ToolDescriptor, planScopes map[string][]string, security *HTTPToolSecurity, mergedEnv *toolconfig.CaseInsensitiveEnv, serverURL string) (string, string, bool, error) {
 	// To discuss, currently we are taking the approach of exact scope match for reused tokens
 	// We could look into enabling a prefix match feature for caches where we return multiple entries matching the projectID, clientID, tokenURL and then check scopes against all returned values
 	// We would want to make sure any underlying cache implementation supports this feature
 	tokenCache := cache.NewTypedObjectCache[clientCredentialsTokenCache](logger.With(attr.SlogCacheNamespace("client_credentials_token_cache")), cacheImpl, cache.SuffixNone)
-	var clientSecret, clientID, tokenURLOverride, accessToken string
+	var clientSecret, clientID, tokenURLOverride, accessToken, secretVar, accessTokenVar string
 	for _, v := range security.EnvVariables {
 		if strings.Contains(v, "CLIENT_SECRET") {
 			clientSecret = mergedEnv.Get(v)
+			secretVar = v
 		} else if strings.Contains(v, "CLIENT_ID") {
 			clientID = mergedEnv.Get(v)
 		} else if strings.Contains(v, "TOKEN_URL") {
 			tokenURLOverride = mergedEnv.Get(v)
 		} else if strings.Contains(v, "ACCESS_TOKEN") {
 			accessToken = mergedEnv.Get(v)
+			accessTokenVar = v
 		}
 	}
 
 	if accessToken != "" {
-		return accessToken, nil
+		return accessToken, accessTokenVar, false, nil
 	}
 
 	if clientSecret == "" {
-		return "", fmt.Errorf("missing client secret for client credentials")
+		return "", "", false, fmt.Errorf("missing client secret for client credentials")
 	}
 
 	if clientID == "" {
-		return "", fmt.Errorf("missing client id for client credentials")
+		return "", "", false, fmt.Errorf("missing client id for client credentials")
 	}
 
 	var requestedScopes []string
@@ -287,11 +308,11 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	var oauthFlows oAuthFlows
 	if err := json.Unmarshal(security.OAuthFlows, &oauthFlows); err != nil {
-		return "", fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
+		return "", "", false, fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
 	}
 
 	if oauthFlows.ClientCredentials == nil {
-		return "", fmt.Errorf("no client credentials flow found")
+		return "", "", false, fmt.Errorf("no client credentials flow found")
 	}
 
 	tokenURL := oauthFlows.ClientCredentials.TokenUrl
@@ -304,13 +325,13 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	}
 
 	if tokenURL == "" {
-		return "", fmt.Errorf("no client credentials token url found")
+		return "", "", false, fmt.Errorf("no client credentials token url found")
 	}
 
 	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
 	if token := getTokenFromCache(ctx, logger, tokenCache, cacheKey); token != "" {
 		req.Header.Set("Authorization", formatForBearer(token))
-		return token, nil
+		return token, secretVar, true, nil
 	}
 
 	// Prepare the token request
@@ -326,7 +347,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, data)
 	if err != nil {
-		return "", fmt.Errorf("failed to create client credentials token request: %w", err)
+		return "", "", false, fmt.Errorf("failed to create client credentials token request: %w", err)
 	}
 
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -336,7 +357,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	client.Timeout = 10 * time.Second
 	resp, err := client.Do(tokenReq)
 	if err != nil {
-		return "", &clientCredentialsError{failure: clientCredentialsTransportFailure(err), err: fmt.Errorf("failed to make client credentials token request: %w", err)}
+		return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(err), err: fmt.Errorf("failed to make client credentials token request: %w", err)}
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -356,7 +377,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, client, tokenURL, clientID, clientSecret, requestedScopes)
 			if retryErr != nil {
-				return "", &clientCredentialsError{failure: clientCredentialsTransportFailure(retryErr), err: fmt.Errorf("failed to make client credentials token request: %w", retryErr)}
+				return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsTransportFailure(retryErr), err: fmt.Errorf("failed to make client credentials token request: %w", retryErr)}
 			}
 
 			resp = retryResp
@@ -366,21 +387,21 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return "", &clientCredentialsError{failure: ClientGrantUnavailable, err: fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)}
+				return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)}
 			}
 
-			return "", &clientCredentialsError{failure: clientCredentialsStatusFailure(resp.StatusCode), err: fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))}
+			return "", secretVar, true, &clientCredentialsError{failure: clientCredentialsStatusFailure(resp.StatusCode), err: fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))}
 		}
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read client credentials token response body: %w", err)
+		return "", "", false, fmt.Errorf("failed to read client credentials token response body: %w", err)
 	}
 
 	accessToken, expiresIn, err := parseClientCredentialsTokenResponse(bodyBytes)
 	if err != nil {
-		return "", fmt.Errorf("failed to parse client credentials token response: %w", err)
+		return "", "", false, fmt.Errorf("failed to parse client credentials token response: %w", err)
 	}
 
 	// If we are passed an expiry value we will use the cache
@@ -398,33 +419,12 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		}
 	}
 
-	return accessToken, nil
+	return accessToken, secretVar, true, nil
 }
-
-// ClientGrantFailureHeader marks the 401 the proxy writes itself when its client
-// credentials token request fails. Its value is a [ClientGrantFailure].
-const ClientGrantFailureHeader = "X-Gram-Client-Grant-Failure"
-
-// ClientGrantFailure is why a client credentials token request failed.
-type ClientGrantFailure string
-
-const (
-	// ClientGrantRejected means the token endpoint refused the client (400, 401 or 403).
-	ClientGrantRejected ClientGrantFailure = "rejected"
-
-	// ClientGrantUnavailable means the token endpoint was unreachable, timed out, or answered 429 or 5xx.
-	ClientGrantUnavailable ClientGrantFailure = "unavailable"
-
-	// ClientGrantBlocked means the token URL resolves to an address Speakeasy may not call.
-	ClientGrantBlocked ClientGrantFailure = "blocked"
-
-	// ClientGrantMisconfigured means the token endpoint gave any other answer.
-	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
-)
 
 // clientCredentialsError carries why a token request failed without changing its message.
 type clientCredentialsError struct {
-	failure ClientGrantFailure
+	failure toolconfig.ClientGrantFailure
 	err     error
 }
 
@@ -432,21 +432,21 @@ func (e *clientCredentialsError) Error() string { return e.err.Error() }
 
 func (e *clientCredentialsError) Unwrap() error { return e.err }
 
-func clientCredentialsTransportFailure(err error) ClientGrantFailure {
+func clientCredentialsTransportFailure(err error) toolconfig.ClientGrantFailure {
 	if errors.Is(err, guardian.ErrBlockedIP) {
-		return ClientGrantBlocked
+		return toolconfig.ClientGrantBlocked
 	}
-	return ClientGrantUnavailable
+	return toolconfig.ClientGrantUnavailable
 }
 
-func clientCredentialsStatusFailure(status int) ClientGrantFailure {
+func clientCredentialsStatusFailure(status int) toolconfig.ClientGrantFailure {
 	switch {
 	case status == http.StatusBadRequest || status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return ClientGrantRejected
+		return toolconfig.ClientGrantRejected
 	case status == http.StatusTooManyRequests || status >= http.StatusInternalServerError:
-		return ClientGrantUnavailable
+		return toolconfig.ClientGrantUnavailable
 	}
-	return ClientGrantMisconfigured
+	return toolconfig.ClientGrantMisconfigured
 }
 
 // Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase

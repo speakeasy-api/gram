@@ -21,7 +21,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -598,56 +597,58 @@ func TestHostedMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
 func TestHTTPToolRejectionHappened(t *testing.T) {
 	t.Parallel()
 
-	apiKey := &gateway.HTTPToolSecurity{Key: "api_key", Type: gateway.NullString{Value: "apiKey", Valid: true}, EnvVariables: []string{"API_KEY"}}
-	signIn := &gateway.HTTPToolSecurity{Key: "oauth", Type: gateway.NullString{Value: "oauth2", Valid: true}, OAuthTypes: []string{"authorization_code"}, EnvVariables: []string{"OAUTH_ACCESS_TOKEN"}}
-	clientCredentials := &gateway.HTTPToolSecurity{Key: "machine", Type: gateway.NullString{Value: "oauth2", Valid: true}, OAuthTypes: []string{"client_credentials"}, EnvVariables: []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET"}}
+	user := func(variable string) toolconfig.AppliedCredential {
+		return toolconfig.AppliedCredential{Variable: variable}
+	}
+	system := func(variable string) toolconfig.AppliedCredential {
+		return toolconfig.AppliedCredential{Variable: variable, System: true}
+	}
+	grant := func(credential toolconfig.AppliedCredential) toolconfig.AppliedCredential {
+		credential.ClientGrant = true
+		return credential
+	}
+	sources := map[string]credentialSource{
+		"person_access_token": credentialSourcePerson,
+		"shared_access_token": credentialSourceShared,
+		"caller_key":          credentialSourceCaller,
+		"caller_access_token": credentialSourceCaller,
+		"caller_secret":       credentialSourceCaller,
+		"environment_key":     credentialSourceSaved,
+	}
 	none := mcpconnectionattempts.Code{}
 
 	for _, tc := range []struct {
-		name     string
-		status   int
-		security []*gateway.HTTPToolSecurity
-		system   map[string]string
-		user     map[string]string
-		caller   map[string]string
-		tokens   []oauthTokenInputs
-		failure  gateway.ClientGrantFailure
-		want     mcpconnectionattempts.Code
-		who      mcpconnectionattempts.WhoFixes
+		name    string
+		status  int
+		sent    []toolconfig.AppliedCredential
+		failure toolconfig.ClientGrantFailure
+		want    mcpconnectionattempts.Code
+		who     mcpconnectionattempts.WhoFixes
 	}{
-		{name: "person's sign-in", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "person"}, tokens: []oauthTokenInputs{{Token: "person"}}, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "shared sign-in", status: http.StatusForbidden, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "org"}, tokens: []oauthTokenInputs{{Token: "org", shared: true}}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "client credentials", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "token endpoint refused", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, failure: gateway.ClientGrantRejected, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "token endpoint down", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, failure: gateway.ClientGrantUnavailable, want: mcpconnectionattempts.CodeRemoteSessionUnavailable, who: mcpconnectionattempts.WhoProvider},
-		{name: "token url blocked", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, failure: gateway.ClientGrantBlocked, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
-		{name: "token url wrong", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, failure: gateway.ClientGrantMisconfigured, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
-		{name: "system key", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "environment key", status: http.StatusForbidden, security: []*gateway.HTTPToolSecurity{apiKey}, user: map[string]string{"API_KEY": "key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "system authorization header", status: http.StatusUnauthorized, system: map[string]string{"AUTHORIZATION": "Bearer key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "caller's own key", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, user: map[string]string{"API_KEY": "caller"}, caller: map[string]string{"api_key": "caller"}, want: none},
-		{name: "no credential", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, want: none},
-		{name: "token for another scheme", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{signIn}, tokens: []oauthTokenInputs{{Token: "person", securityKeys: []string{"other"}}}, want: none},
-		{name: "served", status: http.StatusOK, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "person"}, tokens: []oauthTokenInputs{{Token: "person"}}, want: none},
-		{name: "not found", status: http.StatusNotFound, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: none},
-		{name: "rate limited", status: http.StatusTooManyRequests, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: none},
-		{name: "server error", status: http.StatusInternalServerError, security: []*gateway.HTTPToolSecurity{signIn}, tokens: []oauthTokenInputs{{Token: "person"}}, want: none},
+		{name: "person's sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "shared sign-in", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("SHARED_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "saved client grant", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "environment key", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "filtered sign-in falls back to a system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token endpoint refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token endpoint down", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantUnavailable, want: mcpconnectionattempts.CodeRemoteSessionUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "token url blocked", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantBlocked, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token url wrong", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantMisconfigured, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "caller's client secret refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: none},
+		{name: "caller's client secret rejected upstream", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, want: none},
+		{name: "caller's access token", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_ACCESS_TOKEN")}, want: none},
+		{name: "caller's own key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_KEY")}, want: none},
+		{name: "no credential", status: http.StatusUnauthorized, want: none},
+		{name: "served", status: http.StatusOK, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
+		{name: "not found", status: http.StatusNotFound, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
+		{name: "rate limited", status: http.StatusTooManyRequests, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
+		{name: "server error", status: http.StatusInternalServerError, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			env := toolconfig.ToolCallEnv{SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv()}
-			for k, v := range tc.system {
-				env.SystemEnv.Set(k, v)
-			}
-			for k, v := range tc.user {
-				env.UserConfig.Set(k, v)
-			}
-			headers := http.Header{}
-			if tc.failure != "" {
-				headers.Set(gateway.ClientGrantFailureHeader, string(tc.failure))
-			}
-			got := httpToolRejectionHappened(tc.status, headers, &gateway.HTTPToolCallPlan{Security: tc.security}, env, tc.caller, tc.tokens)
+			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Sent: tc.sent, GrantFailure: tc.failure}, sources)
 			require.Equal(t, tc.want, got)
 			if tc.want == none {
 				return
