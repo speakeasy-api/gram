@@ -282,8 +282,8 @@ func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind,
 
 // staleMemberStatus gives a stale choice the call's remedy; the connect page can't fix it.
 func (s *Service) staleMemberStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) metamcp.ConnectionStatusServer {
-	message, reconnect := s.staleChoiceMessage(ctx, logger, gate, member)
-	if reconnect {
+	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+	if remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin {
 		return signInRow(metamcp.SignInNeedsConsent, message, nil)
 	}
 	return signInRow(metamcp.SignInActionRequired, message, nil)

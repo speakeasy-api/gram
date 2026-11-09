@@ -617,15 +617,16 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 		require.True(t, server.UserSessionIssuerID.Valid)
 		return server.UserSessionIssuerID.UUID
 	}
-	stampAndWire := func(serverID, remoteIssuerID, clientID uuid.UUID) {
+	stampAndWire := func(serverID, clientID uuid.UUID) {
 		require.NoError(t, rsRepo.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{
 			RemoteSessionClientID: clientID,
 			UserSessionIssuerID:   memberIssuerOf(serverID),
 		}))
-		stamped, err := testrepo.New(ti.conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
-			RemoteSessionIssuerID: conv.ToNullUUID(remoteIssuerID),
-			ID:                    serverID,
+		stamped, err := testrepo.New(ti.conn).StampMCPServerUpstreamClientFixture(ctx, testrepo.StampMCPServerUpstreamClientFixtureParams{
 			ProjectID:             projectID,
+			OrganizationID:        authCtx.ActiveOrganizationID,
+			McpServerID:           serverID,
+			RemoteSessionClientID: clientID,
 		})
 		require.NoError(t, err)
 		require.Equal(t, int64(1), stamped)
@@ -648,7 +649,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 
 	remoteIssuerID := newRemoteIssuer()
 	serverID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWire(serverID, remoteIssuerID, newClient(remoteIssuerID, "auto-attach-client"))
+	stampAndWire(serverID, newClient(remoteIssuerID, "auto-attach-client"))
 
 	_, err := ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,
@@ -665,7 +666,7 @@ func TestAddMetaMcpMember_AutoAttachesProviderClient(t *testing.T) {
 	// Second member on the same upstream: attach succeeds, binding count for
 	// that upstream stays at one.
 	secondID := seedMcpServer(t, ctx, ti.conn, projectID)
-	stampAndWire(secondID, remoteIssuerID, newClient(remoteIssuerID, "auto-attach-client-2"))
+	stampAndWire(secondID, newClient(remoteIssuerID, "auto-attach-client-2"))
 
 	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
 		SessionToken:     nil,

@@ -370,6 +370,11 @@ export function projectQuery(
   });
 }
 
+// A redeploy adds a deployment, so every read of a project's counts is stale.
+export function invalidateProjects(qc: QueryClient): Promise<void> {
+  return qc.invalidateQueries({ queryKey: ["gram-admin-project"] });
+}
+
 export function usersListQuery(
   params: Parameters<typeof listUsers>[0],
 ): AdminQuery<

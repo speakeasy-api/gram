@@ -18,8 +18,6 @@ export {
 
 export { REDACTED_SECRET } from "./model/secret";
 
-export { normalizeScopes } from "./model/clientConfiguration";
-
 export { providerUrlLabel } from "./model/provider";
 
 export {

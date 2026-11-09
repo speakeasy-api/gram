@@ -193,22 +193,19 @@ func TestAuthorizationErrorPageWithoutCallback(t *testing.T) {
 func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name     string
-		reason   oauthui.Reason
-		approval bool
-		want     string
+		name   string
+		reason oauthui.Reason
+		want   string
 	}{
-		{"blocked", oauthui.ReasonOrganizationBlocked, false, "Your organization doesn't allow"},
-		{"expired", oauthui.ReasonExpired, false, "link expired or was already used"},
-		{"unavailable", oauthui.ReasonUnavailable, false, "This is a problem on our side"},
-		{"session", oauthui.ReasonSessionChanged, false, "current browser or sign-in session"},
-		{"approval-expired", oauthui.ReasonExpired, true, "This approval link expired"},
-		{"approval-session", oauthui.ReasonSessionChanged, true, "Your staff sign-in session changed"},
+		{"blocked", oauthui.ReasonOrganizationBlocked, "Your organization doesn't allow"},
+		{"expired", oauthui.ReasonExpired, "link expired or was already used"},
+		{"unavailable", oauthui.ReasonUnavailable, "This is a problem on our side"},
+		{"session", oauthui.ReasonSessionChanged, "current browser or sign-in session"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			response := httptest.NewRecorder()
-			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, Approval: tc.approval, ClientName: "Example Client", ServerName: "example-server"}))
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, ClientName: "Example Client", ServerName: "example-server"}))
 			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
 			require.Equal(t, oautherr.CodeInvalidClient, body.Code)
 			require.Contains(t, response.Body.String(), tc.want)
@@ -303,7 +300,6 @@ func TestAuthorizationErrorLeadsWithWhatHappened(t *testing.T) {
 		{"connection", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", ClientName: "Client", ServerName: "Server"}},
 		{"provider outage", oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonProviderUnavailable, ClientName: "Client", ServerName: "Server"}},
 		{"setup", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Setup: true}},
-		{"approval", oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "invalid_request", Approval: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -315,4 +311,110 @@ func TestAuthorizationErrorLeadsWithWhatHappened(t *testing.T) {
 			}
 		})
 	}
+}
+
+// pageText is the rendered page with whitespace collapsed and apostrophes unescaped.
+func pageText(response *httptest.ResponseRecorder) string {
+	return strings.ReplaceAll(strings.Join(strings.Fields(response.Body.String()), " "), "&#39;", "'")
+}
+
+// Only an outage says to retry; a fault of ours points to support.
+func TestAuthorizationErrorPageRetriesOnlyOutages(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		status    int
+		want      string
+		wantRetry bool
+	}{
+		{"internal fault", http.StatusInternalServerError, "Share the technical details below with Speakeasy support.", false},
+		{"not implemented", http.StatusNotImplemented, "Share the technical details below with Speakeasy support.", false},
+		{"bad gateway", http.StatusBadGateway, "Try connecting again shortly.", true},
+		{"outage", http.StatusServiceUnavailable, "Try connecting again shortly.", true},
+		{"gateway timeout", http.StatusGatewayTimeout, "Try connecting again shortly.", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: tc.status, Code: "unexpected", ErrorID: "err-123", ClientName: "Example Client", ServerName: "example-server"}))
+			page := pageText(response)
+			require.Contains(t, page, "This is a problem on our side")
+			require.Contains(t, page, tc.want)
+			require.Equal(t, tc.wantRetry, strings.Contains(page, "again shortly"))
+			require.Contains(t, page, "err-123")
+		})
+	}
+}
+
+// A failed server connection check names the check, and says to retry only when retrying can help.
+func TestAuthorizationErrorPageNamesTheConnectionCheck(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		reason    oauthui.Reason
+		want      string
+		wantRetry bool
+	}{
+		{oauthui.ReasonCheckFailed, "Share the technical details below with Speakeasy support.", false},
+		{oauthui.ReasonCheckUnavailable, "Try again shortly. If it keeps happening, share the technical details below with Speakeasy support.", true},
+		{oauthui.ReasonCheckNeedsAdmin, "Ask your IT administrators to check this server's connection settings.", false},
+		{oauthui.ReasonCheckNotAllowed, "Ask your IT administrators for access. Share the technical details below with them.", false},
+	} {
+		t.Run(string(tc.reason), func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusInternalServerError, Code: "unexpected", Reason: tc.reason, ErrorID: "err-123"}))
+			page := pageText(response)
+			require.Contains(t, page, "<title>Couldn't check the connection · Speakeasy</title>")
+			require.Contains(t, page, "Checking the server's connection")
+			require.NotContains(t, page, "Your MCP client")
+			require.NotContains(t, page, "Couldn't connect")
+			require.Contains(t, page, tc.want)
+			require.Equal(t, tc.wantRetry, strings.Contains(page, "again shortly"))
+			require.Contains(t, page, "back button")
+			require.Contains(t, page, "err-123")
+		})
+	}
+}
+
+func TestAuthorizationErrorPageAsksToSignInAgain(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "bad_request", Reason: oauthui.ReasonSignInRequired, ClientName: "Speakeasy dashboard", ServerName: "example-server"}))
+	page := pageText(response)
+	require.Contains(t, page, "Your sign-in service needs you to sign in again")
+	require.Contains(t, page, "sign in when your sign-in service asks")
+	require.Contains(t, page, "Speakeasy dashboard")
+	require.NotContains(t, strings.ToLower(page), "your mcp client")
+}
+
+// A fault on organization setup keeps setup wording rather than calling the link incomplete.
+func TestAuthorizationErrorPageSetupFault(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Setup: true, Status: http.StatusInternalServerError, Code: oautherr.CodeServerError}))
+	page := pageText(response)
+	require.Contains(t, page, "Speakeasy couldn't finish checking your setup. This is a problem on our side")
+	require.NotContains(t, page, "incomplete")
+}
+
+// A first-party sign-in service outage names the sign-in service, not the connection's service.
+func TestAuthorizationErrorPageSignInServiceUnavailable(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusServiceUnavailable, Code: "unavailable", Reason: oauthui.ReasonSignInUnavailable, ClientName: "Speakeasy dashboard"}))
+	page := pageText(response)
+	require.Contains(t, page, "Your sign-in service isn't available right now. This isn't something you did.")
+	require.Contains(t, page, "Try again in a few minutes. If it keeps happening, share the technical details below with your IT administrators or Speakeasy support.")
+	require.NotContains(t, page, "The service this connection uses")
+}
+
+// A sign-in the service refused for an unnamed reason may be an outage or a broken setup: retry, then IT administrators.
+func TestAuthorizationErrorPageSignInFailed(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: http.StatusBadRequest, Code: "bad_request", Reason: oauthui.ReasonSignInFailed, ClientName: "Speakeasy dashboard"}))
+	page := pageText(response)
+	require.Contains(t, page, "Your sign-in service couldn't sign you in. This isn't something you did.")
+	require.Contains(t, page, "Try again. If it keeps happening, share the technical details below with your IT administrators.")
+	require.NotContains(t, page, "isn't available right now")
 }
