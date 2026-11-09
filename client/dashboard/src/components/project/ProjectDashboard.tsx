@@ -44,7 +44,11 @@ import {
 import { safeBase64Encode } from "@/components/observe/observeFilterUtils";
 import { llmTokens } from "@/pages/costs/taxonomy";
 import { ActivityTimelineCard } from "./ActivityTimelineCard";
-import { buildProjectOverviewQuery } from "./projectOverviewQuery";
+import {
+  buildProjectOverviewQuery,
+  PROJECT_OVERVIEW_STALE_TIME_MS,
+} from "./projectOverviewQuery";
+import { getPresetRange } from "@/elements";
 
 export function ProjectDashboard(): JSX.Element {
   const isDark = useIsDarkTheme();
@@ -177,29 +181,44 @@ export function ProjectDashboard(): JSX.Element {
   // and visibility so the numbers line up. Telemetry also carries ids for
   // sessions that were never captured (OTel-only clients, Cursor usage
   // polling, LiteLLM per-request ids), which made the counts disagree.
-  const { data: sessionCountsData, isPending: isSessionCountsPending } =
-    useQuery({
-      queryKey: [
-        "project",
-        "sessionCountsByUser",
-        orgSlug,
-        projectSlug,
-        from.toISOString(),
-        to.toISOString(),
-      ],
-      queryFn: () =>
-        unwrapAsync(
-          chatCountByUser(client, {
-            from,
-            to,
-            limit: 6,
-            gramProject: projectSlug,
-          }),
-        ),
-      enabled: logsEnabled && !!projectSlug && hasHookData,
-      placeholderData: keepPreviousData,
-      throwOnError: false,
-    });
+  // Keyed like the overview query: presets by name, so the cache matches
+  // across mounts; the range is resolved when the request runs.
+  const {
+    data: sessionCountsData,
+    isPending: isSessionCountsPending,
+    isError: isSessionCountsError,
+    isFetching: isSessionCountsFetching,
+  } = useQuery({
+    queryKey: [
+      "project",
+      "sessionCountsByUser",
+      orgSlug,
+      projectSlug,
+      customRange
+        ? {
+            from: customRange.from.toISOString(),
+            to: customRange.to.toISOString(),
+          }
+        : { preset: dateRange },
+    ],
+    queryFn: () => {
+      const range = customRange ?? getPresetRange(dateRange);
+      return unwrapAsync(
+        chatCountByUser(client, {
+          from: range.from,
+          to: range.to,
+          limit: 6,
+          gramProject: projectSlug,
+        }),
+      );
+    },
+    enabled: logsEnabled && !!projectSlug && hasHookData,
+    placeholderData: keepPreviousData,
+    staleTime: PROJECT_OVERVIEW_STALE_TIME_MS,
+    throwOnError: false,
+  });
+  const isSessionCountsRefreshing =
+    isSessionCountsFetching && !isSessionCountsPending;
 
   // Sessions without a Speakeasy user (external users, agent actors) count
   // toward the total but are not ranked.
@@ -483,6 +502,8 @@ export function ProjectDashboard(): JSX.Element {
                   <StatTile
                     title="Sessions"
                     value={totalSessions}
+                    displayValue={isSessionCountsError ? "-" : undefined}
+                    isRefreshing={isSessionCountsRefreshing}
                     tone="information"
                     icon="message-circle"
                     tooltip="Agent sessions captured in this project in the selected period. Matches the Agent Sessions list."
@@ -633,6 +654,8 @@ export function ProjectDashboard(): JSX.Element {
                     >
                       {isTopUsersLoading || isSessionCountsPending ? (
                         <SkeletonList />
+                      ) : isSessionCountsError ? (
+                        <EmptyState message="Session counts could not be loaded" />
                       ) : topUsersBySessions.length === 0 ? (
                         <EmptyState message="No session activity recorded" />
                       ) : (

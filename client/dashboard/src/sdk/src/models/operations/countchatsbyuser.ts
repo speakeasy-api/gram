@@ -25,7 +25,7 @@ export type CountChatsByUserRequest = {
    */
   from?: Date | undefined;
   /**
-   * Count chats last active before this timestamp (ISO 8601)
+   * Count chats created before this timestamp (ISO 8601)
    */
   to?: Date | undefined;
   /**

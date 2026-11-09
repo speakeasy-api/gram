@@ -773,7 +773,9 @@ WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_tim
 -- visibility scope, activity-overlap window) so each user's count equals what
 -- chats.list returns when filtered to that user, and the counts sum to the
 -- unfiltered chats.list total. Chats with no user_id (external users, agent
--- actors) group under ''.
+-- actors) group under ''. Under an own-sessions scope (@user_id set) every
+-- visible row, including owned agents' sessions, belongs to that user, as it
+-- does in chats.list.
 WITH candidate_chats AS (
   SELECT c.id, c.created_at, c.user_id
   FROM chats c
@@ -803,16 +805,21 @@ chat_activity AS (
       AND cm.project_id = @project_id::uuid
   ) last_msg
 )
+, attributed AS (
+  SELECT
+    CASE WHEN @user_id::text <> '' THEN @user_id::text ELSE COALESCE(ca.user_id, '') END AS owner_id
+  FROM chat_activity ca
+  WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
+    AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time)
+)
 SELECT
-  COALESCE(ca.user_id, '')::text AS user_id,
+  a.owner_id::text AS user_id,
   COALESCE(MAX(u.email), '')::text AS email,
   COALESCE(MAX(u.display_name), '')::text AS display_name,
   COUNT(*)::bigint AS chat_count
-FROM chat_activity ca
-LEFT JOIN users u ON u.id = ca.user_id AND u.deleted_at IS NULL
-WHERE (@from_time::timestamptz IS NULL OR ca.last_message_timestamp >= @from_time)
-  AND (@to_time::timestamptz IS NULL OR ca.created_at <= @to_time)
-GROUP BY COALESCE(ca.user_id, '')
+FROM attributed a
+LEFT JOIN users u ON u.id = a.owner_id AND u.deleted_at IS NULL
+GROUP BY a.owner_id
 ORDER BY chat_count DESC, user_id ASC;
 
 -- name: ListChats :many

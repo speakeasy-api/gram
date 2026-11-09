@@ -501,7 +501,7 @@ var _ = Service("chat", func() {
 			Attribute("from", String, "Count chats last active after this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
-			Attribute("to", String, "Count chats last active before this timestamp (ISO 8601)", func() {
+			Attribute("to", String, "Count chats created before this timestamp (ISO 8601)", func() {
 				Format(FormatDateTime)
 			})
 			Attribute("limit", Int, "Maximum number of users to return", func() {

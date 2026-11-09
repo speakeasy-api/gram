@@ -27171,11 +27171,11 @@ paths:
                     format: date-time
                     type: string
                 - allowEmptyValue: true
-                  description: Count chats last active before this timestamp (ISO 8601)
+                  description: Count chats created before this timestamp (ISO 8601)
                   in: query
                   name: to
                   schema:
-                    description: Count chats last active before this timestamp (ISO 8601)
+                    description: Count chats created before this timestamp (ISO 8601)
                     format: date-time
                     type: string
                 - allowEmptyValue: true

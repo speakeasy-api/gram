@@ -509,7 +509,7 @@ type CountByUserPayload struct {
 	ChatSessionsToken *string
 	// Count chats last active after this timestamp (ISO 8601)
 	From *string
-	// Count chats last active before this timestamp (ISO 8601)
+	// Count chats created before this timestamp (ISO 8601)
 	To *string
 	// Maximum number of users to return
 	Limit int

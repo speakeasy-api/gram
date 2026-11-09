@@ -50,15 +50,42 @@ func TestCountByUser_MatchesListChats(t *testing.T) {
 	require.NotEmpty(t, result.Users[0].Email)
 
 	for _, u := range result.Users {
-		if u.UserID == "" {
-			continue
-		}
 		payload := defaultPayload()
-		payload.UserID = &u.UserID
+		if u.UserID == "" {
+			// The only user-less chat seeded here is ext-ccc's.
+			externalUserID := "ext-ccc"
+			payload.ExternalUserID = &externalUserID
+		} else {
+			payload.UserID = &u.UserID
+		}
 		filtered, err := ti.service.ListChats(ctx, payload)
 		require.NoError(t, err)
-		require.Equal(t, filtered.Total, u.Count, "user %s", u.UserID)
+		require.Equal(t, filtered.Total, u.Count, "user %q", u.UserID)
 	}
+}
+
+// A member without chat:read sees their own sessions plus their owned agents'
+// sessions in chat.list, so the count must attribute both to them.
+func TestCountByUser_RegularUser_CountsOwnedAgentSessions(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := authztest.WithExactGrants(t, initSessionCtx(t, ti))
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	seedChat(t, ctx, ti, authCtx.UserID, "", "own chat")
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "my agent")
+	seedAgentChat(t, ctx, ti, agentID, "agent chat")
+
+	listed, err := ti.service.ListChats(ctx, defaultPayload())
+	require.NoError(t, err)
+
+	result, err := ti.service.CountByUser(ctx, &gen.CountByUserPayload{Limit: 10})
+	require.NoError(t, err)
+	require.Equal(t, listed.Total, result.Total)
+	require.Len(t, result.Users, 1)
+	require.Equal(t, authCtx.UserID, result.Users[0].UserID)
+	require.Equal(t, listed.Total, result.Users[0].Count)
 }
 
 func TestCountByUser_LimitTruncatesUsersNotTotal(t *testing.T) {
