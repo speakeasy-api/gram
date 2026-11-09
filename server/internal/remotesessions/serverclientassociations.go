@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -248,10 +249,9 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if soleConsumer {
 		// The link is retired as an administrator's detach, which the
 		// synchronization never undoes while the association it was derived
-		// from stays. A client an administrator created is not this
-		// association's and is left offered.
-		aq := authclientsrepo.New(dbtx)
-		offered, err := aq.ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
+		// from stays. Administrator-owned links, including ones to backfilled
+		// clients, are not this association's and stay offered.
+		offered, err := authclientsrepo.New(dbtx).ListServerBackfillAuthClients(ctx, authclientsrepo.ListServerBackfillAuthClientsParams{
 			McpServerID:    serverID,
 			ProjectID:      *authCtx.ProjectID,
 			OrganizationID: authCtx.ActiveOrganizationID,
@@ -261,33 +261,16 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		}
 		retired := false
 		for _, client := range offered {
-			if client.Source != authclientbackfill.SourceBackfill || client.RemoteSessionClientID.UUID != clientID {
+			if client.RemoteSessionClientID.UUID != clientID {
 				continue
 			}
-			detached, err := aq.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{
-				AuthClientID:   client.ID,
-				McpServerID:    serverID,
-				OrganizationID: authCtx.ActiveOrganizationID,
-			})
+			err := authclients.DetachMcpServer(ctx, dbtx, s.auditLogger, authCtx, client, serverID)
 			if errors.Is(err, pgx.ErrNoRows) {
 				// A concurrent detach already retired this link.
 				continue
 			}
 			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "detach MCP server auth client").LogError(ctx, logger)
-			}
-			if err := s.auditLogger.LogAuthClientDetachMcpServer(ctx, dbtx, audit.LogAuthClientMcpServerEvent{
-				OrganizationID:   authCtx.ActiveOrganizationID,
-				ProjectID:        detached.ProjectID,
-				Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-				ActorDisplayName: authCtx.Email,
-				ActorSlug:        nil,
-				AuthClientURN:    urn.NewAuthClient(client.ID),
-				AuthClientName:   client.Name,
-				McpServerURN:     urn.NewMcpServer(serverID),
-				McpServerName:    detached.McpServerName.String,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "log MCP server auth client detach").LogError(ctx, logger)
 			}
 			retired = true
 		}
