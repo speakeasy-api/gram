@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -171,34 +172,76 @@ func TestStartOrResumeChat_HumanCompletionRecordsNoAgent(t *testing.T) {
 	require.Equal(t, authCtx.UserID, row.UserID.String)
 }
 
-// The agent stamp is fill-once: a later turn by another agent on the same chat
-// id cannot reassign the session, and a later turn by the same agent is a no-op.
-func TestStartOrResumeChat_AgentStampIsFillOnce(t *testing.T) {
+// A second agent cannot append to another agent's session: the turn is rejected
+// as if the chat did not exist, the row is untouched, and only the first
+// agent's owner can open it. The same agent resumes its own session freely.
+func TestStartOrResumeChat_SecondAgentTurnIsRejected(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 	strategy := newCaptureStrategy(t, ti.conn)
 
-	first := seedAgent(t, ctx, ti, authCtx.UserID, "First agent")
-	second := seedAgent(t, ctx, ti, authCtx.UserID, "Second agent")
+	ownerA := "agent-owner-a-" + uuid.NewString()
+	ownerB := "agent-owner-b-" + uuid.NewString()
+	agentA := seedAgent(t, ctx, ti, ownerA, "Agent A")
+	agentB := seedAgent(t, ctx, ti, ownerB, "Agent B")
 	chatID := uuid.New()
 
-	for _, agentID := range []uuid.UUID{first, second, first} {
-		_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, authCtx.UserID), completionRequest(ti, chatID, ""))
-		require.NoError(t, err)
-	}
+	_, err := strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentA, ownerA), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentB, ownerB), completionRequest(ti, chatID, ""))
+	requireOopsCode(t, err, oops.CodeNotFound)
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentA, ownerA), completionRequest(ti, chatID, ""))
+	require.NoError(t, err, "the first agent resumes its own session")
 
 	row := chatRow(t, ti, chatID)
-	require.True(t, row.AgentID.Valid)
-	require.Equal(t, first, row.AgentID.UUID)
+	require.Equal(t, agentA, row.AgentID.UUID)
+	require.False(t, row.UserID.Valid, "the rejected turn does not demote the session")
+
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, ownerA), loadPayload(chatID.String()))
+	require.NoError(t, err)
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, ownerB), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A session with no identity at all (NULL user, NULL external user, no agent)
+// is the shape assistant-driven chats take. An agent turn on it does not name
+// the agent, so the agent's owner never gains the earlier turns.
+func TestStartOrResumeChat_AgentTurnDoesNotAdoptExistingSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	strategy := newCaptureStrategy(t, ti.conn)
+
+	owner := "agent-owner-" + uuid.NewString()
+	agentID := seedAgent(t, ctx, ti, owner, "Agent joining an assistant session")
+	chatID := uuid.New()
+	_, err := repo.New(ti.conn).UpsertChat(ctx, repo.UpsertChatParams{
+		ID:             chatID,
+		ProjectID:      ti.projectID,
+		OrganizationID: ti.orgID,
+		UserID:         pgtype.Text{String: "", Valid: false},
+		ExternalUserID: pgtype.Text{String: "", Valid: false},
+		AgentID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Title:          conv.ToPGText("assistant-shaped session"),
+	})
+	require.NoError(t, err)
+
+	_, err = strategy.StartOrResumeChat(agentCredentialCtx(t, ctx, agentID, owner), completionRequest(ti, chatID, ""))
+	require.NoError(t, err)
+
+	row := chatRow(t, ti, chatID)
+	require.False(t, row.AgentID.Valid, "an existing session is never named after a later agent")
+	require.False(t, row.UserID.Valid, "the identity columns are left as they were")
+
+	_, err = ti.service.LoadChat(memberCtxForUser(t, ti, owner), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // A session created before NULL attribution existed holds user_id = "". A later
-// agent turn names the agent on it, but the empty string is left alone, so the
+// agent turn leaves both the empty string and the missing agent alone, so the
 // session is not retroactively opened to the agent's owner.
-func TestStartOrResumeChat_PreExistingEmptyIdentityIsNamedNotOpened(t *testing.T) {
+func TestStartOrResumeChat_PreExistingEmptyIdentityIsNotNamedOrOpened(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx := initSessionCtx(t, ti)
@@ -224,8 +267,7 @@ func TestStartOrResumeChat_PreExistingEmptyIdentityIsNamedNotOpened(t *testing.T
 	require.NoError(t, err)
 
 	after := chatRow(t, ti, chatID)
-	require.True(t, after.AgentID.Valid, "the resumed session is named after its agent")
-	require.Equal(t, agentID, after.AgentID.UUID)
+	require.False(t, after.AgentID.Valid, "the resumed session is not named after its agent")
 	require.True(t, after.UserID.Valid, "an existing empty identity is not rewritten")
 	require.Empty(t, after.UserID.String)
 

@@ -109,20 +109,11 @@ ON CONFLICT (id) DO UPDATE SET deleted_at = CASE
     ) THEN NULL
     ELSE chats.deleted_at
 END
--- Fill-once agent attribution: a session is created on its first turn and
--- reused for every later one, so a session that started before the stamp
--- existed is named on its next agent turn, and a later caller can never
--- reassign an existing session to a different agent. EXCLUDED.agent_id is the
--- tenant-checked subquery result above, and the WHERE below pins the row to the
--- caller's project, so the guard holds on the conflict path too.
-  , agent_id = COALESCE(chats.agent_id, EXCLUDED.agent_id)
--- An existing row keeps its author, and an empty-string user_id from before
--- NULL attribution stays empty, which names the agent without opening the
--- session to its owner. One exception: a non-agent turn landing on an
--- agent-only session (no human identity, an agent recorded) makes its
--- attribution mixed. Agent turns write NULL user_id; every other turn writes
--- a non-NULL one, even an empty string. The row is then demoted to the
--- empty-string "no author" shape instead of being handed to either side.
+-- agent_id is set on insert only. Naming an agent on an existing session would
+-- hand its owner every earlier turn, including ones the agent never sent.
+-- An existing row keeps its author, except a non-agent turn on an agent-only
+-- session: agent turns write NULL user_id, every other turn a non-NULL one (even
+-- ''), so the row is demoted to the '' no-author shape instead of changing hands.
   , user_id = CASE
       WHEN chats.user_id IS NULL
         AND COALESCE(chats.external_user_id, '') = ''
@@ -135,7 +126,10 @@ END
 -- project's chat id would otherwise land on that row and get its id back from
 -- RETURNING. Rejecting the conflict yields no row, which the caller maps to an
 -- authorization failure.
+-- A second agent appending to another agent's session is rejected the same
+-- way: its owner would otherwise read turns of an agent that is not theirs.
 WHERE chats.project_id = EXCLUDED.project_id
+  AND (chats.agent_id IS NULL OR EXCLUDED.agent_id IS NULL OR chats.agent_id = EXCLUDED.agent_id)
 RETURNING id;
 
 -- name: UpsertExternalChat :one

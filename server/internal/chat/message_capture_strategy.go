@@ -97,8 +97,8 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		// Only reachable when the id names a chat in another project, so the
-		// public message must not say so. Cause is kept for logs.
+		// Reached when the id names a chat in another project or a session another
+		// agent drives, so the public message must not say which. Cause is kept for logs.
 		return nil, oops.E(oops.CodeNotFound, err, "chat not found")
 	case err != nil:
 		s.logger.ErrorContext(ctx, "failed to create chat", attr.SlogError(err))
