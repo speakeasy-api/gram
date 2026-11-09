@@ -47,8 +47,9 @@ tool echo, control authentication,
 scenario cleanup and upstream events. Gateway behavior is tested separately by
 the Reflow flows against the running stack.
 
-The fixture executable uses explicit `mise exec` with immutable revision
-`9c6d4f8c2e9828924bbafa7c249ad3eddc234606`. The private benchmark package is not
+The launch task uses `mise install` and `mise which` to resolve immutable revision
+`9c6d4f8c2e9828924bbafa7c249ad3eddc234606`, then spawns that executable directly.
+The private benchmark package is not
 in the global tool set, so normal `mise install`, setup and CI do not fetch it.
 Only an actual fixture launch resolves and installs it. Installation uses the
 caller's normal HTTPS trust before the resolved binary receives the local CA
