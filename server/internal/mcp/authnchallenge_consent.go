@@ -2272,7 +2272,7 @@ func (s *Service) buildRemoteSessionCardsForMember(ctx context.Context, endpoint
 				statuses[id] = marker
 			}
 		}
-		routing = consentRouting{backend: consentBackendRemote, upstream: resource, members: nil}
+		routing = consentRouting{backend: consentBackendRemote, upstream: resource, members: nil, unroutableClients: nil}
 		if member.tunneledServerID.Valid {
 			routing.backend = consentBackendTunneled
 		}

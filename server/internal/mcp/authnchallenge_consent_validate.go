@@ -283,6 +283,9 @@ func (s *Service) probeRemoteSession(
 		var member chosenMetaMember
 		resource, member, err = s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, challengeState.FocusServer)
 		if err != nil {
+			if errors.Is(err, errConsentMemberTarget) {
+				err = fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
+			}
 			return oops.E(oops.CodeBadRequest, err, "This connection cannot be verified for this gateway member.").LogWarn(ctx, logger)
 		}
 		if committedResource != "" && strings.TrimRight(committedResource, "/") != strings.TrimRight(resource, "/") {
