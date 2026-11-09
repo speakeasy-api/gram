@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -67,7 +68,7 @@ func (s *Service) handleMetaDescribeServerCall(
 		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
 	}
 
-	member, ok := findMetaMember(members, args.Server)
+	member, ok := s.findNamedMember(ctx, gate, members, args.Server)
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
@@ -148,7 +149,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
-		member, ok := findMetaMember(members, serverSlug)
+		member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 		if !ok {
 			notFound = append(notFound, qualified)
 			continue
@@ -250,6 +251,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
+	// Resolved before the cached-view check so the named server's check is
+	// recorded on both paths; an unknown server is still refused after it.
+	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
@@ -265,7 +269,6 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
-	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
@@ -650,26 +653,25 @@ func (s *Service) loadMemberToolset(
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved.
+// prepared when the member snapshot was resolved. Whether the check is
+// recorded follows ctx: admission and listings pass authz.WithoutChallenges,
+// and a call that named a private member already recorded the same check, so
+// the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	visibility := mcpservers.VisibilityPrivate
 	if public {
-		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
-		return true, nil
+		visibility = mcpservers.VisibilityPublic
 	}
-	if !authenticated {
+	if !public && !authenticated {
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	err := s.authz.Require(ctx, connect)
-	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
+	refusal, err := s.memberConnectDecision(ctx, shadow, shadowSurface, visibility, connect)
 	if err != nil {
-		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
-			return false, nil
-		}
 		return false, fmt.Errorf("check toolset-level authz: %w", err)
 	}
-	return true, nil
+	return refusal == nil, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's

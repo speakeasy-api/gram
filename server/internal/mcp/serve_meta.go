@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -107,6 +108,11 @@ type metaGateContext struct {
 	unapprovedMembers []metaMember
 	// hiddenMembers are members the caller hid, reported but never served.
 	hiddenMembers []metaMember
+	// deniedMembers are members admission turned away: private members refused
+	// their own connect and, on derived gateways, public members refused their
+	// private toolset's. They are never listed or served; a call that names one
+	// records its denied check.
+	deniedMembers []metaMember
 	// execute permits live credential resolution for a cached tool call.
 	execute         bool
 	discoveryMode   metamcp.DiscoveryMode
@@ -590,6 +596,9 @@ func (s *Service) callMetaServerTool(
 	if params.Name == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
+	// Admission and listings record no authorization checks; a call records
+	// one for each server it names, however often it checks that server.
+	ctx = authz.WithOneChallengePerResource(ctx)
 
 	// A name another mode serves usually comes from a tools/list the client
 	// cached before this connection's mode changed, so the refusal says to
@@ -640,13 +649,13 @@ func (s *Service) callMetaServerTool(
 	var body json.RawMessage
 	switch params.Name {
 	case metamcp.ToolListServers:
-		body, err = s.handleMetaListServersCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req)
+		body, err = s.handleMetaListServersCall(authz.WithoutChallenges(ctx), logger, gate, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
 		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
 	case metamcp.ToolDescribeTools:
 		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
-		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
+		body, err = s.handleMetaConnectionStatusCall(authz.WithoutChallenges(ctx), logger, gate, members, req)
 	default:
 		// execute_tool is deliberately not logged here: it writes a single
 		// tool_call row stamped with this gateway's id, the member dispatch's
@@ -889,6 +898,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
