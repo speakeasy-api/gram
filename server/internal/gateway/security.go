@@ -45,6 +45,9 @@ func processSecurity(
 	credentialFrom := func(variable string, grant bool) toolconfig.AppliedCredential {
 		return toolconfig.AppliedCredential{Variable: variable, System: env.UserConfig == nil || env.UserConfig.Get(variable) == "", ClientGrant: grant}
 	}
+	// A grant that failed without the proxy answering 401 counts only if nothing else sent an Authorization.
+	var grantFailure toolconfig.ClientGrantFailure
+	var grantCredential toolconfig.AppliedCredential
 	setHeader := func(key, value, variable string) {
 		req.Header.Set(key, value)
 		securityHeadersProcessed[http.CanonicalHeaderKey(key)] = value
@@ -54,6 +57,10 @@ func processSecurity(
 		// if tool calling logging is enabled this will record the headers that were set with redaction
 		attrRecorder.RecordRequestHeaders(securityHeadersProcessed, true)
 		if env.Credentials != nil {
+			if _, sent := applied[http.CanonicalHeaderKey("Authorization")]; grantFailure != "" && !sent {
+				applied[http.CanonicalHeaderKey("Authorization")] = grantCredential
+				env.Credentials.GrantFailure = grantFailure
+			}
 			for _, credential := range applied {
 				env.Credentials.Sent = append(env.Credentials.Sent, credential)
 			}
@@ -185,6 +192,10 @@ func processSecurity(
 							}
 							return false
 						}
+						if failure, ok := errors.AsType[*clientCredentialsError](err); ok {
+							grantFailure = failure.failure
+							grantCredential = credentialFrom(variable, grant)
+						}
 					}
 					if token != "" {
 						setHeader("Authorization", formatForBearer(token), variable)
@@ -308,11 +319,11 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	var oauthFlows oAuthFlows
 	if err := json.Unmarshal(security.OAuthFlows, &oauthFlows); err != nil {
-		return "", "", false, fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to unmarshal oauth flows for client credentials: %w", err)}
 	}
 
 	if oauthFlows.ClientCredentials == nil {
-		return "", "", false, fmt.Errorf("no client credentials flow found")
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials flow found")}
 	}
 
 	tokenURL := oauthFlows.ClientCredentials.TokenUrl
@@ -325,7 +336,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	}
 
 	if tokenURL == "" {
-		return "", "", false, fmt.Errorf("no client credentials token url found")
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("no client credentials token url found")}
 	}
 
 	cacheKey := clientCredentialsTokenCacheCacheKey(tool.ProjectID, clientID, tokenURL, requestedScopes)
@@ -347,7 +358,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	tokenReq, err := http.NewRequestWithContext(ctx, "POST", tokenURL, data)
 	if err != nil {
-		return "", "", false, fmt.Errorf("failed to create client credentials token request: %w", err)
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to create client credentials token request: %w", err)}
 	}
 
 	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -396,12 +407,12 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", false, fmt.Errorf("failed to read client credentials token response body: %w", err)
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantUnavailable, err: fmt.Errorf("failed to read client credentials token response body: %w", err)}
 	}
 
 	accessToken, expiresIn, err := parseClientCredentialsTokenResponse(bodyBytes)
 	if err != nil {
-		return "", "", false, fmt.Errorf("failed to parse client credentials token response: %w", err)
+		return "", secretVar, true, &clientCredentialsError{failure: toolconfig.ClientGrantMisconfigured, err: fmt.Errorf("failed to parse client credentials token response: %w", err)}
 	}
 
 	// If we are passed an expiry value we will use the cache

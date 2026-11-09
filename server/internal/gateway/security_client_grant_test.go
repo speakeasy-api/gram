@@ -84,6 +84,41 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 	}
 }
 
+// A grant that fails without the proxy answering 401 still reports why, unless another Authorization was sent.
+func TestClientGrantMisconfigurationIsReported(t *testing.T) {
+	t.Parallel()
+
+	notAToken := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not a token"))
+	}))
+	t.Cleanup(notAToken.Close)
+
+	for _, tc := range []struct {
+		name     string
+		tokenURL string
+	}{
+		{name: "token endpoint answers without a token", tokenURL: notAToken.URL},
+		{name: "token url is malformed", tokenURL: "http://[::1"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			system := map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret", "MACHINE_TOKEN_URL": tc.tokenURL}
+			ok, _, w, report := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{machineSecurity}, system, nil)
+			require.True(t, ok)
+			require.Empty(t, keys(w.Header()))
+			require.Equal(t, toolconfig.ClientGrantMisconfigured, report.GrantFailure)
+			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true}}, report.Sent)
+
+			system["AUTHORIZATION"] = "Bearer saved"
+			ok, _, _, report = runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{machineSecurity}, system, nil)
+			require.True(t, ok)
+			require.Empty(t, report.GrantFailure)
+			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "authorization", System: true, ClientGrant: false}}, report.Sent)
+		})
+	}
+}
+
 // A caller's access token skips the grant, so the saved secret was never sent.
 func TestCallerAccessTokenSkipsClientGrant(t *testing.T) {
 	t.Parallel()
