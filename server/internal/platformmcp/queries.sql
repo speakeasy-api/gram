@@ -936,6 +936,7 @@ SELECT
     m.toolset_id,
     m.unproxied_mcp_server_id,
     m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -4190,41 +4191,17 @@ UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 se
 -- Test fixture: proves a pooled connection is still healthy.
 SELECT 1;
 
--- name: ListPlatformMCPAgentConnectServers :many
--- Every MCP server in the organization, keyed by the resource ID an agent's
--- mcp:connect grant names: the toolset ID when the server has one, otherwise
--- the server ID. Callers match grants against these rows; the rows grant
--- nothing.
-SELECT
-  COALESCE(server.toolset_id, server.id)::uuid AS resource_id,
-  server.id AS mcp_server_id,
-  server.project_id,
-  projects.name AS project_name,
-  COALESCE(server.name, server.slug, '')::text AS name,
-  server.user_session_issuer_id
-FROM mcp_servers AS server
-JOIN projects ON projects.id = server.project_id
-WHERE projects.organization_id = @organization_id
-  AND projects.deleted IS FALSE
-  AND server.deleted IS FALSE
-ORDER BY projects.name, COALESCE(server.name, server.slug, ''), server.id
-LIMIT @limit_value;
-
--- name: ListPlatformMCPAgentConnectToolsets :many
--- MCP-enabled toolsets no server serves: an mcp:connect grant can name one by
--- its toolset ID.
-SELECT toolset.id AS resource_id, toolset.project_id, projects.name AS project_name, toolset.name
-FROM toolsets AS toolset
-JOIN projects ON projects.id = toolset.project_id
-WHERE projects.organization_id = @organization_id
-  AND projects.deleted IS FALSE
-  AND toolset.deleted IS FALSE
-  AND toolset.mcp_enabled IS TRUE
-  AND NOT EXISTS (
-    SELECT 1 FROM mcp_servers AS served
-    WHERE served.toolset_id = toolset.id
-      AND served.project_id = toolset.project_id
-      AND served.deleted IS FALSE
-  )
-ORDER BY projects.name, toolset.name, toolset.id
-LIMIT @limit_value;
+-- name: ListPlatformMCPServerNamesByResourceIDs :many
+-- Names the MCP servers that authorization checks name by resource ID: a
+-- server's own ID, which its endpoint checks, or the toolset ID the
+-- organization gateway checks for a toolset-backed server. A toolset's
+-- canonical server comes first, then the oldest, so it names the toolset.
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY(@resource_ids::uuid[]) OR m.toolset_id = ANY(@resource_ids::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id;

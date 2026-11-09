@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"testing"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/internal/access"
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
@@ -24,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -72,7 +76,7 @@ func (f agentIdentityFixture) service(t *testing.T, checks AgentAuthorizationChe
 	t.Helper()
 
 	engine := authz.NewEngine(testenv.NewLogger(t), f.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	return NewAgentIdentityReadService(f.conn, engine, checks, allowBudget())
+	return NewAgentIdentityReadService(testenv.NewLogger(t), f.conn, engine, checks, allowBudget())
 }
 
 func (f agentIdentityFixture) grant(t *testing.T, scope authz.Scope, selector authz.Selector) {
@@ -155,23 +159,25 @@ func TestAgentMCPAccessListsGrantedServersAndCredentialModes(t *testing.T) {
 	service := f.service(t, agentChecksFunc(nil))
 	output, err = service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
 	require.NoError(t, err)
-	require.Equal(t, AgentIdentity{ID: f.agentID.String(), Name: "Inventory bot", Lifecycle: "active"}, output.Agent)
+	require.Equal(t, AgentIdentity{ID: f.agentID.String(), Name: "Inventory bot", Lifecycle: "active", OwnerReassignmentRequired: false}, output.Agent)
 	require.Equal(t, 1, output.MissingServerGrants, "a grant naming a deleted server is counted, not listed")
 	require.False(t, output.Truncated)
 
-	byID := make(map[string]AgentMCPServerAccess, len(output.Servers))
-	for _, server := range output.Servers {
-		byID[server.ResourceID] = server
-	}
+	byID := agentServersByID(output)
 	require.NotContains(t, byID, unreached.String(), "a project-wide grant reaches only its own project")
 	require.Contains(t, byID, readable.String(), "mcp:read reaches the one server it names, in another project")
-	require.Equal(t, agentGrantServer, byID[readable.String()].Grant, "mcp:read includes connecting")
+	require.True(t, hasUseRule(byID[readable.String()].Rules, "agent", "resource"), "mcp:read includes connecting")
 	require.Equal(t, other.ID.String(), byID[readable.String()].ProjectID)
+	require.Equal(t, "Other project", byID[readable.String()].ProjectName)
 	require.Equal(t, agentCredentialCallerProvided, byID[passThrough.String()].CredentialMode, "a pass-through server uses what the agent's client sends")
 	require.Contains(t, byID, shared.String())
 	require.Contains(t, byID, personal.String())
-	require.Equal(t, agentGrantServer, byID[shared.String()].Grant, "the narrowest grant is reported")
-	require.Equal(t, agentGrantProject, byID[personal.String()].Grant)
+	require.Equal(t, "Agent shared server", byID[shared.String()].MCPName)
+	require.Equal(t, "all_tools", byID[shared.String()].ConnectionAccess)
+	require.True(t, hasUseRule(byID[shared.String()].Rules, "agent", "resource"), "the grant naming the server is reported")
+	require.True(t, hasUseRule(byID[shared.String()].Rules, "agent", "project"), "so is the project-wide one")
+	require.False(t, hasUseRule(byID[personal.String()].Rules, "agent", "resource"))
+	require.True(t, hasUseRule(byID[personal.String()].Rules, "agent", "project"))
 	require.Equal(t, agentCredentialShared, byID[shared.String()].CredentialMode, "a server that asks no person to sign in uses a shared credential")
 	require.Equal(t, agentCredentialNotAssigned, byID[personal.String()].CredentialMode, "a personal server with no connection assigned acts for no one")
 	require.Empty(t, byID[personal.String()].OnBehalfOf)
@@ -280,27 +286,34 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 	ctx, principal := f.callerContext(t, f.principal.UserID, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
 
 	_, err := forbidden.AuthorizationChecks(ctx, principal, AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil})
-	require.ErrorIs(t, err, ErrAgentChecksForbidden, "listing checks without org:read is refused as the dashboard refuses it")
+	require.ErrorIs(t, err, ErrAgentChecksForbidden, "a checks listing that refuses the caller is reported as the dashboard reports it")
 	require.Equal(t, 1, calls)
 
-	for name, input := range map[string]AgentAuthorizationChecksInput{
-		"malformed":       {AgentID: f.agentID.String(), From: new("yesterday"), To: nil},
-		"reversed":        {AgentID: f.agentID.String(), From: new("2026-11-07T00:00:00Z"), To: new("2026-11-06T00:00:00Z")},
-		"past retention":  {AgentID: f.agentID.String(), From: new("2026-01-01T00:00:00Z"), To: new("2026-11-06T00:00:00Z")},
-		"unknown agent":   {AgentID: uuid.NewString(), From: nil, To: nil},
-		"not agent:read":  {AgentID: f.agentID.String(), From: nil, To: nil},
-		"empty agent ID":  {AgentID: "", From: nil, To: nil},
-		"another org ctx": {AgentID: f.agentID.String(), From: nil, To: nil},
+	stranger := "user_" + uuid.NewString()
+	for _, tc := range []struct {
+		name    string
+		input   AgentAuthorizationChecksInput
+		caller  string
+		org     string
+		wantErr error
+	}{
+		{name: "malformed", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("yesterday"), To: nil}, wantErr: ErrAgentChecksWindowInvalid},
+		{name: "reversed", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("2026-11-07T00:00:00Z"), To: new("2026-11-06T00:00:00Z")}, wantErr: ErrAgentChecksWindowInvalid},
+		{name: "past retention", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("2026-01-01T00:00:00Z"), To: new("2026-11-06T00:00:00Z")}, wantErr: ErrAgentChecksWindowInvalid},
+		{name: "unknown agent", input: AgentAuthorizationChecksInput{AgentID: uuid.NewString(), From: nil, To: nil}, wantErr: ErrAgentNotAvailable},
+		{name: "empty agent ID", input: AgentAuthorizationChecksInput{AgentID: "", From: nil, To: nil}, wantErr: ErrAgentNotAvailable},
+		{name: "not agent:read", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil}, caller: stranger, wantErr: ErrAgentNotAvailable},
+		{name: "another org", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil}, org: "org_" + uuid.NewString(), wantErr: ErrForbidden},
 	} {
 		callerCtx, caller := ctx, principal
-		switch name {
-		case "not agent:read":
-			callerCtx, caller = f.callerContext(t, "user_"+uuid.NewString(), authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
-		case "another org ctx":
-			caller.OrganizationID = "org_" + uuid.NewString()
+		if tc.caller != "" {
+			callerCtx, caller = f.callerContext(t, tc.caller, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
 		}
-		_, err := forbidden.AuthorizationChecks(callerCtx, caller, input)
-		require.Error(t, err, name)
+		if tc.org != "" {
+			caller.OrganizationID = tc.org
+		}
+		_, err := forbidden.AuthorizationChecks(callerCtx, caller, tc.input)
+		require.ErrorIs(t, err, tc.wantErr, tc.name)
 	}
 	require.Equal(t, 1, calls, "refused requests never list checks")
 
@@ -316,4 +329,150 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 		require.ErrorIs(t, err, ErrAgentChecksForbidden, name)
 	}
 	require.Equal(t, 1, calls, "a caller without org:read never lists checks")
+}
+
+func TestAgentMCPAccessCountsRoleGrants(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_roles")
+	ctx := t.Context()
+	server := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent role server")
+	role := seedAccessRole(t, ctx, f.conn, f.principal.OrganizationID, "agent-operators", "Agent operators")
+	selector, err := json.Marshal(mcpConnectSelector(server.String(), f.project.ID.String()))
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: f.principal.OrganizationID, PrincipalUrn: role, Scope: string(authz.ScopeMCPConnect), Selectors: selector})
+	require.NoError(t, err)
+	_, err = accessrepo.New(f.conn).UpsertAgentRoleAssignment(ctx, accessrepo.UpsertAgentRoleAssignmentParams{OrganizationID: f.principal.OrganizationID, RoleUrn: role.String(), AgentID: f.agentID})
+	require.NoError(t, err)
+
+	callerCtx, principal := f.callerContext(t, f.principal.UserID)
+	output, err := f.service(t, agentChecksFunc(nil)).MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	byID := agentServersByID(output)
+	require.Contains(t, byID, server.String(), "an agent that reaches a server only through a role lists it")
+	require.True(t, slices.ContainsFunc(byID[server.String()].Rules, func(rule access.MCPAccessRuleSummary) bool {
+		return rule.AccessLevel == "use" && rule.SourceKind == "role" && rule.SourceName == "Agent operators" && rule.AppliesTo == "resource"
+	}), "the rule names the role")
+	require.Zero(t, output.MissingServerGrants, "a role's grants are not the agent's own")
+}
+
+func TestAgentMCPAccessListsNothingForAnAgentThatCannotSignIn(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_suspended")
+	server := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent suspended server")
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(server.String(), f.project.ID.String()))
+	service := f.service(t, agentChecksFunc(nil))
+	callerCtx, principal := f.callerContext(t, f.principal.UserID)
+
+	output, err := service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	require.Contains(t, agentServersByID(output), server.String())
+
+	_, err = agentsrepo.New(f.conn).SuspendAgent(t.Context(), agentsrepo.SuspendAgentParams{OrganizationID: f.principal.OrganizationID, ID: f.agentID})
+	require.NoError(t, err)
+	output, err = service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	require.Equal(t, "suspended", output.Agent.Lifecycle)
+	require.False(t, output.Agent.OwnerReassignmentRequired)
+	require.Empty(t, output.Servers, "a suspended agent's keys are refused, so it reaches no server")
+	require.Zero(t, output.MissingServerGrants)
+}
+
+func TestAgentMCPAccessHonorsBlocks(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_blocks")
+	open := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent open server")
+	blocked := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent blocked server")
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
+	f.grant(t, authz.ScopeMCPBlockedConnect, mcpConnectSelector(blocked.String(), f.project.ID.String()))
+
+	callerCtx, principal := f.callerContext(t, f.principal.UserID)
+	output, err := f.service(t, agentChecksFunc(nil)).MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	byID := agentServersByID(output)
+	require.Contains(t, byID, open.String())
+	require.NotContains(t, byID, blocked.String(), "an mcp:blocked_connect grant takes the server away")
+}
+
+func TestAgentMCPAccessMatchesServerAndToolsetIDs(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_wrappers")
+	ctx := t.Context()
+	seedToolsetServer := func(toolsetID uuid.UUID, id uuid.UUID, name string) {
+		_, err := mcpserversrepo.New(f.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: id, ProjectID: f.project.ID, Name: conv.ToPGText(name), Slug: conv.ToPGText("agent-wrapper-" + uuid.NewString()[:8]),
+			ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private",
+		})
+		require.NoError(t, err)
+	}
+	seedToolset := func(name string) uuid.UUID {
+		toolset, err := toolsetsrepo.New(f.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID, Name: name, Slug: "agent-toolset-" + uuid.NewString()[:8]})
+		require.NoError(t, err)
+		return toolset.ID
+	}
+
+	// One toolset served by its canonical server and a second wrapper.
+	shared := seedToolset("Agent shared toolset")
+	seedToolsetServer(shared, shared, "Agent canonical server")
+	wrapper := uuid.New()
+	seedToolsetServer(shared, wrapper, "Agent wrapper server")
+	// Another toolset served only by a wrapper with its own ID.
+	legacy := seedToolset("Agent legacy toolset")
+	legacyWrapper := uuid.New()
+	seedToolsetServer(legacy, legacyWrapper, "Agent legacy wrapper")
+
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(wrapper.String(), f.project.ID.String()))
+	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(legacy.String(), f.project.ID.String()))
+
+	callerCtx, principal := f.callerContext(t, f.principal.UserID, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
+	service := f.service(t, agentChecksFunc(func(_ context.Context, payload *accessgen.ListChallengesPayload) (*accessgen.ListChallengesResult, error) {
+		if *payload.Outcome == "allow" {
+			return &accessgen.ListChallengesResult{Total: 0, Challenges: []*accessgen.AuthzChallenge{}}, nil
+		}
+		check := func(id, resourceID string) *accessgen.AuthzChallenge {
+			return &accessgen.AuthzChallenge{ID: id, Timestamp: "2026-11-07T12:00:00Z", Scope: "mcp:connect", ResourceKind: new(authz.ResourceKindMCP), ResourceID: &resourceID, Reason: "no_grants", PrincipalUrn: "agent:" + f.agentID.String()}
+		}
+		return &accessgen.ListChallengesResult{Total: 3, Challenges: []*accessgen.AuthzChallenge{check("d1", wrapper.String()), check("d2", shared.String()), check("d3", legacy.String())}}, nil
+	}))
+
+	output, err := service.MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
+	require.NoError(t, err)
+	byID := agentServersByID(output)
+	require.Contains(t, byID, wrapper.String(), "a grant on a wrapper's own server ID reaches that wrapper")
+	require.Equal(t, "Agent wrapper server", byID[wrapper.String()].MCPName)
+	require.NotContains(t, byID, shared.String(), "and not the toolset's other server")
+	require.Contains(t, byID, legacyWrapper.String(), "a grant naming the toolset ID reaches the server that serves it")
+	require.True(t, hasUseRule(byID[legacyWrapper.String()].Rules, "agent", "resource"))
+	require.Zero(t, output.MissingServerGrants, "neither grant names a missing server")
+
+	checks, err := service.AuthorizationChecks(callerCtx, principal, AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("2026-11-01T00:00:00Z"), To: new("2026-11-08T00:00:00Z")})
+	require.NoError(t, err)
+	names := make(map[string]string, len(checks.Denied.Groups))
+	for _, group := range checks.Denied.Groups {
+		names[group.ResourceID] = group.ResourceName
+	}
+	require.Equal(t, map[string]string{
+		wrapper.String(): "Agent wrapper server",
+		shared.String():  "Agent canonical server",
+		legacy.String():  "Agent legacy wrapper",
+	}, names, "checks on a server's own ID and on a toolset ID are both named")
+}
+
+func agentServersByID(output AgentMCPAccessOutput) map[string]AgentMCPServerAccess {
+	byID := make(map[string]AgentMCPServerAccess, len(output.Servers))
+	for _, server := range output.Servers {
+		byID[server.MCPID] = server
+	}
+	return byID
+}
+
+// hasUseRule reports whether an allowing connect rule from sourceKind covers
+// appliesTo.
+func hasUseRule(rules []access.MCPAccessRuleSummary, sourceKind, appliesTo string) bool {
+	return slices.ContainsFunc(rules, func(rule access.MCPAccessRuleSummary) bool {
+		return rule.AccessLevel == "use" && rule.SourceKind == sourceKind && rule.AppliesTo == appliesTo && rule.Effect == string(authz.GrantEffectAllows)
+	})
 }

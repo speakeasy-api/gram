@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 	"time"
@@ -15,6 +16,8 @@ import (
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/access"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -22,16 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/plugins"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 const (
-	// maxAgentAccessTargets bounds the servers and toolsets one access read
-	// matches the agent's grants against. Organizations hold far fewer; past
-	// it the result says it was cut off rather than reading without bound.
-	maxAgentAccessTargets = 1000
-
 	// maxAgentChecksPerOutcome is the most denied, and separately the most
 	// allowed, checks one read groups. It is the largest page listChallenges
 	// serves, so each outcome is one read.
@@ -44,10 +43,6 @@ const (
 	// maxAgentChecksWindow matches how long checks are kept.
 	maxAgentChecksWindow = 90 * 24 * time.Hour
 )
-
-// agentConnectScopes are the agent policy scopes that let it connect to an MCP
-// server: mcp:connect, and mcp:read and mcp:write, which include it.
-var agentConnectScopes = []authz.Scope{authz.ScopeMCPConnect, authz.ScopeMCPRead, authz.ScopeMCPWrite}
 
 // hiddenAgentCheckScopes are left out of an agent's checks, from the groups
 // and from the totals. An agent records one org:hooks_ingest check for every
@@ -86,16 +81,9 @@ const (
 	agentCredentialCallerProvided = "caller_provided"
 )
 
-// How an mcp:connect grant reaches a server, narrowest first.
-const (
-	agentGrantServer       = "server"
-	agentGrantProject      = "project"
-	agentGrantOrganization = "organization"
-)
-
 // AgentAuthorizationChecks is the dashboard's authorization check listing. It
-// keeps the org:read check, the organization member filter and the
-// exclude_scopes semantics in one place.
+// applies the organization member filter and the exclude_scopes semantics,
+// and checks org:read again as the dashboard does.
 type AgentAuthorizationChecks interface {
 	ListChallenges(context.Context, *accessgen.ListChallengesPayload) (*accessgen.ListChallengesResult, error)
 }
@@ -104,6 +92,7 @@ type AgentAuthorizationChecks interface {
 type AgentIdentityReadService struct {
 	db     *pgxpool.Pool
 	engine *authz.Engine
+	roles  *access.RoleManager
 	checks AgentAuthorizationChecks
 	budget OperationBudget
 	now    func() time.Time
@@ -111,12 +100,22 @@ type AgentIdentityReadService struct {
 
 // NewAgentIdentityReadService reads agent policy and connection assignments
 // from Postgres and authorization checks through checks.
-func NewAgentIdentityReadService(db *pgxpool.Pool, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
-	return &AgentIdentityReadService{db: db, engine: engine, checks: checks, budget: budget, now: time.Now}
+func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, engine *authz.Engine, checks AgentAuthorizationChecks, budget OperationBudget) *AgentIdentityReadService {
+	if logger == nil {
+		return &AgentIdentityReadService{db: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
+	}
+	return &AgentIdentityReadService{
+		db:     db,
+		engine: engine,
+		roles:  access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
+		checks: checks,
+		budget: budget,
+		now:    time.Now,
+	}
 }
 
 func (s *AgentIdentityReadService) valid() bool {
-	return s != nil && s.db != nil && s.engine != nil && s.checks != nil && s.budget.valid() && s.now != nil
+	return s != nil && s.db != nil && s.engine != nil && s.roles != nil && s.checks != nil && s.budget.valid() && s.now != nil
 }
 
 // AgentIdentityInput names one agent.
@@ -132,8 +131,13 @@ type AgentIdentity struct {
 	// Name is the agent's name.
 	Name string `json:"name"`
 
-	// Lifecycle is active, suspended, revoked or owner_reassignment_required.
+	// Lifecycle is active, suspended, or revoked, as the agents API reports it.
 	Lifecycle string `json:"lifecycle"`
+
+	// OwnerReassignmentRequired is true when the agent's owner left and it
+	// awaits a new one; until then its keys are refused, whatever Lifecycle
+	// says.
+	OwnerReassignmentRequired bool `json:"owner_reassignment_required"`
 }
 
 // AgentCredentialPerson is someone whose own connection an agent signs in with.
@@ -145,23 +149,29 @@ type AgentCredentialPerson struct {
 	ConnectionExpired bool `json:"connection_expired"`
 }
 
-// AgentMCPServerAccess is one MCP server an agent's mcp:connect, mcp:read or
-// mcp:write grants let it connect to.
+// AgentMCPServerAccess is one MCP server an agent may connect to.
 type AgentMCPServerAccess struct {
-	// ResourceID is the ID mcp:connect grants and checks name for the server.
-	ResourceID string `json:"resource_id"`
+	// MCPID is the server's ID, the one its endpoint checks mcp:connect on.
+	MCPID string `json:"mcp_id"`
 
-	// Name is the server's name.
-	Name string `json:"name"`
+	// MCPName is the server's name.
+	MCPName string `json:"mcp_name"`
 
 	// ProjectID and ProjectName are the project the server belongs to.
 	ProjectID string `json:"project_id"`
 
 	ProjectName string `json:"project_name"`
 
-	// Grant is how the narrowest matching mcp:connect, mcp:read or mcp:write
-	// grant reaches the server: server, project, or organization.
-	Grant string `json:"grant"`
+	// ConnectionAccess is public when the server admits anyone, otherwise
+	// all_tools or some_tools as the agent's grants and blocks decide it.
+	ConnectionAccess string `json:"connection_access" jsonschema:"public, all_tools, or some_tools"`
+
+	// ToolAccess is all or some.
+	ToolAccess string `json:"tool_access" jsonschema:"all or some"`
+
+	// Rules are the grants and blocks that decide the agent's access, from
+	// its own policy, its roles, and grants to everyone.
+	Rules []access.MCPAccessRuleSummary `json:"rules"`
 
 	// CredentialMode is shared, on_behalf_of, not_assigned, or
 	// caller_provided.
@@ -180,15 +190,15 @@ type AgentMCPServerAccess struct {
 type AgentMCPAccessOutput struct {
 	Agent AgentIdentity `json:"agent"`
 
-	// Servers are the MCP servers the agent's mcp:connect, mcp:read and
-	// mcp:write grants reach.
+	// Servers are the MCP servers the agent may connect to.
 	Servers []AgentMCPServerAccess `json:"servers"`
 
-	// MissingServerGrants counts grants naming a server that no longer exists.
+	// MissingServerGrants counts the agent's own grants naming a server that
+	// no longer exists.
 	MissingServerGrants int `json:"missing_server_grants"`
 
 	// Truncated is true when the organization holds more servers than one read
-	// matches, so some reachable servers may be missing.
+	// evaluates, so some reachable servers may be missing.
 	Truncated bool `json:"truncated"`
 }
 
@@ -253,19 +263,12 @@ type AgentAuthorizationChecksOutput struct {
 	HiddenScopes []string `json:"hidden_scopes"`
 }
 
-// agentConnectTarget is one resource an mcp:connect grant can name.
-type agentConnectTarget struct {
-	resourceID  uuid.UUID
-	serverID    uuid.NullUUID
-	projectID   uuid.UUID
-	projectName string
-	name        string
-	issuerID    uuid.NullUUID
-}
-
-// MCPAccess reads the MCP servers an agent's mcp:connect, mcp:read and mcp:write grants reach and
-// whose credential it uses on each. It needs what the dashboard's Permissions
-// tab needs: the agent's owner, or agent:write on the agent.
+// MCPAccess reads the MCP servers an agent may connect to and whose
+// credential it uses on each. Its grants are the ones its keys are checked
+// with: its own policy, its roles, and grants to everyone, with blocks
+// applied, evaluated as the member access read evaluates a member's. It needs
+// what the dashboard's Permissions tab needs: the agent's owner, or
+// agent:write on the agent.
 func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Principal, input AgentIdentityInput) (AgentMCPAccessOutput, error) {
 	var zero AgentMCPAccessOutput
 	if !s.valid() {
@@ -279,70 +282,75 @@ func (s *AgentIdentityReadService) MCPAccess(ctx context.Context, principal Prin
 		return zero, err
 	}
 
-	rows, err := agentsrepo.New(s.db).ListAgentPolicyGrants(ctx, agentsrepo.ListAgentPolicyGrantsParams{OrganizationID: principal.OrganizationID, AgentID: agent.ID})
-	if err != nil {
-		return zero, fmt.Errorf("list agent policy grants: %w", err)
-	}
-	grants := make([]authz.Grant, 0, len(rows))
-	for _, row := range rows {
-		// mcp:read and mcp:write include connecting, so they reach servers too;
-		// the engine's scope expansion decides when each grant is matched.
-		if !slices.Contains(agentConnectScopes, authz.Scope(row.Scope)) {
-			continue
-		}
-		selector, err := authz.SelectorFromRow(row.Selectors)
-		if err != nil {
-			return zero, fmt.Errorf("parse agent %s selector: %w", row.Scope, err)
-		}
-		grants = append(grants, authz.NewGrantWithSelector(authz.Scope(row.Scope), selector))
-	}
-
 	output := AgentMCPAccessOutput{Agent: agentIdentity(agent), Servers: []AgentMCPServerAccess{}, MissingServerGrants: 0, Truncated: false}
-	if len(grants) == 0 {
+	if !agentSignsIn(agent) {
 		return output, nil
 	}
-	targets, truncated, err := s.connectTargets(ctx, principal.OrganizationID)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	principals, err := authz.ResolveAgentPrincipals(ctx, s.db, principal.OrganizationID, agentPrincipal)
 	if err != nil {
-		return zero, err
+		return zero, fmt.Errorf("resolve agent principals: %w", err)
+	}
+	grants, err := authz.LoadGrants(ctx, s.db, principal.OrganizationID, principals)
+	if err != nil {
+		return zero, fmt.Errorf("load agent grants: %w", err)
+	}
+	servers, truncated, err := grantedMCPAccess(ctx, s.db, s.roles, principal.OrganizationID, grants)
+	if err != nil {
+		return zero, fmt.Errorf("explain agent mcp access: %w", err)
 	}
 	output.Truncated = truncated
-
-	named := make(map[string]bool)
-	for _, target := range targets {
-		named[target.resourceID.String()] = true
-	}
-	for _, grant := range grants {
-		resourceID := grant.Selector[authz.SelectorKeyResourceID]
-		if resourceID != authz.WildcardResource && !named[resourceID] && !truncated {
-			output.MissingServerGrants++
-		}
+	if !truncated {
+		output.MissingServerGrants = missingServerGrants(grants, agentPrincipal.String(), servers)
 	}
 
 	credentials := newAgentCredentialReader(s.db, principal.OrganizationID, agent.ID, s.now())
-	for _, target := range targets {
-		reach, err := agentGrantReach(grants, target)
-		if err != nil {
-			return zero, err
-		}
-		if reach == "" {
+	for _, server := range servers {
+		if !server.access.CanConnect {
 			continue
 		}
-		access := AgentMCPServerAccess{
-			ResourceID:          target.resourceID.String(),
-			Name:                target.name,
-			ProjectID:           target.projectID.String(),
-			ProjectName:         target.projectName,
-			Grant:               reach,
+		entry := AgentMCPServerAccess{
+			MCPID:               server.access.MCPID,
+			MCPName:             server.access.MCPName,
+			ProjectID:           server.access.ProjectID,
+			ProjectName:         server.access.ProjectName,
+			ConnectionAccess:    server.access.ConnectionAccess,
+			ToolAccess:          server.access.ToolAccess,
+			Rules:               server.access.Rules,
 			CredentialMode:      agentCredentialShared,
 			OnBehalfOf:          []AgentCredentialPerson{},
 			UnusableAssignments: 0,
 		}
-		if err := credentials.describe(ctx, target, &access); err != nil {
+		if err := credentials.describe(ctx, server.server, &entry); err != nil {
 			return zero, err
 		}
-		output.Servers = append(output.Servers, access)
+		output.Servers = append(output.Servers, entry)
 	}
 	return output, nil
+}
+
+// missingServerGrants counts the grants principalURN holds that would let it
+// connect to one named MCP server, where no server in servers has that ID or
+// toolset ID.
+func missingServerGrants(grants []authz.Grant, principalURN string, servers []grantedMCPServer) int {
+	named := make(map[string]bool, 2*len(servers))
+	for _, server := range servers {
+		named[server.server.McpServerID.String()] = true
+		if server.server.ToolsetID.Valid {
+			named[server.server.ToolsetID.UUID.String()] = true
+		}
+	}
+	missing := 0
+	for _, grant := range grants {
+		if grant.PrincipalUrn != principalURN || !slices.Contains(authz.ScopeImplicationClosure(grant.Scope), authz.ScopeMCPConnect) {
+			continue
+		}
+		resourceID := grant.Selector.ResourceID()
+		if resourceID != authz.WildcardResource && !named[resourceID] {
+			missing++
+		}
+	}
+	return missing
 }
 
 // AuthorizationChecks reads an agent's recent authorization checks, denied
@@ -424,7 +432,10 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 }
 
 // requireAgent loads the agent and admits its unblocked owner, or a caller
-// holding scope on it, as the dashboard's agent authorizer does.
+// holding scope on it, as the dashboard's agent authorizer does. That
+// authorizer admits only a dashboard session, so this applies the same owner
+// rule through agents.OwnsUnblocked and the same scope check through the
+// caller's grants.
 func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal Principal, rawID string, scope authz.Scope) (agentsrepo.Agent, error) {
 	var zero agentsrepo.Agent
 	agentID, err := uuid.Parse(strings.TrimSpace(rawID))
@@ -442,7 +453,7 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	if err != nil {
 		return zero, fmt.Errorf("read agent: %w", err)
 	}
-	if agent.OwnerUserID == principal.UserID && !agent.OwnerReassignmentRequiredAt.Valid {
+	if agents.OwnsUnblocked(principal.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt) {
 		return agent, nil
 	}
 	if err := s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}); err != nil {
@@ -454,104 +465,45 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	return agent, nil
 }
 
-// connectTargets lists what an mcp:connect grant can name in the organization.
-func (s *AgentIdentityReadService) connectTargets(ctx context.Context, organizationID string) ([]agentConnectTarget, bool, error) {
-	queries := platformrepo.New(s.db)
-	servers, err := queries.ListPlatformMCPAgentConnectServers(ctx, platformrepo.ListPlatformMCPAgentConnectServersParams{OrganizationID: organizationID, LimitValue: maxAgentAccessTargets + 1})
-	if err != nil {
-		return nil, false, fmt.Errorf("list agent connect servers: %w", err)
-	}
-	toolsets, err := queries.ListPlatformMCPAgentConnectToolsets(ctx, platformrepo.ListPlatformMCPAgentConnectToolsetsParams{OrganizationID: organizationID, LimitValue: maxAgentAccessTargets + 1})
-	if err != nil {
-		return nil, false, fmt.Errorf("list agent connect toolsets: %w", err)
-	}
-	targets := make([]agentConnectTarget, 0, len(servers)+len(toolsets))
-	// Several servers can serve one toolset, and a grant names them all by
-	// that toolset's ID, so each resource is one target. The one that asks
-	// people to sign in is kept, since it decides whose credential is used.
-	byResource := make(map[uuid.UUID]int, len(servers))
-	for _, server := range servers {
-		target := agentConnectTarget{resourceID: server.ResourceID, serverID: uuid.NullUUID{UUID: server.McpServerID, Valid: true}, projectID: server.ProjectID, projectName: server.ProjectName, name: server.Name, issuerID: server.UserSessionIssuerID}
-		at, seen := byResource[server.ResourceID]
-		if !seen {
-			byResource[server.ResourceID] = len(targets)
-			targets = append(targets, target)
-			continue
-		}
-		if !targets[at].issuerID.Valid && target.issuerID.Valid {
-			targets[at] = target
-		}
-	}
-	for _, toolset := range toolsets {
-		targets = append(targets, agentConnectTarget{resourceID: toolset.ResourceID, serverID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, projectID: toolset.ProjectID, projectName: toolset.ProjectName, name: toolset.Name, issuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
-	}
-	slices.SortFunc(targets, func(a, b agentConnectTarget) int {
-		return cmp.Or(cmp.Compare(a.projectName, b.projectName), cmp.Compare(a.name, b.name), cmp.Compare(a.resourceID.String(), b.resourceID.String()))
-	})
-	// Either list reaching its bound means rows were left out, even when
-	// collapsing servers of one toolset brought the targets back under it.
-	truncated := len(servers) > maxAgentAccessTargets || len(toolsets) > maxAgentAccessTargets || len(targets) > maxAgentAccessTargets
-	return targets[:min(len(targets), maxAgentAccessTargets)], truncated, nil
-}
-
-// mcpNames names the MCP servers the checks are about.
+// mcpNames names the MCP servers the checks are about, by the server's own ID
+// or by the toolset ID the organization gateway checks.
 func (s *AgentIdentityReadService) mcpNames(ctx context.Context, organizationID string, results ...*accessgen.ListChallengesResult) (map[string]string, error) {
-	needed := false
+	var ids []uuid.UUID
 	for _, result := range results {
 		for _, check := range result.Challenges {
-			needed = needed || conv.PtrValOr(check.ResourceKind, "") == authz.ResourceKindMCP
+			if conv.PtrValOr(check.ResourceKind, "") != authz.ResourceKindMCP {
+				continue
+			}
+			id, err := uuid.Parse(conv.PtrValOr(check.ResourceID, ""))
+			if err != nil {
+				continue
+			}
+			ids = append(ids, id)
 		}
 	}
 	names := make(map[string]string)
-	if !needed {
+	if len(ids) == 0 {
 		return names, nil
 	}
-	targets, _, err := s.connectTargets(ctx, organizationID)
+	slices.SortFunc(ids, func(a, b uuid.UUID) int { return cmp.Compare(a.String(), b.String()) })
+	rows, err := platformrepo.New(s.db).ListPlatformMCPServerNamesByResourceIDs(ctx, platformrepo.ListPlatformMCPServerNamesByResourceIDsParams{OrganizationID: organizationID, ResourceIds: slices.Compact(ids)})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("name agent check servers: %w", err)
 	}
-	for _, target := range targets {
-		names[target.resourceID.String()] = target.name
+	// A server's own ID names it; a toolset ID takes the first server's name.
+	for _, row := range rows {
+		names[row.McpServerID.String()] = row.Name
 	}
-	return names, nil
-}
-
-// agentGrantReach says how the narrowest grant reaches target, or "" when
-// none does. Grants are matched with the engine's selector semantics.
-func agentGrantReach(grants []authz.Grant, target agentConnectTarget) (string, error) {
-	check := authz.MCPCheck(authz.ScopeMCPConnect, target.resourceID.String(), target.projectID.String())
-	reach := ""
-	for _, grant := range grants {
-		allowed, err := authz.GrantsAuthorize([]authz.Grant{grant}, check)
-		if err != nil {
-			return "", fmt.Errorf("match agent mcp:connect grant: %w", err)
-		}
-		if !allowed {
+	for _, row := range rows {
+		if !row.ToolsetID.Valid {
 			continue
 		}
-		candidate := agentGrantOrganization
-		switch {
-		case grant.Selector[authz.SelectorKeyResourceID] != authz.WildcardResource:
-			candidate = agentGrantServer
-		case grant.Selector[authz.SelectorKeyProjectID] != "":
-			candidate = agentGrantProject
-		}
-		if reach == "" || agentGrantRank(candidate) < agentGrantRank(reach) {
-			reach = candidate
+		toolsetID := row.ToolsetID.UUID.String()
+		if _, named := names[toolsetID]; !named {
+			names[toolsetID] = row.Name
 		}
 	}
-	return reach, nil
-}
-
-func agentGrantRank(reach string) int {
-	switch reach {
-	case agentGrantServer:
-		return 0
-	case agentGrantProject:
-		return 1
-	default:
-		return 2
-	}
+	return names, nil
 }
 
 // agentCredentialReader reads an agent's connection assignments once per
@@ -574,35 +526,32 @@ func newAgentCredentialReader(db *pgxpool.Pool, organizationID string, agentID u
 	return &agentCredentialReader{db: db, organizationID: organizationID, agentID: agentID, now: now, assignments: make(map[string]agentAssignments)}
 }
 
-// describe sets access's credential mode, as the dashboard's "Acting on behalf
+// describe sets entry's credential mode, as the dashboard's "Acting on behalf
 // of" reads it: a server that asks no person to sign in uses a shared
 // credential, and otherwise the agent acts for the people whose connections
 // are assigned to it.
-func (r *agentCredentialReader) describe(ctx context.Context, target agentConnectTarget, access *AgentMCPServerAccess) error {
-	if !target.serverID.Valid {
-		return nil
-	}
-	auth, err := authclients.ReadServerAuthentication(ctx, r.db, r.organizationID, target.serverID.UUID)
+func (r *agentCredentialReader) describe(ctx context.Context, server platformrepo.ListPlatformMCPInventoryRow, entry *AgentMCPServerAccess) error {
+	auth, err := authclients.ReadServerAuthentication(ctx, r.db, r.organizationID, server.McpServerID)
 	if err != nil {
 		return fmt.Errorf("read mcp server authentication: %w", err)
 	}
-	if !target.issuerID.Valid || !offersPersonalSignIn(auth) {
+	if !server.UserSessionIssuerID.Valid || !offersPersonalSignIn(auth) {
 		if passesCallerCredentialThrough(auth) {
-			access.CredentialMode = agentCredentialCallerProvided
+			entry.CredentialMode = agentCredentialCallerProvided
 		}
 		return nil
 	}
-	assigned, err := r.read(ctx, target.projectID, target.issuerID.UUID)
+	assigned, err := r.read(ctx, server.ProjectID, server.UserSessionIssuerID.UUID)
 	if err != nil {
 		return err
 	}
-	access.UnusableAssignments = assigned.unusable
+	entry.UnusableAssignments = assigned.unusable
 	if len(assigned.people) == 0 {
-		access.CredentialMode = agentCredentialNotAssigned
+		entry.CredentialMode = agentCredentialNotAssigned
 		return nil
 	}
-	access.CredentialMode = agentCredentialOnBehalfOf
-	access.OnBehalfOf = slices.Clone(assigned.people)
+	entry.CredentialMode = agentCredentialOnBehalfOf
+	entry.OnBehalfOf = slices.Clone(assigned.people)
 	return nil
 }
 
@@ -696,16 +645,19 @@ func remoteSessionEnded(session remotesessionsrepo.RemoteSession, now time.Time)
 }
 
 func agentIdentity(agent agentsrepo.Agent) AgentIdentity {
-	lifecycle := "active"
-	switch {
-	case agent.RevokedAt.Valid:
-		lifecycle = "revoked"
-	case agent.SuspendedAt.Valid:
-		lifecycle = "suspended"
-	case agent.OwnerReassignmentRequiredAt.Valid:
-		lifecycle = "owner_reassignment_required"
+	return AgentIdentity{
+		ID:                        agent.ID.String(),
+		Name:                      agent.Name,
+		Lifecycle:                 string(agents.DeriveLifecycle(agent)),
+		OwnerReassignmentRequired: agent.OwnerReassignmentRequiredAt.Valid,
 	}
-	return AgentIdentity{ID: agent.ID.String(), Name: agent.Name, Lifecycle: lifecycle}
+}
+
+// agentSignsIn reports whether the agent's keys still authenticate: an agent
+// that is not active, or awaits a new owner, is refused before any grant is
+// read.
+func agentSignsIn(agent agentsrepo.Agent) bool {
+	return agents.DeriveLifecycle(agent) == agents.LifecycleActive && !agent.OwnerReassignmentRequiredAt.Valid
 }
 
 // agentChecksWindow resolves the period, defaulting to the last week.

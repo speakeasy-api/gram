@@ -27,6 +27,7 @@ import (
 	telem_srv "github.com/speakeasy-api/gram/server/gen/http/telemetry/server"
 	telem_gen "github.com/speakeasy-api/gram/server/gen/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/agentgateway"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentsRepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -4634,7 +4635,7 @@ func agentGatewayCandidate(authCtx *contextvalues.AuthContext, agent agentsRepo.
 	}
 	// The agent visibility rule: an owner who is not awaiting reassignment
 	// sees their own agent whatever their grants.
-	owned := authCtx != nil && agent.OwnerUserID == authCtx.UserID && !agent.OwnerReassignmentRequiredAt.Valid
+	owned := authCtx != nil && agents.OwnsUnblocked(authCtx.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt)
 	return gatewayCandidate{id: agentgateway.GatewayID(agent.ID), label: label, projectID: uuid.Nil, agentID: agent.ID, ownedAgent: owned}
 }
 
