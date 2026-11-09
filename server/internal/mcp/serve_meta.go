@@ -108,8 +108,10 @@ type metaGateContext struct {
 	unapprovedMembers []metaMember
 	// hiddenMembers are members the caller hid, reported but never served.
 	hiddenMembers []metaMember
-	// deniedMembers are private members admission turned away. They are never
-	// listed or served; a call that names one records its denied check.
+	// deniedMembers are members admission turned away: private members refused
+	// their own connect and, on derived gateways, public members refused their
+	// private toolset's. They are never listed or served; a call that names one
+	// records its denied check.
 	deniedMembers []metaMember
 	// execute permits live credential resolution for a cached tool call.
 	execute         bool
