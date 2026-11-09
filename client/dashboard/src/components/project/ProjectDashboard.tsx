@@ -55,6 +55,7 @@ export function ProjectDashboard(): JSX.Element {
   const { orgSlug, projectSlug } = useSlugs();
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
+  const { hasScope } = useRBAC();
 
   const {
     dateRange,
@@ -443,7 +444,11 @@ export function ProjectDashboard(): JSX.Element {
       <Page.Section.Body>
         <div className="space-y-8">
           {showDisabledBanner && (
-            <LoggingDisabledBanner settingsHref={orgRoutes.logs.href()} />
+            <LoggingDisabledBanner
+              settingsHref={
+                hasScope("org:admin") ? orgRoutes.logs.href() : undefined
+              }
+            />
           )}
 
           {logsEnabled && (
@@ -775,7 +780,9 @@ export function ProjectDashboard(): JSX.Element {
           <ActivityTimelineCard
             logs={recentLogs}
             isPending={isAuditLogsPending}
-            viewAllHref={orgRoutes.auditLogs.href()}
+            viewAllHref={
+              hasScope("org:read") ? orgRoutes.auditLogs.href() : undefined
+            }
           />
         </div>
       </Page.Section.Body>
@@ -820,25 +827,28 @@ function ExploreWithAIButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function LoggingDisabledBanner({ settingsHref }: { settingsHref: string }) {
+function LoggingDisabledBanner({ settingsHref }: { settingsHref?: string }) {
   return (
     <Card>
       <Card.Content className="flex flex-col items-start gap-6">
         <div className="space-y-1">
           <h3 className="text-lg font-medium">Logging is disabled</h3>
           <p className="text-muted-foreground text-sm">
-            Enable logging to see an overview of your project metrics, top
-            activity, and session data.
+            {settingsHref
+              ? "Enable logging to see an overview of your project metrics, top activity, and session data."
+              : "Ask an organization admin to enable logging to see an overview of your project metrics, top activity, and session data."}
           </p>
         </div>
-        <Link to={settingsHref}>
-          <Button variant="secondary" size="sm">
-            <Button.Text>Enable in settings</Button.Text>
-            <Button.RightIcon>
-              <Icon name="arrow-right" />
-            </Button.RightIcon>
-          </Button>
-        </Link>
+        {settingsHref && (
+          <Link to={settingsHref}>
+            <Button variant="secondary" size="sm">
+              <Button.Text>Enable in settings</Button.Text>
+              <Button.RightIcon>
+                <Icon name="arrow-right" />
+              </Button.RightIcon>
+            </Button>
+          </Link>
+        )}
       </Card.Content>
     </Card>
   );
