@@ -377,14 +377,14 @@ func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger
 // memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
 const memberSetupChangedDetail = "setup_changed"
 
-// staleChoiceHappened records whoever the stale choice's message tells to act first.
+// staleChoiceHappened is the code for whoever the stale choice's message tells to act first.
 // An unchecked remedy is our failed lookup, not the person's or an admin's.
 func staleChoiceHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
 	switch remedy {
 	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
 		return mcpconnectionattempts.CodeNeedsSignIn
 	case staleChoiceAskAdmin:
-		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+		return mcpconnectionattempts.CodeApprovalNeedsAdmin
 	case staleChoiceUnchecked:
 	}
 	return mcpconnectionattempts.CodeInternalError

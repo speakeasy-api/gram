@@ -161,7 +161,7 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 			}
 			var logs bytes.Buffer
 			f.service.logger = slog.New(slog.NewJSONHandler(&logs, nil))
-			err := f.service.validateCatalogMember(t.Context(), gate, member)
+			err := f.service.validateCatalogMember(t.Context(), gate, member, catalogCheckRecorded)
 			if !tc.rejected {
 				require.NoError(t, err)
 				return

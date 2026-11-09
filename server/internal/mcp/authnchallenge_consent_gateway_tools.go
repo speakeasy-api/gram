@@ -192,12 +192,21 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if organizationGateway && len(members) == 0 {
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
-	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
 	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
 	if err != nil {
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}
 	view.auth = memberAuth
+	var preferred map[uuid.UUID]uuid.UUID
+	if memberAuth == nil {
+		serviceAuth, err := s.gatewayConsentServiceChoices(ctx, r, endpoint, subject, members, view.cards)
+		if err != nil {
+			return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway service choices").LogError(ctx, logger)
+		}
+		view.auth = serviceAuth
+		preferred = selectedServices(serviceAuth)
+	}
+	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards, preferred)
 	for i := range members {
 		member := &members[i]
 		if member.backend != metaMemberBackendProxied {

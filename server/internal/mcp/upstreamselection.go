@@ -1085,7 +1085,11 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 			return false, err
 		}
 		auth := choices[member.serverID]
-		if auth == nil || auth.Status != consentAuthChoose {
+		switch {
+		case auth != nil && auth.Status == consentAuthNoAuth:
+			// Consent approves a member needing no upstream sign-in as it is.
+			return true, nil
+		case auth == nil || auth.Status != consentAuthChoose:
 			return false, nil
 		}
 		var registrations []uuid.UUID
@@ -1144,11 +1148,19 @@ func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, g
 		message, _ := s.refuseStaleChoiceCall(ctx, logger, gate, member, stale)
 		return message
 	}
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		message, _ := s.refuseCatalogConsentCall(ctx, logger, gate, member, consent, true)
+		return message
+	}
 	return memberErrorMessage(err)
 }
 
 // memberFailureMessage is what a describe of a failed member reads.
 func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
+	if consent, ok := errors.AsType[catalogConsentError](err); ok {
+		message, _ := s.catalogConsentRefusal(ctx, logger, gate, member, consent, true)
+		return message
+	}
 	stale, ok := errors.AsType[memberStaleChoiceError](err)
 	if !ok {
 		return memberErrorMessage(err)

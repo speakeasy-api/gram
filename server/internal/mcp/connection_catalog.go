@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -479,14 +480,24 @@ func (c *connectionCatalog) approvedMembers(members []metaMember) (approved, una
 	return approved, unapproved
 }
 
+// catalogCheckRecording says whether a member check counts toward the re-consent forecast and writes diagnostics.
+type catalogCheckRecording string
+
+const (
+	// catalogCheckRecorded gates a real list, describe or call.
+	catalogCheckRecorded catalogCheckRecording = "recorded"
+	// catalogCheckUnrecorded only reads a member's state for status.
+	catalogCheckUnrecorded catalogCheckRecording = "unrecorded"
+)
+
 // validateCatalogMember prevents a changed destination from inheriting consent.
-func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember) error {
+func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, recording catalogCheckRecording) error {
 	if gate.catalog == nil {
 		return nil
 	}
 	approved, found := gate.catalog.Members[member.slug]
 	if !found || approved.ServerID != member.serverID || approved.ProjectID != member.projectID {
-		return s.rejectCatalogMember(ctx, gate, member, consentRejectionMemberNotApproved, catalogMemberNotApproved,
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionMemberNotApproved, catalogMemberNotApproved,
 			map[string]bool{"member_recorded": found, "server_id_matches": found && approved.ServerID == member.serverID, "project_id_matches": found && approved.ProjectID == member.projectID})
 	}
 
@@ -499,7 +510,7 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 			return member.upstreamUnavailable
 		}
 		if approved.Auth == nil || approved.Auth.RegistrationID != member.chosenClientID || approved.Auth.ClientID != clientID {
-			return s.rejectCatalogMember(ctx, gate, member, consentRejectionAuthenticationChanged, "This server's authentication changed. Reconnect this gateway in your AI app to approve it.",
+			return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionAuthenticationChanged, "This server's authentication changed. Reconnect this gateway in your AI app to approve it.",
 				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
@@ -509,15 +520,17 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 		return memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
 	}
 	typedCompared := approved.typedCompared(typedChoices)
-	s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
-		organizationID: gate.organizationID,
-		serverID:       member.serverID,
-		site:           upstreamIssuerReconsentSiteCatalogMember,
-		consenter:      gate.userID,
-		outcome:        upstreamIssuerReconsent(approved.approvedHash(typedChoices), member.configuration.forMode(typedCompared), member.otherConfiguration.forMode(typedCompared), nil),
-	})
+	if recording == catalogCheckRecorded {
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: gate.organizationID,
+			serverID:       member.serverID,
+			site:           upstreamIssuerReconsentSiteCatalogMember,
+			consenter:      gate.userID,
+			outcome:        upstreamIssuerReconsent(approved.approvedHash(typedChoices), member.configuration.forMode(typedCompared), member.otherConfiguration.forMode(typedCompared), nil),
+		})
+	}
 	if approved.configurationChanged(member.configuration, typedChoices) {
-		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
+		return s.rejectCatalogMember(ctx, gate, member, recording, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
 			map[string]bool{"configuration_hash_present": member.configuration.hash != "", "approved_hash_recorded": approved.BackendHash != "", "typed_compared": typedCompared})
 	}
 	return nil
@@ -526,8 +539,11 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 // Log before discovery collapses the refusal into consent_required. Keep the
 // record to correlation IDs and comparison results: never log the catalog,
 // credentials, configuration hashes, headers, or tool definitions.
-func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, reason consentRejectionReason, message string, comparisons map[string]bool) error {
+func (s *Service) rejectCatalogMember(ctx context.Context, gate *metaGateContext, member metaMember, recording catalogCheckRecording, reason consentRejectionReason, message string, comparisons map[string]bool) error {
 	err := catalogConsentError{metaMemberError: &metaMemberError{message: message}, reason: reason}
+	if recording != catalogCheckRecorded {
+		return err
+	}
 	if gate.consentDiagnostics != nil {
 		key := consentDiagnosticKey{catalogID: gate.catalog.ID, memberID: member.serverID, reason: reason}
 		if _, seen := gate.consentDiagnostics.seen.LoadOrStore(key, struct{}{}); seen {
@@ -580,6 +596,92 @@ func needsNewConsent(err error) bool {
 	}
 	_, stale := errors.AsType[memberStaleChoiceError](err)
 	return stale
+}
+
+// catalogConsentRemedy says who can restore a member's approval. A new consent restores it
+// unless consent would offer the person no usable connection; then only an administrator can.
+// It is unchecked when that lookup fails.
+func (s *Service) catalogConsentRemedy(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) staleChoiceRemedy {
+	authentication := gate.authentication
+	switch {
+	case authentication == nil || authentication.subject.Kind != urn.SessionSubjectKindUser:
+		// Whoever approved this connection gives consent again.
+		return staleChoiceReconnect
+	case !authentication.refreshableUserSession, gate.memberChoices == nil:
+		return staleChoiceReconnectThenAdmin
+	case member.backend != metaMemberBackendProxied:
+		return staleChoiceReconnect
+	}
+	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
+	switch {
+	case err != nil:
+		logger.WarnContext(ctx, "check whether consent can approve a changed member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return staleChoiceUnchecked
+	case fixable:
+		return staleChoiceReconnect
+	}
+	return staleChoiceAskAdmin
+}
+
+// catalogConsentMessage names the server when server is set; Code Mode carries the untrusted slug separately.
+// An unchecked remedy reads as reconnect, then ask an administrator.
+func catalogConsentMessage(server string, reason consentRejectionReason, remedy staleChoiceRemedy, person bool) string {
+	what := "settings"
+	if reason == consentRejectionAuthenticationChanged {
+		what = "sign-in"
+	}
+	subject := fmt.Sprintf("The %s for this server", what)
+	if server != "" {
+		subject = fmt.Sprintf("The %s for the %q server", what, server)
+	}
+	switch {
+	case !person:
+		return subject + " changed since this connection was approved. Ask whoever set up this connection to approve it again."
+	case remedy == staleChoiceAskAdmin:
+		return subject + " changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access."
+	case remedy == staleChoiceReconnectThenAdmin, remedy == staleChoiceUnchecked:
+		return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again. If that doesn't help, ask your administrator."
+	}
+	return subject + " changed since you approved it. Reconnect this gateway in your AI app and approve it again."
+}
+
+// catalogConsentRefusal words a member whose approval no longer matches, without recording it.
+func (s *Service) catalogConsentRefusal(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	if consent.reason != consentRejectionAuthenticationChanged && consent.reason != consentRejectionConfigurationChanged {
+		return consent.message, staleChoiceReconnect
+	}
+	remedy := s.catalogConsentRemedy(ctx, logger, gate, member)
+	server := ""
+	if named {
+		server = member.slug
+	}
+	person := gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser
+	return catalogConsentMessage(server, consent.reason, remedy, person), remedy
+}
+
+// catalogApproval is one check of a member against its catalog; message and remedy are set when changed.
+type catalogApproval struct {
+	err     error
+	changed bool
+	message string
+	remedy  staleChoiceRemedy
+}
+
+// checkCatalogApproval reads member's approval for status and words a changed one, recording nothing.
+func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) catalogApproval {
+	approval := catalogApproval{err: s.validateCatalogMember(ctx, gate, member, catalogCheckUnrecorded), changed: false, message: "", remedy: staleChoiceReconnect}
+	if consent, ok := errors.AsType[catalogConsentError](approval.err); ok {
+		approval.changed = true
+		approval.message, approval.remedy = s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
+	}
+	return approval
+}
+
+// refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
+func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
+	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)
+	s.recordMemberFailure(ctx, gate, member, consentRefusalHappened(remedy), mcpconnectionattempts.Detail(string(consent.reason)))
+	return message, remedy
 }
 
 // memberConfiguration is one server's stored-configuration fingerprints.

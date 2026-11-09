@@ -198,6 +198,28 @@ func TestPersonalReadinessOfAConnectionInAnOutage(t *testing.T) {
 	require.Empty(t, connect)
 }
 
+// A connection that needs a reconnect anyway is not made ready by an outage.
+func TestPersonalReadinessReconnectsThroughAnOutage(t *testing.T) {
+	t.Parallel()
+	for name, flagged := range map[string]remoteSessionCard{
+		"rejected":           {Rejected: true},
+		"inactive":           {Inactive: true},
+		"identity reconnect": {IdentityReconnect: true},
+	} {
+		for _, clientType := range []string{authClientTypeRemoteSession, authClientTypeEMA} {
+			t.Run(name+"/"+clientType, func(t *testing.T) {
+				t.Parallel()
+				registration := uuid.New()
+				card := flagged
+				card.ClientID, card.Connected, card.Chained, card.Unavailable = registration.String(), true, clientType == authClientTypeEMA, true
+				state, connect := personalReadiness(clientType, validUUID(registration), []remoteSessionCard{card})
+				require.Equal(t, consentClientReconnect, state)
+				require.Equal(t, registration.String(), connect)
+			})
+		}
+	}
+}
+
 func TestCardPanelHidesLiveDetailsDuringAnOutage(t *testing.T) {
 	t.Parallel()
 
