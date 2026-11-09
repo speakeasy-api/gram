@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
@@ -408,22 +407,6 @@ func TestConnectionOutageMessage(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, connectionOutageMessage(tc.name, tc.kind, tc.wait))
 	}
-}
-
-// Only a person has a connect page to reconnect on.
-func TestMemberReconnectURL_OnlyForPeople(t *testing.T) {
-	t.Parallel()
-
-	member := metaMember{slug: "m", remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
-	gate := func(subject urn.SessionSubject) metaGateContext {
-		return metaGateContext{connectRoot: "https://app.example.test/connect", authentication: &issuerGateAuthentication{subject: subject}}
-	}
-	require.NotEmpty(t, gate(urn.NewUserSubject("user-1")).memberReconnectURL(member))
-	require.Empty(t, gate(urn.NewAgentSubject(uuid.New())).memberReconnectURL(member))
-	require.Empty(t, gate(urn.NewWorkloadSubject(uuid.New(), "workload")).memberReconnectURL(member))
-	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect"}.memberReconnectURL(member))
-	require.NotEmpty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1"}.memberReconnectURL(member), "the Platform gateway serves people, with no authentication set")
-	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect", userID: "user-1", agentID: uuid.New()}.memberReconnectURL(member))
 }
 
 // A caller with no connect page is sent to an administrator, not told to ask a user to open one.

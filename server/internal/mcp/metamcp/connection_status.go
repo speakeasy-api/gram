@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/hex"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -77,8 +78,10 @@ type ConnectionStatusServer struct {
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
 
-	// Reconnect marks a row on an agent gateway that reconnecting at the
-	// agent's sign-in step can fix.
+	// Reconnect marks a row that opening ConnectURL fixes when the result's
+	// Audience is not the caller: on an agent gateway, a server the agent's
+	// sign-in step connects. The caller's own connect page fixes every row
+	// that needs sign-in, so it marks none.
 	Reconnect bool `json:"reconnect,omitempty"`
 
 	// Outage is what the view shows for SignInUnavailable; Detail stays the message for the AI app.
@@ -93,27 +96,30 @@ type ConnectionStatusOutage struct {
 	ReconnectURL string `json:"reconnectUrl,omitempty"`
 }
 
+// ConnectionStatusAudience is who opens a connection_status result's
+// ConnectURL.
+type ConnectionStatusAudience string
+
+const (
+	// ConnectionStatusAudienceCaller: the caller signs in at ConnectURL.
+	ConnectionStatusAudienceCaller ConnectionStatusAudience = ""
+	// ConnectionStatusAudienceAgentEditors: the caller is an agent, which
+	// cannot sign in itself. Someone who can edit it opens ConnectURL, the
+	// agent's MCP sign-in step, for the rows marked Reconnect.
+	ConnectionStatusAudienceAgentEditors ConnectionStatusAudience = "agent_editors"
+)
+
 // ConnectionStatusResult is the structuredContent payload of a
-// connection_status call. ConnectURL is the gateway's connect page; it is
-// empty when the gateway has no sign-in.
+// connection_status call. ConnectURL is the gateway's connect page, or on an
+// agent gateway the agent's MCP sign-in step; it is empty when there is no
+// page to open.
 type ConnectionStatusResult struct {
-	ConnectURL string                   `json:"connectUrl,omitempty"`
-	Servers    []ConnectionStatusServer `json:"servers"`
+	ConnectURL string `json:"connectUrl,omitempty"`
 
-	// Reconnect is set on an agent gateway when a server needs signing in
-	// again: the agent cannot, so someone who can edit it reconnects it.
-	Reconnect *ConnectionStatusReconnect `json:"reconnect,omitempty"`
+	// Audience is who opens ConnectURL.
+	Audience ConnectionStatusAudience `json:"audience,omitempty"`
 
-	// Agent reports an agent gateway, which the agent cannot sign in to
-	// itself. Only the text hint reads it.
-	Agent bool `json:"-"`
-}
-
-// ConnectionStatusReconnect is where an agent's servers are reconnected.
-type ConnectionStatusReconnect struct {
-	// URL opens the agent's MCP sign-in settings in the dashboard; empty
-	// when the page could not be named.
-	URL string `json:"url,omitempty"`
+	Servers []ConnectionStatusServer `json:"servers"`
 }
 
 var connectionStatusSchema = []byte(`{
@@ -183,7 +189,8 @@ func (r ConnectionStatusResult) Text() string {
 	if needsConsent {
 		b.WriteString("\nReconnect this gateway in your AI app to review access.\n")
 	}
-	if hidden && r.ConnectURL != "" {
+	// Only the caller's own connect page shows a hidden server again.
+	if hidden && r.ConnectURL != "" && r.Audience == ConnectionStatusAudienceCaller {
 		fmt.Fprintf(&b, "\nTo use a hidden server, show it again at %s.\n", r.ConnectURL)
 	}
 	if needsConnect {
@@ -194,22 +201,27 @@ func (r ConnectionStatusResult) Text() string {
 
 // signInHint says who signs in the servers that need it, and where.
 func (r ConnectionStatusResult) signInHint() string {
+	if r.Audience == ConnectionStatusAudienceAgentEditors {
+		return r.agentEditorsHint()
+	}
 	if r.ConnectURL != "" {
 		return fmt.Sprintf("\nTo sign in, open %s in a browser, then call %s again to refresh.\n", r.ConnectURL, ToolConnectionStatus)
 	}
-	if r.Reconnect == nil && r.Agent {
+	return "\nThis gateway has no sign-in page; ask the gateway's administrator to connect these servers.\n"
+}
+
+// agentEditorsHint is signInHint for an agent, which cannot sign in itself.
+// The owner is not the only person who may reconnect an agent's servers, so
+// the hint names no one. Each server's line says what is wrong; a server
+// never signed in, or one that failed for another reason, is not necessarily
+// a broken sign-in.
+func (r ConnectionStatusResult) agentEditorsHint() string {
+	const who = "someone who can edit this agent"
+	if !slices.ContainsFunc(r.Servers, func(s ConnectionStatusServer) bool { return s.Reconnect }) {
 		return fmt.Sprintf("\nThis agent cannot fix these servers itself. Each server above says who can, then call %s again to refresh.\n", ToolConnectionStatus)
 	}
-	if r.Reconnect == nil {
-		return "\nThis gateway has no sign-in page; ask the gateway's administrator to connect these servers.\n"
-	}
-	// The owner is not the only person who may reconnect an agent's servers,
-	// so the hint names no one. Each server's line says what is wrong; a
-	// server never signed in, or one that failed for another reason, is not
-	// necessarily a broken sign-in.
-	const who = "someone who can edit this agent"
-	if r.Reconnect.URL == "" {
+	if r.ConnectURL == "" {
 		return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to check them in Speakeasy, then call %s again to refresh.\n", who, ToolConnectionStatus)
 	}
-	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.Reconnect.URL, ToolConnectionStatus)
+	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.ConnectURL, ToolConnectionStatus)
 }

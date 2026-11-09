@@ -190,7 +190,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 				usable = usable || token.Token != "" || token.SessionUnavailable()
 			}
 			if !usable {
-				return nil, gate.agentMemberReconnectError(member)
+				return nil, gate.agentReconnectError(member)
 			}
 		}
 		return tokens, err
@@ -281,17 +281,13 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 		return nil, fmt.Errorf("resolve agent member credential: %w", ctx.Err())
 	}
 	if err != nil {
-		return nil, memberConnectionError{gate.agentMemberReconnectError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {
-		return nil, memberConnectionError{gate.agentMemberReconnectError(member), resolveFailureHappened(err)}
+		return nil, memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(err)}
 	}
 	return resolved, nil
-}
-
-func agentMemberCredentialError(member metaMember) error {
-	return agentServerCredentialError(member.slug)
 }
 
 func agentServerCredentialError(slug string) error {
@@ -300,6 +296,8 @@ func agentServerCredentialError(slug string) error {
 
 // agentCredentialError is an agent's connection to a server that is missing
 // or unusable, which a person fixes by reconnecting it rather than a retry.
+// It is not a memberCredentialError: the call's log row and connection
+// attempts keep the resolve failure that caused it.
 type agentCredentialError struct{ *metaMemberError }
 
 func (e agentCredentialError) Unwrap() error { return e.metaMemberError }
@@ -327,7 +325,7 @@ func (e agentAccessError) Unwrap() error { return e.metaMemberError }
 // client and connection owner a permitted use serves, for the call's log row.
 func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, contextvalues.UpstreamCredential, error) {
 	connection, credential, err := s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
-	return connection, credential, gate.withAgentMemberReconnect(member, err)
+	return connection, credential, gate.withAgentMemberFix(member, err)
 }
 
 // agentServerClients lists the OAuth registrations that serve the target

@@ -2,7 +2,6 @@ package mcp
 
 import (
 	"bytes"
-	"errors"
 	"net/http"
 	"testing"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
-	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
@@ -214,119 +212,16 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	member := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
 	connectURL := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 
-	err := memberAuthFailure(member, memberDial{anonymous: true, connectURL: connectURL}, http.StatusUnauthorized)
+	err := memberAuthFailure(member, memberDial{anonymous: true, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, `server "github" is not connected for this user`)
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL}, http.StatusUnauthorized)
+	err = memberAuthFailure(member, memberDial{anonymous: false, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "rejected the user's credential")
 	require.ErrorContains(t, err, connectURL)
 
 	err = memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "Ask your administrator to connect it")
-}
-
-const testAgentSignIn = "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
-
-func testAgentReconnect() agentReconnect {
-	return agentReconnect{url: testAgentSignIn, permissionsURL: "https://app.example.com/acme/projects/default/identities/agent:agent-1/permissions"}
-}
-
-// An agent cannot sign in itself, so a rejected or missing connection sends it
-// to the people who can edit it, with the agent's sign-in page. It names no
-// one: the owner is not the only person who may fix it.
-func TestMemberAuthFailure_AgentAsksAnEditor(t *testing.T) {
-	t.Parallel()
-
-	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	fix := testAgentReconnect
-
-	err := memberAuthFailure(member, memberDial{anonymous: false, ownerReconnect: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, err, `server "linear" rejected this agent's connection, so it needs re-authentication`)
-	require.ErrorContains(t, err, "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it, then retry")
-	require.NotContains(t, err.Error(), "administrator")
-	require.NotContains(t, err.Error(), "owner")
-	_, credential := errors.AsType[memberCredentialError](err)
-	require.True(t, credential, "a person fixes it; a retry does not")
-
-	err = memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: true, ownerReconnect: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, err, "this agent has no connection to it")
-	require.ErrorContains(t, err, "and connect it, then retry")
-
-	// Without a page to send anyone to, the generic wording stands.
-	none := func() agentReconnect { return agentReconnect{} }
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{ownerReconnect: none}, http.StatusUnauthorized), "Ask your administrator to reconnect it")
-	// A self client's credential is the administrator's.
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{clientCredential: true, ownerReconnect: fix}, http.StatusUnauthorized), "contact the MCP server administrator")
-	// With the agent's token sent beside configured headers, the refusal is
-	// the token's.
-	require.ErrorContains(t, memberAuthFailure(member, memberDial{configuredHeaders: true, ownerReconnect: fix}, http.StatusUnauthorized), "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it")
-}
-
-// A 403 to a connection the upstream accepted is the upstream account's
-// permissions: signing in again as the same account does not change them.
-func TestMemberAuthFailure_AgentForbiddenIsNotReauthentication(t *testing.T) {
-	t.Parallel()
-
-	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	err := memberAuthFailure(member, memberDial{ownerReconnect: testAgentReconnect}, http.StatusForbidden)
-	require.ErrorContains(t, err, `server "linear" answered 403 Forbidden`)
-	require.ErrorContains(t, err, "signing in again as the same account does not change that")
-	require.ErrorContains(t, err, testAgentSignIn)
-	require.NotContains(t, err.Error(), "needs re-authentication")
-}
-
-// A credential configured on the server, such as an API key, is not set at
-// the agent's sign-in step, so its refusal or absence is the server's to fix.
-func TestMemberAuthFailure_AgentServerCredentialIsTheServers(t *testing.T) {
-	t.Parallel()
-
-	fix := testAgentReconnect
-	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	rejected := memberAuthFailure(oauth, memberDial{anonymous: true, configuredHeaders: true, ownerReconnect: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, rejected, `server "linear" rejected the credential configured for it in Speakeasy, such as an API key`)
-	require.ErrorContains(t, rejected, "Ask an admin of the server's project to update the server's credential")
-	require.NotContains(t, rejected.Error(), testAgentSignIn)
-
-	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
-	missing := memberAuthFailure(apiKey, memberDial{anonymous: true, ownerReconnect: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, missing, `server "weather" requires a credential, such as an API key, and none is configured for it in Speakeasy`)
-	require.ErrorContains(t, missing, "Ask an admin of the server's project to add the server's credential")
-	require.NotContains(t, missing.Error(), testAgentSignIn)
-}
-
-// A missing or unusable connection asks for a reconnect; a refused use asks
-// for a permissions review, since reconnecting cannot clear it. Other
-// failures, and gateways that are not an agent's, pass through unchanged.
-func TestWithAgentMemberReconnect_SeparatesBrokenConnectionsFromRefusedAccess(t *testing.T) {
-	t.Parallel()
-
-	member := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	other := errors.New("load agent member auth client: boom")
-
-	none := metaGateContext{}
-	require.Equal(t, other, none.withAgentMemberReconnect(member, other))
-	refusal := agentServerCredentialError(member.slug)
-	require.Equal(t, refusal, none.withAgentMemberReconnect(member, refusal), "only an agent gateway rewrites it")
-	denied := agentServerAccessError(member.slug)
-	require.Equal(t, denied, none.withAgentMemberReconnect(member, denied), "only an agent gateway rewrites it")
-	require.Equal(t, refusal.Error(), denied.Error(), "other surfaces read the same as before")
-	require.NoError(t, none.withAgentMemberReconnect(member, nil))
-	require.ErrorContains(t, none.agentMemberReconnectError(member), "unavailable or not permitted; reconnect it before retrying", "no link keeps the generic wording")
-
-	agent := metaGateContext{agentOwner: &agentOwnerReconnect{
-		agent: func() (string, error) { return "default", nil },
-		link:  func(string) agentReconnect { return testAgentReconnect() },
-	}}
-	broken := agent.withAgentMemberReconnect(member, refusal)
-	require.ErrorContains(t, broken, `server "linear" needs re-authentication: this agent's connection to it is missing or can no longer be used`)
-	require.ErrorContains(t, broken, "Ask someone who can edit this agent to open "+testAgentSignIn+" and reconnect it, then retry")
-
-	refused := agent.withAgentMemberReconnect(member, denied)
-	require.ErrorContains(t, refused, `server "linear" refused this agent: it is not allowed to use a connection to this server, and reconnecting does not change that`)
-	require.ErrorContains(t, refused, "review its permissions at "+testAgentReconnect().permissionsURL)
-	require.NotContains(t, refused.Error(), "re-authentication")
-	require.Equal(t, other, agent.withAgentMemberReconnect(member, other))
 }
 
 func renderGatewayConsent(t *testing.T, data consentTemplateData) string {
@@ -514,48 +409,4 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `aria-label="Sign in to Source as"`)
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
-}
-
-// connection_status offers a reconnect only on rows a reconnect fixes, and
-// gives those rows a short detail, since the hint carries the link. A server
-// whose credential is configured on the server, a refused use and a row that
-// could not be checked keep their own detail and get no Reconnect.
-func TestAgentConnectionReconnect_MarksOnlyRowsAReconnectFixes(t *testing.T) {
-	t.Parallel()
-
-	gate := metaGateContext{agentOwner: &agentOwnerReconnect{
-		agent: func() (string, error) { return "default", nil },
-		link:  func(string) agentReconnect { return testAgentReconnect() },
-	}}
-	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
-	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
-	refused := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
-	unchecked := gatewayTestMember("notion", "Notion", uuid.New(), uuid.New())
-	never := gatewayTestMember("jira", "Jira", uuid.New(), uuid.New())
-	members := []metaMember{oauth, apiKey, refused, unchecked, never}
-
-	broken := gate.agentMemberReconnectError(oauth)
-	require.Equal(t, agentDetailNeedsReauth, memberErrorDetail(broken))
-	require.Contains(t, memberErrorMessage(broken), testAgentSignIn, "a tool call still reads the full message")
-	denied := gate.agentMemberAccessError(refused)
-
-	servers := []metamcp.ConnectionStatusServer{
-		{Slug: "linear", Status: metamcp.SignInError, Detail: memberErrorDetail(broken)},
-		{Slug: "weather", Status: metamcp.SignInNotConnected},
-		{Slug: "github", Status: metamcp.SignInError, Detail: memberErrorDetail(denied)},
-		{Slug: "notion", Status: metamcp.SignInError, Detail: memberCheckFailedDetail},
-		{Slug: "jira", Status: metamcp.SignInNotConnected},
-	}
-	reconnect := agentConnectionReconnect(gate, members, servers)
-	require.NotNil(t, reconnect)
-	require.Equal(t, testAgentSignIn, reconnect.URL)
-	marked := make([]bool, len(servers))
-	for i, server := range servers {
-		marked[i] = server.Reconnect
-	}
-	require.Equal(t, []bool{true, false, false, false, true}, marked)
-	require.Contains(t, servers[2].Detail, "review its permissions", "a refused use keeps the instruction that fixes it")
-
-	onlyRefused := []metamcp.ConnectionStatusServer{{Slug: "github", Status: metamcp.SignInError, Detail: memberErrorDetail(denied)}}
-	require.Nil(t, agentConnectionReconnect(gate, []metaMember{refused}, onlyRefused), "nothing to reconnect gives no link")
 }

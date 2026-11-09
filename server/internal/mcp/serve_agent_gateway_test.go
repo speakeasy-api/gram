@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -694,15 +695,15 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	require.NotContains(t, text, "sign-in page")
 	require.NotContains(t, text, "its owner")
 	var result struct {
-		StructuredContent struct {
-			Reconnect *struct {
-				URL string `json:"url"`
-			} `json:"reconnect"`
-		} `json:"structuredContent"`
+		StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
 	}
 	require.NoError(t, json.Unmarshal(rpc["result"], &result))
-	require.NotNil(t, result.StructuredContent.Reconnect)
-	require.True(t, strings.HasSuffix(result.StructuredContent.Reconnect.URL, link), result.StructuredContent.Reconnect.URL)
+	require.Equal(t, metamcp.ConnectionStatusAudienceAgentEditors, result.StructuredContent.Audience)
+	require.True(t, strings.HasSuffix(result.StructuredContent.ConnectURL, link), result.StructuredContent.ConnectURL)
+	row := slices.IndexFunc(result.StructuredContent.Servers, func(s metamcp.ConnectionStatusServer) bool { return s.Slug == fx.granted })
+	require.GreaterOrEqual(t, row, 0)
+	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
+	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
 	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }
 

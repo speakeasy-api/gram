@@ -247,11 +247,11 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	logger := testenv.NewLogger(t)
 	require.Equal(t, want, f.service.memberFailureMessage(t.Context(), logger, gate, member, member.upstreamUnavailable))
 
-	status, detail, outage := f.service.staleMemberStatus(t.Context(), logger, gate, member)
-	require.Nil(t, outage)
-	require.Equal(t, metamcp.SignInActionRequired, status)
-	require.Equal(t, want, detail)
-	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: status, Detail: detail}}}.Text()
+	row := f.service.staleMemberStatus(t.Context(), logger, gate, member)
+	require.Nil(t, row.Outage)
+	require.Equal(t, metamcp.SignInActionRequired, row.Status)
+	require.Equal(t, want, row.Detail)
+	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: row.Status, Detail: row.Detail}}}.Text()
 	require.NotContains(t, text, "To sign in")
 	require.NotContains(t, text, "Reconnect this gateway")
 
