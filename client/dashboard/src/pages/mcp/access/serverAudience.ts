@@ -279,13 +279,17 @@ export function effectiveReach(
     : [];
   if (pastBlock.length > 0) blocked.delete("use");
 
-  const unnarrowed = granting.find((entry) => !isNarrowed(entry));
+  // Only connect rules reach tools; view and manage do not include connect.
+  const connecting = granting.filter((entry) =>
+    capabilitiesOf(entry.level).includes("use"),
+  );
+  const unnarrowed = connecting.find((entry) => !isNarrowed(entry));
   const connectBlocks = reaching.filter(
     (entry) => BLOCKED_CAPABILITY[entry.level] === "use",
   );
   const directConnect = directConnectPastBlock(reaching, principalUrn);
   const reachable = catalog
-    .filter((tool) => granting.some((grant) => coversTool(grant, tool)))
+    .filter((tool) => connecting.some((grant) => coversTool(grant, tool)))
     .filter(
       (tool) =>
         !connectBlocks.some(
@@ -300,10 +304,10 @@ export function effectiveReach(
   const remaining = reachable.length;
 
   const toolsLabel = reachLabel({
-    connectBlocked: blocked.has("use"),
+    connectBlocked: blocked.has("use") || connecting.length === 0,
     remaining: countable ? remaining : null,
     // Past a block, only this person's own narrowed rules reach any tools.
-    labelRules: pastBlock.length > 0 ? pastBlock : granting,
+    labelRules: pastBlock.length > 0 ? pastBlock : connecting,
     wholeServer: Boolean(unnarrowed) && pastBlock.length === 0,
   });
 
@@ -340,7 +344,10 @@ export function effectiveReach(
 
   return {
     toolsLabel,
-    reachableTools: countable && !blocked.has("use") ? reachable : [],
+    reachableTools:
+      countable && !blocked.has("use") && connecting.length > 0
+        ? reachable
+        : [],
     capabilities,
     scopedLevels,
     // Only the blocks that trim tools. One that removes a capability whole
@@ -373,7 +380,7 @@ function reachLabel({
   labelRules,
   wholeServer,
 }: {
-  /** Connect is taken away whole. */
+  /** Connect is taken away whole, or nothing grants it. */
   connectBlocked: boolean;
   /** Tools left once blocks are resolved against the catalogue, if counted. */
   remaining: number | null;
