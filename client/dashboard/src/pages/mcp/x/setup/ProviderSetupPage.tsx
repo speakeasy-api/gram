@@ -1,5 +1,8 @@
 import { useRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders";
-import { salesforceSelectionForUrl } from "@/pages/catalog/provider-setup/salesforce";
+import {
+  salesforceSelectionForUrl,
+  salesforceInstanceConfiguration,
+} from "@/pages/catalog/provider-setup/salesforce";
 import type { State } from "@/pages/catalog/provider-setup/state";
 import { useEffect, useReducer, useRef, type ReactNode } from "react";
 import { useProviderConnection } from "./useProviderConnection";
@@ -108,6 +111,7 @@ function SalesforceSetupEntry({
   mcpServer: McpServer;
   overviewHref: string;
 }): JSX.Element {
+  const routes = useRoutes();
   const headers = useRemoteMcpServerHeaders(
     { remoteMcpServerId: mcpServer.remoteMcpServerId! },
     undefined,
@@ -136,13 +140,34 @@ function SalesforceSetupEntry({
         </Page.Body>
       </Page>
     );
-  const instanceUrl =
-    headers.data.headers.find(
-      (header) =>
-        header.name.toLowerCase() === "mcp-instance-url" &&
-        !header.isSecret &&
-        !header.valueFromRequestHeader,
-    )?.value ?? "";
+  let instanceUrl;
+  try {
+    instanceUrl = salesforceInstanceConfiguration(
+      headers.data.headers,
+    ).instanceUrl;
+  } catch (error) {
+    return (
+      <Page>
+        <Page.Header>{null}</Page.Header>
+        <Page.Body>
+          <Alert variant="error">
+            {error instanceof Error
+              ? error.message
+              : "Review the MCP-Instance-URL header in identity settings."}{" "}
+            <Link
+              to={
+                routes.mcp.details.settings.href(
+                  mcpServerRouteParam(mcpServer),
+                ) + "#authentication"
+              }
+            >
+              Open identity settings
+            </Link>
+          </Alert>
+        </Page.Body>
+      </Page>
+    );
+  }
   return (
     <ProviderSetupFlow
       provider="salesforce"

@@ -3,6 +3,7 @@ import { Layers, Server, ShieldCheck, ShieldCog, CopyPlus } from "lucide-react";
 import { useSetup } from "./setup-context";
 import {
   AppChoice,
+  CallbackUrlStatus,
   Choices,
   Correction,
   CopyValue,
@@ -13,8 +14,6 @@ import {
   SetupField,
 } from "./shared";
 import { salesforceConnection, salesforceServers } from "./salesforce";
-import { Alert } from "@/components/ui/Alert";
-import { Button } from "@/components/ui/Button";
 
 /** Provider tasks adapted from the interactive Salesforce demo. */
 export function SalesforceTask(): JSX.Element {
@@ -229,18 +228,12 @@ export function SalesforceTask(): JSX.Element {
           />
           {redirectUrl ? (
             <CopyValue label="Callback URL" value={redirectUrl} />
-          ) : callback.isError ? (
-            <Alert variant="error">
-              Couldn’t load the callback URL.{" "}
-              <Button
-                variant="secondary"
-                onClick={() => void callback.refetch()}
-              >
-                <Button.Text>Retry</Button.Text>
-              </Button>
-            </Alert>
           ) : (
-            <p className="mt-4">Loading callback URL…</p>
+            <CallbackUrlStatus
+              label="callback URL"
+              isError={callback.isError}
+              retry={() => callback.refetch()}
+            />
           )}
           <Section title="OAuth scopes">
             <p>Add these to Selected OAuth Scopes:</p>

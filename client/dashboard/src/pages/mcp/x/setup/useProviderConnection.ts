@@ -1,5 +1,11 @@
 import {
   salesforceConnection,
+  salesforceInstance,
+  salesforceInstanceConfiguration,
+  salesforceInstanceHeader,
+  salesforceLogin,
+  salesforceScopes,
+  SalesforceInstanceConfigurationError,
   salesforceSelectionForUrl,
 } from "@/pages/catalog/provider-setup/salesforce";
 import { salesforceSourceFingerprint } from "./provider-setup";
@@ -129,6 +135,11 @@ export function useProviderConnection(
   source?: { url: string; instanceUrl?: string },
 ): ProviderConnection {
   const providerKey = s.provider;
+  if (providerKey === "salesforce" && source?.instanceUrl)
+    source = {
+      ...source,
+      instanceUrl: salesforceInstance(source.instanceUrl) ?? source.instanceUrl,
+    };
   const salesforce = useMemo(
     () =>
       providerKey === "salesforce" ? salesforceConnection(s.values) : null,
@@ -136,13 +147,7 @@ export function useProviderConnection(
   );
   const config =
     providerKey === "salesforce"
-      ? (salesforce ?? {
-          name: "Salesforce",
-          issuer: "https://login.salesforce.com",
-          authorizationEndpoint:
-            "https://login.salesforce.com/services/oauth2/authorize",
-          tokenEndpoint: "https://login.salesforce.com/services/oauth2/token",
-        })
+      ? (salesforce ?? salesforceLogin())
       : providers[providerKey];
   const name = config.name;
   const access = s.values.access;
@@ -151,9 +156,7 @@ export function useProviderConnection(
       providerKey === "slack"
         ? scopesFor({ values: { access } })
         : providerKey === "salesforce"
-          ? s.values.integration === "hosted"
-            ? ["api", "refresh_token"]
-            : ["mcp_api", "refresh_token"]
+          ? salesforceScopes(s.values.integration)
           : [],
     [access, providerKey, s.values.integration],
   );
@@ -214,6 +217,11 @@ export function useProviderConnection(
           source.instanceUrl ?? "",
         );
       if (!ownRefresh) {
+        generation.current++;
+        cancelPopup();
+        setPhase("idle");
+        setToolCount(null);
+        setFailure(null);
         appliedSource.current = { ...source };
         dispatch({
           type: "source",
@@ -240,6 +248,7 @@ export function useProviderConnection(
     source,
     s.sourceFingerprint,
     dispatch,
+    cancelPopup,
   ]);
   useEffect(
     () => () => {
@@ -255,9 +264,7 @@ export function useProviderConnection(
     server.remoteMcpServerId,
     server.environmentId,
     server.updatedAt,
-    ...(providerKey === "salesforce"
-      ? [config.issuer, source?.url, source?.instanceUrl]
-      : []),
+    ...(providerKey === "salesforce" ? [config.issuer] : []),
   ]);
   const currentTarget = useRef(targetKey);
   const observedClient = useRef<string | null>(null);
@@ -378,7 +385,11 @@ export function useProviderConnection(
   );
 
   const prepareSalesforceSource = useCallback(
-    async (run: number, write: boolean) => {
+    async (
+      run: number,
+      write: boolean,
+      registerRollback?: (rollback: () => Promise<void>) => void,
+    ) => {
       if (providerKey !== "salesforce") return;
       const selected = salesforceConnection(s.values);
       const id = server.remoteMcpServerId;
@@ -402,27 +413,17 @@ export function useProviderConnection(
         headers.some((header) => header.name.toLowerCase() === "authorization")
       )
         throw new ConfigurationChanged();
-      const instances = headers.filter(
-        (header) => header.name.toLowerCase() === "mcp-instance-url",
-      );
-      if (
-        instances.length > 1 ||
-        instances.some(
-          (header) => header.isSecret || header.valueFromRequestHeader,
-        )
-      )
-        throw new ConfigurationChanged();
-      const instance = instances[0];
+      const { header: instance, instanceUrl: currentInstance } =
+        salesforceInstanceConfiguration(headers);
       const expected = appliedSource.current;
       if (
         !expected ||
         upstream.url !== expected.url ||
-        (instance?.value ?? "") !== (expected.instanceUrl ?? "")
+        currentInstance !== (expected.instanceUrl ?? "")
       )
         throw new ConfigurationChanged();
       const changeUrl = upstream.url !== selected.url;
-      const changeInstance =
-        (instance?.value ?? "") !== (selected.instanceUrl ?? "");
+      const changeInstance = currentInstance !== (selected.instanceUrl ?? "");
       if (!changeUrl && !changeInstance) return;
       if (!write) throw new ConfigurationChanged();
       const { mcpServers } = await sdk.mcpServers.list();
@@ -433,10 +434,75 @@ export function useProviderConnection(
         )
       )
         throw new ConfigurationChanged();
+      const originalSource = {
+        url: upstream.url,
+        instanceUrl: currentInstance,
+      };
+      registerRollback?.(async () => {
+        if (generation.current !== run) throw new ConfigurationChanged();
+        const latestTarget = await sdk.mcpServers.get({ id: server.id });
+        const latestRemote = await sdk.remoteMcp.getServer({ id });
+        const latestHeaders = await sdk.remoteMcp.listServerHeaders({
+          remoteMcpServerId: id,
+        });
+        const latestInstance = salesforceInstanceConfiguration(
+          latestHeaders.headers,
+        );
+        const applied = appliedSource.current;
+        if (
+          generation.current !== run ||
+          latestTarget.remoteMcpServerId !== id ||
+          latestTarget.environmentId !== server.environmentId ||
+          !applied ||
+          latestRemote.url !== applied.url ||
+          latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
+        )
+          throw new ConfigurationChanged();
+        if (latestRemote.url !== originalSource.url) {
+          await sdk.remoteMcp.updateServer({
+            updateServerForm: { id, url: originalSource.url },
+          });
+          appliedSource.current = {
+            ...appliedSource.current!,
+            url: originalSource.url,
+          };
+        }
+        if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
+          if (instance) {
+            const form = {
+              name: instance.name,
+              description: instance.description,
+              value: instance.value,
+              isRequired: instance.isRequired,
+              isSecret: false,
+            };
+            if (latestInstance.header)
+              await sdk.remoteMcp.updateServerHeader({
+                updateServerHeaderForm: {
+                  ...form,
+                  id: latestInstance.header.id,
+                },
+              });
+            else
+              await sdk.remoteMcp.createServerHeader({
+                createServerHeaderForm: { ...form, remoteMcpServerId: id },
+              });
+          } else if (latestInstance.header)
+            await sdk.remoteMcp.deleteServerHeader({
+              id: latestInstance.header.id,
+            });
+        }
+        appliedSource.current = originalSource;
+        dispatch({
+          type: "connection",
+          sourceFingerprint: salesforceSourceFingerprint(id, originalSource),
+        });
+      });
       if (changeInstance) {
         if (selected.instanceUrl) {
           const form = {
-            name: "MCP-Instance-URL",
+            name: instance?.name ?? salesforceInstanceHeader,
+            description: instance?.description,
             value: selected.instanceUrl,
             isRequired: true,
             isSecret: false,
@@ -706,8 +772,12 @@ export function useProviderConnection(
     setFailure(null);
     if (providerKey === "salesforce")
       dispatch({ type: "connection", configChanged: true });
+    let rollbackSource: (() => Promise<void>) | undefined;
+    let identityCommitted = false;
     try {
-      await prepareSalesforceSource(run, true);
+      await prepareSalesforceSource(run, true, (rollback) => {
+        rollbackSource = rollback;
+      });
       if (generation.current !== run) return;
       let current = await sdk.mcpServers.get({ id: server.id });
       if (generation.current !== run) return;
@@ -759,12 +829,7 @@ export function useProviderConnection(
         latest.remoteMcpServerId !== current.remoteMcpServerId ||
         latest.environmentId !== current.environmentId
       ) {
-        fail(
-          "save",
-          "This server’s identity changed. Reload its settings before saving credentials.",
-          "settings",
-        );
-        return;
+        throw new ConfigurationChanged();
       }
       const issuerDigest =
         providerKey === "salesforce" && !provider
@@ -819,9 +884,10 @@ export function useProviderConnection(
           },
         },
       );
-      if (generation.current !== run) return;
       if (result.status !== "registered" && result.status !== "linked")
         throw new Error(`Couldn’t save ${name} app credentials.`);
+      identityCommitted = true;
+      if (generation.current !== run) return;
       // A disabled catalog install must serve its private OAuth endpoint before sign-in.
       if (current.visibility === "disabled")
         await sdk.mcpServers.update({
@@ -850,6 +916,22 @@ export function useProviderConnection(
       ]);
     } catch (err) {
       if (generation.current !== run) return;
+      if (!identityCommitted && rollbackSource) {
+        try {
+          await rollbackSource();
+        } catch {
+          fail(
+            "save",
+            "Salesforce connection settings may be partially saved. Review the upstream URL and MCP-Instance-URL in identity settings before retrying credentials.",
+            "settings",
+          );
+          return;
+        }
+      }
+      if (err instanceof SalesforceInstanceConfigurationError) {
+        fail("save", err.message, "settings");
+        return;
+      }
       const identityConflict =
         err instanceof ConfigurationChanged ||
         (err instanceof GramError && err.statusCode === 409);
@@ -926,8 +1008,13 @@ export function useProviderConnection(
           if (generation.current === run && status.data?.client)
             fail(
               "signin",
-              `Couldn’t start ${name} sign-in. Try again.`,
-              err instanceof ConfigurationChanged ? "settings" : undefined,
+              err instanceof SalesforceInstanceConfigurationError
+                ? err.message
+                : `Couldn’t start ${name} sign-in. Try again.`,
+              err instanceof ConfigurationChanged ||
+                err instanceof SalesforceInstanceConfigurationError
+                ? "settings"
+                : undefined,
             );
           throw err;
         }
@@ -962,11 +1049,16 @@ export function useProviderConnection(
           recoveryFor(result),
         );
       }
-    } catch {
+    } catch (err) {
       if (generation.current === run)
         fail(
           "test",
-          `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
+          err instanceof SalesforceInstanceConfigurationError
+            ? err.message
+            : `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
+          err instanceof SalesforceInstanceConfigurationError
+            ? "settings"
+            : undefined,
         );
     } finally {
       if (generation.current === run) setPhase("idle");

@@ -6,9 +6,11 @@ import { scopesFor } from "./provider-data";
 import { Eye, Link, Settings2 } from "lucide-react";
 import {
   AppChoice,
+  CallbackUrlStatus,
   Choices,
   CopyValue,
   CopyAction,
+  Correction,
   ExternalAction,
   InProvider,
   SetupField,
@@ -127,6 +129,13 @@ function Credentials() {
         : "Secret status unavailable";
   return (
     <>
+      {s.provider === "salesforce" &&
+        (s.errors.instanceUrl || s.errors.salesforceServer) && (
+          <Alert variant="error">
+            {s.errors.instanceUrl ?? s.errors.salesforceServer}{" "}
+            <Correction step="choices">Review connection choices</Correction>
+          </Alert>
+        )}
       <InProvider
         actions={credentialInstructions(
           s.provider,
@@ -247,21 +256,12 @@ function GitHubTask() {
         )}
         {redirectUrl ? (
           <CopyValue label="Authorization callback URL" value={redirectUrl} />
-        ) : callbackQuery.isError ? (
-          <Alert variant="error">
-            Couldn’t load the authorization callback URL.{" "}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void callbackQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
         ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Loading authorization callback URL…
-          </p>
+          <CallbackUrlStatus
+            label="authorization callback URL"
+            isError={callbackQuery.isError}
+            retry={() => callbackQuery.refetch()}
+          />
         )}
         <InProvider
           actions={[
@@ -367,23 +367,13 @@ function SlackTask({ serverName }: { serverName: string }) {
       >
         {existing && <p>Open the app you want to configure.</p>}
       </ExternalAction>
-      {!redirectUrl &&
-        (callbackQuery.isError ? (
-          <Alert variant="error">
-            Couldn’t load the redirect URL.{" "}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => void callbackQuery.refetch()}
-            >
-              <Button.Text>Retry</Button.Text>
-            </Button>
-          </Alert>
-        ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Loading redirect URL…
-          </p>
-        ))}
+      {!redirectUrl && (
+        <CallbackUrlStatus
+          label="redirect URL"
+          isError={callbackQuery.isError}
+          retry={() => callbackQuery.refetch()}
+        />
+      )}
       <InProvider
         actions={
           existing

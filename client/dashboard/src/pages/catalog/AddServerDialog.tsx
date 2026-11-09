@@ -263,7 +263,10 @@ export function AddServerDialog({
         ? {
             ...workflow,
             updateServerConfig: (index, updates) => {
-              if (updates.identityMode) {
+              if (
+                updates.identityMode &&
+                (updates.identityMode === "user") !== guidedSalesforce
+              ) {
                 setSalesforceIdentity({
                   identityMode: updates.identityMode,
                   name: workflow.serverConfigs[index]!.name,
@@ -272,7 +275,7 @@ export function AddServerDialog({
             },
           }
         : workflow,
-    [salesforceSetupEnabled, workflow],
+    [salesforceSetupEnabled, guidedSalesforce, workflow],
   );
   const serversKey = servers.map((s) => s.registrySpecifier).join(",");
   const autoStartRef = useRef(false);

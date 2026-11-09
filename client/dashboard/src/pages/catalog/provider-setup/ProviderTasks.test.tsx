@@ -4,20 +4,27 @@ import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce } from "./state";
+import { initialState, reduce, type Action } from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 
+const callback = vi.hoisted(() => ({
+  data: { callbackUrl: "https://current.example/callback" },
+  isError: false,
+  refetch: vi.fn(),
+}));
 vi.mock(
   "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js",
   () => ({
-    useNewRemoteSessionClientCallbackUrl: () => ({
-      data: { callbackUrl: "https://current.example/callback" },
-      isError: false,
-    }),
+    useNewRemoteSessionClientCallbackUrl: () => callback,
   }),
 );
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  callback.data.callbackUrl = "https://current.example/callback";
+  callback.isError = false;
+  callback.refetch.mockClear();
+});
 function SavedCredentials({ provider }: { provider: "slack" | "github" }) {
   const [s, dispatch] = useReducer(reduce, {
     ...initialState(provider),
@@ -228,6 +235,7 @@ function SalesforceFixture({
       }}
     >
       <ProviderTask serverName="Salesforce" />
+      <button onClick={() => dispatch({ type: "next" })}>Continue</button>
     </SetupContext>
   );
 }
@@ -319,6 +327,63 @@ it("shows Consumer Key-only native credentials and the optional hosted secret", 
   render(<SalesforceFixture step="credentials" integration="hosted" />);
   expect(screen.getByLabelText("Client Secret (optional)")).toBeDefined();
 });
+it.each([
+  ["hosted", "sobject-reads", /Enter an HTTPS Salesforce instance URL/],
+  ["native", "unsupported", /Choose a supported Salesforce server/],
+])(
+  "shows connection validation from credentials for %s and offers correction",
+  async (integration, salesforceServer, message) => {
+    const user = userEvent.setup();
+    render(
+      <SalesforceFixture
+        step="credentials"
+        integration={integration}
+        salesforceServer={salesforceServer}
+      />,
+    );
+    await user.type(screen.getByLabelText("Consumer Key"), "consumer-key");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText(message)).toBeDefined();
+    await user.click(
+      screen.getByRole("button", { name: "Review connection choices" }),
+    );
+    expect(
+      screen.getByRole("radio", { name: "Salesforce native MCP" }),
+    ).toBeDefined();
+    expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+  },
+);
+it.each([
+  ["salesforce", "oauth", "callback URL"],
+  ["github", "app", "authorization callback URL"],
+  ["slack", "app", "redirect URL"],
+] as const)(
+  "shows callback loading, failure and retry consistently for %s",
+  async (provider, step, label) => {
+    callback.data.callbackUrl = "";
+    const user = userEvent.setup();
+    const s = { ...initialState(provider), step };
+    const dispatch = vi.fn<(action: Action) => void>();
+    const task = (
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Demo" />
+      </SetupContext>
+    );
+    const view = render(task);
+    expect(screen.getByText(`Loading ${label}…`).className).toContain(
+      "text-muted-foreground",
+    );
+    callback.isError = true;
+    view.rerender(
+      <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
+        <ProviderTask serverName="Demo" />
+      </SetupContext>,
+    );
+    expect(screen.getByText(`Couldn’t load the ${label}.`)).toBeDefined();
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    expect(callback.refetch).toHaveBeenCalledOnce();
+  },
+);
 it("retains the unresolved support branch with a real correction action and no simulated success", () => {
   render(<SalesforceFixture step="support" path="support" />);
   expect(

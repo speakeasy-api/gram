@@ -1,4 +1,65 @@
 import type { CatalogServer } from "../hooks";
+import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
+
+export const salesforceInstanceHeader = "MCP-Instance-URL";
+const isSalesforceInstanceHeader = (name: string): boolean =>
+  name.toLowerCase() === salesforceInstanceHeader.toLowerCase();
+
+export class SalesforceInstanceConfigurationError extends Error {}
+
+export function salesforceInstanceConfiguration(
+  headers: RemoteMcpServerHeader[],
+): { header: RemoteMcpServerHeader | undefined; instanceUrl: string } {
+  const instances = headers.filter((header) =>
+    isSalesforceInstanceHeader(header.name),
+  );
+  if (
+    instances.length > 1 ||
+    instances.some((header) => header.isSecret || header.valueFromRequestHeader)
+  )
+    throw new SalesforceInstanceConfigurationError(
+      "In identity settings, keep one plain MCP-Instance-URL header with a fixed Salesforce instance URL; remove duplicates, secret values and request-header mappings.",
+    );
+  const header = instances[0];
+  const raw = header?.value ?? "";
+  return { header, instanceUrl: salesforceInstance(raw) ?? raw };
+}
+
+export function salesforceScopes(integration: string): string[] {
+  return integration === "hosted"
+    ? ["api", "refresh_token"]
+    : ["mcp_api", "refresh_token"];
+}
+
+export function salesforceLogin(issuer = "https://login.salesforce.com"): {
+  name: string;
+  issuer: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+} {
+  return {
+    name: "Salesforce",
+    issuer,
+    authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
+    tokenEndpoint: `${issuer}/services/oauth2/token`,
+  };
+}
+
+function strictHttpsUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol !== "https:" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
+      ? null
+      : url;
+  } catch {
+    return null;
+  }
+}
 
 /** Salesforce's native endpoints and the separate hosted CRM contract. */
 const salesforceHostedUrl =
@@ -95,7 +156,7 @@ export function salesforceSetupInstallServer(
       {
         ...remote,
         headers: remote.headers?.filter(
-          (header) => header.name.toLowerCase() !== "mcp-instance-url",
+          (header) => !isSalesforceInstanceHeader(header.name),
         ),
       },
     ],
@@ -110,56 +171,36 @@ type Selection = {
   clientSecret?: string;
 };
 export function salesforceInstance(value: string): string | null {
-  try {
-    const url = new URL(value.trim());
-    if (
-      url.protocol !== "https:" ||
-      url.port ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash ||
-      !["", "/"].includes(url.pathname) ||
-      !url.hostname.endsWith(".salesforce.com")
-    )
-      return null;
-    return url.origin;
-  } catch {
+  const url = strictHttpsUrl(value.trim());
+  if (
+    !url ||
+    !["", "/"].includes(url.pathname) ||
+    !url.hostname.endsWith(".salesforce.com")
+  )
     return null;
-  }
+  return url.origin;
 }
+
 export function salesforceSelectionForUrl(
   value: string | undefined,
 ): Partial<Selection> | null {
   if (!value) return null;
-  try {
-    const url = new URL(value);
-    if (
-      url.protocol !== "https:" ||
-      url.port ||
-      url.username ||
-      url.password ||
-      url.search ||
-      url.hash
-    )
-      return null;
-    const clean = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-    if (clean === salesforceHostedUrl) return { integration: "hosted" };
-    if (url.origin !== "https://api.salesforce.com") return null;
-    for (const server of salesforceServers) {
-      for (const environment of ["production", "sandbox"]) {
-        if (clean === nativeUrl(server, environment))
-          return {
-            integration: "native",
-            environment,
-            salesforceServer: server.id,
-          };
-      }
+  const url = strictHttpsUrl(value);
+  if (!url) return null;
+  const clean = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+  if (clean === salesforceHostedUrl) return { integration: "hosted" };
+  if (url.origin !== "https://api.salesforce.com") return null;
+  for (const server of salesforceServers) {
+    for (const environment of ["production", "sandbox"]) {
+      if (clean === nativeUrl(server, environment))
+        return {
+          integration: "native",
+          environment,
+          salesforceServer: server.id,
+        };
     }
-    return null;
-  } catch {
-    return null;
   }
+  return null;
 }
 export function salesforceConnection(values: Selection): {
   name: string;
@@ -186,13 +227,10 @@ export function salesforceConnection(values: Selection): {
       ? "https://test.salesforce.com"
       : "https://login.salesforce.com");
   return {
-    name: "Salesforce",
-    issuer,
-    authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
-    tokenEndpoint: `${issuer}/services/oauth2/token`,
+    ...salesforceLogin(issuer),
     url: hosted ? salesforceHostedUrl : nativeUrl(server!, values.environment),
     instanceUrl: instance,
-    scopes: hosted ? ["api", "refresh_token"] : ["mcp_api", "refresh_token"],
+    scopes: salesforceScopes(values.integration),
     authMethod:
       hosted && values.clientSecret?.trim()
         ? ("client_secret_post" as const)

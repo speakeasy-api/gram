@@ -238,6 +238,24 @@ describe("Salesforce catalog Add entry", () => {
       hosted.remotes,
     );
   });
+  it("updates Manual to Shared credential in place without rebuilding the Salesforce selection", async () => {
+    const view = openSalesforce();
+    await screen.findByRole("radio", { name: /User Identity/ });
+    fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
+    const configure = mocks.workflow.mock.results.at(-1)!.value;
+    configure.serverConfigs[0].identityMode = "none";
+    view.refresh();
+    const initialConfiguration =
+      mocks.workflow.mock.calls.at(-1)![0].initialConfiguration;
+
+    fireEvent.click(screen.getByRole("radio", { name: /Shared credential/ }));
+    expect(mocks.updateServerConfig).toHaveBeenLastCalledWith(0, {
+      identityMode: "agent",
+    });
+    expect(mocks.workflow.mock.calls.at(-1)![0].initialConfiguration).toBe(
+      initialConfiguration,
+    );
+  });
   it.each(["none", "agent"] as const)(
     "retains the original endpoint flow when Identity changes to %s",
     async (identityMode) => {

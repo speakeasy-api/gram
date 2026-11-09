@@ -7,6 +7,28 @@ import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { ArrowUpRight, CirclePlus, SquareDashed } from "lucide-react";
 import { type FieldName, names } from "./state";
 import { cn } from "@/lib/utils";
+import { Alert } from "@/components/ui/Alert";
+
+export function CallbackUrlStatus({
+  label,
+  isError,
+  retry,
+}: {
+  label: string;
+  isError: boolean;
+  retry: () => unknown;
+}): JSX.Element {
+  if (isError)
+    return (
+      <Alert variant="error">
+        Couldn’t load the {label}.{" "}
+        <Button variant="secondary" size="sm" onClick={() => void retry()}>
+          <Button.Text>Retry</Button.Text>
+        </Button>
+      </Alert>
+    );
+  return <p className="mt-4 text-sm text-muted-foreground">Loading {label}…</p>;
+}
 
 export function Section({
   title,

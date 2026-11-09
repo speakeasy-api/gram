@@ -559,20 +559,15 @@ export function useRemoteMcpInstallWorkflow({
       setServerConfigs((prev) => [
         ...prev,
         {
-          server: currentConfig.server,
+          ...buildServerConfig(
+            currentConfig.server,
+            serverNameSuffix,
+            servers.length === 1 ? initialConfiguration : undefined,
+          ),
           name: currentConfig.name,
           remotes: currentConfig.remotes.filter((r) =>
             currentConfig.selectedRemoteUrls.has(r.url),
           ),
-          headerValues: {},
-          identityMode:
-            servers.length === 1 && initialConfiguration
-              ? initialConfiguration.identityMode
-              : supportsAutomaticOAuth(currentConfig.server)
-                ? "user"
-                : "none",
-          agentAuthorization: "",
-          serviceAccountClient: null,
         },
       ]);
     }
@@ -588,6 +583,7 @@ export function useRemoteMcpInstallWorkflow({
     currentServerIndex,
     multiRemoteConfigs,
     servers.length,
+    serverNameSuffix,
     initialConfiguration,
   ]);
 

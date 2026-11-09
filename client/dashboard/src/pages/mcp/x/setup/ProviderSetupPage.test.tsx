@@ -3,6 +3,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
 import type { Action, State } from "@/pages/catalog/provider-setup/state";
 import { ProviderSetupPage } from "./ProviderSetupPage";
@@ -18,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   pending: "",
   error: "",
   loading: false,
+  headers: [] as RemoteMcpServerHeader[],
 }));
 vi.mock("canvas-confetti", () => ({ default: { create: mocks.create } }));
 vi.mock("@/contexts/Auth", () => ({
@@ -49,7 +51,7 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer", () => ({
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders", () => ({
   useRemoteMcpServerHeaders: () => ({
-    data: { headers: [] },
+    data: { headers: mocks.headers },
     isPending: false,
     isError: false,
   }),
@@ -147,6 +149,7 @@ function validate() {
   act(() => mocks.dispatch({ type: "connection", tested: true }));
 }
 beforeEach(() => {
+  mocks.headers = [];
   vi.resetAllMocks();
   mocks.create.mockReturnValue(mocks.fire);
   mocks.provider = "github";
@@ -286,4 +289,35 @@ describe("provider setup completion celebration", () => {
     expect(completeButton().disabled).toBe(false);
     expect(mocks.fire).not.toHaveBeenCalled();
   });
+});
+
+describe("Salesforce instance header entry", () => {
+  it.each(["duplicate", "secret", "request"])(
+    "shows actionable %s header errors before entering setup",
+    (kind) => {
+      mocks.provider = "salesforce";
+      const header: RemoteMcpServerHeader = {
+        id: "instance",
+        name: "MCP-Instance-URL",
+        value: "https://example.my.salesforce.com",
+        isSecret: kind === "secret",
+        isRequired: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        valueFromRequestHeader: kind === "request" ? "X-Instance" : undefined,
+      };
+      mocks.headers =
+        kind === "duplicate" ? [header, { ...header, id: "other" }] : [header];
+      render(<Setup />);
+      expect(screen.getByText(/keep one plain MCP-Instance-URL/)).toBeTruthy();
+      expect(
+        screen
+          .getByRole("link", { name: "Open identity settings" })
+          .getAttribute("href"),
+      ).toBe("/settings#authentication");
+      expect(
+        screen.queryByRole("button", { name: "Complete setup" }),
+      ).toBeNull();
+    },
+  );
 });
