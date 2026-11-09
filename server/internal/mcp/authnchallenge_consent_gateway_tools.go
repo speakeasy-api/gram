@@ -175,6 +175,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}

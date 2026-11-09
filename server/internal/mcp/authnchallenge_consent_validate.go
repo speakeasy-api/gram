@@ -604,6 +604,7 @@ func (s *Service) metaValidationTarget(
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		// Consent probes never call connection_status.
 		connectURL:        "",
+		agentFix:          nil,
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}
