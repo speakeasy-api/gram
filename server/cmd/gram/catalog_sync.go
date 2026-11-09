@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/admin"
 	"github.com/speakeasy-api/gram/server/internal/catalogsource"
@@ -38,6 +40,7 @@ func catalogSyncFlags() []cli.Flag {
 func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer, service *admin.Service, registry *mcpregistry.Service, store *mcpregistry.CatalogAssetStore) error {
 	environment := c.String("environment")
 	var source admin.CatalogSource
+	var destination string
 	sourceURL, audience, reader := c.String("catalog-source-url"), c.String("catalog-source-audience"), c.String("catalog-source-reader")
 	if c.Bool("catalog-source-managed") || sourceURL != "" || audience != "" || reader != "" {
 		if environment != "local" && environment != "dev" {
@@ -58,6 +61,11 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 		if store == nil {
 			return fmt.Errorf("catalog sync requires configured platform asset storage")
 		}
+		var err error
+		destination, err = catalogResetDestination(environment, c.String("admin-server-url"))
+		if err != nil {
+			return err
+		}
 		tokens, err := catalogsource.NewGoogleTokenSource(ctx, audience, reader)
 		if err != nil {
 			return fmt.Errorf("configure catalog source identity: %w", err)
@@ -73,6 +81,7 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 	sourceIdentity := catalogSourceIdentity(sourceURL, audience)
 	mux.Handle(http.MethodPost, admin.CatalogSyncPath, service.CatalogSyncHandler(environment, source, store, sourceIdentity).ServeHTTP)
 	mux.Handle(http.MethodPost, admin.CatalogRefreshPath, service.CatalogRefreshHandler(environment, sourceIdentity, source, store).ServeHTTP)
+	mux.Handle(http.MethodPost, admin.CatalogResetPath, service.CatalogResetHandler(environment, sourceIdentity, destination, source, store).ServeHTTP)
 	exportAudience, subjects := c.String("catalog-export-audience"), c.StringSlice("catalog-export-subjects")
 	if exportAudience != "" || len(subjects) > 0 {
 		if environment != "prod" {
@@ -91,4 +100,20 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 		mux.Handle(http.MethodGet, catalogsource.ExportPath, handler.ServeHTTP)
 	}
 	return nil
+}
+
+// catalogResetDestination is derived exclusively from trusted startup settings.
+// Reject sensitive URL components rather than exposing them in confirmation text.
+func catalogResetDestination(environment, serverURL string) (string, error) {
+	u, err := url.Parse(serverURL)
+	if err != nil || u == nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || strings.Contains(serverURL, "#") {
+		return "", fmt.Errorf("catalog reset requires a valid admin-server-url without credentials, query, or fragment")
+	}
+	u.Host = strings.ToLower(u.Host)
+	if (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
+		u.Host = strings.TrimSuffix(u.Host, ":"+u.Port())
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = strings.TrimRight(u.RawPath, "/")
+	return environment + " " + u.String(), nil
 }

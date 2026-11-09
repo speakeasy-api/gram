@@ -304,3 +304,11 @@ ON CONFLICT (id) DO NOTHING;
 SELECT url = @url::text AND source_type = 'native_v1' AND auth_profile = 'none' AND source_key = 'speakeasy' AS valid
 FROM mcp_registries
 WHERE id = @id;
+
+-- name: SetAttachmentSelectedRemotesFixture :exec
+-- Test fixture: persist an installation's non-default selected remotes.
+UPDATE external_mcp_attachments SET selected_remotes = @selected_remotes WHERE id = @id;
+
+-- name: GetAttachmentFixture :one
+-- Test fixture: observe all persisted installation fields, including remote selection.
+SELECT * FROM external_mcp_attachments WHERE id = @id;

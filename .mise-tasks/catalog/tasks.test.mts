@@ -235,3 +235,58 @@ test("catalog tasks accept Go boolean true spellings and reject invalid modes", 
     }
   }
 });
+
+test("reset preview/status are separate and apply requires exact confirmation", (t) => {
+  const f = fixture(t);
+  for (const action of ["preview", "status"]) {
+    const result = f.run("catalog/reset.sh", {
+      ...enabled,
+      usage_action: action,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.calls,
+      new RegExp(`catalog-transfer --operation reset --action ${action}`),
+    );
+  }
+  const id = "11111111-1111-4111-8111-111111111111";
+  const missing = f.run("catalog/reset.sh", {
+    ...enabled,
+    usage_action: "apply",
+    usage_plan_id: id,
+  });
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stderr, /confirmation/);
+  const applied = f.run("catalog/reset.sh", {
+    ...enabled,
+    usage_action: "apply",
+    usage_plan_id: id,
+    usage_confirmation: `RESET local ${id}`,
+  });
+  assert.equal(applied.status, 0, applied.stderr);
+  assert.match(
+    applied.calls,
+    new RegExp(
+      `--operation reset --action apply --plan-id ${id} --confirmation RESET local ${id}`,
+    ),
+  );
+  assert.notEqual(
+    f.run("catalog/reset.sh", { ...enabled, usage_action: "bootstrap" }).status,
+    0,
+  );
+});
+
+test("reset failure recommends status and a new reset preview, never bootstrap", (t) => {
+  const f = fixture(t);
+  const result = f.run("catalog/reset.sh", { ...enabled, GO_STATUS: "1" });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /C1 \(ConductorOne\)/);
+  assert.match(result.stderr, /catalog:reset --action status/);
+  assert.match(result.stderr, /catalog:reset --action preview/);
+  assert.match(result.stderr, /No apply retry was attempted/);
+  assert.doesNotMatch(
+    result.stderr,
+    /catalog:bootstrap|catalog:refresh|No seed\/reset/,
+  );
+  assert.equal(result.calls.match(/catalog-transfer/g)?.length, 1);
+});

@@ -1,3 +1,4 @@
+import { CatalogRegistryReset } from "./CatalogRegistryReset";
 import { useCallback, useState, useSyncExternalStore, type JSX } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -88,7 +89,9 @@ export function CatalogRegistrySync(): JSX.Element {
       void client.invalidateQueries({
         predicate: (entry) =>
           entry.queryKey.some(
-            (part) => typeof part === "string" && /registry/i.test(part),
+            (part) =>
+              typeof part === "string" &&
+              /registry|catalog-.*-status/i.test(part),
           ),
       });
     },
@@ -233,6 +236,7 @@ export function CatalogRegistrySync(): JSX.Element {
           <Changes changes={apply.data.changes ?? []} />
         </div>
       )}
+      <CatalogRegistryReset />
     </section>
   );
 }

@@ -3,3 +3,33 @@
 //   sqlc v1.31.1
 
 package repo
+
+import (
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+type ExternalMcpAttachment struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	DeploymentID uuid.UUID
+	// @access: confidential
+	RegistryID uuid.NullUUID
+	// @access: confidential
+	Name string
+	// @access: confidential
+	Slug string
+	// @access: confidential
+	RegistryServerSpecifier string
+	// @access: opaque-restricted
+	SelectedRemotes []string
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}

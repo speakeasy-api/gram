@@ -28,6 +28,10 @@ type CatalogRefreshChange struct {
 	Reason string `json:"reason,omitempty"`
 }
 type CatalogRefreshPlan struct {
+	Operation      string                 `json:"operation,omitempty"`
+	Destination    string                 `json:"destination,omitempty"`
+	Confirmation   string                 `json:"confirmation,omitempty"`
+	ScopeWarning   string                 `json:"scopeWarning,omitempty"`
 	ID             uuid.UUID              `json:"id"`
 	SourceIdentity string                 `json:"sourceIdentity"`
 	SourceRevision string                 `json:"sourceRevision"`
@@ -35,6 +39,8 @@ type CatalogRefreshPlan struct {
 	Changes        []CatalogRefreshChange `json:"changes"`
 }
 type CatalogRefreshReceipt struct {
+	Operation      string                 `json:"operation,omitempty"`
+	Destination    string                 `json:"destination,omitempty"`
 	SourceRevision string                 `json:"sourceRevision"`
 	PlanID         uuid.UUID              `json:"planId"`
 	State          string                 `json:"state"`
@@ -42,29 +48,34 @@ type CatalogRefreshReceipt struct {
 	CompletedAt    time.Time              `json:"completedAt"`
 }
 type CatalogRefreshStatus struct {
-	SourceIdentity          string                 `json:"sourceIdentity"`
-	LastFullSuccessAt       *time.Time             `json:"lastFullSuccessAt,omitempty"`
-	LastFullSuccessRevision string                 `json:"lastFullSuccessRevision,omitempty"`
-	LastAttemptRevision     string                 `json:"lastAttemptRevision,omitempty"`
-	LastAttemptState        string                 `json:"lastAttemptState,omitempty"`
-	Conflicts               []CatalogRefreshChange `json:"conflicts,omitempty"`
-	Failure                 string                 `json:"failure,omitempty"`
+	LastAttemptOperation     string                 `json:"lastAttemptOperation,omitempty"`
+	LastFullSuccessOperation string                 `json:"lastFullSuccessOperation,omitempty"`
+	SourceIdentity           string                 `json:"sourceIdentity"`
+	LastFullSuccessAt        *time.Time             `json:"lastFullSuccessAt,omitempty"`
+	LastFullSuccessRevision  string                 `json:"lastFullSuccessRevision,omitempty"`
+	LastAttemptRevision      string                 `json:"lastAttemptRevision,omitempty"`
+	LastAttemptState         string                 `json:"lastAttemptState,omitempty"`
+	Conflicts                []CatalogRefreshChange `json:"conflicts,omitempty"`
+	Failure                  string                 `json:"failure,omitempty"`
 }
 type CatalogRefresher struct {
-	registry                    *Service
-	environment, sourceIdentity string
-	source                      CatalogRefreshSource
-	assets                      CatalogRefreshAssets
+	registry                             *Service
+	environment, sourceIdentity          string
+	operation, destination, confirmation string
+	source                               CatalogRefreshSource
+	assets                               CatalogRefreshAssets
 }
 type refreshState struct {
-	Baseline                map[string]json.RawMessage `json:"baseline"`
-	LastFullSuccessAt       *time.Time                 `json:"lastFullSuccessAt,omitempty"`
-	LastFullSuccessRevision string                     `json:"lastFullSuccessRevision,omitempty"`
-	LastAttemptRevision     string                     `json:"lastAttemptRevision,omitempty"`
-	LastAttemptState        string                     `json:"lastAttemptState,omitempty"`
-	Conflicts               []CatalogRefreshChange     `json:"conflicts,omitempty"`
-	Absent                  map[string]bool            `json:"absent,omitempty"`
-	Failure                 string                     `json:"failure,omitempty"`
+	LastAttemptOperation     string                     `json:"lastAttemptOperation,omitempty"`
+	LastFullSuccessOperation string                     `json:"lastFullSuccessOperation,omitempty"`
+	Baseline                 map[string]json.RawMessage `json:"baseline"`
+	LastFullSuccessAt        *time.Time                 `json:"lastFullSuccessAt,omitempty"`
+	LastFullSuccessRevision  string                     `json:"lastFullSuccessRevision,omitempty"`
+	LastAttemptRevision      string                     `json:"lastAttemptRevision,omitempty"`
+	LastAttemptState         string                     `json:"lastAttemptState,omitempty"`
+	Conflicts                []CatalogRefreshChange     `json:"conflicts,omitempty"`
+	Absent                   map[string]bool            `json:"absent,omitempty"`
+	Failure                  string                     `json:"failure,omitempty"`
 }
 type refreshStoredPlan struct {
 	Public           CatalogRefreshPlan         `json:"public"`
@@ -75,9 +86,12 @@ type refreshStoredPlan struct {
 }
 
 func NewCatalogRefresher(registry *Service, environment, sourceIdentity string, source CatalogRefreshSource, images CatalogRefreshAssets) *CatalogRefresher {
-	return &CatalogRefresher{registry: registry, environment: environment, sourceIdentity: sourceIdentity, source: source, assets: images}
+	return &CatalogRefresher{registry: registry, environment: environment, sourceIdentity: sourceIdentity, source: source, assets: images, operation: "refresh", destination: "", confirmation: ""}
 }
 func (r *CatalogRefresher) check() error {
+	if r.operation == "reset" && (r.destination == "" || len(r.destination) > 2048) {
+		return errors.New("catalog reset trusted destination required")
+	}
 	if r.environment != "local" && r.environment != "dev" {
 		return errors.New("catalog refresh destination must be local or dev")
 	}
@@ -273,7 +287,12 @@ func (r *CatalogRefresher) preview(ctx context.Context, owner string, additive b
 		}
 		trialPrepared[name] = data
 	}
-	plan := refreshStoredPlan{Public: CatalogRefreshPlan{ID: uuid.New(), SourceIdentity: r.sourceIdentity, SourceRevision: revision, ExpiresAt: time.Now().UTC().Add(15 * time.Minute), Changes: []CatalogRefreshChange{}}, DestinationToken: destinationToken, BaselineToken: baselineToken, Prepared: prepared, Upstream: upstream}
+	plan := refreshStoredPlan{Public: CatalogRefreshPlan{Operation: r.operation, Destination: "", Confirmation: "", ScopeWarning: "", ID: uuid.New(), SourceIdentity: r.sourceIdentity, SourceRevision: revision, ExpiresAt: time.Now().UTC().Add(15 * time.Minute), Changes: []CatalogRefreshChange{}}, DestinationToken: destinationToken, BaselineToken: baselineToken, Prepared: prepared, Upstream: upstream}
+	if r.operation == "reset" {
+		plan.Public.Destination = r.destination
+		plan.Public.Confirmation = resetConfirmation(r.destination, plan.Public.ID)
+		plan.Public.ScopeWarning = catalogResetScopeWarning
+	}
 	names := refreshNames(upstream, state.Baseline, local)
 	if additive {
 		names = refreshNames(upstream)
@@ -292,6 +311,9 @@ func (r *CatalogRefresher) preview(ctx context.Context, owner string, additive b
 					}
 				}
 			}
+		}
+		if r.operation == "reset" {
+			action, reason = resetDecision(local[name], upstream[name], entries[name].Published)
 		}
 		if additive && len(local[name]) > 0 {
 			action, reason = "conflict", "existing_entry"
@@ -398,20 +420,38 @@ func (r *CatalogRefresher) loadPlan(ctx context.Context, tx pgx.Tx, owner string
 	if err != nil {
 		return refreshStoredPlan{}, nil, refreshError(err)
 	}
+	// Committing a receipt clears the large plan payload. The compact receipt
+	// therefore carries its own operation/destination boundary, checked before
+	// replay. Legacy receipts lacking operation belong only to refresh.
 	if len(rawReceipt) > 0 {
 		var receipt CatalogRefreshReceipt
 		if err = json.Unmarshal(rawReceipt, &receipt); err != nil {
 			return refreshStoredPlan{}, nil, refreshError(err)
 		}
+		if receipt.PlanID != id {
+			return refreshStoredPlan{}, nil, fmt.Errorf("%w: catalog receipt plan mismatch", ErrConflict)
+		}
+		public := CatalogRefreshPlan{ID: receipt.PlanID, Operation: receipt.Operation, Destination: receipt.Destination, Confirmation: "", ScopeWarning: "", SourceIdentity: "", SourceRevision: "", ExpiresAt: time.Time{}, Changes: nil}
+		if receipt.Operation == "reset" {
+			public.Confirmation = resetConfirmation(receipt.Destination, receipt.PlanID)
+		}
+		if err = r.authorizePlan(public); err != nil {
+			return refreshStoredPlan{}, nil, err
+		}
 		var empty refreshStoredPlan
 		return empty, &receipt, nil
 	}
-	if !time.Now().Before(expires) {
-		return refreshStoredPlan{}, nil, fmt.Errorf("%w: catalog refresh plan expired; create a new preview", ErrConflict)
-	}
 	var plan refreshStoredPlan
-	err = json.Unmarshal(data, &plan)
-	return plan, nil, refreshError(err)
+	if err = json.Unmarshal(data, &plan); err != nil {
+		return refreshStoredPlan{}, nil, refreshError(err)
+	}
+	if err = r.authorizePlan(plan.Public); err != nil {
+		return refreshStoredPlan{}, nil, err
+	}
+	if !time.Now().Before(expires) {
+		return refreshStoredPlan{}, nil, fmt.Errorf("%w: catalog plan expired; create a new preview", ErrConflict)
+	}
+	return plan, nil, nil
 }
 func (r *CatalogRefresher) Apply(ctx context.Context, owner string, id uuid.UUID) (out CatalogRefreshReceipt, applyErr error) {
 	if err := r.check(); err != nil {
@@ -512,7 +552,7 @@ func (r *CatalogRefresher) Apply(ctx context.Context, owner string, id uuid.UUID
 	if err != nil {
 		return CatalogRefreshReceipt{}, refreshError(err)
 	}
-	result := CatalogRefreshReceipt{SourceRevision: plan.Public.SourceRevision, PlanID: id, State: "completed", Changes: plan.Public.Changes, CompletedAt: time.Now().UTC()}
+	result := CatalogRefreshReceipt{Operation: plan.Public.Operation, Destination: plan.Public.Destination, SourceRevision: plan.Public.SourceRevision, PlanID: id, State: "completed", Changes: plan.Public.Changes, CompletedAt: time.Now().UTC()}
 	for _, change := range plan.Public.Changes {
 		if change.Action == "preserved" {
 			continue
@@ -532,9 +572,11 @@ func (r *CatalogRefresher) Apply(ctx context.Context, owner string, id uuid.UUID
 		}
 	}
 	if result.State == "completed" {
+		state.LastFullSuccessOperation = r.operation
 		state.LastFullSuccessAt = &result.CompletedAt
 		state.LastFullSuccessRevision = plan.Public.SourceRevision
 	}
+	state.LastAttemptOperation = r.operation
 	state.LastAttemptRevision = plan.Public.SourceRevision
 	state.LastAttemptState = result.State
 	state.Failure = ""
@@ -576,7 +618,7 @@ func (r *CatalogRefresher) Status(ctx context.Context) (CatalogRefreshStatus, er
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	state, _, err := refreshReadState(ctx, tx, r.sourceIdentity)
-	return CatalogRefreshStatus{SourceIdentity: r.sourceIdentity, LastFullSuccessAt: state.LastFullSuccessAt, LastFullSuccessRevision: state.LastFullSuccessRevision, LastAttemptRevision: state.LastAttemptRevision, LastAttemptState: state.LastAttemptState, Conflicts: state.Conflicts, Failure: state.Failure}, refreshError(err)
+	return CatalogRefreshStatus{LastAttemptOperation: state.LastAttemptOperation, LastFullSuccessOperation: state.LastFullSuccessOperation, SourceIdentity: r.sourceIdentity, LastFullSuccessAt: state.LastFullSuccessAt, LastFullSuccessRevision: state.LastFullSuccessRevision, LastAttemptRevision: state.LastAttemptRevision, LastAttemptState: state.LastAttemptState, Conflicts: state.Conflicts, Failure: state.Failure}, refreshError(err)
 }
 
 // Import is the trusted additive bootstrap. Legacy caller-provided bundles keep
@@ -647,9 +689,10 @@ func (r *CatalogRefresher) recordFailure(ctx context.Context, revision string, c
 	if err != nil {
 		return
 	}
+	state.LastAttemptOperation = r.operation
 	state.LastAttemptRevision = revision
 	state.LastAttemptState = "failed"
-	state.Failure = "refresh_failed"
+	state.Failure = r.operation + "_failed"
 	if errors.Is(cause, ErrConflict) {
 		state.Failure = "stale_plan"
 	}

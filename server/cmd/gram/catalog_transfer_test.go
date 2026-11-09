@@ -10,8 +10,8 @@ import (
 
 //nolint:paralleltest // cli.App.RunContext mutates urfave's shared help flags.
 func TestCatalogTransferHasNoUnsafeFlags(t *testing.T) {
-	require.Len(t, newCatalogTransferCommand().Flags, 2)
-	for _, name := range []string{"operation", "file", "database-url", "site-url", "assets-backend", "assets-uri", "operator", "environment", "cookie", "yes"} {
+	require.Len(t, newCatalogTransferCommand().Flags, 4)
+	for _, name := range []string{"file", "database-url", "site-url", "assets-backend", "assets-uri", "operator", "environment", "cookie", "yes"} {
 		t.Run(name, func(t *testing.T) {
 			app := cli.NewApp()
 			app.Writer = io.Discard
@@ -61,5 +61,21 @@ func TestCatalogTransferValidatesExactPlan(t *testing.T) {
 		app.Commands = []*cli.Command{newCatalogTransferCommand()}
 		err := app.RunContext(t.Context(), append([]string{"test", "catalog-transfer"}, tc.args...))
 		require.ErrorContains(t, err, tc.want)
+	}
+}
+
+//nolint:paralleltest // cli.App.RunContext mutates shared help flags.
+func TestCatalogTransferResetRequiresExplicitPlanAndConfirmation(t *testing.T) {
+	for _, flags := range [][]string{
+		{"--operation", "reset", "--action", "bootstrap"},
+		{"--operation", "reset", "--action", "apply", "--plan-id", "11111111-1111-4111-8111-111111111111"},
+		{"--operation", "refresh", "--confirmation", "RESET local"},
+		{"--operation", "unknown"},
+	} {
+		app := cli.NewApp()
+		app.Writer = io.Discard
+		app.ErrWriter = io.Discard
+		app.Commands = []*cli.Command{newCatalogTransferCommand()}
+		require.Error(t, app.RunContext(t.Context(), append([]string{"test", "catalog-transfer"}, flags...)))
 	}
 }

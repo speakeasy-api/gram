@@ -319,6 +319,30 @@ func (q *Queries) FindExternalMCPToolEntriesForProjects(ctx context.Context, pro
 	return items, nil
 }
 
+const getAttachmentFixture = `-- name: GetAttachmentFixture :one
+SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at, deleted_at, deleted FROM external_mcp_attachments WHERE id = $1
+`
+
+// Test fixture: observe all persisted installation fields, including remote selection.
+func (q *Queries) GetAttachmentFixture(ctx context.Context, id uuid.UUID) (ExternalMcpAttachment, error) {
+	row := q.db.QueryRow(ctx, getAttachmentFixture, id)
+	var i ExternalMcpAttachment
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.RegistryID,
+		&i.Name,
+		&i.Slug,
+		&i.RegistryServerSpecifier,
+		&i.SelectedRemotes,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const getExternalMCPToolDefinitionByURN = `-- name: GetExternalMCPToolDefinitionByURN :one
 WITH deployment AS (
     SELECT d.id
@@ -907,6 +931,21 @@ func (q *Queries) NativeCatalogRegistryMatches(ctx context.Context, arg NativeCa
 	var valid pgtype.Bool
 	err := row.Scan(&valid)
 	return valid, err
+}
+
+const setAttachmentSelectedRemotesFixture = `-- name: SetAttachmentSelectedRemotesFixture :exec
+UPDATE external_mcp_attachments SET selected_remotes = $1 WHERE id = $2
+`
+
+type SetAttachmentSelectedRemotesFixtureParams struct {
+	SelectedRemotes []string
+	ID              uuid.UUID
+}
+
+// Test fixture: persist an installation's non-default selected remotes.
+func (q *Queries) SetAttachmentSelectedRemotesFixture(ctx context.Context, arg SetAttachmentSelectedRemotesFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAttachmentSelectedRemotesFixture, arg.SelectedRemotes, arg.ID)
+	return err
 }
 
 const setMCPRegistryEnabledFixture = `-- name: SetMCPRegistryEnabledFixture :exec

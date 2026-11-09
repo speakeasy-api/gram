@@ -246,7 +246,7 @@ it.each(["failed", "completed_with_conflicts"])(
     ).toBeDefined();
     expect(screen.queryByText("Full sync completed.")).toBeNull();
     if (state === "failed")
-      expect(screen.getByRole("alert").textContent).toContain(
+      expect(screen.getAllByRole("alert")[0]?.textContent).toContain(
         "source_unavailable",
       );
     else expect(screen.getByText("Unresolved conflicts: 1")).toBeDefined();
@@ -283,4 +283,28 @@ it("expires an open confirmed plan as the subscribed clock advances", async () =
     cleanup();
     vi.useRealTimers();
   }
+});
+
+it("refresh apply updates the mounted reset panel's shared status", async () => {
+  let applied = false;
+  fetcher.mockImplementation(async (_path, init) => {
+    const request = JSON.parse(init.body);
+    if (request.action === "preview") return plan;
+    if (request.action === "apply") {
+      applied = true;
+      return { planId: plan.id, state: "completed", changes: [] };
+    }
+    return {
+      sourceIdentity: "production",
+      lastAttemptOperation: applied ? "refresh" : "reset",
+      lastAttemptState: applied ? "completed" : "completed_with_conflicts",
+    };
+  });
+  await preview();
+  await screen.findByText(
+    "Last catalog attempt (reset): completed_with_conflicts",
+  );
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Apply confirmed plan" }));
+  await screen.findByText("Last catalog attempt (refresh): completed");
 });
