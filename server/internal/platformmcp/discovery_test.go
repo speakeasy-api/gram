@@ -650,7 +650,7 @@ func TestMetaToolsCarryResultCards(t *testing.T) {
 	require.NotEmpty(t, want)
 	require.Equal(t, want, cardOf(callPlatformToolName, map[string]any{"name": cardTool}), "call_platform_tool returns the tool's card")
 	require.Equal(t, want, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute returns the card of its one card call")
-	require.Nil(t, cardOf(callPlatformToolName, map[string]any{"name": "get_platform_context"}), "a result without a card carries none")
+	require.Nil(t, cardOf(callPlatformToolName, map[string]any{"name": "get_platform_context"}), "a text-only tool's successful result carries no card")
 
 	calls = 2
 	require.Nil(t, cardOf(executePlatformCodeName, map[string]any{"code": "pass"}), "execute never picks between several cards")

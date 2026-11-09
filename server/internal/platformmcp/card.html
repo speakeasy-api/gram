@@ -6,9 +6,9 @@
     <title>Speakeasy</title>
     <style>
       /* One shared shell: a dotted panel with the resource's tile, a coloured
-   eyebrow, a serif title, up to two lines, tags and one action, over a Speakeasy
-   footer. Catalog results show a sideways row of smaller cards in the same
-   style. Square corners and hairline borders throughout. */
+   eyebrow, a serif title, up to two lines, optional rows, tags and one action,
+   over a Speakeasy footer. Catalog results show a sideways row of smaller cards
+   in the same style. Square corners and hairline borders throughout. */
       :root {
         color-scheme: light dark;
         --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 9%));
@@ -150,6 +150,33 @@
         background: var(--tag);
         border: 1px solid var(--hair);
         color: var(--tag-fg);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .rows {
+        margin-top: 14px;
+        list-style: none;
+        border-top: 1px solid var(--hair);
+      }
+      .rows li {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--hair);
+        font-size: 13px;
+      }
+      .row-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row-meta {
+        flex: none;
+        color: var(--muted);
         font: 11px/1.5 var(--mono);
         letter-spacing: 0.06em;
         text-transform: uppercase;
@@ -442,7 +469,7 @@
             })(viewports[i]);
           }
         }
-        // A result without a card, such as a refusal, clears any earlier card,
+        // A result without a card, such as a text-only tool's, clears any earlier card,
         // hides the frame and reports a one-pixel height so the host can
         // collapse it.
         function render(meta) {
