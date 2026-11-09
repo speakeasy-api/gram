@@ -9,10 +9,11 @@ import (
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 )
 
-// projectAdminMust says who fixes a Slack token read from the server's
-// environment, and where.
+// projectAdminMust says who fixes a Slack token, and where. The token is read
+// from the server's environment in Speakeasy merged with any the client sends
+// in its MCP headers.
 func projectAdminMust(action string) string {
-	return fmt.Sprintf("An admin of the server's project must %s in the server's environment.", action)
+	return fmt.Sprintf("An admin of the server's project must %s in the server's environment in Speakeasy, or the client in its MCP headers.", action)
 }
 
 // slackTokenRejectedCodes are the envelope codes Slack answers with when the
@@ -29,15 +30,16 @@ var slackTokenRejectedCodes = map[string]struct{}{
 // configError turns a failure the server's Slack configuration causes (no
 // token, a token Slack rejects, or a token without the scope a method needs)
 // into a failed precondition that says what is missing and who can fix it.
-// Callers see that message instead of a generic failure. Any other error is
-// returned unchanged.
+// Callers see that message instead of a generic failure. Each cause is a client
+// fault (oops.ClientFaulter), so error boundaries answer it at warn. Any other
+// error is returned unchanged.
 func configError(err error) error {
 	if err == nil {
 		return nil
 	}
 
 	if missing, ok := errors.AsType[*slackapi.TokenNotConfiguredError](err); ok {
-		return oops.E(oops.CodeFailedPrecondition, configFaultError{err}, "server not configured: missing environment variable %s. %s", missingTokenVariables(missing), projectAdminMust("add it"))
+		return oops.E(oops.CodeFailedPrecondition, err, "server not configured: missing environment variable %s. %s", missingTokenVariables(missing), projectAdminMust("add it"))
 	}
 
 	slackErr, ok := errors.AsType[*slackapi.Error](err)
@@ -49,10 +51,10 @@ func configError(err error) error {
 		if slackErr.Needed != "" {
 			scope = "the " + slackErr.Needed + " scope"
 		}
-		return oops.E(oops.CodeFailedPrecondition, configFaultError{err}, "server not configured: its Slack token lacks %s, which %s needs. A Slack workspace admin must add the scope to the Slack app and reinstall the app. %s", scope, slackErr.Method, projectAdminMust("then update the token"))
+		return oops.E(oops.CodeFailedPrecondition, err, "server not configured: its Slack token lacks %s, which %s needs. A Slack workspace admin must add the scope to the Slack app and reinstall the app. %s", scope, slackErr.Method, projectAdminMust("then update the token"))
 	}
 	if _, rejected := slackTokenRejectedCodes[slackErr.Code]; rejected {
-		return oops.E(oops.CodeFailedPrecondition, configFaultError{err}, "server not configured: Slack rejected its token (%s). %s", slackErr.Code, projectAdminMust("replace it"))
+		return oops.E(oops.CodeFailedPrecondition, err, "server not configured: Slack rejected its token (%s). %s", slackErr.Code, projectAdminMust("replace it"))
 	}
 	return err
 }
@@ -72,15 +74,3 @@ func missingTokenVariables(missing *slackapi.TokenNotConfiguredError) string {
 	}
 	return names
 }
-
-// configFaultError marks a configuration failure as the caller's to fix, so error
-// boundaries answer it with a 4xx at warn rather than as a Speakeasy fault.
-type configFaultError struct {
-	err error
-}
-
-func (f configFaultError) Error() string { return f.err.Error() }
-
-func (f configFaultError) Unwrap() error { return f.err }
-
-func (configFaultError) ClientFault() bool { return true }

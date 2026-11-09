@@ -86,6 +86,12 @@ func TestError_UnnamedEnvelopeFailureStaysServerFault(t *testing.T) {
 	require.Equal(t, "slack reactions.add: request failed", err.Error())
 }
 
+func TestTokenNotConfiguredError_IsClientFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, oops.IsClientFault(&TokenNotConfiguredError{Kind: TokenPreferBot, Variables: nil}), "a missing token is the configuration's to fix")
+}
+
 func TestError_NeededOnlyForMissingScope(t *testing.T) {
 	t.Parallel()
 

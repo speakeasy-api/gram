@@ -353,12 +353,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		// ShareableError public is written to be client-safe).
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
 			shareable.Code != oops.CodeUnexpected && shareable.Code != oops.CodeInvariantViolation {
-			deepest := shareable
-			for inner := errors.Unwrap(error(deepest)); inner != nil; inner = errors.Unwrap(inner) {
-				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
-					deepest = innerShareable
-				}
-			}
+			deepest := oops.Innermost(err)
 			// An unknown tool or invalid call refused before dispatch is one
 			// the program can correct.
 			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&

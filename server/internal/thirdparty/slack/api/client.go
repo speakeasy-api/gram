@@ -189,6 +189,10 @@ func (e *TokenNotConfiguredError) Error() string {
 	return fmt.Sprintf("slack token not configured: expected %s, %s, or %s", BotTokenEnvVar, UserTokenEnvVar, TokenEnvVar)
 }
 
+// ClientFault implements oops.ClientFaulter: a missing token is the
+// configuration's to fix, not a Speakeasy fault.
+func (*TokenNotConfiguredError) ClientFault() bool { return true }
+
 func errorDetails(resp ResponseEnvelope) string {
 	parts := make([]string, 0, 3)
 	if resp.Error != "" {

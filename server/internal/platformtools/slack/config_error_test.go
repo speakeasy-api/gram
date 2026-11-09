@@ -57,7 +57,7 @@ func TestSlackTool_MissingBotTokenSaysWhatToSetAndWho(t *testing.T) {
 	}
 
 	err := tool.Call(t.Context(), emptySlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
-	requireConfigError(t, err, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment.")
+	requireConfigError(t, err, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment in Speakeasy, or the client in its MCP headers.")
 }
 
 func TestSlackTool_MissingUserTokenNamesUserToken(t *testing.T) {
@@ -70,7 +70,7 @@ func TestSlackTool_MissingUserTokenNamesUserToken(t *testing.T) {
 	}
 
 	err := tool.Call(t.Context(), emptySlackEnv(), bytes.NewBufferString(`{"query":"launch"}`), io.Discard)
-	requireConfigError(t, err, "server not configured: missing environment variable SLACK_USER_TOKEN (or SLACK_TOKEN), a Slack user token (search needs its search:read scope). An admin of the server's project must add it in the server's environment.")
+	requireConfigError(t, err, "server not configured: missing environment variable SLACK_USER_TOKEN (or SLACK_TOKEN), a Slack user token (search needs its search:read scope). An admin of the server's project must add it in the server's environment in Speakeasy, or the client in its MCP headers.")
 }
 
 func TestSlackTool_MissingScopeNamesTheScope(t *testing.T) {
@@ -83,7 +83,7 @@ func TestSlackTool_MissingScopeNamesTheScope(t *testing.T) {
 	}
 
 	err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
-	requireConfigError(t, err, "server not configured: its Slack token lacks the channels:read scope, which conversations.list needs. A Slack workspace admin must add the scope to the Slack app and reinstall the app. An admin of the server's project must then update the token in the server's environment.")
+	requireConfigError(t, err, "server not configured: its Slack token lacks the channels:read scope, which conversations.list needs. A Slack workspace admin must add the scope to the Slack app and reinstall the app. An admin of the server's project must then update the token in the server's environment in Speakeasy, or the client in its MCP headers.")
 }
 
 func TestSlackTool_RejectedTokenSaysToReplaceIt(t *testing.T) {
@@ -97,7 +97,7 @@ func TestSlackTool_RejectedTokenSaysToReplaceIt(t *testing.T) {
 		}
 
 		err := tool.Call(t.Context(), testSlackEnv(), bytes.NewBufferString(`{}`), io.Discard)
-		requireConfigError(t, err, "server not configured: Slack rejected its token ("+code+"). An admin of the server's project must replace it in the server's environment.")
+		requireConfigError(t, err, "server not configured: Slack rejected its token ("+code+"). An admin of the server's project must replace it in the server's environment in Speakeasy, or the client in its MCP headers.")
 	}
 }
 
