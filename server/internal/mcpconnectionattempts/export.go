@@ -289,9 +289,12 @@ func exportRecord(row Row) (log.Record, bool) {
 	if duration := row.EventTime.Sub(row.AttemptStartedAt); duration >= minAttemptDuration {
 		attrs = append(attrs, attr.ExtMcpConnectionDuration(duration))
 	}
-	// server.address is the external host of the step: the sign-in provider on sign-in and
-	// refresh steps, the upstream MCP server on MCP requests.
-	address, port := splitProviderHost(row.ProviderHost)
+	// server.address is the external host that failed: the sign-in provider on sign-in and
+	// refresh steps, the upstream MCP server on MCP requests. Unknown means it is left out.
+	address, port := "", 0
+	if !row.failedElsewhere {
+		address, port = splitProviderHost(row.ProviderHost)
+	}
 	if port != 0 {
 		attrs = append(attrs, attr.ServerPort(port))
 	}

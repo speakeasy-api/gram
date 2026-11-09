@@ -77,3 +77,11 @@ func TestCanonicalCopiesOfSensitiveValuesAreSensitive(t *testing.T) {
 		require.False(t, dialect.IsSensitiveDataKey(key), "%s is not sensitive", key)
 	}
 }
+
+func TestIsMcpConnectionKey(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsMcpConnectionKey("speakeasy.mcp_connection.outcome"))
+	require.False(t, IsMcpConnectionKey("speakeasy.mcp_connections"))
+	require.False(t, IsMcpConnectionKey("speakeasy.project.id"))
+}

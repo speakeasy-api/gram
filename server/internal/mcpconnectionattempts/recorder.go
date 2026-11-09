@@ -125,6 +125,11 @@ func Provider(issuer string) Option {
 	return Option{apply: func(row *Row) { row.ProviderHost = NormalizeProviderHost(issuer) }}
 }
 
+// FailedElsewhere marks a row whose failure was not at the provider host it names, so the export leaves the host out.
+func FailedElsewhere() Option {
+	return Option{apply: func(row *Row) { row.failedElsewhere = true }}
+}
+
 // Member is the gateway member for member-level steps.
 func Member(id uuid.UUID) Option {
 	return Option{apply: func(row *Row) { row.MemberID = idString(id) }}
@@ -207,6 +212,9 @@ type Row struct {
 
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
+
+	// failedElsewhere is for the export only and is never stored.
+	failedElsewhere bool
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -281,6 +289,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", reported: nil},
+		failedElsewhere:       false,
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {

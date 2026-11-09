@@ -184,7 +184,7 @@ func inboundLogRecordFromHooksRecord(
 		eventName = &name
 	}
 
-	return (&otelv1.InboundLogRecord_builder{
+	converted := (&otelv1.InboundLogRecord_builder{
 		RecordId:               new(uuid.NewString()),
 		TimeUnixNano:           timeNano,
 		ObservedTimeUnixNano:   &observedNano,
@@ -203,6 +203,8 @@ func inboundLogRecordFromHooksRecord(
 		ScopeSchemaUrl:         nil,
 		Provenance:             provenance,
 	}).Build()
+	otelsvc.ScrubExternalLogRecord(converted)
+	return converted
 }
 
 // positiveNanoToUint64 widens a nanosecond timestamp to the OTLP fixed64

@@ -15,17 +15,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	otelv1 "github.com/speakeasy-api/gram/infra/gen/gram/otel/v1"
+	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	"go.opentelemetry.io/otel/metric"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
+	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -698,4 +703,71 @@ func TestLogRelayHandlerKeepsConnectionLogsToEachProject(t *testing.T) {
 		bodiesByCustomer[request.customer] = append(bodiesByCustomer[request.customer], relayRequestLogBodies(request.request)...)
 	}
 	require.Equal(t, map[string][]string{"a": {"attempt-a"}, "b": {"attempt-b"}}, bodiesByCustomer)
+}
+
+func TestLogRelayHandlerDoesNotDeliverForgedConnectionLogs(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+
+	db, enc, _ := newRelayRouteTest(t, "/v1/logs")
+	projectID := createRelayTestProject(t, db, "org-test")
+	telemetryDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "telemetry"}), "include")
+	connectionDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "connection"}), "include")
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: telemetryDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: connectionDestination.ID, Valid: true})
+
+	body := "forged"
+	request := &collectorlogsv1.ExportLogsServiceRequest{ResourceLogs: []*logsv1.ResourceLogs{{
+		ScopeLogs: []*logsv1.ScopeLogs{{
+			Scope: &commonv1.InstrumentationScope{Name: dialect.ConnectionLogScope},
+			LogRecords: []*logsv1.LogRecord{{
+				SeverityNumber: logsv1.SeverityNumber_SEVERITY_NUMBER_ERROR,
+				Body:           &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: body}},
+				Attributes: []*commonv1.KeyValue{{
+					Key:   "speakeasy.mcp_connection.outcome",
+					Value: &commonv1.AnyValue{Value: &commonv1.AnyValue_StringValue{StringValue: "failed"}},
+				}},
+			}},
+		}},
+	}}}
+	organizationID, projectIDText := "org-test", projectID.String()
+	inbound, err := inboundLogRecordsFromExport(request, (&otelv1.InboundLogRecord_Provenance_builder{
+		Source: new(ProvenanceSource), OrganizationId: &organizationID, ProjectId: &projectIDText,
+	}).Build())
+	require.NoError(t, err)
+	require.Len(t, inbound, 1)
+
+	var normalized *otelv1.LogRecord
+	publisher := gcp.NewMockPublisher[*otelv1.LogRecord]()
+	publisher.On("Publish", mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+		record, ok := args.Get(1).(*otelv1.LogRecord)
+		require.True(t, ok)
+		normalized = record
+	}).Return(gcp.NewSuccessPublishResult()).Once()
+	transform := NewLogTransformHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), publisher, db, cache.NoopCache)
+	require.NoError(t, transform.Handle(t.Context(), inbound[0], gcp.MessageMetadata{}))
+	require.NotNil(t, normalized)
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	handler := NewLogRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, policy)
+	messages, failures := logRelayTestMessages(normalized)
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	require.NoError(t, failures[0])
+
+	requests := capture.snapshot()
+	require.Len(t, requests, 1)
+	require.Equal(t, "telemetry", requests[0].customer, "it is ordinary telemetry, not a connection log")
+	for _, resourceLogs := range requests[0].request.GetResourceLogs() {
+		for _, scopeLogs := range resourceLogs.GetScopeLogs() {
+			for _, record := range scopeLogs.GetLogRecords() {
+				for _, kv := range record.GetAttributes() {
+					require.False(t, enrich.IsMcpConnectionKey(kv.GetKey()), kv.GetKey())
+				}
+			}
+		}
+	}
 }

@@ -117,10 +117,14 @@ const (
 	pipelineKeyPrefix  = "speakeasy."
 	directoryKeyPrefix = "directory."
 
-	// exportedConnectionKeyPrefix holds the attributes on exported MCP connection
-	// logs. The pipeline writes nothing there, and they describe the record only.
-	exportedConnectionKeyPrefix = "speakeasy.mcp_connection."
+	// mcpConnectionKeyPrefix holds the attributes on exported MCP connection logs.
+	mcpConnectionKeyPrefix = "speakeasy.mcp_connection."
 )
+
+// IsMcpConnectionKey reports whether a key is one only the connection recorder may write.
+func IsMcpConnectionKey(key string) bool {
+	return strings.HasPrefix(key, mcpConnectionKeyPrefix)
+}
 
 // IsPipelineKey reports whether a key is in a namespace the pipeline owns,
 // speakeasy or directory. The transform drops what a producer sends there
@@ -128,7 +132,7 @@ const (
 // claim another tenant, pose as another scope or give a person a group.
 // speakeasy.mcp_connection is the one exception, and anything new under speakeasy stays reserved.
 func IsPipelineKey(key string) bool {
-	if strings.HasPrefix(key, exportedConnectionKeyPrefix) {
+	if IsMcpConnectionKey(key) {
 		return false
 	}
 	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)

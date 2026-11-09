@@ -240,6 +240,19 @@ func TestExportRecord_OneRowAttemptHasNoDuration(t *testing.T) {
 	require.NotContains(t, recordAttributes(record), string(attr.ExtMcpConnectionDurationKey))
 }
 
+func TestExportRecord_FailureElsewhereLeavesOutTheHost(t *testing.T) {
+	t.Parallel()
+
+	row := exportTestRow(t, CodeIDPUnavailable, true, Provider("https://login.example.test:8443"), FailedElsewhere())
+	require.Equal(t, "login.example.test:8443", row.ProviderHost, "the stored column is unchanged")
+
+	record, ok := exportRecord(row)
+	require.True(t, ok)
+	got := recordAttributes(record)
+	require.NotContains(t, got, string(attr.ServerAddressKey))
+	require.NotContains(t, got, string(attr.ServerPortKey))
+}
+
 func TestSplitProviderHost(t *testing.T) {
 	t.Parallel()
 

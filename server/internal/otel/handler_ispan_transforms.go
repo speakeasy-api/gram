@@ -115,7 +115,7 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 func dropReservedSpanAttributes(span *otelv1.Span) {
 	attributes := span.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
-		return enrich.IsPipelineKey(kv.GetKey())
+		return enrich.IsPipelineKey(kv.GetKey()) || enrich.IsMcpConnectionKey(kv.GetKey())
 	})
 	if len(kept) != len(attributes) {
 		span.SetAttributes(kept)

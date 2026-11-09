@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -667,19 +668,22 @@ func (s *Service) recordRemoteSessionVerdict(
 	target validationTarget,
 	remoteSessionID uuid.UUID,
 	verdict remotesessions.ValidationOutcome,
+	failure probeFailure,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
 	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	what := verdictHappened(verdict, target.tunnelID.Valid)
+	what := verdictHappened(verdict, target.tunnelID.Valid, failure)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
-		mcpconnectionattempts.Member(target.memberID),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
-	)
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(target.memberID), mcpconnectionattempts.RemoteSession(remoteSessionID)}
+	// Only an inactive verdict came from the issuer; the others are about the MCP server.
+	if verdict != remotesessions.ValidationOutcomeInactive {
+		opts = append(opts, mcpconnectionattempts.FailedElsewhere())
+	}
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what, opts...)
 }
 
 // recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
@@ -707,7 +711,7 @@ func (s *Service) recordRemoteSessionCheck(
 	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
-func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {
+func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool, failure probeFailure) mcpconnectionattempts.Happened {
 	switch verdict {
 	case remotesessions.ValidationOutcomeValid:
 		return mcpconnectionattempts.ResultAllowed
@@ -718,9 +722,22 @@ func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mc
 	case remotesessions.ValidationOutcomeUnknown:
 	}
 	if tunneled {
-		return mcpconnectionattempts.CodeTunnelUnavailable
+		return tunneledProbeHappened(failure)
 	}
 	return mcpconnectionattempts.CodeProviderUnavailable
+}
+
+// tunneledProbeHappened blames the tunnel only when it reported the failure itself.
+func tunneledProbeHappened(failure probeFailure) mcpconnectionattempts.Code {
+	if failure.status == 0 && failure.tunnelError == "" && errors.Is(failure.err, context.DeadlineExceeded) {
+		return mcpconnectionattempts.CodeProviderUnreachable
+	}
+	credential := remotemcp.UpstreamCredentialSent{Attached: false, Self: false, Configured: false}
+	if code, ok := remotemcp.UpstreamFailureHappened(failure.status, credential, true, failure.tunnelError, failure.err); ok {
+		return code
+	}
+	// It answered, but not with a usable result.
+	return mcpconnectionattempts.CodeProviderServerError
 }
 
 // recordListingFailures writes one row per member a Direct listing lost. Sign-ins not done yet are not failures.
