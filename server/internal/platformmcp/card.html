@@ -577,10 +577,24 @@
         // ChatGPT also exposes the result directly on window.openai. The
         // widget can mount before the result lands, with both globals still
         // null; that is not an empty result, so it does not close the widget.
+        // toolResponseMetadata can be the result's _meta itself or an
+        // envelope that keeps the MCP result, with its _meta, inside.
+        function openAIMeta(metadata) {
+          if (!metadata || metadata[CARD_KEY] !== undefined) {
+            return metadata;
+          }
+          var results = [metadata.mcp_tool_result, metadata.call_tool_result];
+          for (var i = 0; i < results.length; i++) {
+            if (results[i] && results[i]._meta) {
+              return results[i]._meta;
+            }
+          }
+          return metadata;
+        }
         function renderFromOpenAI() {
           setTheme(window.openai.theme);
           render(
-            window.openai.toolResponseMetadata,
+            openAIMeta(window.openai.toolResponseMetadata),
             window.openai.toolOutput != null ||
               window.openai.toolResponseMetadata != null,
           );
