@@ -2398,11 +2398,27 @@ describe("Editing an agent that already exists", () => {
       expect(screen.getByText(/This issues another API key/)).toBeTruthy();
     });
 
+    it("offers a retry instead of reading forever when the server list fails", async () => {
+      mocks.mcpServers.mockRejectedValue(new Error("servers unavailable"));
+      editing({ signInOnly: true });
+      expect(
+        await screen.findByText(
+          "The server list could not be loaded, so the servers this key would reach are not known.",
+        ),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Issue key" })).toBeNull();
+      expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    });
+
     it("issues the key for the servers the agent already reaches, without asking for a name or expiry", async () => {
       mocks.listDelegableGrants.mockResolvedValue([grant]);
       editing({ signInOnly: true });
-      const issue = await screen.findByRole("button", { name: "Issue key" });
       // Held until the servers the key will reach have been read back.
+      const issue = screen.getByRole("button", { name: "Issue key" });
+      expect((issue as HTMLButtonElement).disabled).toBe(true);
+      expect(
+        screen.getByText("Reading the servers this agent reaches…"),
+      ).toBeTruthy();
       await waitFor(() =>
         expect((issue as HTMLButtonElement).disabled).toBe(false),
       );

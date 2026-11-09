@@ -38,7 +38,10 @@ export function AgentIssueKey({
     onDone();
   };
 
-  if (grants.isError) {
+  // Only before the first read lands. A refetch that fails later must not
+  // unmount the wizard: a key it already issued is shown once, and would be
+  // lost.
+  if (grants.data === undefined && grants.isError) {
     return (
       <div role="alert" className="space-y-2">
         <Text>

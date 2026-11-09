@@ -119,13 +119,17 @@ function PlatformPresets({
   isError,
   onRetry,
   canFederate,
+  keyOnly,
 }: {
   entries: CatalogEntry[];
   isPending: boolean;
   isError: boolean;
   onRetry: () => void;
   canFederate: boolean;
-}): JSX.Element {
+  /** Platforms are not a choice here, so a failed read is not worth a word. */
+  keyOnly: boolean;
+}): JSX.Element | null {
+  if (isError && keyOnly) return null;
   if (isError) {
     return (
       <div role="alert" className="space-y-2 border p-3">
@@ -262,6 +266,7 @@ export function CredentialPicker({
           isError={isError}
           onRetry={onRetry}
           canFederate={canFederate && !keyOnly}
+          keyOnly={keyOnly}
         />
       </div>
       {keyOnly ? (

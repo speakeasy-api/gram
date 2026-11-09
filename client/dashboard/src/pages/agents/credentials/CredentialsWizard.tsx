@@ -550,7 +550,7 @@ export function CredentialsWizard({
     adopted.current = true;
     setCredential("workload");
     setPlatformKey(admittedEntry?.key ?? CUSTOM_PLATFORM_KEY);
-  }, [editing, admitted, admittedEntry, catalog.isPending]);
+  }, [editing, signInOnly, admitted, admittedEntry, catalog.isPending]);
   // The catalog loads after the first render, so the preset name is filled
   // in when it arrives rather than in a state initializer that has nothing
   // to read yet. Only while the field is still untouched.
@@ -2305,6 +2305,19 @@ export function CredentialsWizard({
         // grants. Until that read has landed the reach is empty, and a key
         // issued then would reach none of them.
         const readingReach = editing && !reconciled;
+        // A failed read never reconciles, so it is said, with a way to retry,
+        // rather than left reading forever.
+        if (readingReach && inventory.isError) {
+          return (
+            <WizardFooter
+              note="The server list could not be loaded, so the servers this key would reach are not known."
+              onBack={signInOnly ? undefined : () => setStep(2)}
+              primary={
+                <Button onClick={() => inventory.refetch()}>Try again</Button>
+              }
+            />
+          );
+        }
         return (
           <WizardFooter
             note={
