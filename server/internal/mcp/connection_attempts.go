@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -28,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/privatekeyjwt"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 )
 
 // connectionAttemptEndTTL outlives the longest a browser attempt can stay live.
@@ -765,4 +767,57 @@ func (s *Service) recordIDPAuthorityRefusal(ctx context.Context, logger *slog.Lo
 		return
 	}
 	s.endAttemptOnce(ctx, logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, code, detail, request)
+}
+
+// refuseWorkloadGrantRow records a refused workload or assistant token grant.
+func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) {
+	code, detail := workloadGrantHappened(err)
+	t.Refuse(ctx, code, detail)
+}
+
+// workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
+func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
+	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+		detail := mcpconnectionattempts.Detail(refusal.reason)
+		switch refusal.reason {
+		case "issuer_untrusted", "issuer_jwks_uri_invalid":
+			return mcpconnectionattempts.CodeIssuerNotTrusted, detail
+		case "issuer_key_source_unknown":
+			return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, detail
+		case "subject_not_admitted", "device_key_not_registered":
+			return mcpconnectionattempts.CodeSubjectNotAdmitted, detail
+		case "endpoint_not_agent_addressable":
+			return mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail
+		case "agent_admission_denied":
+			return mcpconnectionattempts.CodeNoServerAccess, detail
+		case "issuer_policy_changed":
+			return mcpconnectionattempts.CodeConnectionChanged, detail
+		case string(workload.ReasonKeyUnresolvable):
+			return mcpconnectionattempts.CodeIDPTransientFailure, detail
+		}
+		switch refusal.outcome {
+		case workloadGrantUnavailable, workloadGrantRateLimited:
+			return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
+		case workloadGrantRefused:
+		}
+		if strings.HasPrefix(refusal.reason, "assertion_") || refusal.reason == "device_key_id_mismatch" {
+			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		}
+		return mcpconnectionattempts.CodeAssertionOther, detail
+	}
+	if refusal, ok := errors.AsType[*oops.OAuthError](err); ok {
+		detail := mcpconnectionattempts.Detail(refusal.Response.Code)
+		switch refusal.Response.Code {
+		case tokenErrorSetupRequired:
+			return mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail
+		case oautherr.CodeAccessDenied:
+			return mcpconnectionattempts.CodeNoServerAccess, detail
+		default:
+			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
+		}
+	}
+	if workload.ReasonOf(err) == workload.ReasonVerifierMisconfigured {
+		return mcpconnectionattempts.CodeAssertionVerifierMisconfigured, mcpconnectionattempts.Detail(string(workload.ReasonVerifierMisconfigured))
+	}
+	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")
 }

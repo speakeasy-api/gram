@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
@@ -410,42 +411,62 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return err
 	}
 
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppWorkload), mcpconnectionattempts.StepInboundToken,
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
+	defer t.Finish(ctx)
+
 	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
 	resources := r.PostForm[oauthwire.ParamResource]
 	switch {
 	case assertion == "":
+		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(string(workload.ReasonAssertionMissing)))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	case len(resources) == 0:
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch, mcpconnectionattempts.Detail("resource_missing"))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is required")
 	}
 	canonicalResource, err := endpoint.RootURL(baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build workload grant resource identifier").LogError(ctx, logger)
 	}
 	if err := oauthwire.ValidateResourceIndicators(resources, canonicalResource); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeResourceMismatch)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
 	urls, err := s.requestAuthorizationServerURLs(ctx, endpoint, baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build workload assertion audiences").LogError(ctx, logger)
 	}
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
+	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	if err != nil {
+		// Only admission runs after the signature check, so only its refusals name a proven subject.
+		if refusal, ok := errors.AsType[*workloadGrantError](err); ok && (refusal.reason == "subject_not_admitted" || refusal.reason == "subject_admission_unavailable") {
+			t.With(mcpconnectionattempts.Subject(&subject))
+		}
+		refuseWorkloadGrantRow(ctx, t, err)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 
-	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	if _, _, err := subject.Workload(); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
+		refusal := refuseWorkloadGrant("assertion_subject_invalid", err)
+		refuseWorkloadGrantRow(ctx, t, refusal)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
+	t.With(mcpconnectionattempts.Subject(&subject))
 	target, ok := agentAuthorizationTarget(endpoint)
 	if !ok {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy")))
+		refusal := refuseWorkloadGrant("endpoint_not_agent_addressable", errors.New("endpoint cannot carry an agent session policy"))
+		refuseWorkloadGrantRow(ctx, t, refusal)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeAgentSessionPolicy(*target, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "encode workload session policy").LogError(ctx, logger)
 	}
 	// The same check the MCP side applies to the stored row, so a session it
@@ -455,20 +476,23 @@ func (s *Service) handleWorkloadAssertionGrant(
 		delegatedGrants, pgtype.Int4{Int32: int32(version), Valid: true},
 	)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "validate workload session policy").LogError(ctx, logger)
 	}
 	issuerURL, err := s.issuerURL(endpoint, baseURL)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build issuer URL").LogError(ctx, logger)
 	}
 
 	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail(tokenParamUpstreamAuthClient))
 		return err
 	}
 	projectID := endpoint.ProjectID
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
-		client: nil, beforeCommit: nil,
+		client: nil, beforeCommit: nil, tracker: t,
 		presented:            presented,
 		credential:           credential,
 		projectID:            &projectID,
@@ -506,6 +530,9 @@ func (s *Service) refuseUnservedWorkloadGrant(
 type workloadGrantIssuance struct {
 	client       *usersessions_repo.UserSessionClient
 	beforeCommit func(context.Context, pgx.Tx, *mintedSession) error
+
+	// tracker records the grant's connection row, or nil for none.
+	tracker *mcpconnectionattempts.Tracker
 
 	// presented is the identity the assertion presented, for logs.
 	presented presentedWorkload
@@ -593,6 +620,7 @@ func workloadSessionIssuance(target workloadSessionTarget, subject urn.SessionSu
 func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, grant workloadGrantIssuance) error {
 	minted, err := s.mintWorkloadGrantSession(ctx, logger, grant)
 	if err != nil {
+		refuseWorkloadGrantRow(ctx, grant.tracker, err)
 		if _, ok := errors.AsType[*workloadGrantError](err); ok {
 			return s.writeWorkloadGrantRefusal(ctx, w, logger, grant.presented, err)
 		}
@@ -600,8 +628,10 @@ func (s *Service) issueWorkloadGrantSession(ctx context.Context, w http.Response
 	}
 
 	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		grant.tracker.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
 		return err
 	}
+	grant.tracker.Succeed(ctx, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.UserSession(minted.ID))
 	logger.InfoContext(ctx, "workload session issued",
 		attr.SlogOAuthGrant(oauthwire.GrantTypeJWTBearer),
 		attr.SlogWorkloadIssuerID(grant.presented.issuerID.String()),
