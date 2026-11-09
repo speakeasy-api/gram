@@ -366,10 +366,6 @@ export function AgentIdentityChallenges({
     from: from.toISOString(),
     to: to.toISOString(),
   });
-  const allowedTotal =
-    connected.total === undefined || other.total === undefined
-      ? undefined
-      : connected.total + other.total;
   return (
     <IdentityPanel
       title="Authorization checks"
@@ -383,7 +379,7 @@ export function AgentIdentityChallenges({
       onRetry={() => {
         for (const query of queries) void query.refetch();
       }}
-      footer={checksFooter(failed.total, allowedTotal)}
+      footer={checksFooter(failed.total, connected.total, other.total)}
     >
       <ChecksHeading>Failed</ChecksHeading>
       <CheckSection

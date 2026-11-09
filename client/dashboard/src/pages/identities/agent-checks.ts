@@ -77,18 +77,32 @@ export function checkCountLabel(
 
 /**
  * The panel footer, counted only from the slices that loaded. A slice that
- * failed says its count is missing rather than counting as none.
+ * failed says its count is missing rather than counting as none, and the
+ * allowed slice that did load still counts.
  */
 export function checksFooter(
   failedTotal: number | undefined,
-  allowedTotal: number | undefined,
+  connectTotal: number | undefined,
+  otherTotal: number | undefined,
 ): string | undefined {
-  if (failedTotal === undefined) {
-    if (allowedTotal === undefined) return undefined;
-    return `${allowedTotal.toLocaleString()} allowed checks in this period. The failed count could not be loaded.`;
+  const missing = [
+    failedTotal === undefined && "failed",
+    connectTotal === undefined && "MCP server",
+    otherTotal === undefined && "other allowed",
+  ].filter((label): label is string => !!label);
+  const allowed = [connectTotal, otherTotal].filter(
+    (total): total is number => total !== undefined,
+  );
+  const allowedTotal = allowed.reduce((sum, total) => sum + total, 0);
+  const counts = [
+    failedTotal !== undefined && `${failedTotal.toLocaleString()} failed`,
+    allowed.length > 0 && `${allowedTotal.toLocaleString()} allowed`,
+  ].filter((part): part is string => !!part);
+  if (counts.length === 0) return undefined;
+  if (missing.length === 0) {
+    if ((failedTotal ?? 0) + allowedTotal === 0) return undefined;
+    return `${counts.join(" and ")} checks in this period, grouped by scope and resource.`;
   }
-  if (allowedTotal === undefined)
-    return `${failedTotal.toLocaleString()} failed checks in this period. The allowed count could not be loaded.`;
-  if (failedTotal + allowedTotal === 0) return undefined;
-  return `${failedTotal.toLocaleString()} failed and ${allowedTotal.toLocaleString()} allowed checks in this period, grouped by scope and resource.`;
+  const what = missing.length === 1 ? "count" : "counts";
+  return `${counts.join(" and ")} checks in this period. The ${missing.join(" and ")} ${what} could not be loaded.`;
 }

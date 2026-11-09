@@ -83,23 +83,32 @@ describe("checkCountLabel", () => {
 });
 
 describe("checksFooter", () => {
-  it("counts both outcomes when both loaded", () => {
-    expect(checksFooter(2, 5)).toBe(
+  it("counts both outcomes when every slice loaded", () => {
+    expect(checksFooter(2, 3, 2)).toBe(
       "2 failed and 5 allowed checks in this period, grouped by scope and resource.",
     );
   });
 
   it("says nothing for a period with no checks", () => {
-    expect(checksFooter(0, 0)).toBeUndefined();
-    expect(checksFooter(undefined, undefined)).toBeUndefined();
+    expect(checksFooter(0, 0, 0)).toBeUndefined();
+    expect(checksFooter(undefined, undefined, undefined)).toBeUndefined();
   });
 
   it("says which count is missing rather than counting it as none", () => {
-    expect(checksFooter(undefined, 5)).toBe(
+    expect(checksFooter(undefined, 3, 2)).toBe(
       "5 allowed checks in this period. The failed count could not be loaded.",
     );
-    expect(checksFooter(3, undefined)).toBe(
-      "3 failed checks in this period. The allowed count could not be loaded.",
+    expect(checksFooter(3, undefined, undefined)).toBe(
+      "3 failed checks in this period. The MCP server and other allowed counts could not be loaded.",
+    );
+  });
+
+  it("keeps the allowed slice that loaded when the other one failed", () => {
+    expect(checksFooter(1, undefined, 4)).toBe(
+      "1 failed and 4 allowed checks in this period. The MCP server count could not be loaded.",
+    );
+    expect(checksFooter(1, 6, undefined)).toBe(
+      "1 failed and 6 allowed checks in this period. The other allowed count could not be loaded.",
     );
   });
 });
