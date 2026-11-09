@@ -29,11 +29,13 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	return chooseConsentUpstreamClientPicks(endpoint, members, cards, preferred), nil
 }
 
-// usableConsentCard is a card a pick can go through. An outage leaves a connected card's connection in place, as personalReadiness treats it.
+// usableConsentCard is a card a pick can go through. An outage leaves a connected card's connection in place, unless the upstream already refused it.
 func usableConsentCard(card remoteSessionCard) bool {
 	switch cardStatus(card) {
-	case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending, gatewayServerUnavailable:
+	case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending:
 		return true
+	case gatewayServerUnavailable:
+		return !card.Rejected && !card.Inactive && !card.IdentityReconnect
 	case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNotConnected, gatewayServerReconnect, gatewayServerNoAccess:
 	}
 	return false
