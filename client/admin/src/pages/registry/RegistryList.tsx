@@ -98,7 +98,7 @@ export function RegistryList(): JSX.Element {
       <Button
         variant="outline"
         aria-expanded={showSync}
-        onClick={() => setShowSync(true)}
+        onClick={() => setShowSync((shown) => !shown)}
       >
         Catalog Registry Sync
       </Button>

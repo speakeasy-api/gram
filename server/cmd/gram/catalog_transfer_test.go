@@ -44,17 +44,22 @@ func TestCatalogTransferNamesMissingConfiguration(t *testing.T) {
 
 //nolint:paralleltest // CLI shares help flags.
 func TestCatalogTransferValidatesExactPlan(t *testing.T) {
-	for _, args := range [][]string{
-		{"--action", "apply"},
-		{"--action", "apply", "--plan-id", "not-a-uuid"},
-		{"--action", "apply", "--plan-id", "00000000-0000-0000-0000-000000000000"},
-		{"--action", "status", "--plan-id", "11111111-1111-4111-8111-111111111111"},
-		{"--action", "sync"},
+	const id = "11111111-1111-4111-8111-111111111111"
+	for _, tc := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"--action", "apply"}, "apply requires --plan-id with the exact nonzero preview UUID"},
+		{[]string{"--action", "apply", "--plan-id", "not-a-uuid"}, "apply requires --plan-id with the exact nonzero preview UUID"},
+		{[]string{"--action", "apply", "--plan-id", "00000000-0000-0000-0000-000000000000"}, "apply requires --plan-id with the exact nonzero preview UUID"},
+		{[]string{"--action", "status", "--plan-id", id}, "--plan-id is accepted only with --action apply"},
+		{[]string{"--action", "preview", "--plan-id", id}, "--plan-id is accepted only with --action apply"},
+		{[]string{"--action", "bootstrap", "--plan-id", id}, "--plan-id is accepted only with --action apply"},
+		{[]string{"--action", "sync"}, "--action must be bootstrap, preview, apply, or status"},
 	} {
 		app := cli.NewApp()
 		app.Commands = []*cli.Command{newCatalogTransferCommand()}
-		err := app.RunContext(t.Context(), append([]string{"test", "catalog-transfer"}, args...))
-		require.Error(t, err)
-		require.NotContains(t, err.Error(), "must be configured")
+		err := app.RunContext(t.Context(), append([]string{"test", "catalog-transfer"}, tc.args...))
+		require.ErrorContains(t, err, tc.want)
 	}
 }

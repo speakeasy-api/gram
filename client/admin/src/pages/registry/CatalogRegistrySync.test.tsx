@@ -24,6 +24,7 @@ const plan = {
     "create",
     "update",
     "unpublish",
+    "republish",
     "adopt",
     "preserved",
     "conflict",
@@ -62,6 +63,17 @@ it("requires exact-plan confirmation, groups changes and preserves conflicts", a
   await preview();
   for (const change of plan.changes)
     expect(screen.getByText(change.name)).toBeDefined();
+  for (const label of [
+    "Create",
+    "Update",
+    "Unpublish (not delete)",
+    "Republish",
+    "Adopt",
+    "Preserved",
+    "Conflicts",
+  ]) {
+    expect(screen.getByRole("heading", { name: `${label} (1)` })).toBeDefined();
+  }
   const apply = screen.getByRole("button", { name: "Apply confirmed plan" });
   expect(apply.hasAttribute("disabled")).toBe(true);
   fireEvent.click(screen.getByRole("checkbox"));

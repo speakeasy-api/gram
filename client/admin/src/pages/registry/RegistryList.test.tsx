@@ -12,6 +12,12 @@ vi.mock("./RegistryPromotionCandidates", () => ({
   RegistryPromotionCandidates: () => null,
 }));
 
+vi.mock("./CatalogRegistrySync", () => ({
+  CatalogRegistrySync: () => (
+    <section aria-label="Catalog Registry Sync">Synthetic sync panel</section>
+  ),
+}));
+
 const list = vi.hoisted(() => vi.fn());
 vi.mock("@gram/admin-client/react-query/adminListRegistryEntries.core", () => ({
   buildAdminListRegistryEntriesQuery: (_client: unknown, request: unknown) => ({
@@ -270,4 +276,23 @@ it("restores the cursor stack after leaving and remounting the list", async () =
   );
   fireEvent.click(screen.getByRole("button", { name: "Previous" }));
   await waitFor(() => expect(screen.getByText("Page 1")).toBeTruthy());
+});
+
+it("toggles the catalog sync disclosure", async () => {
+  list.mockResolvedValue({ entries: [] });
+  await renderWithApp(<RegistryList />);
+  const toggle = await screen.findByRole("button", {
+    name: "Catalog Registry Sync",
+  });
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
+  fireEvent.click(toggle);
+  expect(
+    screen.getByRole("region", { name: "Catalog Registry Sync" }),
+  ).toBeDefined();
+  expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  fireEvent.click(toggle);
+  expect(
+    screen.queryByRole("region", { name: "Catalog Registry Sync" }),
+  ).toBeNull();
+  expect(toggle.getAttribute("aria-expanded")).toBe("false");
 });

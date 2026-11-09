@@ -24,6 +24,8 @@ const DefaultEmail = "eng@speakeasyapi.dev"
 
 // authenticated uses only the configured loopback Admin server and mock OIDC provider.
 // It never follows redirects automatically, persists credentials, or accesses storage.
+//
+//nolint:bodyclose,forbidigo // Loopback-only clients; redirect and challengeToken consume and close every authentication response.
 func authenticated(ctx context.Context, adminURL, providerURL, email string, operation func(*http.Client, *url.URL) (any, error)) (any, error) {
 	admin, err := localOrigin(adminURL)
 	if err != nil {
@@ -115,6 +117,8 @@ func Validate(action, planID string) error {
 // Run performs the selected action using an ephemeral authenticated local session.
 // The client never previews, retries, or substitutes a plan during apply.
 // The backend still checks source staleness before applying that exact ID.
+//
+//nolint:forbidigo // The authenticated callback receives only the loopback-only client with redirects disabled.
 func Run(ctx context.Context, adminURL, providerURL, email, action, planID string) (any, error) {
 	if err := Validate(action, planID); err != nil {
 		return nil, err
@@ -147,7 +151,7 @@ func Run(ctx context.Context, adminURL, providerURL, email, action, planID strin
 			PlanID string `json:"planId,omitempty"`
 		}{action, planID})
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("encode catalog request: %w", err)
 		}
 		var result json.RawMessage
 		if err := post(ctx, client, admin, "catalog.refresh", string(body), &result); err != nil {
@@ -156,7 +160,7 @@ func Run(ctx context.Context, adminURL, providerURL, email, action, planID strin
 		if action == "apply" {
 			var receipt mcpregistry.CatalogRefreshReceipt
 			if err := json.Unmarshal(result, &receipt); err != nil {
-				return nil, err
+				return nil, fmt.Errorf("decode catalog receipt: %w", err)
 			}
 			if receipt.State != "completed" {
 				return result, fmt.Errorf("catalog apply returned %q; inspect --action status and preview unresolved changes", receipt.State)
@@ -167,18 +171,21 @@ func Run(ctx context.Context, adminURL, providerURL, email, action, planID strin
 }
 
 // Sync preserves the initial-import API for existing local callers.
+//
+//nolint:forbidigo // The authenticated callback receives only the loopback-only client with redirects disabled.
 func Sync(ctx context.Context, adminURL, providerURL, email string) (*mcpregistry.CatalogImportResult, error) {
-	result, err := authenticated(ctx, adminURL, providerURL, email, func(client *http.Client, admin *url.URL) (any, error) {
-		var result mcpregistry.CatalogImportResult
+	var result mcpregistry.CatalogImportResult
+	_, err := authenticated(ctx, adminURL, providerURL, email, func(client *http.Client, admin *url.URL) (any, error) {
 		err := post(ctx, client, admin, "catalog.sync", "{}", &result)
 		return &result, err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return result.(*mcpregistry.CatalogImportResult), nil
+	return &result, nil
 }
 
+//nolint:forbidigo // Client is supplied by authenticated with a loopback-only dialer and redirects disabled.
 func post(ctx context.Context, client *http.Client, admin *url.URL, endpoint, body string, result any) error {
 	resp, err := request(ctx, client, http.MethodPost, admin.JoinPath("/admin/"+endpoint), body, "application/json")
 	if err != nil {

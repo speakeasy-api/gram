@@ -18,6 +18,7 @@ on:
       - .mise-tasks/check/daemon*
       - .mise-tasks/check/listeners.test.mts
       - .mise-tasks/test/local-network.sh
+      - .mise-tasks/catalog/**
       - .mise-tasks/ensure-stack.sh
       - .mise-tasks/idle-pause.sh
       - .mise-tasks/nuke.sh

@@ -910,7 +910,7 @@ func newWorkerCommand() *cli.Command {
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
-				StartupSeeds:                   startupSeeds(logger, db, siteURL, c.String("environment"), c.Bool("catalog-source-managed")),
+				StartupSeeds:                   configuredStartupSeeds(c, logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
 				PIScanner:                      piScanner,

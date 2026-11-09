@@ -2270,7 +2270,7 @@ func newStartCommand() *cli.Command {
 						IssuerMetadataRefresher:        issuerMetadataRefresher,
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
-						StartupSeeds:                   startupSeeds(logger, db, siteURL, c.String("environment"), c.Bool("catalog-source-managed")),
+						StartupSeeds:                   configuredStartupSeeds(c, logger, db, siteURL),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,

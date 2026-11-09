@@ -23,7 +23,7 @@ func newCatalogTransferCommand() *cli.Command {
 				return fmt.Errorf("catalog-transfer accepts no arguments")
 			}
 			if err := cataloglocalclient.Validate(c.String("action"), c.String("plan-id")); err != nil {
-				return err
+				return fmt.Errorf("validate catalog action: %w", err)
 			}
 			adminURL, providerURL := os.Getenv("GRAM_ADMIN_SERVER_URL"), os.Getenv("GRAM_ADMIN_OIDC_EMULATOR_URL")
 			if adminURL == "" {

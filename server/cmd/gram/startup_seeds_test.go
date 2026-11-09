@@ -43,6 +43,7 @@ func TestStartupSeedsSourceManagedCatalog(t *testing.T) {
 	for _, environment := range []string{"local", "dev", "prod", "preview", ""} {
 		for _, managed := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/managed=%t", environment, managed), func(t *testing.T) {
+				t.Parallel()
 				seeds := startupSeeds(nil, nil, nil, environment, managed)
 				names := make([]string, 0, len(seeds))
 				for _, seed := range seeds {
@@ -60,6 +61,8 @@ func TestStartupSeedsSourceManagedCatalog(t *testing.T) {
 		}
 	}
 }
+
+//nolint:paralleltest // Subtests share the parent-scoped environment and must remain sequential.
 func TestCatalogSourceManagedModeReachesEverySeedEntrypoint(t *testing.T) {
 	t.Setenv("GRAM_CATALOG_SOURCE_MANAGED", "true")
 	t.Setenv("GRAM_ENVIRONMENT", "local")
@@ -79,7 +82,7 @@ func TestCatalogSourceManagedModeReachesEverySeedEntrypoint(t *testing.T) {
 			c := cli.NewContext(cli.NewApp(), set, nil)
 			require.True(t, c.Bool("catalog-source-managed"))
 			require.Equal(t, "local", c.String("environment"))
-			for _, seed := range startupSeeds(nil, nil, nil, c.String("environment"), c.Bool("catalog-source-managed")) {
+			for _, seed := range configuredStartupSeeds(c, nil, nil, nil) {
 				require.NotEqual(t, "registry-okta", seed.Name)
 			}
 		})

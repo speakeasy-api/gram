@@ -15,6 +15,7 @@ const groups = [
   ["create", "Create"],
   ["update", "Update"],
   ["unpublish", "Unpublish (not delete)"],
+  ["republish", "Republish"],
   ["adopt", "Adopt"],
   ["preserved", "Preserved"],
   ["conflict", "Conflicts"],

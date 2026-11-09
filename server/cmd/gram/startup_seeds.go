@@ -19,6 +19,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/policylifecycle"
 )
 
+// configuredStartupSeeds binds every runtime/reseed caller to the same catalog authority flags.
+func configuredStartupSeeds(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) []activities.StartupSeed {
+	return startupSeeds(logger, db, assetBaseURL, c.String("environment"), c.Bool("catalog-source-managed"))
+}
+
 // startupSeeds lists the reference data every worker keeps applied. To ship
 // new data, change the seed's source in code: its Version moves and the next
 // deploy applies it. To add a kind of seed, append one here.
@@ -99,7 +104,7 @@ func newAppSeedCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL, c.String("environment"), c.Bool("catalog-source-managed")), c.StringSlice("name"))
+			seeds, err := selectStartupSeeds(configuredStartupSeeds(c, logger, db, assetBaseURL), c.StringSlice("name"))
 			if err != nil {
 				return err
 			}
