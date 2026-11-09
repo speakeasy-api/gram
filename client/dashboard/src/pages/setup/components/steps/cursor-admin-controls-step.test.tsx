@@ -16,7 +16,13 @@ vi.mock("../enable-logging-section", () => ({
   EnableLoggingSection: () => <div>Enable logging section</div>,
 }));
 vi.mock("../marketplace-section", () => ({
-  MarketplaceSection: () => <div>Marketplace section</div>,
+  MarketplaceSection: ({
+    requiresCollaborators,
+  }: {
+    requiresCollaborators?: boolean;
+  }) => (
+    <div>{`Marketplace section, requires collaborators: ${String(requiresCollaborators ?? false)}`}</div>
+  ),
 }));
 vi.mock("../confirm-traffic-section", () => ({
   ConfirmTrafficSection: ({
@@ -66,7 +72,11 @@ describe("CursorAdminControlsStep", () => {
     render(<CursorAdminControlsStep onComplete={() => {}} />);
 
     expect(screen.getByText("Set up Cursor admin controls")).toBeTruthy();
-    expect(screen.getByText("Marketplace section")).toBeTruthy();
+    // The team marketplace imports the repo through GitHub, so the section
+    // must stay incomplete until the repo has a collaborator.
+    expect(
+      screen.getByText("Marketplace section, requires collaborators: true"),
+    ).toBeTruthy();
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
     ).toEqual(["Connect Cursor"]);
