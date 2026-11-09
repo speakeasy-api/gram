@@ -433,6 +433,13 @@ function ScopePickerHarness({
   );
 }
 
+// Inspect rows start collapsed; open every one to reach its checkboxes.
+function openInspectRows(): void {
+  for (const button of screen.queryAllByRole("button", { name: "Change" })) {
+    fireEvent.click(button);
+  }
+}
+
 describe("StandardPolicyEditor scope rows", () => {
   afterEach(cleanup);
 
@@ -537,41 +544,73 @@ describe("StandardPolicyEditor scope rows", () => {
     );
   });
 
-  it("renders one inspect row for every enabled detector", () => {
+  it("renders one collapsed, plain-language row for every enabled detector", () => {
     renderEditor(policy());
 
     expect(screen.getByText("Secrets")).toBeTruthy();
     expect(screen.getByText("Shadow AI")).toBeTruthy();
     expect(screen.getByText("Custom rules")).toBeTruthy();
-    expect(screen.getAllByText("Tool", { selector: "span" })).toHaveLength(2);
-    expect(screen.getByText("Response", { selector: "span" })).toBeTruthy();
+    expect(screen.getByText("Checks tool results.")).toBeTruthy();
+    expect(
+      screen.getAllByText(
+        "Checks everything: what people type, tool calls, tool results and agent replies.",
+      ),
+    ).toHaveLength(2);
+    expect(screen.getAllByText("Recommended")).toHaveLength(3);
+    expect(screen.queryByRole("checkbox", { name: /^Secrets:/ })).toBeNull();
+  });
+
+  it("marks a changed detector as custom and resets it", () => {
+    renderEditor(policy());
+
+    openInspectRows();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Secrets: What people type" }),
+    );
+
+    expect(screen.getByText("Custom")).toBeTruthy();
+    expect(screen.getByText("1 changed from recommended")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Done" })[0]!);
+    expect(
+      screen.getByText("Checks what people type and tool results."),
+    ).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    expect(screen.queryByText("Custom")).toBeNull();
+    expect(screen.getByText("Checks tool results.")).toBeTruthy();
   });
 
   it("keeps the final inspection surface selected", () => {
     renderEditor(policy());
 
+    openInspectRows();
     const response = screen.getByRole("checkbox", {
-      name: "Secrets: Tool responses",
+      name: "Secrets: Tool results",
     });
     expect(response.getAttribute("aria-checked")).toBe("true");
     fireEvent.click(response);
     expect(response.getAttribute("aria-checked")).toBe("true");
   });
 
-  it("shows MCP-only columns without disabling response inspection", () => {
+  it("disables surfaces outside an MCP call without disabling tool results", () => {
     renderEditor(policy());
 
     fireEvent.click(screen.getByText("Specific MCP servers"));
+    openInspectRows();
 
     expect(
-      screen.getAllByLabelText("User is not part of an MCP call").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByLabelText("Assistant is not part of an MCP call").length,
-    ).toBeGreaterThan(0);
+      screen
+        .getByRole("checkbox", { name: "Secrets: What people type" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
     expect(
       screen
-        .getByRole("checkbox", { name: "Secrets: Tool responses" })
+        .getByRole("checkbox", { name: "Secrets: Agent replies" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Secrets: Tool results" })
         .hasAttribute("disabled"),
     ).toBe(false);
     expect(
@@ -590,15 +629,16 @@ describe("StandardPolicyEditor scope rows", () => {
     );
 
     expect(
-      screen.getByText("Inspection surfaces do not apply to this detector."),
+      screen.getByText("Checks the whole session, not individual messages."),
     ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change" })).toBeNull();
     expect(
       screen.queryByRole("checkbox", { name: /^Account identity:/ }),
     ).toBeNull();
 
     fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(
-      screen.getByText("Inspection surfaces do not apply to this detector."),
+      screen.getByText("Checks the whole session, not individual messages."),
     ).toBeTruthy();
     expect(
       screen.queryByRole("checkbox", { name: /^Account identity:/ }),
@@ -827,7 +867,8 @@ describe("StandardPolicyEditor scope rows", () => {
       }),
     );
 
-    fireEvent.click(screen.getAllByRole("button", { name: "CEL" })[0]!);
+    openInspectRows();
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit as CEL" })[0]!);
     expect(screen.getByText(expression)).toBeTruthy();
     fireEvent.click(screen.getByText("Specific MCP servers"));
     expect(screen.queryByText(expression)).toBeNull();
