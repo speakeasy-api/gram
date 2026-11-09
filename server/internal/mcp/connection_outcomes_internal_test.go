@@ -304,7 +304,7 @@ func TestTokenClientRefusal(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
 }
 
-// Anyone can present a catalog client_id, so a row for a client that was never checked names no app.
+// Anyone can present a catalog client_id, so a row for a client that was never checked names no family.
 func TestTokenClientRows_UncheckedClientNamesNoFamily(t *testing.T) {
 	t.Parallel()
 

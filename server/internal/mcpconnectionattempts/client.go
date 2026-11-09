@@ -235,7 +235,7 @@ func (r *Recorder) stampClient(row *Row) {
 			row.ClientFamily, row.ClientVersion = family, version
 		}
 	}
-	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's. An unnamed session's reported version is.
+	// An admitted catalog client_id beats a runtime User-Agent, whose version isn't the app's. A session that reported an unknown name keeps its reported version.
 	if client.appFamily != "" && (row.ClientFamily == "" || row.ClientFamily == FamilyOther ||
 		row.ClientFamily == FamilyScript && vendorHostedRedirect[client.appFamily]) {
 		row.ClientFamily, row.ClientVersion = client.appFamily, ""
