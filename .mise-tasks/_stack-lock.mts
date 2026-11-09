@@ -69,13 +69,18 @@ export async function reapStaleLock(path: string): Promise<void> {
   }
 
   try {
-    const owner = ownerFromIdentity(await readLink(path));
-    if (owner && !(await processIsAlive(owner))) {
-      console.error(
-        `Clearing a stack lock left behind by a dead process (${owner}).`,
-      );
-      await fs.rm(path, { force: true });
-    }
+    const identity = await readLink(path);
+    const owner = ownerFromIdentity(identity);
+    if (!owner || (await processIsAlive(owner))) return;
+    // The owner may have released the lock and exited after the first read,
+    // letting a new holder take it. Re-read now that the owner is known dead:
+    // a dead owner cannot release, and nobody can acquire while the lock
+    // exists, so an unchanged identity stays put until it is removed below.
+    if ((await readLink(path)) !== identity) return;
+    console.error(
+      `Clearing a stack lock left behind by a dead process (${owner}).`,
+    );
+    await fs.rm(path, { force: true });
   } finally {
     await fs.rm(reapPath, { force: true });
   }

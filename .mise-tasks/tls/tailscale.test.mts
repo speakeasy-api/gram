@@ -23,6 +23,7 @@ import {
   splitPEM,
   type CertPair,
 } from "./tailscale.mts";
+import { reapStaleLock } from "../_stack-lock.mts";
 
 const task = fileURLToPath(new URL("./tailscale.mts", import.meta.url));
 const domain = "dev-machine.example.ts.net";
@@ -255,5 +256,24 @@ test("restart clears a stack lock left by a dead process", async (t) => {
   assert.equal(skipped, undefined);
   assert.equal(restarted, true);
   assert.equal(existsSync(lock), false);
+  assert.equal(existsSync(`${lock}.reap`), false);
+});
+
+test("reaping keeps a lock a new holder took after the old owner released", async (t) => {
+  const { gitdir } = gitRepo(t);
+  const lock = join(gitdir, "gram-stack-lock");
+  symlinkSync("999999:pause", lock);
+  const newHolder = `${process.pid}:unpause`;
+  const kill = process.kill.bind(process);
+  // The old owner releases and exits, and a new holder acquires, between the
+  // reaper's first read and its liveness check.
+  t.mock.method(process, "kill", (pid: number, signal?: number | string) => {
+    if (pid !== 999999) return kill(pid, signal);
+    rmSync(lock);
+    symlinkSync(newHolder, lock);
+    throw Object.assign(new Error("no such process"), { code: "ESRCH" });
+  });
+  await reapStaleLock(lock);
+  assert.equal(readlinkSync(lock), newHolder);
   assert.equal(existsSync(`${lock}.reap`), false);
 });
