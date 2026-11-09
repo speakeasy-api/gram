@@ -11,10 +11,11 @@ import (
 
 // consentUpstreamClientPicks returns, for each MCP server the consent covers,
 // the upstream client the person is going through: the one card for it that
-// is connected or chained, or, among several, the one preferred names. A
-// server with no such card, or several and no preference among them, gets no
-// pick, and the credential's choice for it is left to a reconnection unless
-// the server has only one client. Interactive and chained cards are picked
+// is connected or chained (in an outage or not), or, among several, the one
+// preferred names, else the only one not in an outage. A server with no such
+// card, or several and nothing to decide between them, gets no pick, and the
+// credential's choice for it is left to a reconnection unless the server has
+// only one client. Interactive and chained cards are picked
 // alike, so this is the one place a person's choice is decided.
 func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, cards []remoteSessionCard, preferred map[uuid.UUID]uuid.UUID) (map[uuid.UUID]uuid.UUID, error) {
 	var members []metaMember
