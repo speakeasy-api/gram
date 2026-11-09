@@ -166,6 +166,13 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 			}
 		}
 	}
+	// The re-consent forecast's other hash reads the database, so it is
+	// computed before the consent client lock is taken.
+	var otherInventoryHash string
+	var otherInventoryErr error
+	if reuse {
+		otherInventoryHash, otherInventoryErr = s.otherConsentInventoryHash(ctx, endpoint, inventory)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin consent approval: %w", err)
@@ -190,7 +197,13 @@ func (s *Service) beginConsentApproval(ctx context.Context, endpoint *ResolvedMc
 		if err != nil {
 			return nil, fmt.Errorf("read resource approval: %w", err)
 		}
-		s.forecastResourceReconsent(ctx, endpoint, state, inventory, saved.InventoryHash, inventoryHash)
+		s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+			organizationID: endpoint.OrganizationID,
+			serverID:       endpoint.McpServerID.UUID,
+			site:           upstreamIssuerReconsentSiteReuseResource,
+			consenter:      reconsentConsenter(state),
+			outcome:        upstreamIssuerReconsent(saved.InventoryHash, inventoryHash, otherInventoryHash, otherInventoryErr),
+		})
 		if saved.InventoryHash != inventoryHash || saved.RemoteSetHash != remoteHash || saved.SessionDurationHours <= 0 {
 			return nil, nil
 		}

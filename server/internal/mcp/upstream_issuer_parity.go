@@ -506,30 +506,21 @@ func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions
 	return none
 }
 
-// forecastResourceReconsent records whether a stored resource approval would
-// survive taking the upstream issuer from the other source. saved is the
-// stored inventory hash and decided the one checked against it.
-func (s *Service) forecastResourceReconsent(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, saved, decided string) {
-	check := upstreamIssuerReconsentCheck{
-		organizationID: endpoint.OrganizationID,
-		serverID:       endpoint.McpServerID.UUID,
-		site:           upstreamIssuerReconsentSiteReuseResource,
-		consenter:      reconsentConsenter(state),
-		outcome:        upstreamIssuerReconsentError,
-	}
-	if inventory == nil {
-		check.outcome = upstreamIssuerReconsent(saved, decided, decided, nil)
-		s.recordUpstreamIssuerReconsent(ctx, s.logger, check)
-		return
-	}
+// otherConsentInventoryHash is the inventory's reuse fingerprint with its
+// backend hash taken from the upstream issuer source the organization's flag
+// does not make authoritative. A reuse only gets this far with a complete
+// inventory, so inventory is not nil.
+func (s *Service) otherConsentInventoryHash(ctx context.Context, endpoint *ResolvedMcpEndpoint, inventory *consentToolInventory) (string, error) {
 	hashes, err := s.consentBackendFingerprint(ctx, endpoint)
-	if err == nil {
-		err = hashes.otherErr
+	if err != nil {
+		return "", err
+	}
+	if hashes.otherErr != nil {
+		return "", hashes.otherErr
 	}
 	other := *inventory
 	other.BackendHash = hashes.other
-	check.outcome = upstreamIssuerReconsent(saved, decided, consentInventoryFingerprint(&other), err)
-	s.recordUpstreamIssuerReconsent(ctx, s.logger, check)
+	return consentInventoryFingerprint(&other), nil
 }
 
 // reconsentConsenter is whose consent a check is about: the consenting
