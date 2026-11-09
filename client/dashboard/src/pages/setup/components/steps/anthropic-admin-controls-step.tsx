@@ -72,7 +72,7 @@ export function AnthropicAdminControlsStep({
 
         <StepSection
           index={4}
-          slug="cowork-monitoring"
+          slug="connect-cowork"
           title="Turn on Cowork monitoring"
           description="Cowork's native monitoring sends usage, tokens and cost to Speakeasy. The conversations themselves arrive from the plugin, which Set up Claude Desktop registers."
         >
