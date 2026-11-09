@@ -159,13 +159,13 @@ func (s *CatalogIdentityProviderAttachmentService) attachLocked(ctx context.Cont
 		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("lock identity-provider issuer attachment: %w", err)
 	}
 
-	if attachedClient, attached, err := s.matchingAttachment(ctx, s.db, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
+	enforced, err := s.authEnforcement.Enforced(ctx, principal.OrganizationID)
+	if err != nil {
+		return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	if attachedClient, attached, err := s.matchingAttachment(ctx, s.db, enforced, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, metadata.Issuer); err != nil {
 		return CatalogIdentityProviderAttachmentResult{}, err
 	} else if attached {
-		enforced, err := s.authEnforcement.Enforced(ctx, principal.OrganizationID)
-		if err != nil {
-			return CatalogIdentityProviderAttachmentResult{}, fmt.Errorf("read upstream auth enforcement: %w", err)
-		}
 		// An offered typed client is already attached. Legacy synchronization
 		// would create a second auth client for an administrator's offer.
 		if !enforced {
@@ -281,7 +281,8 @@ func (s *CatalogIdentityProviderAttachmentService) discoverSupportedIssuerMetada
 // client, before the association is written in the same transaction. The
 // client's remote session issuer is locked after the server, the order
 // binding writers take, so no binding change commits between the reread and
-// the write.
+// the write. It runs only where typed auth clients do not choose upstream
+// authentication, so the reread uses the issuer's bindings.
 func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(ctx context.Context, principal Principal, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, issuerURL string, client remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow) error {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -308,7 +309,7 @@ func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(c
 	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, client.RemoteSessionIssuerID); err != nil {
 		return fmt.Errorf("lock identity-provider client binding: %w", err)
 	}
-	current, attached, err := s.matchingAttachment(ctx, tx, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, issuerURL)
+	current, attached, err := s.matchingAttachment(ctx, tx, false, principal.OrganizationID, project, registration.McpServerID.UUID, registration.UserSessionIssuerID.UUID, issuerURL)
 	if err != nil {
 		return err
 	}
@@ -349,12 +350,8 @@ func (s *CatalogIdentityProviderAttachmentService) associateExistingAttachment(c
 // attached when it offers a registration for issuerURL through a personal auth
 // client, and what the user session issuer binds for its other servers is no
 // conflict.
-func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, db remotesessionsrepo.DBTX, organizationID string, project ResolvedProject, mcpServerID, userSessionIssuerID uuid.UUID, issuerURL string) (remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow, bool, error) {
+func (s *CatalogIdentityProviderAttachmentService) matchingAttachment(ctx context.Context, db remotesessionsrepo.DBTX, enforced bool, organizationID string, project ResolvedProject, mcpServerID, userSessionIssuerID uuid.UUID, issuerURL string) (remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow, bool, error) {
 	var none remotesessionsrepo.ListRemoteSessionClientsForUserSessionIssuerRow
-	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
-	if err != nil {
-		return none, false, fmt.Errorf("read upstream auth enforcement: %w", err)
-	}
 	if enforced {
 		offered, err := upstreamclientsrepo.New(db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: []uuid.UUID{mcpServerID}})
 		if err != nil {

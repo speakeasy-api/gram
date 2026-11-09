@@ -610,17 +610,17 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	service.policy, err = guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil, guardian.WithTLSRootCAs(roots))
 	require.NoError(t, err)
 
-	_, _, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	_, _, err = service.matchingAttachment(ctx, conn, false, principal.OrganizationID, project, serverID, shared, provider)
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentConflict, "the issuer's binding decides without enforcement")
 
 	_, err = productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: principal.OrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 	require.NoError(t, err)
 	service.authEnforcement = authenforcement.NewGate(conn)
 
-	_, attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	_, attached, err := service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, provider)
 	require.NoError(t, err, "another server's provider on the shared issuer must not refuse the attachment")
 	require.False(t, attached)
-	_, attached, err = service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, other.Issuer)
+	_, attached, err = service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, other.Issuer)
 	require.NoError(t, err)
 	require.False(t, attached, "a client the issuer binds is not this server's until the server offers it")
 
@@ -641,7 +641,7 @@ func TestMatchingAttachmentFollowsTypedOffersUnderEnforcement(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: project.ID, OrganizationID: principal.OrganizationID, McpServerID: serverID, AuthClientID: authClientID, Source: "admin"}))
 
-	match, attached, err := service.matchingAttachment(ctx, conn, principal.OrganizationID, project, serverID, shared, provider)
+	match, attached, err := service.matchingAttachment(ctx, conn, true, principal.OrganizationID, project, serverID, shared, provider)
 	require.NoError(t, err)
 	require.True(t, attached, "the server offers a registration of the provider with no issuer binding")
 	require.Equal(t, registration.ID, match.ClientID)

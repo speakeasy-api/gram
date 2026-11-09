@@ -44,6 +44,9 @@ FOR UPDATE;
 -- name: ListEligibleServers :many
 -- Typed auth clients choose upstream authentication only for proxied servers.
 -- Unproxied servers have no typed offers and retain their derived issuer and clients.
+-- The enforced-and-proxied predicate appears four times in this file, twice per
+-- query, and changes with them and with Go code that gates typed auth clients on
+-- remote or tunneled backends.
 -- Where typed auth clients apply (typed_auth_enforced),
 -- a server's authorization server is the one its personal or identity-provider
 -- auth clients offer: an identity-provider client's if it offers one, else the
@@ -56,7 +59,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
@@ -161,7 +164,7 @@ SELECT
   , ms.name
   , ms.slug
   , i.id AS issuer_id
-  , CASE WHEN @typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL) THEN TRUE ELSE FALSE END AS typed_auth_enforced
+  , (@typed_auth_enforced::boolean AND (ms.remote_mcp_server_id IS NOT NULL OR ms.tunneled_mcp_server_id IS NOT NULL))::boolean AS typed_auth_enforced
   , ARRAY(
       SELECT oc.id
       FROM mcp_server_auth_clients AS ol
