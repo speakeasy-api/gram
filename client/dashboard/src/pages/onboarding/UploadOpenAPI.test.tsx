@@ -1,10 +1,4 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -16,13 +10,6 @@ const state = vi.hoisted(() => ({
   isLoading: false,
   isError: false,
   provider: vi.fn(),
-  pending: undefined as ((pending: boolean) => void) | undefined,
-  gateway: {
-    gatewayId: "gateway" as string | null,
-    createdServerId: null as string | null,
-    isAttaching: false,
-    cancel: vi.fn(),
-  },
   stepper: {
     state: "error",
     meta: {
@@ -34,25 +21,12 @@ const state = vi.hoisted(() => ({
     reset: vi.fn(),
   },
 }));
-vi.mock("@/pages/mcp/gateway/useGatewayCreation", () => ({
-  useGatewayCreation: () => state.gateway,
-}));
-vi.mock("@/pages/mcp/gateway/GatewayAttachmentStatus", () => ({
-  GatewayAttachmentStatus: () => null,
-}));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
 vi.mock("@/components/page-templates", () => ({
   FormPage: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 vi.mock("@/components/upload-asset/deploy-step", () => ({
-  default: ({
-    onPendingChange,
-  }: {
-    onPendingChange?: (pending: boolean) => void;
-  }) => {
-    state.pending = onPendingChange;
-    return null;
-  },
+  default: () => null,
 }));
 vi.mock("@/components/upload-asset/name-deployment-step", () => ({
   default: () => null,
@@ -114,60 +88,15 @@ beforeEach(() => {
   state.isLoading = false;
   state.isError = false;
   state.stepper.meta.current.existingDocument = null;
-  state.gateway.gatewayId = "gateway";
-  state.gateway.createdServerId = null;
-  state.gateway.isAttaching = false;
   state.stepper.state = "error";
   state.stepper.meta.current.deployment = { id: "deployment" };
 });
-it("disables Cancel throughout creation and allows it only once writes settle", () => {
-  render(<UploadOpenAPI />, { wrapper: Router });
-  act(() => state.pending?.(true));
-  const cancel = screen.getByRole("button", {
-    name: "Cancel",
-  }) as HTMLButtonElement;
-  expect(cancel.disabled).toBe(true);
-  fireEvent.click(cancel);
-  expect(state.gateway.cancel).not.toHaveBeenCalled();
-  act(() => state.pending?.(false));
-  expect(cancel.disabled).toBe(false);
-  fireEvent.click(cancel);
-  expect(state.gateway.cancel).toHaveBeenCalledTimes(1);
-});
-it("exposes retained deployment logs in gateway mode without a destructive reset", () => {
+it("offers deployment logs and a reset after a failed deployment", () => {
   render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "View Logs" }));
   expect(location()).toBe("/org/projects/project/deployments/deployment");
-  expect(screen.queryByRole("button", { name: "Try Again" })).toBeNull();
-  expect(state.stepper.reset).not.toHaveBeenCalled();
-});
-it("does not offer a reset or standalone Continue for gateway creation", () => {
-  state.stepper.meta.current.deployment = null;
-  const view = render(<UploadOpenAPI />, { wrapper: Router });
-  expect(screen.queryByRole("button", { name: "Try Again" })).toBeNull();
-  state.stepper.state = "completed";
-  view.rerender(<UploadOpenAPI />);
-  expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
-});
-it("keeps attachment cancellation disabled but releases stale creation state after attachment settles", () => {
-  const view = render(<UploadOpenAPI />, { wrapper: Router });
-  act(() => state.pending?.(true));
-  state.gateway.createdServerId = "server";
-  state.gateway.isAttaching = true;
-  view.rerender(<UploadOpenAPI />);
-  expect(
-    (screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement)
-      .disabled,
-  ).toBe(true);
-  state.gateway.isAttaching = false;
-  view.rerender(<UploadOpenAPI />);
-  expect(
-    (screen.getByRole("button", { name: "Cancel" }) as HTMLButtonElement)
-      .disabled,
-  ).toBe(false);
 });
 it("preserves standalone Continue", () => {
-  state.gateway.gatewayId = null;
   state.stepper.state = "completed";
   render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -186,7 +115,7 @@ vi.mock("@/components/sources/source-list", () => ({
   }),
 }));
 
-it("retains the existing source in gateway mode after lookup succeeds", () => {
+it("retains the existing source after lookup succeeds", () => {
   state.search = "slug=original";
   state.sources = [{ name: "Original API", slug: "original", kind: "openapi" }];
   render(<UploadOpenAPI />, { wrapper: Router });
@@ -194,7 +123,6 @@ it("retains the existing source in gateway mode after lookup succeeds", () => {
     name: "Original API",
     slug: "original",
   });
-  expect(screen.getByRole("button", { name: "Cancel" })).toBeTruthy();
 });
 it.each(["loading", "error"])(
   "does not mount an upload before a safe source lookup: %s",
@@ -207,7 +135,6 @@ it.each(["loading", "error"])(
   },
 );
 it("returns standalone source updates to sources", () => {
-  state.gateway.gatewayId = null;
   state.stepper.state = "completed";
   state.stepper.meta.current.existingDocument = {
     name: "Original API",

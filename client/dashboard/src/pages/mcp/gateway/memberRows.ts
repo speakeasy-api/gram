@@ -1,13 +1,13 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { MetaMcpMember } from "@gram/client/models/components/metamcpmember.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 
 /**
- * Backend-attested member classification. "hosted" (toolset-backed) members
- * execute in-process and are always available; "proxied" (remote/tunneled)
- * members report unknown until the runtime holds live sessions (AGE-3291
- * PR 2); "disabled", "unproxied" and "slugless" members have no gateway
- * dispatch path and are excluded from serving.
+ * Backend-attested member classification. "proxied" (remote/tunneled) members
+ * report unknown until the runtime holds live sessions (AGE-3291 PR 2);
+ * "hosted" members are servers Speakeasy hosts, which gateways refuse, so they
+ * appear only as memberships written before that rule; "disabled",
+ * "unproxied" and "slugless" members have no gateway dispatch path either.
+ * Every class but "proxied" is excluded from serving.
  */
 export type MemberClassification =
   | "hosted"
@@ -109,78 +109,49 @@ export function memberBackendKind(
   return undefined;
 }
 
-/**
- * Add member candidates: existing mcp_servers rows, plus toolsets with no
- * toolset-backed row yet (adding one mints the row, then attaches it).
- */
-export type AddCandidate =
-  | { kind: "server"; server: McpServer }
-  | { kind: "toolset"; toolset: ToolsetEntry };
+/** Add member candidates: existing servers a gateway can serve or show why not. */
+export type AddCandidate = McpServer;
 
 export function buildAddCandidates(
   servers: McpServer[],
-  toolsets: ToolsetEntry[],
   memberServerIds: Set<string>,
   search: string,
 ): AddCandidate[] {
   const query = search.trim().toLowerCase();
   const matches = (...fields: (string | undefined)[]) =>
     !query || fields.some((f) => f?.toLowerCase().includes(query));
-  // A toolset's own hosted server (id = toolset id) is never a gateway member;
-  // the toolset candidate mints a separate wrapper instead.
-  const pickable = servers.filter((s) => s.id !== s.toolsetId);
-  const wrappedToolsetIds = new Set(
-    pickable.flatMap((s) => (s.toolsetId ? [s.toolsetId] : [])),
-  );
-
-  const serverCandidates: AddCandidate[] = pickable
+  // Gateways never hold a hosted server, so none is offered.
+  return servers
+    .filter((s) => !s.toolsetId)
     .filter((s) => !memberServerIds.has(s.id))
     .filter((s) => matches(s.name, s.slug))
-    .map((server) => ({ kind: "server", server }));
-  const toolsetCandidates: AddCandidate[] = toolsets
-    .filter((t) => !wrappedToolsetIds.has(t.id))
-    .filter((t) => matches(t.name, t.slug))
-    .map((toolset) => ({ kind: "toolset", toolset }));
-
-  return [...serverCandidates, ...toolsetCandidates].sort(
-    (a, b) =>
-      candidateName(a).localeCompare(candidateName(b)) ||
-      candidateKey(a).localeCompare(candidateKey(b)),
-  );
+    .sort(
+      (a, b) =>
+        candidateName(a).localeCompare(candidateName(b)) ||
+        candidateKey(a).localeCompare(candidateKey(b)),
+    );
 }
 
 export function candidateName(candidate: AddCandidate): string {
-  return candidate.kind === "server"
-    ? (candidate.server.name ?? "")
-    : candidate.toolset.name;
+  return candidate.name ?? "";
 }
 
-/** Only reconcile a toolset retry with the exact wrapper this batch created. */
-export function candidateKey(
-  candidate: AddCandidate,
-  wrappers?: ReadonlyMap<string, string>,
-): string {
-  if (candidate.kind === "toolset") return `toolset-${candidate.toolset.id}`;
-  for (const [key, serverId] of wrappers ?? []) {
-    if (serverId === candidate.server.id) return key;
-  }
-  return `server-${candidate.server.id}`;
+export function candidateKey(candidate: AddCandidate): string {
+  return `server-${candidate.id}`;
 }
 
 export interface AddBatchState {
-  wrappers: Map<string, string>;
   orders: Map<string, number>;
   completed: Set<string>;
 }
 
-/** Fresh membership supersedes completed writes, not failed retries/wrappers. */
+/** Fresh membership supersedes completed writes, not failed retries. */
 export function reconcileCompletedMembers(
   state: AddBatchState,
   memberServerIds: ReadonlySet<string>,
 ): void {
   for (const key of state.completed) {
-    const serverId = state.wrappers.get(key) ?? key.slice("server-".length);
-    if (!memberServerIds.has(serverId)) {
+    if (!memberServerIds.has(key.slice("server-".length))) {
       state.completed.delete(key);
       state.orders.delete(key);
     }
@@ -199,7 +170,6 @@ export async function addCandidateBatch(
   startOrder: number,
   state: AddBatchState,
   dependencies: {
-    createWrapper: (toolset: ToolsetEntry) => Promise<string>;
     attach: (serverId: string, sortOrder: number) => Promise<void>;
   },
 ): Promise<AddResult[]> {
@@ -208,27 +178,19 @@ export async function addCandidateBatch(
     ...Array.from(state.orders.values(), (n) => n + 1),
   );
   for (const candidate of candidates) {
-    const key = candidateKey(candidate, state.wrappers);
+    const key = candidateKey(candidate);
     if (!state.orders.has(key)) state.orders.set(key, order++);
   }
   const results: AddResult[] = [];
   for (const candidate of candidates) {
-    const key = candidateKey(candidate, state.wrappers);
+    const key = candidateKey(candidate);
     const result: AddResult = {
       key,
       name: candidateName(candidate) || "MCP server",
     };
     try {
       if (!state.completed.has(key)) {
-        let serverId =
-          candidate.kind === "server"
-            ? candidate.server.id
-            : state.wrappers.get(key);
-        if (!serverId && candidate.kind === "toolset") {
-          serverId = await dependencies.createWrapper(candidate.toolset);
-          state.wrappers.set(key, serverId);
-        }
-        await dependencies.attach(serverId!, state.orders.get(key)!);
+        await dependencies.attach(candidate.id, state.orders.get(key)!);
         state.completed.add(key);
       }
     } catch (error) {

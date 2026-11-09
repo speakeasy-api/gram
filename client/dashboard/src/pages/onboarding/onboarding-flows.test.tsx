@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from "react";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import UploadOpenAPI from "./UploadOpenAPI";
@@ -10,20 +10,7 @@ const state = vi.hoisted(() => ({
     "mcp:write:project",
     "mcp:write:gateway",
   ]),
-  gatewayId: "gateway" as string | null,
-  createdServerId: null as string | null,
-  attachmentError: null as string | null,
-  isAttaching: false,
-  cancel: vi.fn(),
-  complete: vi.fn(),
-  retry: vi.fn().mockResolvedValue(undefined),
   deploy: vi.fn(),
-}));
-vi.mock("@/pages/mcp/gateway/useGatewayCreation", async (importOriginal) => ({
-  ...(await importOriginal<
-    typeof import("@/pages/mcp/gateway/useGatewayCreation")
-  >()),
-  useGatewayCreation: () => state,
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
 vi.mock("@/components/page-templates", async () => {
@@ -129,69 +116,15 @@ beforeEach(() => {
     "mcp:write:project",
     "mcp:write:gateway",
   ]);
-  state.gatewayId = "gateway";
-  state.createdServerId = null;
-  state.attachmentError = null;
-});
-it("keeps function gateway context when continuing from CLI instructions to source selection", () => {
-  render(<FunctionsOnboarding />, { wrapper: MemoryRouter });
-  expect(
-    screen
-      .getByRole("link", { name: /select deployed function/i })
-      .getAttribute("href"),
-  ).toBe(
-    "/org/projects/project/mcp/add/from-existing-source?attachToGateway=gateway",
-  );
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(state.cancel).toHaveBeenCalled();
-});
-it("does not add gateway actions to standalone function instructions", () => {
-  state.gatewayId = null;
-  render(<FunctionsOnboarding />, { wrapper: MemoryRouter });
-  expect(
-    screen.queryByRole("link", { name: /select deployed function/i }),
-  ).toBeNull();
-});
-it("passes gateway completion into OpenAPI creation and prevents leaving for inventory prematurely", () => {
-  render(<UploadOpenAPI />, { wrapper: MemoryRouter });
-  expect(state.deploy).toHaveBeenCalledWith(
-    expect.objectContaining({ gateway: state }),
-  );
-  expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  expect(state.cancel).toHaveBeenCalled();
-});
-it("replaces OpenAPI creation steps with attachment recovery after creation", () => {
-  state.createdServerId = "server";
-  state.attachmentError = "Attachment failed";
-  render(<UploadOpenAPI />, { wrapper: MemoryRouter });
-  expect(state.deploy).not.toHaveBeenCalled();
-  expect(screen.getByText("Attachment failed")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /retry/i }));
-  expect(state.retry).toHaveBeenCalled();
 });
 it("keeps standalone OpenAPI continue navigation", () => {
-  state.gatewayId = null;
   render(<UploadOpenAPI />, { wrapper: MemoryRouter });
   expect(screen.getByRole("button", { name: "Continue" })).toBeTruthy();
 });
 
 it.each([UploadOpenAPI, FunctionsOnboarding])(
-  "requires project-level MCP write for gateway onboarding (%s)",
-  (Component) => {
-    state.scopes.delete("mcp:write:project");
-    render(<Component />, { wrapper: MemoryRouter });
-    expect(state.deploy).not.toHaveBeenCalled();
-    expect(screen.queryByText("CLI instructions")).toBeNull();
-    expect(
-      screen.queryByRole("link", { name: /select deployed function/i }),
-    ).toBeNull();
-  },
-);
-it.each([UploadOpenAPI, FunctionsOnboarding])(
   "preserves standalone onboarding without MCP write (%s)",
   (Component) => {
-    state.gatewayId = null;
     state.scopes = new Set(["project:write:project"]);
     render(<Component />, { wrapper: MemoryRouter });
     if (Component === UploadOpenAPI) expect(state.deploy).toHaveBeenCalled();

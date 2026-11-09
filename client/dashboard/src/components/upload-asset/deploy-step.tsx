@@ -4,15 +4,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
-import { Button } from "@/components/ui/Button";
-import {
-  ensureToolsetWrapper,
-  memberWrappers,
-} from "@/pages/mcp/gateway/ensureToolsetWrapper";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useListTools } from "@/hooks/toolTypes";
-import { asTools } from "@/lib/toolTypes";
 import { slugify } from "@/lib/constants";
 import { useRoutes } from "@/routes";
 import { Deployment } from "@gram/client/models/components/deployment.js";
@@ -35,17 +29,7 @@ import { Text } from "@/components/ui/Text";
 import { useStep } from "./step/use-step";
 import { useStepper } from "./stepper/use-stepper";
 
-export default function DeployStep({
-  gateway,
-  onPendingChange,
-}: {
-  onPendingChange?: (pending: boolean) => void;
-  gateway?: {
-    gatewayId: string | null;
-    createdServerId: string | null;
-    complete: (mcpServerId: string) => Promise<void>;
-  };
-}): React.JSX.Element | null {
+export default function DeployStep(): React.JSX.Element | null {
   const stepper = useStepper();
   const step = useStep();
   const telemetry = useTelemetry();
@@ -68,43 +52,8 @@ export default function DeployStep({
     };
   }, []);
   const deploymentAttempted = React.useRef(false);
-  const [terminalTools, setTerminalTools] = React.useState<ReturnType<
-    typeof asTools
-  > | null>(null);
-  // Gateway creation must not consume cached or in-flight pre-terminal query data.
-  const tools =
-    gateway?.gatewayId && deploymentAttempted.current
-      ? terminalTools
-      : toolsList.data?.tools;
-  const [deploymentPending, setDeploymentPending] = React.useState(false);
-  const [deploymentError, setDeploymentError] = React.useState<string | null>(
-    null,
-  );
-  const [deploymentRetry, setDeploymentRetry] = React.useState(0);
-  const [creationPending, setCreationPending] = React.useState(false);
-  React.useEffect(() => {
-    onPendingChange?.(
-      creationPending ||
-        deploymentPending ||
-        (step.isCurrentStep && step.state === "idle" && !deploymentError) ||
-        (stepDone && !!toolsList.isLoading),
-    );
-  }, [
-    creationPending,
-    deploymentPending,
-    step.isCurrentStep,
-    step.state,
-    stepDone,
-    toolsList.isLoading,
-    onPendingChange,
-    deploymentError,
-  ]);
+  const tools = toolsList.data?.tools;
   const toolsetCreationAttempted = React.useRef(false);
-  const toolsSeeded = React.useRef(false);
-  const wrapperAttempted = React.useRef(false);
-  const createdWrapperId = React.useRef<string | null>(null);
-  const [creationError, setCreationError] = React.useState<string | null>(null);
-  const [retryAttempt, setRetryAttempt] = React.useState(0);
 
   const { toolCount, toolUrns } = React.useMemo(() => {
     const { deployment, uploadResult, assetName } = stepper.meta.current;
@@ -134,7 +83,6 @@ export default function DeployStep({
   // The deployment may fail due to unrelated issues (e.g., external MCP), but if tools
   // were created for this asset, we should still create a toolset for them.
   React.useEffect(() => {
-    if (gateway?.gatewayId && (deploymentError || deploymentPending)) return;
     // Only run when step processing is done (completed or failed) and we have tools
     const stepDone = step.state === "completed" || step.state === "failed";
     // A new version of an existing document already has servers carrying
@@ -142,9 +90,8 @@ export default function DeployStep({
     if (
       !stepDone ||
       toolsetCreationAttempted.current ||
-      gateway?.createdServerId ||
       toolUrns.length === 0 ||
-      (stepper.meta.current.existingDocument && !gateway?.gatewayId)
+      stepper.meta.current.existingDocument
     ) {
       return;
     }
@@ -155,72 +102,21 @@ export default function DeployStep({
     // Mark as attempted immediately to prevent duplicate calls
     toolsetCreationAttempted.current = true;
 
-    setCreationPending(true);
     const createToolset = async () => {
       try {
-        if (stepper.meta.current.existingDocument && gateway?.gatewayId) {
-          // Updating a source does not identify a server: reuse only an
-          // unambiguous existing association, never mint a duplicate toolset.
-          const { toolsets } = await client.toolsets.list();
-          if (!mounted.current) return;
-          const matches = toolsets.filter((toolset) =>
-            toolset.toolUrns?.some((urn) => toolUrns.includes(urn)),
-          );
-          if (matches.length !== 1 || !matches[0]) {
-            throw new Error(
-              "Source updated. Select the intended existing server from the gateway; its source association could not be determined uniquely.",
-            );
-          }
-          const mcpServers = memberWrappers(
-            (await client.mcpServers.list({ toolsetId: matches[0].id }))
-              .mcpServers,
-            matches[0].id,
-          );
-          if (!mounted.current) return;
-          if (mcpServers.length !== 1 || !mcpServers[0]) {
-            throw new Error(
-              "Source updated. Select the intended existing server from the gateway; its source association could not be determined uniquely.",
-            );
-          }
-          await gateway.complete(mcpServers[0].id);
-          return;
-        }
-        // Gateway retries resume from the last successful stage.
-        const toolset =
-          (gateway?.gatewayId ? stepper.meta.current.toolset : null) ??
-          (await client.toolsets.create({
-            createToolsetRequestBody: {
-              name: assetName,
-              description: `Tools generated from ${assetName}`,
-            },
-          }));
+        const toolset = await client.toolsets.create({
+          createToolsetRequestBody: {
+            name: assetName,
+            description: `Tools generated from ${assetName}`,
+          },
+        });
         if (!mounted.current) return;
-        if (gateway?.gatewayId) stepper.meta.current.toolset = toolset;
-
-        if (!toolsSeeded.current) {
-          await client.toolsets.updateBySlug({
-            slug: toolset.slug,
-            updateToolsetRequestBody: { toolUrns },
-          });
-          if (!mounted.current) return;
-          toolsSeeded.current = true;
-        }
-
+        await client.toolsets.updateBySlug({
+          slug: toolset.slug,
+          updateToolsetRequestBody: { toolUrns },
+        });
+        if (!mounted.current) return;
         stepper.meta.current.toolset = toolset;
-        if (gateway?.gatewayId) {
-          if (!createdWrapperId.current) {
-            const reconcile = wrapperAttempted.current;
-            wrapperAttempted.current = true;
-            createdWrapperId.current = await ensureToolsetWrapper(
-              client,
-              toolset,
-              reconcile,
-            );
-          }
-          if (!mounted.current) return;
-          await gateway.complete(createdWrapperId.current);
-        }
-        if (!mounted.current) return;
         telemetry.capture("onboarding_event", {
           action: "toolset_auto_created",
           toolset_name: assetName,
@@ -228,36 +124,13 @@ export default function DeployStep({
         });
       } catch (error) {
         if (!mounted.current) return;
-        if (gateway?.gatewayId) {
-          setCreationError(
-            !stepper.meta.current.toolset &&
-              !stepper.meta.current.existingDocument
-              ? "Toolset creation could not be confirmed. Do not retry creation. Return to the gateway and manually inspect toolsets to recover any created resource before starting again."
-              : error instanceof Error
-                ? error.message
-                : "Failed to create MCP server",
-          );
-        } else {
-          // Standalone toolset creation remains optional.
-          console.error("Failed to auto-create toolset:", error);
-        }
-      } finally {
-        if (mounted.current) setCreationPending(false);
+        // Toolset creation is optional.
+        console.error("Failed to auto-create toolset:", error);
       }
     };
 
     void createToolset();
-  }, [
-    step.state,
-    toolUrns,
-    client,
-    stepper.meta,
-    telemetry,
-    gateway,
-    retryAttempt,
-    deploymentError,
-    deploymentPending,
-  ]);
+  }, [step.state, toolUrns, client, stepper.meta, telemetry]);
 
   const deploymentLogs = useDeploymentLogs(
     {
@@ -272,21 +145,14 @@ export default function DeployStep({
   React.useEffect(() => {
     if (
       !step.isCurrentStep ||
-      (step.state !== "idle" && !deploymentRetry) ||
-      deploymentAttempted.current ||
-      gateway?.createdServerId
+      step.state !== "idle" ||
+      deploymentAttempted.current
     )
       return;
     deploymentAttempted.current = true;
-    setDeploymentPending(true);
     createOrEvolveDeployment()
-      .then(async (result) => {
+      .then((result) => {
         if (!mounted.current) return;
-        if (gateway?.gatewayId) {
-          const response = await client.tools.list({ deploymentId: result.id });
-          if (!mounted.current) return;
-          setTerminalTools(asTools(response.tools));
-        }
         stepper.meta.current.deployment = result;
 
         // Always mark as "completed" so we can check tool count
@@ -312,69 +178,18 @@ export default function DeployStep({
       })
       .catch((err) => {
         if (!mounted.current) return;
-        setDeploymentError(
-          err instanceof Error ? err.message : "Deployment failed",
-        );
         console.error("Deployment failed:", err);
         step.setState("failed");
         stepper.setState("error");
-      })
-      .finally(() => {
-        if (mounted.current) setDeploymentPending(false);
       });
   }, [
     step.isCurrentStep,
     step.state,
     createOrEvolveDeployment,
-    deploymentRetry,
-    gateway?.createdServerId,
-    gateway?.gatewayId,
-    client.tools,
     step,
     stepper,
     telemetry,
   ]);
-
-  if (gateway?.gatewayId && deploymentError) {
-    return (
-      <Stack gap={3}>
-        <Alert variant="error" dismissible={false}>
-          {deploymentError}
-        </Alert>
-        <Button
-          onClick={() => {
-            setDeploymentError(null);
-            setDeploymentPending(true);
-            deploymentAttempted.current = false;
-            setDeploymentRetry((attempt) => attempt + 1);
-          }}
-        >
-          Retry deployment
-        </Button>
-      </Stack>
-    );
-  }
-
-  if (gateway?.gatewayId && creationError) {
-    return (
-      <Stack gap={3}>
-        <Alert variant="error" dismissible={false}>
-          {creationError}
-        </Alert>
-        {stepper.meta.current.toolset && (
-          <Button
-            onClick={() => {
-              setCreationError(null);
-              toolsetCreationAttempted.current = false;
-              setRetryAttempt((attempt) => attempt + 1);
-            }}
-          >
-            Retry
-          </Button>
-        )}
-      </Stack>
-    );
-  }
 
   if (!step.isCurrentStep) return null;
 

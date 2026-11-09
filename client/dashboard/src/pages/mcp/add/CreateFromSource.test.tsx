@@ -11,18 +11,6 @@ import CreateFromSource from "./CreateFromSource";
 const api = vi.hoisted(() => ({
   create: vi.fn(),
   update: vi.fn(),
-  wrapper: vi.fn(),
-  complete: vi.fn(),
-}));
-vi.mock("@/pages/mcp/gateway/useGatewayCreation", () => ({
-  useGatewayCreation: () => ({
-    gatewayId: "gateway",
-    createdServerId: null,
-    isAttaching: false,
-    attachmentError: null,
-    complete: api.complete,
-    cancel: vi.fn(),
-  }),
 }));
 vi.mock("@/components/page-templates", () => ({
   FormPage: ({ children }: { children: React.ReactNode }) => (
@@ -32,7 +20,6 @@ vi.mock("@/components/page-templates", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     toolsets: { create: api.create, updateBySlug: api.update },
-    mcpServers: { create: api.wrapper },
   }),
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
@@ -79,38 +66,22 @@ beforeEach(() => {
     slug: "toolset",
     name: "First source",
   });
-  api.update
-    .mockRejectedValueOnce(new Error("Seeding failed"))
-    .mockResolvedValue(undefined);
-  api.wrapper.mockResolvedValue({ id: "server" });
+  api.update.mockResolvedValue(undefined);
 });
 afterEach(cleanup);
-it.each(["click", "Enter", " "])(
-  "locks the retained source against %s activation during recovery",
-  async (activation) => {
-    render(
-      <MemoryRouter>
-        <CreateFromSource />
-      </MemoryRouter>,
-    );
-    const first = screen.getByRole("button", { name: /First source/ });
-    const second = screen.getByRole("button", { name: /Second source/ });
-    fireEvent.click(first);
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
-    await screen.findByText("Seeding failed");
-    if (activation === "click") fireEvent.click(second);
-    else fireEvent.keyDown(second, { key: activation });
-    expect(first.querySelector('[aria-pressed="true"]')).not.toBeNull();
-    expect(second.querySelector('[aria-pressed="false"]')).not.toBeNull();
-    // Fieldset disabled does not remove div-based cards from keyboard/a11y interaction.
-    expect(second.closest("[inert]")).not.toBeNull();
-    expect(second.closest('[aria-disabled="true"]')).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    await waitFor(() => expect(api.complete).toHaveBeenCalledWith("server"));
-    expect(api.create).toHaveBeenCalledOnce();
-    expect(api.update).toHaveBeenLastCalledWith({
+it("creates a server seeded with only the chosen source's tools", async () => {
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /First source/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  await waitFor(() =>
+    expect(api.update).toHaveBeenCalledWith({
       slug: "toolset",
       updateToolsetRequestBody: { toolUrns: ["urn:first"] },
-    });
-  },
-);
+    }),
+  );
+  expect(api.create).toHaveBeenCalledOnce();
+});
