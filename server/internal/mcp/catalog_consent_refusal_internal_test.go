@@ -203,27 +203,51 @@ func TestCatalogConsentDescribeAndStatusFollowTheCall(t *testing.T) {
 	}
 }
 
-// In Code Mode, a call reconnecting can't fix keeps the slug out of its message and is not a consent request.
-func TestCatalogConsentCodeModeCallNeedsAnAdministrator(t *testing.T) {
+// In Code Mode, tools.servers(), tools.connect and a call give a changed member the same remedy, and only the call records it.
+func TestCatalogConsentCodeModeServersConnectAndCallAgree(t *testing.T) {
 	t.Parallel()
-	rec := mcpconnectionattemptstest.New(t)
-	s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
-	serverID := uuid.New()
-	member := changedMember(serverID, false)
-	gate := staleChoiceRemedyGate(s, map[uuid.UUID]bool{serverID: false})
-	gate.execute = true
-	approveChangedMember(gate, &member, toolfilter.CatalogModeLive, true)
-	consent, ok := errors.AsType[catalogConsentError](s.validateCatalogMember(t.Context(), gate, member))
-	require.True(t, ok)
+	for name, tc := range catalogConsentRemedyCases() {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			s := &Service{connections: rec.Recorder, logger: testenv.NewLogger(t)}
+			serverID := uuid.New()
+			member := changedMember(serverID, tc.hosted)
+			gate := tc.gate(s, serverID)
+			gate.execute = true
+			approveChangedMember(gate, &member, toolfilter.CatalogModeLive, tc.signInChanged)
+			backend := &metaCodeBackend{service: s}
+			unnamed := catalogConsentMessage("", tc.detail, tc.remedy, gate.authentication.subject.Kind == urn.SessionSubjectKindUser)
 
-	refusal := catalogConsentCodeRefusal(s.refuseCatalogConsentCall(t.Context(), s.logger, gate, member, consent, false))
-	refused, ok := errors.AsType[*codemode.MemberRefusalError](refusal)
-	require.True(t, ok)
-	require.Equal(t, "The sign-in for this server changed, and you can't approve it again yourself. Ask your administrator to finish setting it up or give you access.", refused.Message)
-	require.False(t, refused.ConsentRequired)
-	require.NotErrorIs(t, refusal, codemode.ErrConsentRequired)
-	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeApprovalNeedsAdmin)
-	require.Equal(t, string(consentRejectionAuthenticationChanged), row.SubReason)
+			state := backend.knownConnectionState(t.Context(), gate, member)
+			connect := backend.connectRefusal(t.Context(), gate, member)
+			require.Empty(t, rec.Rows(), "discovery and connect record nothing")
+			call := backend.memberCallRefusal(t.Context(), gate, member)
+			if tc.remedy == staleChoiceAskAdmin {
+				require.Equal(t, "unknown", state.Consent)
+				require.Equal(t, unnamed, state.Instructions)
+				refused, ok := errors.AsType[*codemode.MemberRefusalError](connect)
+				require.True(t, ok)
+				require.Equal(t, unnamed, refused.Message)
+				require.False(t, refused.ConsentRequired)
+			} else {
+				require.Equal(t, "required", state.Consent)
+				require.Contains(t, state.Instructions, "tools.connect")
+				require.NoError(t, connect)
+			}
+			if tc.remedy == staleChoiceReconnect {
+				require.Equal(t, codemode.ErrConsentRequired, call)
+			} else {
+				refused, ok := errors.AsType[*codemode.MemberRefusalError](call)
+				require.True(t, ok)
+				require.Equal(t, unnamed, refused.Message)
+				require.Equal(t, tc.remedy != staleChoiceAskAdmin, refused.ConsentRequired)
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.reason)
+			require.Equal(t, string(tc.detail), row.SubReason)
+			require.Equal(t, string(tc.who), row.WhoFixes)
+		})
+	}
 }
 
 // When we can't check whether consent would fix it, the person reconnects first, and the row blames our lookup.

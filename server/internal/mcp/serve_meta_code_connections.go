@@ -50,7 +50,11 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		state.Consent = "approved"
 		if err := b.service.validateCatalogMember(ctx, gate, member); err != nil {
 			state.Consent = "unknown"
-			if needsNewConsent(err) {
+			if consent, ok := errors.AsType[catalogConsentError](err); ok {
+				if message, remedy := b.service.catalogConsentRefusal(ctx, b.service.logger, gate, member, consent, false); remedy == staleChoiceAskAdmin {
+					state.Instructions = message
+					return state
+				}
 				state.Consent = "required"
 			}
 		} else {
@@ -154,16 +158,23 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	return action, nil
 }
 
-// connectRefusal stops a sign-in link for a stale choice that consent can't replace.
+// connectRefusal stops a sign-in link for a stale choice or changed approval that consent can't fix.
 func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
-	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
+		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		if remedy == staleChoiceReconnect {
+			return nil
+		}
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
+	}
+	consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member))
+	if !ok {
 		return nil
 	}
-	message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-	if remedy == staleChoiceReconnect {
-		return nil
+	if message, remedy := b.service.catalogConsentRefusal(ctx, b.service.logger, gate, member, consent, false); remedy == staleChoiceAskAdmin {
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
 	}
-	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
+	return nil
 }
 
 // codeConnectAvailable reports whether Connect can mint a link bound to the

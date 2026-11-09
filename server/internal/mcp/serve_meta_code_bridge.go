@@ -242,10 +242,19 @@ func (b *metaCodeBackend) helperFailure(ctx context.Context, gate *metaGateConte
 	if consent, ok := errors.AsType[catalogConsentError](err); ok {
 		return catalogConsentCodeRefusal(b.service.catalogConsentRefusal(ctx, b.service.logger, gate, member, consent, false))
 	}
-	if needsNewConsent(err) {
-		return codemode.ErrConsentRequired
-	}
 	return codemode.ErrToolUnavailable
+}
+
+// memberCallRefusal records and refuses a call to a member with a stale choice or a changed approval, before dispatch.
+func (b *metaCodeBackend) memberCallRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
+		message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, gate, member, stale)
+		return &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
+	}
+	if consent, ok := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, gate, member)); ok {
+		return catalogConsentCodeRefusal(b.service.refuseCatalogConsentCall(ctx, b.service.logger, gate, member, consent, false))
+	}
+	return nil
 }
 
 func (b *metaCodeBackend) revoke() error {
@@ -389,16 +398,8 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	callGate := *gate
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
-			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
-				message, remedy := b.service.refuseStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
-				return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: remedy == staleChoiceReconnect || remedy == staleChoiceReconnectThenAdmin}
-			}
-			err := b.service.validateCatalogMember(ctx, &callGate, member)
-			if consent, ok := errors.AsType[catalogConsentError](err); ok {
-				return nil, catalogConsentCodeRefusal(b.service.refuseCatalogConsentCall(ctx, b.service.logger, &callGate, member, consent, false))
-			}
-			if needsNewConsent(err) {
-				return nil, codemode.ErrConsentRequired
+			if err := b.memberCallRefusal(ctx, &callGate, member); err != nil {
+				return nil, err
 			}
 		}
 	}
