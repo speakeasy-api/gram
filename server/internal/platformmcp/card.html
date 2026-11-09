@@ -262,7 +262,8 @@
           }
         }
         // A result without a card, such as a refusal, clears any earlier card,
-        // hides the frame and reports zero height so the host can collapse it.
+        // hides the frame and reports a one-pixel height so the host can
+        // collapse it.
         function render(meta) {
           var card = meta && meta[CARD_KEY];
           root.innerHTML = typeof card === "string" ? card : "";
