@@ -268,7 +268,7 @@ func TestUnmaskRiskResult_OwnerPath_AssistantRuntimeKeepsGrantCheck(t *testing.T
 	})
 
 	res, err := ti.service.UnmaskRiskResult(runtimeCtx, &gen.UnmaskRiskResultPayload{ID: rowID.String()})
-	require.Error(t, err)
+	requireOopsCode(t, err, oops.CodeForbidden)
 	require.Nil(t, res)
 }
 
