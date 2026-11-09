@@ -48,7 +48,7 @@ func TestCardResourceIsListedAndReadable(t *testing.T) {
 	require.False(t, assistant, "the managed assistant renders no MCP Apps")
 }
 
-// Every external tool links the card view, so it is served on every
+// Card-linking tools need the card view, so it is served on every
 // deployment, including one with no live services.
 func TestCardResourceIsAlwaysServed(t *testing.T) {
 	t.Parallel()

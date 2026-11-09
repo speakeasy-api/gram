@@ -2,8 +2,11 @@ package platformmcp
 
 import (
 	"cmp"
+	"context"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -29,6 +32,12 @@ func TestRenderCardGallery(t *testing.T) {
 		path = filepath.Join(t.TempDir(), "cards.html")
 	}
 
+	dashboard, err := url.Parse("https://app.speakeasy.com")
+	require.NoError(t, err)
+	// Sample results name projects by ID; the gallery resolves any ID to one
+	// sample project, as the live lookup would within an organization.
+	galleryLinks := cardLinks{dashboardURL: dashboard, serverURL: nil, projectSlug: func(context.Context, string) string { return "support" }}
+	galleryContext := linkContext("example-org")
 	descriptors := galleryDescriptors()
 	unavailable := reflect.TypeFor[featureUnavailableResult]()
 	type entry struct {
@@ -43,7 +52,7 @@ func TestRenderCardGallery(t *testing.T) {
 		if !descriptor.Meta.servesAudience(AudienceExternal) {
 			continue
 		}
-		kind, carded := toolCardKind(descriptor.Name, descriptor.Annotations)
+		spec, carded := toolCardSpec(descriptor.Name)
 		if !carded {
 			textOnly = append(textOnly, entry{Name: descriptor.Name, Note: "", Card: "", Reason: textOnlyTools[descriptor.Name]})
 			continue
@@ -60,20 +69,20 @@ func TestRenderCardGallery(t *testing.T) {
 		if descriptor.output == unavailable {
 			sample = featureUnavailableResult{Code: unavailableCode, Feature: descriptor.Name, Message: "This is not switched on for your organization yet."}
 		}
-		result := withResultCard(cmp.Or(descriptor.Title, cardHumanize(descriptor.Name)), kind, nil, sample)
+		result := withResultCard(galleryContext, galleryLinks, cmp.Or(descriptor.Title, cardFallbackTitle(descriptor.Name)), spec, nil, sample, gallerySampleInput(descriptor.InputSchema))
 		rendered, _ := result.Meta[cardMetaKey].(string)
 		require.NotEmpty(t, rendered, "tool %q draws no card for its sample output", descriptor.Name)
-		sections[kind] = append(sections[kind], entry{Name: descriptor.Name, Note: note, Card: template.HTML(rendered), Reason: ""})
+		sections[spec.kind] = append(sections[spec.kind], entry{Name: descriptor.Name, Note: note, Card: template.HTML(rendered), Reason: ""})
 	}
 
-	refusal := withResultCard("Rename Plugin", cardKindReceipt, &mcp.CallToolResult{
+	refusal := withResultCard(galleryContext, galleryLinks, "Rename Plugin", cardTools["rename_plugin"], &mcp.CallToolResult{
 		Meta:              nil,
 		Content:           []mcp.Content{&mcp.TextContent{Text: `{"code":"permission_denied","request_access_url":"https://app.speakeasy.com/example/request-access","message":"You do not have permission to use this Platform MCP tool. This action requires org:admin."}`}},
 		StructuredContent: nil,
 		IsError:           true,
 		InputRequests:     nil,
 		RequestState:      "",
-	}, nil)
+	}, nil, nil)
 	refusalHTML, _ := refusal.Meta[cardMetaKey].(string)
 
 	style := cardShellHTML[strings.Index(cardShellHTML, "<style>")+len("<style>") : strings.Index(cardShellHTML, "</style>")]
@@ -119,6 +128,22 @@ table { border-collapse: collapse; font-size: 13px; } td { border-top: 1px solid
 	}))
 	require.NoError(t, os.WriteFile(path, []byte(out.String()), 0o600))
 	t.Logf("wrote %d cards to %s", total, path)
+}
+
+// gallerySampleInput fills a tool's arguments from its input schema, so route
+// segments the result does not repeat, such as the project, can be filled.
+func gallerySampleInput(schema []byte) map[string]any {
+	var parsed struct {
+		Properties map[string]any `json:"properties"`
+	}
+	if json.Unmarshal(schema, &parsed) != nil {
+		return nil
+	}
+	input := make(map[string]any, len(parsed.Properties))
+	for key := range parsed.Properties {
+		input[key] = gallerySampleString(key, 0)
+	}
+	return input
 }
 
 // galleryDescriptors collects every external tool with its live output type
@@ -253,7 +278,7 @@ func gallerySampleValue(t reflect.Type, key string, depth, index int) reflect.Va
 				continue
 			}
 			if name == "" {
-				name = strings.ToLower(field.Name)
+				name = field.Name
 			}
 			value.Field(i).Set(gallerySampleValue(field.Type, name, depth+1, index))
 		}

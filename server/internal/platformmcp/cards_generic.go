@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -10,16 +11,17 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Generic result cards. Every external tool links the card view, and after a
-// call addTool builds one of four shared cards from the result the client
+// Generic result cards. Every tool in cardTools links the card view, and after
+// a call addTool builds one of four shared cards from the result the client
 // already receives: a detail card for one resource, a list card, a receipt for
-// a change, and a refusal card for a call that did not complete. A tool that
-// builds its own card keeps it.
+// a change, and a refusal card for a call that did not complete. Each card
+// links to its dashboard page. A tool that builds its own card keeps it.
 //
 // A generic card shows only values under the named keys below. It never
 // renders an arbitrary field, so a credential or hidden-resource signal in a
@@ -34,42 +36,10 @@ const (
 	cardKindReceipt cardKind = "receipt"
 )
 
-// textOnlyTools keep their plain result. Each reason says why a card would not
-// help the person reading the conversation.
-var textOnlyTools = map[string]string{
-	"run_analytics_query":             "returns query rows for the model to analyse; a card cannot show a table",
-	"query_mcp_events":                "returns raw event rows for the model to analyse",
-	"query_mcp_metrics":               "returns metric series for the model to analyse",
-	"query_mcp_traces":                "returns raw trace spans for the model to analyse",
-	"query_skill_usage":               "returns usage rows for the model to analyse",
-	"describe_analytics_catalog":      "describes query inputs for the model, not a result for the user",
-	"list_analytics_dimension_values": "lists query filter values for the model, not a result for the user",
-	"list_attribute_keys":             "lists query attribute keys for the model, not a result for the user",
-	"describe_tools":                  "returns tool schemas for the model to read",
-	"execute_tool":                    "returns another MCP server's own result, which that server presents",
-	"read_chat":                       "returns a transcript for the model to read",
-	"search_speakeasy_docs":           "returns doc passages for the model to read and cite; it is also a first-run tool, and its card link would push tools/list past the host budget",
-	"send_platform_mcp_feedback":      "sends feedback to Speakeasy; there is nothing for the user to see",
-	"record_workflow_run":             "records telemetry for the agent; there is nothing for the user to see",
-}
-
-// toolCardKind is the shared card a tool's results use, and false for a
-// text-only tool.
-func toolCardKind(name string, annotations *mcp.ToolAnnotations) (cardKind, bool) {
-	if _, ok := textOnlyTools[name]; ok {
-		return "", false
-	}
-	verb, _, _ := strings.Cut(name, "_")
-	switch verb {
-	case "list", "search", "find":
-		return cardKindList, true
-	case "get", "describe", "inspect", "compare", "preview", "suggest", "whoami":
-		return cardKindDetail, true
-	}
-	if annotations != nil && annotations.ReadOnlyHint {
-		return cardKindDetail, true
-	}
-	return cardKindReceipt, true
+// toolCardSpec is a tool's card spec, and false for a text-only tool.
+func toolCardSpec(name string) (cardSpec, bool) {
+	spec, ok := cardTools[name]
+	return spec, ok
 }
 
 // withCardToolMeta links a tool to the card view without dropping any _meta
@@ -89,13 +59,13 @@ func withCardToolMeta(meta mcp.Meta) mcp.Meta {
 // withResultCard adds a generic card to a result that has none. It never
 // changes the result's content, structured content or error flag, and it
 // returns a copy rather than editing a result the handler may share.
-func withResultCard(title string, kind cardKind, result *mcp.CallToolResult, output any) *mcp.CallToolResult {
+func withResultCard(ctx context.Context, links cardLinks, title string, spec cardSpec, result *mcp.CallToolResult, output, input any) *mcp.CallToolResult {
 	if result != nil {
 		if _, ok := result.Meta[cardMetaKey]; ok {
 			return result
 		}
 	}
-	card, ok := genericCard(title, kind, result, output)
+	card, ok := genericCard(ctx, links, title, spec, result, output, input)
 	if !ok {
 		return result
 	}
@@ -118,7 +88,7 @@ func withResultCard(title string, kind cardKind, result *mcp.CallToolResult, out
 
 // genericCard reads the same JSON the client receives: the structured content
 // when the handler set it, else its text, else the typed output.
-func genericCard(title string, kind cardKind, result *mcp.CallToolResult, output any) (resultCard, bool) {
+func genericCard(ctx context.Context, links cardLinks, title string, spec cardSpec, result *mcp.CallToolResult, output, input any) (resultCard, bool) {
 	source := output
 	switch {
 	case result != nil && result.StructuredContent != nil:
@@ -141,7 +111,8 @@ func genericCard(title string, kind cardKind, result *mcp.CallToolResult, output
 	decoded, err := decodeOrderedJSON(data)
 	if err != nil {
 		if result != nil && result.IsError {
-			return refusalCard(title, nil), true
+			// A plain-text refusal is its own message.
+			return refusalCard(title, jsonObject{{Key: "message", Value: strings.TrimSpace(string(data))}}), true
 		}
 		return noResultCard, false
 	}
@@ -152,24 +123,40 @@ func genericCard(title string, kind cardKind, result *mcp.CallToolResult, output
 	if isUnavailableResult(object) {
 		return unavailableCard(title, object), true
 	}
-	switch kind {
+	var card resultCard
+	switch spec.kind {
 	case cardKindList:
-		if card, ok := listCard(title, object); ok {
-			return card, true
+		listed, ok := listCard(title, object)
+		if !ok {
+			listed = detailCard(title, object)
 		}
-		return detailCard(title, object), true
+		card = listed
 	case cardKindReceipt:
-		return receiptCard(title, object), true
+		card = receiptCard(title, object)
 	default:
-		// A read that names no single resource but returns a list, such as
-		// a permissions catalogue, reads better as that list.
-		if cardSubject(object).firstString(cardNameKeys) == "" {
-			if card, ok := listCard(title, object); ok {
-				return card, true
-			}
-		}
-		return detailCard(title, object), true
+		card = detailCard(title, object)
 	}
+	// A link the result itself returns, such as a setup or sign-in URL, is
+	// the next step and wins over the page link.
+	if card.Action == nil {
+		card.Action = links.link(ctx, spec, object, decodeCardInput(input))
+	}
+	return card, true
+}
+
+// decodeCardInput is the call's arguments as an ordered object, for filling
+// route segments the result does not repeat.
+func decodeCardInput(input any) jsonObject {
+	encoded, err := json.Marshal(input)
+	if err != nil {
+		return nil
+	}
+	decoded, err := decodeOrderedJSON(encoded)
+	if err != nil {
+		return nil
+	}
+	object, _ := decoded.(jsonObject)
+	return object
 }
 
 // noResultCard is returned with false when no card can be drawn.
@@ -382,7 +369,8 @@ func findNamedObject(object jsonObject, depth int) (jsonObject, bool) {
 			return found, true
 		}
 	}
-	if project != nil && project.firstString(cardNameKeys) != "" {
+	// A project counts only when it has a display name, not just a slug.
+	if project != nil && project.firstString([]string{"display_name", "name"}) != "" {
 		return project, true
 	}
 	return nil, false
@@ -421,8 +409,8 @@ func cardTags(objects ...jsonObject) []string {
 	return tags
 }
 
-// cardActionFrom is the first allowed link in the result. Only absolute http
-// and https URLs qualify; html/template also blocks any other scheme.
+// cardActionFrom is the first allowed link in the result. Only absolute https
+// URLs qualify, so a card never opens a page over plaintext HTTP.
 func cardActionFrom(objects ...jsonObject) *cardAction {
 	for _, object := range objects {
 		for _, action := range cardActionKeys {
@@ -431,7 +419,7 @@ func cardActionFrom(objects ...jsonObject) *cardAction {
 				continue
 			}
 			parsed, err := url.Parse(raw)
-			if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.Host == "" {
+			if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 				continue
 			}
 			return &cardAction{Label: action.label, URL: raw}
@@ -444,7 +432,11 @@ func cardActionFrom(objects ...jsonObject) *cardAction {
 func cardCount(count int, key string) string {
 	noun := cardHumanize(key)
 	if count == 1 {
-		noun = strings.TrimSuffix(noun, "s")
+		if stem, ok := strings.CutSuffix(noun, "ies"); ok {
+			noun = stem + "y"
+		} else {
+			noun = strings.TrimSuffix(noun, "s")
+		}
 	}
 	if noun == "" {
 		noun = "results"
@@ -461,6 +453,16 @@ func cardHumanize(value string) string {
 		}
 	}
 	return strings.Join(words, " ")
+}
+
+// cardFallbackTitle is a readable title for a tool that declares none.
+func cardFallbackTitle(name string) string {
+	words := cardHumanize(name)
+	first, size := utf8.DecodeRuneInString(words)
+	if size == 0 {
+		return words
+	}
+	return string(unicode.ToUpper(first)) + words[size:]
 }
 
 // cardWordSpelling keeps acronyms and product words readable.

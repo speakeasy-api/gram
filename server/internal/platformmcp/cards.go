@@ -32,9 +32,9 @@ var cardShellHTML string
 
 // cardTemplate is the markup shared by every card. html/template escapes each
 // value for its context and replaces any URL that is not http(s) or mailto.
-// The one exception is Logo: a data: image URI that cardLogoDataURI builds
-// only from stored bytes it has checked, typed as template.URL so the filter
-// lets it through.
+// Two values are trusted instead: Logo, a data: image URI that cardLogoDataURI
+// builds only from stored bytes it has checked, typed as template.URL; and
+// Icon, which must be one of the fixed SVG constants in cards_generic.go.
 //
 // Every card is a dotted panel holding the resource's tile, and beside it a
 // coloured eyebrow, a serif title, up to two lines below it, an optional list of
