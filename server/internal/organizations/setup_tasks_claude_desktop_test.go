@@ -76,11 +76,35 @@ func TestService_ListSetupTasksCompletesClaudeDesktopOnceACoworkTranscriptArrive
 	require.False(t, registration.CompletedByFact)
 	require.False(t, instructions.CompletedByFact)
 
-	storeMessage("claude-transcript")
+	// Store the row with the origin transcript ingest writes, so the check's
+	// SQL literal can't drift from it unnoticed.
+	storeMessage(chat.OriginClaudeTranscript)
 	registration, instructions = cards()
 	require.Equal(t, "done", registration.Status)
 	require.True(t, registration.CompletedByFact)
 	require.Equal(t, "done", instructions.Status)
 	require.True(t, instructions.CompletedByFact)
 	require.Empty(t, instructions.BlockedBy, "the transcript also settles the registration card it waits on")
+}
+
+func TestService_ListSetupTasksShowsTheOrganizationInstructionCardOnlyToClaudeTeam(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	seedOnboardingCatalog(t, ti)
+	ac, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	// Enterprise captures Claude sessions through the Compliance API and
+	// inference hooks, so it registers plugins but gets no organization
+	// instruction card.
+	recordStack(ctx, t, ti, ac.ActiveOrganizationID, [2]string{"Anthropic", "anthropic-enterprise"})
+	keys := listedSetupTaskKeys(ctx, t, ti)
+	require.Contains(t, keys, "claude-plugin-registration")
+	require.NotContains(t, keys, "claude-org-instructions")
+
+	recordStack(ctx, t, ti, ac.ActiveOrganizationID, [2]string{"Anthropic", "anthropic-team"})
+	keys = listedSetupTaskKeys(ctx, t, ti)
+	require.Contains(t, keys, "claude-plugin-registration")
+	require.Contains(t, keys, "claude-org-instructions")
 }

@@ -120,15 +120,25 @@ func TestSetupTaskCatalogMethodsExistInTheSupportMatrix(t *testing.T) {
 		Methods []struct {
 			ID string `json:"id"`
 		} `json:"methods"`
+		Plans []struct {
+			ID string `json:"id"`
+		} `json:"plans"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &catalog))
 	known := make(map[string]bool, len(catalog.Methods))
 	for _, method := range catalog.Methods {
 		known[method.ID] = true
 	}
+	knownPlans := make(map[string]bool, len(catalog.Plans))
+	for _, plan := range catalog.Plans {
+		knownPlans[plan.ID] = true
+	}
 	for _, card := range setupTaskCatalog {
 		for _, method := range card.Methods {
 			require.True(t, known[method], "card %q names integration method %q that the support matrix does not define", card.Key, method)
+		}
+		for _, plan := range card.Plans {
+			require.True(t, knownPlans[plan], "card %q names plan %q that the support matrix does not define", card.Key, plan)
 		}
 	}
 }
