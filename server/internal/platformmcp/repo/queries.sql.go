@@ -3443,6 +3443,80 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 	return i, err
 }
 
+const getPlatformMCPRegistrationAwaitingSignIn = `-- name: GetPlatformMCPRegistrationAwaitingSignIn :one
+SELECT registration.id, registration.catalog_provider, project.slug AS project_slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+WHERE registration.mcp_server_id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+  AND server.remote_session_issuer_id IS NULL
+ORDER BY registration.id
+LIMIT 1
+`
+
+type GetPlatformMCPRegistrationAwaitingSignInParams struct {
+	McpServerID    uuid.NullUUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPRegistrationAwaitingSignInRow struct {
+	ID              uuid.UUID
+	CatalogProvider string
+	ProjectSlug     string
+}
+
+// The live registration behind an MCP server whose sign-in provider is not
+// connected yet, so the consent page can connect it before it lists sign-in
+// options. No row once the server has a sign-in provider.
+func (q *Queries) GetPlatformMCPRegistrationAwaitingSignIn(ctx context.Context, arg GetPlatformMCPRegistrationAwaitingSignInParams) (GetPlatformMCPRegistrationAwaitingSignInRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationAwaitingSignIn, arg.McpServerID, arg.OrganizationID, arg.ProjectID)
+	var i GetPlatformMCPRegistrationAwaitingSignInRow
+	err := row.Scan(&i.ID, &i.CatalogProvider, &i.ProjectSlug)
+	return i, err
+}
+
+const getPlatformMCPRegistrationConnectSlug = `-- name: GetPlatformMCPRegistrationConnectSlug :one
+SELECT endpoint.slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_endpoints AS endpoint
+  ON endpoint.id = registration.mcp_endpoint_id
+ AND endpoint.project_id = registration.project_id
+ AND endpoint.mcp_server_id = registration.mcp_server_id
+ AND endpoint.custom_domain_id IS NULL
+ AND endpoint.deleted IS FALSE
+WHERE registration.id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+`
+
+type GetPlatformMCPRegistrationConnectSlugParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// The platform endpoint slug a live registration's consent page is served at.
+// Custom-domain endpoints have no platform consent page, so they return no row.
+func (q *Queries) GetPlatformMCPRegistrationConnectSlug(ctx context.Context, arg GetPlatformMCPRegistrationConnectSlugParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationConnectSlug, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const getPlatformMCPRegistrationLogo = `-- name: GetPlatformMCPRegistrationLogo :one
 SELECT a.url, a.content_type, a.content_length
 FROM platform_mcp_catalog_registrations r

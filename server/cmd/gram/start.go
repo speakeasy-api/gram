@@ -2021,6 +2021,9 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			if platformMCPAssistant.ConsentSignIn != nil {
+				mcpService.SetPendingSignInConnector(platformMCPAssistant.ConsentSignIn)
+			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
 			attachApprovals(mux, logger, approvalService, mcpRuntime.MCP, ratelimit.NewRedisStore(redisClient))
