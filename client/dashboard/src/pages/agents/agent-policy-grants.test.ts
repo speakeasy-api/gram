@@ -294,6 +294,31 @@ describe("policy diff", () => {
       "grant_two",
     ]);
   });
+
+  it("removes every stored copy of a duplicated grant, and keeps every copy it still wants", () => {
+    const selector = { resourceKind: "skill", resourceId: "*" } as const;
+    const stored = [
+      storedGrant("copy_one", "skill:read", selector),
+      storedGrant("copy_two", "skill:read", selector),
+      storedGrant("kept_one", "project:read", {
+        resourceKind: "project",
+        resourceId: "*",
+      }),
+      storedGrant("kept_two", "project:read", {
+        resourceKind: "project",
+        resourceId: "*",
+      }),
+    ];
+    const diff = diffAgentPolicyGrants(
+      stored,
+      agentPolicyGrantsFromDraft({ "project:read": null }),
+    );
+    expect(diff.remove.map((grant) => grant.id)).toEqual([
+      "copy_one",
+      "copy_two",
+    ]);
+    expect(diff.create).toEqual([]);
+  });
 });
 
 // The server accepts server_url and server_identity on risk policy selectors

@@ -128,8 +128,9 @@ export function AgentPermissionEditor({
       if (needsReload)
         throw new Error("Reload saved permissions before trying again.");
       if (authorizationError) throw new Error(authorizationError);
-      // Nothing changed, so nothing is written.
-      if (changes.create.length === 0 && changes.remove.length === 0) return;
+      // Nothing changed, so nothing is read or written.
+      if (changes.create.length === 0 && changes.remove.length === 0)
+        return false;
       const current = await sdk.agents.listPolicyGrants({ agentId: agent.id });
       if (agentPolicyFingerprint(current) !== agentPolicyFingerprint(base)) {
         setNeedsReload(true);
@@ -169,9 +170,11 @@ export function AgentPermissionEditor({
           `${progress} No changes were rolled back; closing does not undo saved changes. Reload saved permissions before trying again. ${detail}`,
         );
       }
+      return true;
     },
-    onSuccess: async () => {
-      await refresh();
+    onSuccess: async (wrote) => {
+      // A save that wrote nothing left nothing stale to refetch.
+      if (wrote) await refresh();
       onClose();
     },
     onError: async () => {

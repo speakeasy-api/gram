@@ -223,6 +223,7 @@ describe("computePanelState", () => {
       expect(state).toMatchObject({
         activePanel: "servers",
         selectedServerIds: ["a-1"],
+        label: "1 assistant selected",
       });
     });
   });

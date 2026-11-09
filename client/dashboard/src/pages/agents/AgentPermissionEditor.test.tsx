@@ -361,10 +361,15 @@ describe("Agent permission editor", () => {
         selector: { resourceKind: "inference", resourceId: "*" },
       },
     ]);
+    const invalidate = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
     await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
     expect(mocks.create).not.toHaveBeenCalled();
     expect(mocks.remove).not.toHaveBeenCalled();
+    // Nothing was written, so nothing is refetched.
+    expect(mocks.list).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+    invalidate.mockRestore();
   });
   it("disables policy changes without write permission", () => {
     setup([inferenceGrant("project_one")], {

@@ -451,22 +451,19 @@ export function diffAgentPolicyGrants(
   stored: AgentPolicyGrant[],
   next: EditableAgentPolicyGrant[],
 ): AgentPolicyDiff {
-  const storedByKey = new Map(
-    stored.map((grant) => [
-      delegableGrantKey({
-        effect: grant.effect,
-        scope: grant.scope,
-        selector: grant.selector,
-      }),
-      grant,
-    ]),
-  );
+  const storedKey = (grant: AgentPolicyGrant) =>
+    delegableGrantKey({
+      effect: grant.effect,
+      scope: grant.scope,
+      selector: grant.selector,
+    });
+  const storedKeys = new Set(stored.map(storedKey));
   const nextKeys = new Set(next.map(delegableGrantKey));
   return {
-    create: next.filter((form) => !storedByKey.has(delegableGrantKey(form))),
-    remove: [...storedByKey]
-      .filter(([key]) => !nextKeys.has(key))
-      .map(([, grant]) => grant),
+    create: next.filter((form) => !storedKeys.has(delegableGrantKey(form))),
+    // Every stored copy goes, so a duplicate left behind cannot keep the
+    // permission a save removed.
+    remove: stored.filter((grant) => !nextKeys.has(storedKey(grant))),
   };
 }
 
