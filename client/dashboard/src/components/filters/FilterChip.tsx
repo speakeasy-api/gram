@@ -170,14 +170,16 @@ export function SelectFilterChip({
           <CommandList>
             <CommandEmpty>No options match.</CommandEmpty>
             <CommandGroup>
-              <CommandItem
-                value="__all__"
-                keywords={[allLabelFor(dim)]}
-                onSelect={() => select(null)}
-              >
-                {!value && <Check className="size-4" />}
-                {allLabelFor(dim)}
-              </CommandItem>
+              {!dim.required && (
+                <CommandItem
+                  value="__all__"
+                  keywords={[allLabelFor(dim)]}
+                  onSelect={() => select(null)}
+                >
+                  {!value && <Check className="size-4" />}
+                  {allLabelFor(dim)}
+                </CommandItem>
+              )}
               {options.map((option) => (
                 <CommandItem
                   key={option.value}

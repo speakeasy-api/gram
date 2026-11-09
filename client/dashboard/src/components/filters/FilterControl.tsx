@@ -94,7 +94,13 @@ export function FilterControl({
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
+            {/* A required dimension always resolves to a real value, so an
+                "All" row would only ever snap back to the first option. */}
+            {!dim.required && (
+              <SelectItem value={SELECT_ALL_VALUE}>
+                {allLabelFor(dim)}
+              </SelectItem>
+            )}
             {flattenOptions(options).map((o) => (
               <SelectItem
                 key={o.value}
