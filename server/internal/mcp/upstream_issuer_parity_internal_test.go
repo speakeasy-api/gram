@@ -193,3 +193,41 @@ func TestDirectUpstreamIssuer_RemoteGrantsRouteByResourceUnderEitherSource(t *te
 	require.Equal(t, upstreamIssuerMatch, keys.outcome(sameRoutedUpstream(columnToken, columnErr, associationToken, associationErr)),
 		"a subject's grant routes by its recorded resource, so the source does not matter")
 }
+
+func TestMemberUpstreamIssuer_OtherSourceAndGoverningChoice(t *testing.T) {
+	t.Parallel()
+
+	column := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	association := uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	keys := upstreamIssuerKeys{column: column, association: associationUpstreamIssuer{Provider: association, Providers: 1}, known: true}
+	member := metaMember{remoteSessionIssuerID: column, upstreamIssuer: keys, upstreamIssuerFromAssociations: false, tunneledServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, slug: "member"}
+
+	require.False(t, memberChoiceGoverns(member))
+	require.Equal(t, association, memberWithOtherIssuer(member).remoteSessionIssuerID)
+
+	on := member
+	on.upstreamIssuerFromAssociations = true
+	on.remoteSessionIssuerID = association
+	require.False(t, memberChoiceGoverns(on))
+	require.Equal(t, column, memberWithOtherIssuer(on).remoteSessionIssuerID)
+
+	chosen := member
+	chosen.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.True(t, memberChoiceGoverns(chosen))
+
+	replaced := member
+	replaced.remoteSessionIssuerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+	require.True(t, memberChoiceGoverns(replaced), "a consent-validated client replacing the issuer governs")
+
+	tokens := map[uuid.UUID]remotesessions.UpstreamToken{association.UUID: {Token: "association-token", RemoteSessionClientID: uuid.New(), RemoteSessionID: uuid.New()}}
+	routed, routeErr := routeMetaMemberToken(tokens, member, "")
+	other, otherErr := routeMetaMemberToken(tokens, memberWithOtherIssuer(member), "")
+	require.Equal(t, upstreamIssuerDiffer, keys.outcome(sameRoutedUpstream(routed, routeErr, other, otherErr)),
+		"a tunneled member keyed by the column dials anonymously where its associations would send their credential")
+
+	hosted, hostedErr := hostedMemberTokens(tokens, member)
+	otherHosted, otherHostedErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
+	require.Empty(t, hosted)
+	require.Equal(t, "association-token", soleToken(otherHosted).Token)
+	require.False(t, sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(otherHosted), otherHostedErr))
+}

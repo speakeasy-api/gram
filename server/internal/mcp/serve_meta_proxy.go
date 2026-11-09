@@ -381,6 +381,7 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", fmt.Errorf("load meta MCP member upstream headers: %w", herr)
 		}
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
+		s.compareMemberRouting(ctx, logger, gate.organizationID, tokens, member, strings.TrimRight(remoteServer.Url, "/"), routed, terr)
 		upstreamToken := routed.Token
 		// A resolved agent credential that does not route to this member is
 		// not permission to dial it anonymously. Header/no-auth members have
@@ -413,6 +414,7 @@ func (s *Service) routeMetaMember(
 
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
+		s.compareMemberRouting(ctx, logger, gate.organizationID, tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"), routed, terr)
 		upstreamToken := routed.Token
 		// A resolved agent credential that does not route to this member is
 		// not permission to dial it anonymously. Header/no-auth members have

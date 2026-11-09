@@ -77,6 +77,11 @@ const (
 
 	// upstreamIssuerSiteConsentPreview routes the consent page's tool preview.
 	upstreamIssuerSiteConsentPreview = "consent_preview"
+
+	// upstreamIssuerSiteMemberIssuer is a gateway member's starting upstream
+	// issuer, which its sign-in status, connect links, identity chaining and
+	// client matching read.
+	upstreamIssuerSiteMemberIssuer = "member_issuer"
 )
 
 // Authoritative sources, as recorded.
@@ -199,7 +204,10 @@ func sameRoutedUpstream(a remotesessions.UpstreamToken, aErr error, b remotesess
 		if errors.As(aErr, &aRouting) && errors.As(bErr, &bRouting) {
 			return aRouting.reason == bRouting.reason
 		}
-		return errors.Is(aErr, remotesessions.ErrNoValidToken) == errors.Is(bErr, remotesessions.ErrNoValidToken)
+		if errors.Is(aErr, remotesessions.ErrNoValidToken) != errors.Is(bErr, remotesessions.ErrNoValidToken) {
+			return false
+		}
+		return aErr.Error() == bErr.Error()
 	}
 	return a.RemoteSessionClientID == b.RemoteSessionClientID && a.RemoteSessionID == b.RemoteSessionID && a.Token == b.Token
 }
@@ -391,4 +399,82 @@ func (s *Service) directUpstreamIssuer(ctx context.Context, logger *slog.Logger,
 	parity.outcome = keys.outcome(sameRoutedUpstream(columnToken, columnErr, associationToken, associationErr))
 	s.recordUpstreamIssuerParity(ctx, logger, parity)
 	return keys.authoritative(fromAssociations)
+}
+
+// memberChoiceGoverns reports that a credential's choice replaced the
+// member's starting upstream issuer, so neither source decides it.
+func memberChoiceGoverns(member metaMember) bool {
+	return member.chosenClientID.Valid || member.remoteSessionIssuerID != member.upstreamIssuer.authoritative(member.upstreamIssuerFromAssociations)
+}
+
+// memberWithOtherIssuer is member as the other upstream issuer source would
+// have built it.
+func memberWithOtherIssuer(member metaMember) metaMember {
+	member.remoteSessionIssuerID = member.upstreamIssuer.other(member.upstreamIssuerFromAssociations)
+	return member
+}
+
+// recordMemberIssuerParity records how a listed gateway member's two upstream
+// issuer sources compare as values. Everything that reads the member's issuer
+// without routing a token follows from this value.
+func (s *Service) recordMemberIssuerParity(ctx context.Context, logger *slog.Logger, organizationID string, member metaMember) {
+	keys := member.upstreamIssuer
+	s.recordUpstreamIssuerParity(ctx, logger, upstreamIssuerParity{
+		organizationID:   organizationID,
+		serverID:         member.serverID,
+		surface:          upstreamIssuerSurfaceGatewayState,
+		site:             upstreamIssuerSiteMemberIssuer,
+		keys:             keys,
+		outcome:          keys.outcome(keys.column == keys.association.Provider),
+		fromAssociations: member.upstreamIssuerFromAssociations,
+	})
+}
+
+// compareMemberRouting routes a proxied gateway member's resolved tokens with
+// the other upstream issuer source and records how it compares with the
+// routing that happened. It never resolves a token.
+func (s *Service) compareMemberRouting(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, upstreamResource string, routed remotesessions.UpstreamToken, routeErr error) {
+	parity := upstreamIssuerParity{
+		organizationID:   organizationID,
+		serverID:         member.serverID,
+		surface:          upstreamIssuerSurfaceGatewayProxied,
+		site:             upstreamIssuerSiteRoute,
+		keys:             member.upstreamIssuer,
+		outcome:          upstreamIssuerChoice,
+		fromAssociations: member.upstreamIssuerFromAssociations,
+	}
+	if !memberChoiceGoverns(member) {
+		other, otherErr := routeMetaMemberToken(tokens, memberWithOtherIssuer(member), upstreamResource)
+		parity.outcome = member.upstreamIssuer.outcome(sameRoutedUpstream(routed, routeErr, other, otherErr))
+	}
+	s.recordUpstreamIssuerParity(ctx, logger, parity)
+}
+
+// compareHostedMemberTokens narrows a hosted gateway member's resolved tokens
+// with the other upstream issuer source and records how it compares with the
+// narrowing that happened.
+func (s *Service) compareHostedMemberTokens(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, hosted map[uuid.UUID]remotesessions.UpstreamToken, hostedErr error) {
+	parity := upstreamIssuerParity{
+		organizationID:   organizationID,
+		serverID:         member.serverID,
+		surface:          upstreamIssuerSurfaceGatewayHosted,
+		site:             upstreamIssuerSiteRoute,
+		keys:             member.upstreamIssuer,
+		outcome:          upstreamIssuerChoice,
+		fromAssociations: member.upstreamIssuerFromAssociations,
+	}
+	if !memberChoiceGoverns(member) {
+		other, otherErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
+		parity.outcome = member.upstreamIssuer.outcome(sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(other), otherErr))
+	}
+	s.recordUpstreamIssuerParity(ctx, logger, parity)
+}
+
+// soleToken is the one entry hostedMemberTokens narrows to, or none.
+func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions.UpstreamToken {
+	var none remotesessions.UpstreamToken
+	for _, entry := range tokens {
+		return entry
+	}
+	return none
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -69,6 +70,11 @@ type metaMember struct {
 	// sources, its column and its client associations, as listed. It does not
 	// change when a choice replaces remoteSessionIssuerID.
 	upstreamIssuer upstreamIssuerKeys
+
+	// upstreamIssuerFromAssociations is the organization's upstream issuer
+	// flag: remoteSessionIssuerID starts as the associations' provider when
+	// set, and as the column otherwise.
+	upstreamIssuerFromAssociations bool
 
 	// A tunneled member's recorded RFC 8707 resource identifier, empty when it
 	// records none. Routing accepts a grant qualified to this value; it never
@@ -470,6 +476,7 @@ func (s *Service) admitMetaMembers(
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, []metaMember, error) {
 	shadow := s.newMandatoryShadow(ctx, organizationID)
+	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
@@ -501,34 +508,36 @@ func (s *Service) admitMetaMembers(
 		}
 
 		member := metaMember{
-			serverID:                   candidate.serverID,
-			configurationHash:          "",
-			authClient:                 nil,
-			projectID:                  candidate.projectID,
-			projectSlug:                candidate.projectSlug,
-			slug:                       candidate.slug,
-			name:                       candidate.name,
-			sortOrder:                  candidate.sortOrder,
-			backend:                    backend,
-			toolsetID:                  candidate.toolsetID,
-			remoteServerID:             candidate.remoteServerID,
-			tunneledServerID:           candidate.tunneledServerID,
-			visibility:                 candidate.visibility,
-			environmentID:              candidate.environmentID,
-			toolVariationsGroupID:      candidate.toolVariationsGroupID,
-			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
-			upstreamIssuer:             candidate.upstreamIssuer,
-			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
-			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			upstreamNoAuth:             false,
-			upstreamUnavailable:        nil,
-			typedAuthClient:            false,
-			associatedClients:          nil,
-			typedRegistrations:         false,
+			serverID:                       candidate.serverID,
+			configurationHash:              "",
+			authClient:                     nil,
+			projectID:                      candidate.projectID,
+			projectSlug:                    candidate.projectSlug,
+			slug:                           candidate.slug,
+			name:                           candidate.name,
+			sortOrder:                      candidate.sortOrder,
+			backend:                        backend,
+			toolsetID:                      candidate.toolsetID,
+			remoteServerID:                 candidate.remoteServerID,
+			tunneledServerID:               candidate.tunneledServerID,
+			visibility:                     candidate.visibility,
+			environmentID:                  candidate.environmentID,
+			toolVariationsGroupID:          candidate.toolVariationsGroupID,
+			remoteSessionIssuerID:          candidate.upstreamIssuer.authoritative(fromAssociations),
+			upstreamIssuer:                 candidate.upstreamIssuer,
+			upstreamIssuerFromAssociations: fromAssociations,
+			tunneledResourceIdentifier:     candidate.tunneledResourceIdentifier,
+			chosenClientID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			upstreamNoAuth:                 false,
+			upstreamUnavailable:            nil,
+			typedAuthClient:                false,
+			associatedClients:              nil,
+			typedRegistrations:             false,
 		}
 		switch {
 		case refusal == nil:
 			members = append(members, member)
+			s.recordMemberIssuerParity(ctx, logger, organizationID, member)
 		case candidate.visibility == mcpservers.VisibilityPrivate:
 			// Kept aside so a call that names it records its denied check.
 			// Any other visibility (malformed or future) is simply dropped.
