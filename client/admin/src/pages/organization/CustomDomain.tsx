@@ -5,9 +5,11 @@ import type { AdminCustomDomain } from "@gram/admin-client/models/components/adm
 
 import { CopyValue } from "@/components/CopyValue";
 import { Button } from "@/components/ui/button";
-import { organizationQuery } from "@/lib/adminQueries";
+import {
+  adminListCustomDomainsQuery,
+  organizationQuery,
+} from "@/lib/adminQueries";
 import type { AdminOrganization } from "@/lib/gramAdminApi";
-import { adminListCustomDomainsQuery } from "@/lib/gramAdminClient";
 import { fmtDateShort } from "@/lib/utils";
 import {
   DomainStatusBadge,

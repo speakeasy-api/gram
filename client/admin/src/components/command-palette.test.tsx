@@ -52,8 +52,8 @@ vi.mock("@/pages/organization/Onboarding", () => ({
   OnboardingRoute: () => <h1>Tenant onboarding</h1>,
 }));
 
-vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+vi.mock("@/lib/adminQueries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/adminQueries")>();
   return {
     ...actual,
     adminListCustomDomainsQuery: (request = {}) =>

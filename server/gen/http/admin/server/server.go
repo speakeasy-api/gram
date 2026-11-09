@@ -85,6 +85,7 @@ type Server struct {
 	SetMcpServerScopePin                    http.Handler
 	GetMcpServerToolCalls                   http.Handler
 	GetHookClients                          http.Handler
+	GetOrganizationHookFleet                http.Handler
 	ListRegistryPromotionCandidates         http.Handler
 	GetRegistryPromotionCandidate           http.Handler
 	PromoteRegistryCandidate                http.Handler
@@ -222,6 +223,7 @@ func New(
 			{"SetMcpServerScopePin", "POST", "/admin/project.setMcpServerScopePin"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
 			{"GetHookClients", "GET", "/admin/hookClients.get"},
+			{"GetOrganizationHookFleet", "GET", "/admin/organizationHookFleet.get"},
 			{"ListRegistryPromotionCandidates", "GET", "/admin/registry.promotionCandidates"},
 			{"GetRegistryPromotionCandidate", "POST", "/admin/registry.promotionCandidate"},
 			{"PromoteRegistryCandidate", "POST", "/admin/registry.promoteCandidate"},
@@ -331,6 +333,7 @@ func New(
 		SetMcpServerScopePin:                    NewSetMcpServerScopePinHandler(e.SetMcpServerScopePin, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
 		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetHandler(e.GetOrganizationHookFleet, mux, decoder, encoder, errhandler, formatter),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesHandler(e.ListRegistryPromotionCandidates, mux, decoder, encoder, errhandler, formatter),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateHandler(e.GetRegistryPromotionCandidate, mux, decoder, encoder, errhandler, formatter),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateHandler(e.PromoteRegistryCandidate, mux, decoder, encoder, errhandler, formatter),
@@ -447,6 +450,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetMcpServerScopePin = m(s.SetMcpServerScopePin)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
 	s.GetHookClients = m(s.GetHookClients)
+	s.GetOrganizationHookFleet = m(s.GetOrganizationHookFleet)
 	s.ListRegistryPromotionCandidates = m(s.ListRegistryPromotionCandidates)
 	s.GetRegistryPromotionCandidate = m(s.GetRegistryPromotionCandidate)
 	s.PromoteRegistryCandidate = m(s.PromoteRegistryCandidate)
@@ -562,6 +566,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetMcpServerScopePinHandler(mux, h.SetMcpServerScopePin)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
 	MountGetHookClientsHandler(mux, h.GetHookClients)
+	MountGetOrganizationHookFleetHandler(mux, h.GetOrganizationHookFleet)
 	MountListRegistryPromotionCandidatesHandler(mux, h.ListRegistryPromotionCandidates)
 	MountGetRegistryPromotionCandidateHandler(mux, h.GetRegistryPromotionCandidate)
 	MountPromoteRegistryCandidateHandler(mux, h.PromoteRegistryCandidate)
@@ -4039,6 +4044,60 @@ func NewGetHookClientsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getHookClients")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationHookFleetHandler configures the mux to serve the "admin"
+// service "getOrganizationHookFleet" endpoint.
+func MountGetOrganizationHookFleetHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organizationHookFleet.get", f)
+}
+
+// NewGetOrganizationHookFleetHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "getOrganizationHookFleet"
+// endpoint.
+func NewGetOrganizationHookFleetHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationHookFleetRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationHookFleetResponse(encoder)
+		encodeError    = EncodeGetOrganizationHookFleetError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationHookFleet")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

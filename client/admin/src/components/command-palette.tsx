@@ -38,8 +38,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
-import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
-import { adminListCustomDomainsQuery } from "@/lib/gramAdminClient";
+import {
+  adminListCustomDomainsQuery,
+  organizationQuery,
+  organizationsListQuery,
+} from "@/lib/adminQueries";
 import { ADMIN_NAV } from "@/lib/adminNav";
 import {
   openOrganizationDashboard,

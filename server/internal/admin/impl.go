@@ -125,6 +125,7 @@ type Service struct {
 
 	hookFleet         HookFleetReader
 	hookFleetVersions HookFleetVersions
+
 	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
 	// CNAME targets. Empty leaves targets out of listCustomDomains.
 	customDomainTargetSuffix string

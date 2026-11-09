@@ -2317,6 +2317,43 @@ type GetHookClientsResponseBody struct {
 	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents" json:"device_agents" xml:"device_agents"`
 }
 
+// GetOrganizationHookFleetResponseBody is the type of the "admin" service
+// "getOrganizationHookFleet" endpoint HTTP response body.
+type GetOrganizationHookFleetResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// Length of the window in days.
+	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
+	// Start of the window. Counts cover the whole UTC day it falls on.
+	Since string `form:"since" json:"since" xml:"since"`
+	// The hooks release Speakeasy currently ships. Versions below it are behind.
+	LatestVersion string `form:"latest_version" json:"latest_version" xml:"latest_version"`
+	// The oldest supported hooks version. Versions below it are unsupported.
+	// Absent when no minimum is set.
+	MinimumVersion *string `form:"minimum_version,omitempty" json:"minimum_version,omitempty" xml:"minimum_version,omitempty"`
+	// Days without traffic after which an install counts as quiet.
+	QuietAfterDays int `form:"quiet_after_days" json:"quiet_after_days" xml:"quiet_after_days"`
+	// True when the organization has more installs than the response holds.
+	// Breakdowns then cover only the installs returned.
+	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
+	// Installs returned. Not the organization's full install count when truncated
+	// is true.
+	TotalInstalls int64 `form:"total_installs" json:"total_installs" xml:"total_installs"`
+	// Returned installs that have gone quiet. Only a window longer than
+	// quiet_after_days can return quiet installs.
+	QuietInstalls int64 `form:"quiet_installs" json:"quiet_installs" xml:"quiet_installs"`
+	// Hook events sent to the legacy endpoints in the window.
+	LegacyEvents int64 `form:"legacy_events" json:"legacy_events" xml:"legacy_events"`
+	// Installs per version, newest version first.
+	Versions []*AdminHookFleetVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
+	// Installs per install route, largest first.
+	Routes []*AdminHookFleetBucketResponseBody `form:"routes" json:"routes" xml:"routes"`
+	// Installs and events per endpoint generation, largest first.
+	Generations []*AdminHookFleetBucketResponseBody `form:"generations" json:"generations" xml:"generations"`
+	// Installs, most recently seen first.
+	Installs []*AdminHookFleetInstallResponseBody `form:"installs" json:"installs" xml:"installs"`
+}
+
 // ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
 // service "listRegistryPromotionCandidates" endpoint HTTP response body.
 type ListRegistryPromotionCandidatesResponseBody struct {
@@ -15345,6 +15382,196 @@ type GetHookClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetOrganizationHookFleetUnauthorizedResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetOrganizationHookFleetUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetForbiddenResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "forbidden" error.
+type GetOrganizationHookFleetForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetBadRequestResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "bad_request" error.
+type GetOrganizationHookFleetBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetNotFoundResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrganizationHookFleetNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetConflictResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrganizationHookFleetConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetUnsupportedMediaResponseBody is the type of the
+// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetOrganizationHookFleetUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetInvalidResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationHookFleetInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetInvariantViolationResponseBody is the type of the
+// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetOrganizationHookFleetInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetUnexpectedResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "unexpected" error.
+type GetOrganizationHookFleetUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationHookFleetGatewayErrorResponseBody is the type of the "admin"
+// service "getOrganizationHookFleet" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetOrganizationHookFleetGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListRegistryPromotionCandidatesUnauthorizedResponseBody is the type of the
 // "admin" service "listRegistryPromotionCandidates" endpoint HTTP response
 // body for the "unauthorized" error.
@@ -24607,6 +24834,62 @@ type AdminDeviceAgentCellResponseBody struct {
 	Machines int64 `form:"machines" json:"machines" xml:"machines"`
 }
 
+// AdminHookFleetVersionResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetVersionResponseBody struct {
+	// The hooks binary version, or empty for installs with no version.
+	Version string `form:"version" json:"version" xml:"version"`
+	// How the version compares to the release Speakeasy ships.
+	Status string `form:"status" json:"status" xml:"status"`
+	// Installs whose latest version is this one.
+	Installs int64 `form:"installs" json:"installs" xml:"installs"`
+}
+
+// AdminHookFleetBucketResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetBucketResponseBody struct {
+	// The route or endpoint generation. Empty when unknown.
+	Value string `form:"value" json:"value" xml:"value"`
+	// Installs whose latest value is this one.
+	Installs int64 `form:"installs" json:"installs" xml:"installs"`
+	// Hook events sent with this value across every install. Zero for routes.
+	Events int64 `form:"events" json:"events" xml:"events"`
+}
+
+// AdminHookFleetInstallResponseBody is used to define fields on response body
+// types.
+type AdminHookFleetInstallResponseBody struct {
+	// The project the install reports to. Empty for traffic that named no project.
+	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
+	// The user the install reports as. Empty when the install sent no identity.
+	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
+	// The machine's hostname. Empty when the install sent none.
+	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// The agent the hooks run in, such as claude, codex or cursor.
+	Harness string `form:"harness" json:"harness" xml:"harness"`
+	// The hooks binary version. Empty for the legacy curl hooks and for installs
+	// that sent no version.
+	Version string `form:"version" json:"version" xml:"version"`
+	// How the version compares to the release Speakeasy ships.
+	VersionStatus string `form:"version_status" json:"version_status" xml:"version_status"`
+	// The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed,
+	// ingest_script or ingest_binary. Empty for delivery failure reports only.
+	EndpointGeneration string `form:"endpoint_generation" json:"endpoint_generation" xml:"endpoint_generation"`
+	// How the hooks were installed, such as marketplace or download. Empty when
+	// unknown.
+	InstallRoute string `form:"install_route" json:"install_route" xml:"install_route"`
+	// First hook in the window.
+	FirstSeen string `form:"first_seen" json:"first_seen" xml:"first_seen"`
+	// Most recent hook.
+	LastSeen string `form:"last_seen" json:"last_seen" xml:"last_seen"`
+	// Hook events recorded in the window.
+	Events int64 `form:"events" json:"events" xml:"events"`
+	// Delivery failures the install reported in the window.
+	Errors int64 `form:"errors" json:"errors" xml:"errors"`
+	// True when the install has sent nothing for quiet_after_days or longer.
+	Quiet bool `form:"quiet" json:"quiet" xml:"quiet"`
+}
+
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
@@ -26914,6 +27197,72 @@ func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookCl
 		}
 	} else {
 		body.DeviceAgents = []*AdminDeviceAgentCellResponseBody{}
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetResponseBody builds the HTTP response body from
+// the result of the "getOrganizationHookFleet" endpoint of the "admin" service.
+func NewGetOrganizationHookFleetResponseBody(res *admin.AdminHookFleetResult) *GetOrganizationHookFleetResponseBody {
+	body := &GetOrganizationHookFleetResponseBody{
+		OrganizationID: res.OrganizationID,
+		WindowDays:     res.WindowDays,
+		Since:          res.Since,
+		LatestVersion:  res.LatestVersion,
+		MinimumVersion: res.MinimumVersion,
+		QuietAfterDays: res.QuietAfterDays,
+		Truncated:      res.Truncated,
+		TotalInstalls:  res.TotalInstalls,
+		QuietInstalls:  res.QuietInstalls,
+		LegacyEvents:   res.LegacyEvents,
+	}
+	if res.Versions != nil {
+		body.Versions = make([]*AdminHookFleetVersionResponseBody, len(res.Versions))
+		for i, val := range res.Versions {
+			if val == nil {
+				body.Versions[i] = nil
+				continue
+			}
+			body.Versions[i] = marshalAdminAdminHookFleetVersionToAdminHookFleetVersionResponseBody(val)
+		}
+	} else {
+		body.Versions = []*AdminHookFleetVersionResponseBody{}
+	}
+	if res.Routes != nil {
+		body.Routes = make([]*AdminHookFleetBucketResponseBody, len(res.Routes))
+		for i, val := range res.Routes {
+			if val == nil {
+				body.Routes[i] = nil
+				continue
+			}
+			body.Routes[i] = marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody(val)
+		}
+	} else {
+		body.Routes = []*AdminHookFleetBucketResponseBody{}
+	}
+	if res.Generations != nil {
+		body.Generations = make([]*AdminHookFleetBucketResponseBody, len(res.Generations))
+		for i, val := range res.Generations {
+			if val == nil {
+				body.Generations[i] = nil
+				continue
+			}
+			body.Generations[i] = marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody(val)
+		}
+	} else {
+		body.Generations = []*AdminHookFleetBucketResponseBody{}
+	}
+	if res.Installs != nil {
+		body.Installs = make([]*AdminHookFleetInstallResponseBody, len(res.Installs))
+		for i, val := range res.Installs {
+			if val == nil {
+				body.Installs[i] = nil
+				continue
+			}
+			body.Installs[i] = marshalAdminAdminHookFleetInstallToAdminHookFleetInstallResponseBody(val)
+		}
+	} else {
+		body.Installs = []*AdminHookFleetInstallResponseBody{}
 	}
 	return body
 }
@@ -37630,6 +37979,156 @@ func NewGetHookClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetHookCl
 	return body
 }
 
+// NewGetOrganizationHookFleetUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnauthorizedResponseBody {
+	body := &GetOrganizationHookFleetUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetForbiddenResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetForbiddenResponseBody {
+	body := &GetOrganizationHookFleetForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetBadRequestResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetBadRequestResponseBody {
+	body := &GetOrganizationHookFleetBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetNotFoundResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetNotFoundResponseBody {
+	body := &GetOrganizationHookFleetNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetConflictResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetConflictResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetConflictResponseBody {
+	body := &GetOrganizationHookFleetConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getOrganizationHookFleet" endpoint of
+// the "admin" service.
+func NewGetOrganizationHookFleetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnsupportedMediaResponseBody {
+	body := &GetOrganizationHookFleetUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetInvalidResponseBody builds the HTTP response body
+// from the result of the "getOrganizationHookFleet" endpoint of the "admin"
+// service.
+func NewGetOrganizationHookFleetInvalidResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetInvalidResponseBody {
+	body := &GetOrganizationHookFleetInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getOrganizationHookFleet" endpoint of
+// the "admin" service.
+func NewGetOrganizationHookFleetInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetInvariantViolationResponseBody {
+	body := &GetOrganizationHookFleetInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnexpectedResponseBody {
+	body := &GetOrganizationHookFleetUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationHookFleetGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getOrganizationHookFleet" endpoint of the
+// "admin" service.
+func NewGetOrganizationHookFleetGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetGatewayErrorResponseBody {
+	body := &GetOrganizationHookFleetGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListRegistryPromotionCandidatesUnauthorizedResponseBody builds the HTTP
 // response body from the result of the "listRegistryPromotionCandidates"
 // endpoint of the "admin" service.
@@ -45076,6 +45575,17 @@ func NewGetHookClientsPayload(windowDays int, refresh bool, adminSessionToken *s
 	v := &admin.GetHookClientsPayload{}
 	v.WindowDays = windowDays
 	v.Refresh = refresh
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetOrganizationHookFleetPayload builds a admin service
+// getOrganizationHookFleet endpoint payload.
+func NewGetOrganizationHookFleetPayload(organizationID string, windowDays int, adminSessionToken *string) *admin.GetOrganizationHookFleetPayload {
+	v := &admin.GetOrganizationHookFleetPayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
 	v.AdminSessionToken = adminSessionToken
 
 	return v

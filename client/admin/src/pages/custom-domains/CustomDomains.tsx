@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { adminListCustomDomainsQuery } from "@/lib/gramAdminClient";
+import { adminListCustomDomainsQuery } from "@/lib/adminQueries";
 import { fmtDateShort } from "@/lib/utils";
 
 import {

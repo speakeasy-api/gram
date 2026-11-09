@@ -1,4 +1,7 @@
-import { startLoginRedirect, redirectOnUnauthorized } from "@/lib/adminAuth";
+import {
+  redirecting,
+  redirectingClient as sharedRedirectingClient,
+} from "@/lib/adminSdkClient";
 export { isRedirectingToLogin, redirectOnUnauthorized } from "@/lib/adminAuth";
 
 import {
@@ -82,8 +85,6 @@ import type { SetMcpServerScopePinRequestBody } from "@gram/admin-client/models/
 import type { AdminMcpServerResourceScopes } from "@gram/admin-client/models/components/adminmcpserverresourcescopes";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
-import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
-import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -145,7 +146,6 @@ import {
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
-import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
 import {
   buildAdminListOrganizationActivityInfiniteQuery,
@@ -170,21 +170,7 @@ import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/mod
 // fetch defaults preserve the ambient first-party gram_admin cookie; do not set
 // credentials, mode, Authorization, or Cookie here.
 const mutationClient = new GramCore({ serverURL: window.location.origin });
-const redirectingHTTPClient = new HTTPClient().addHook("response", (response) =>
-  startLoginRedirect(response),
-);
-const redirectingClient = new GramCore({
-  serverURL: window.location.origin,
-  httpClient: redirectingHTTPClient,
-});
-
-async function redirecting<T>(operation: Promise<T>): Promise<T> {
-  try {
-    return await operation;
-  } catch (error) {
-    return redirectOnUnauthorized(error);
-  }
-}
+const redirectingClient = sharedRedirectingClient();
 
 function createAdminSessionQuery() {
   const generated = buildAdminGetSessionQuery(redirectingClient);
@@ -1191,27 +1177,6 @@ export function disableUpstreamAuthEnforcement(
       request: { organizationId: organizationID },
     }),
   );
-}
-
-function createAdminListCustomDomainsQuery(
-  request: AdminListCustomDomainsRequest,
-) {
-  const generated = buildAdminListCustomDomainsQuery(
-    redirectingClient,
-    request,
-  );
-  return queryOptions({
-    ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
-  });
-}
-
-// Every live custom domain, or the one an organization owns. Both filters are
-// applied by the server, so the query key carries them.
-export function adminListCustomDomainsQuery(
-  request: AdminListCustomDomainsRequest = {},
-): ReturnType<typeof createAdminListCustomDomainsQuery> {
-  return createAdminListCustomDomainsQuery(request);
 }
 
 function createRegistryPromotionCandidatesQuery(
