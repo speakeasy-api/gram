@@ -13601,6 +13601,7 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
   reauthorization_required_at timestamptz,
   reauthorization_reason TEXT,
   revoked_at timestamptz,
+  switched_connection_id uuid,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -13626,7 +13627,9 @@ CREATE TABLE IF NOT EXISTS platform_mcp_connections (
   CONSTRAINT platform_mcp_connections_organization_id_fkey
     FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE CASCADE,
   CONSTRAINT platform_mcp_connections_oauth_client_id_fkey
-    FOREIGN KEY (oauth_client_id) REFERENCES platform_mcp_oauth_clients (id) ON DELETE CASCADE
+    FOREIGN KEY (oauth_client_id) REFERENCES platform_mcp_oauth_clients (id) ON DELETE CASCADE,
+  CONSTRAINT platform_mcp_connections_switched_connection_id_fkey
+    FOREIGN KEY (switched_connection_id) REFERENCES platform_mcp_connections (id) ON DELETE SET NULL
 );
 
 COMMENT ON COLUMN platform_mcp_connections.id IS '@access: confidential';
@@ -13640,6 +13643,8 @@ COMMENT ON COLUMN platform_mcp_connections.authorization_expires_at IS '@access:
 COMMENT ON COLUMN platform_mcp_connections.reauthorization_required_at IS '@access: confidential';
 COMMENT ON COLUMN platform_mcp_connections.reauthorization_reason IS '@access: confidential';
 COMMENT ON COLUMN platform_mcp_connections.revoked_at IS '@access: confidential';
+COMMENT ON COLUMN platform_mcp_connections.switched_connection_id IS 'The connection, in another organization, that this connection''s tokens act through after the user switched organization in chat. Null means the tokens act in this connection''s own organization.
+@access: confidential';
 COMMENT ON COLUMN platform_mcp_connections.created_at IS '@access: confidential';
 COMMENT ON COLUMN platform_mcp_connections.updated_at IS '@access: confidential';
 

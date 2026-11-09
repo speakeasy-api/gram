@@ -110,6 +110,9 @@ type PlatformMcpConnection struct {
 	ReauthorizationReason pgtype.Text
 	// @access: confidential
 	RevokedAt pgtype.Timestamptz
+	// The connection, in another organization, that this connection's tokens act through after the user switched organization in chat. Null means the tokens act in this connection's own organization.
+	// @access: confidential
+	SwitchedConnectionID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

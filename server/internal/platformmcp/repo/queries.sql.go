@@ -554,7 +554,7 @@ INSERT INTO platform_mcp_connections (
     $5,
     $6
 )
-RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 `
 
 type CreatePlatformMCPConnectionParams struct {
@@ -588,6 +588,7 @@ func (q *Queries) CreatePlatformMCPConnection(ctx context.Context, arg CreatePla
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1445,7 +1446,7 @@ func (q *Queries) GetActivePlatformMCPCatalogRegistration(ctx context.Context, a
 }
 
 const getActivePlatformMCPConnection = `-- name: GetActivePlatformMCPConnection :one
-SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 FROM platform_mcp_connections
 WHERE organization_id = $1
   AND subject_urn = $2
@@ -1474,6 +1475,7 @@ func (q *Queries) GetActivePlatformMCPConnection(ctx context.Context, arg GetAct
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1481,7 +1483,7 @@ func (q *Queries) GetActivePlatformMCPConnection(ctx context.Context, arg GetAct
 }
 
 const getActivePlatformMCPConnectionByID = `-- name: GetActivePlatformMCPConnectionByID :one
-SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id
+SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.switched_connection_id, connection.created_at, connection.updated_at, client.client_id
 FROM platform_mcp_connections AS connection
 JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
@@ -1508,6 +1510,7 @@ type GetActivePlatformMCPConnectionByIDRow struct {
 	ReauthorizationRequiredAt pgtype.Timestamptz
 	ReauthorizationReason     pgtype.Text
 	RevokedAt                 pgtype.Timestamptz
+	SwitchedConnectionID      uuid.NullUUID
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	ClientID                  string
@@ -1528,6 +1531,7 @@ func (q *Queries) GetActivePlatformMCPConnectionByID(ctx context.Context, arg Ge
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClientID,
@@ -1536,7 +1540,7 @@ func (q *Queries) GetActivePlatformMCPConnectionByID(ctx context.Context, arg Ge
 }
 
 const getActivePlatformMCPConnectionForFeedbackForUpdate = `-- name: GetActivePlatformMCPConnectionForFeedbackForUpdate :one
-SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id
+SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.switched_connection_id, connection.created_at, connection.updated_at, client.client_id
 FROM platform_mcp_connections AS connection
 JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
@@ -1564,6 +1568,7 @@ type GetActivePlatformMCPConnectionForFeedbackForUpdateRow struct {
 	ReauthorizationRequiredAt pgtype.Timestamptz
 	ReauthorizationReason     pgtype.Text
 	RevokedAt                 pgtype.Timestamptz
+	SwitchedConnectionID      uuid.NullUUID
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	ClientID                  string
@@ -1584,6 +1589,7 @@ func (q *Queries) GetActivePlatformMCPConnectionForFeedbackForUpdate(ctx context
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClientID,
@@ -2350,7 +2356,7 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, 
 }
 
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
-SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
+SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.switched_connection_id, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
 FROM platform_mcp_connections AS connection
 JOIN platform_mcp_oauth_clients AS client
   ON client.id = connection.oauth_client_id
@@ -2376,6 +2382,7 @@ type GetPlatformMCPConnectionForUpdateRow struct {
 	ReauthorizationRequiredAt pgtype.Timestamptz
 	ReauthorizationReason     pgtype.Text
 	RevokedAt                 pgtype.Timestamptz
+	SwitchedConnectionID      uuid.NullUUID
 	CreatedAt                 pgtype.Timestamptz
 	UpdatedAt                 pgtype.Timestamptz
 	ClientID                  string
@@ -2397,6 +2404,7 @@ func (q *Queries) GetPlatformMCPConnectionForUpdate(ctx context.Context, arg Get
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ClientID,
@@ -3792,7 +3800,7 @@ WITH target_session AS MATERIALIZED (
       AND session.refresh_token_hash = $2
 ),
 locked_connection AS MATERIALIZED (
-    SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at
+    SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.switched_connection_id, connection.created_at, connection.updated_at
     FROM platform_mcp_connections AS connection
     JOIN target_session
       ON target_session.connection_id = connection.id
@@ -5365,7 +5373,7 @@ func (q *Queries) ListPlatformMCPCatalogRegistrationsByRemoteMcpServer(ctx conte
 }
 
 const listPlatformMCPClientConnectionsForUpdate = `-- name: ListPlatformMCPClientConnectionsForUpdate :many
-SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+SELECT id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 FROM platform_mcp_connections
 WHERE oauth_client_id = $1
   AND revoked_at IS NULL
@@ -5393,6 +5401,7 @@ func (q *Queries) ListPlatformMCPClientConnectionsForUpdate(ctx context.Context,
 			&i.ReauthorizationRequiredAt,
 			&i.ReauthorizationReason,
 			&i.RevokedAt,
+			&i.SwitchedConnectionID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -7686,7 +7695,7 @@ WHERE id = $3
   AND organization_id = $4
   AND active_generation = $5
   AND revoked_at IS NULL
-RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 `
 
 type MarkPlatformMCPConnectionReauthorizationRequiredParams struct {
@@ -7718,6 +7727,7 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -8644,7 +8654,7 @@ SET revoked_at = $1,
 WHERE id = $2
   AND organization_id = $3
   AND revoked_at IS NULL
-RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 `
 
 type RevokePlatformMCPConnectionParams struct {
@@ -8668,6 +8678,7 @@ func (q *Queries) RevokePlatformMCPConnection(ctx context.Context, arg RevokePla
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -8816,7 +8827,7 @@ SET active_generation = $1,
 WHERE id = $4
   AND organization_id = $5
   AND revoked_at IS NULL
-RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, created_at, updated_at
+RETURNING id, organization_id, subject_urn, oauth_client_id, active_generation, authorized_at, reauthorized_at, authorization_expires_at, reauthorization_required_at, reauthorization_reason, revoked_at, switched_connection_id, created_at, updated_at
 `
 
 type RotatePlatformMCPConnectionGenerationParams struct {
@@ -8848,6 +8859,7 @@ func (q *Queries) RotatePlatformMCPConnectionGeneration(ctx context.Context, arg
 		&i.ReauthorizationRequiredAt,
 		&i.ReauthorizationReason,
 		&i.RevokedAt,
+		&i.SwitchedConnectionID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
