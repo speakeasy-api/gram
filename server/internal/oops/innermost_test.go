@@ -22,4 +22,8 @@ func TestInnermost(t *testing.T) {
 	outer := oops.E(oops.CodeBadRequest, fmt.Errorf("wrapped: %w", inner), "tool call was rejected as invalid or not permitted")
 	require.Same(t, inner, oops.Innermost(outer))
 	require.Same(t, inner, oops.Innermost(fmt.Errorf("context: %w", outer)))
+
+	joined := oops.E(oops.CodeUnexpected, errors.Join(errors.New("plain"), outer), "tool call failed")
+	require.Same(t, inner, oops.Innermost(joined), "a ShareableError under errors.Join is found")
+	require.Same(t, inner, oops.Innermost(errors.Join(errors.New("plain"), outer)))
 }
