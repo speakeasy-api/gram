@@ -50,6 +50,12 @@ run = "mise run start:agentation-server"
 ready_output = "Agentation server listening on"
 retry = 0
 
+# Explicit fixture:start only; excluded from default and application startup.
+[daemons.mcp-fixture]
+run = "mise run fixture:run"
+ready_cmd = "mise run fixture:smoke --health-only"
+retry = 0
+
 [daemons.park]
 run = "mise run park"
 ready_output = "Parked on port"
