@@ -150,14 +150,26 @@ func consentAttemptID(raw string) (string, error) {
 }
 
 // loadConsentInventoryDraft reads the attempt's draft, creating the initial
-// empty draft on first use.
-func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) (consentToolInventory, error) {
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+// empty draft on first use. consenter identifies whose consent it is for the
+// re-consent forecast.
+func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt, consenter string) (consentToolInventory, error) {
+	backendHashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
 		return consentToolInventory{}, err
 	}
+	backendHash := backendHashes.decided
 	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt, endpointToolSelectionResource(endpoint)))
 	if err == nil {
+		// Without an MCP server there is no upstream issuer to compare.
+		if endpoint.McpServerID.Valid {
+			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+				organizationID: endpoint.OrganizationID,
+				serverID:       endpoint.McpServerID.UUID,
+				site:           upstreamIssuerReconsentSiteInventoryDraft,
+				consenter:      consenter,
+				outcome:        upstreamIssuerReconsent(cached.BackendHash, backendHashes.decided, backendHashes.other, backendHashes.otherErr),
+			})
+		}
 		if cached.BackendHash != backendHash {
 			return consentToolInventory{}, errConsentConfigurationChanged
 		}

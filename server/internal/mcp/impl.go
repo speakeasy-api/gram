@@ -195,6 +195,9 @@ type Service struct {
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
 	mandatoryShadowLog *onceLog
+	// upstreamIssuerParityLog dedupes upstream issuer disagreement and
+	// re-consent forecast logs.
+	upstreamIssuerParityLog *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -652,6 +655,7 @@ func NewService(
 		posthog:                   posthog,
 		features:                  features,
 		mandatoryShadowLog:        newOnceLog(),
+		upstreamIssuerParityLog:   newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),

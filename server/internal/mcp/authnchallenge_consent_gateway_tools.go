@@ -233,7 +233,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	for _, member := range members {
 		ids = append(ids, member.serverID)
 	}
-	backendHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
+	backendHashes, _, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
 	if err != nil {
 		return nil, nil, nil, err
 	}

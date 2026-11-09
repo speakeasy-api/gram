@@ -532,6 +532,7 @@ func (s *Service) buildMemberDispatch(
 		return nil, hostingstate.NotHosted(), nil, err
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
+	s.compareHostedMemberTokens(ctx, logger, gate.organizationID, tokens, member, hostedTokens, err)
 	if err != nil {
 		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
