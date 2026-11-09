@@ -4,6 +4,7 @@ import { useRBAC } from "@/hooks/useRBAC";
 import { AppRoute } from "@/routes";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React from "react";
+import { visibleNavEntries } from "./sidebar-nav-layout";
 
 /** A nav sub-item plus the scopes that make it visible. */
 export interface ScopeGatedNavEntry {
@@ -41,11 +42,7 @@ export function ScopeGatedNavGroup({
 }): React.JSX.Element | null {
   const { hasAnyScope } = useRBAC();
 
-  const visible = items.filter((entry) => {
-    if (entry.scope === undefined) return true;
-    const scopes = Array.isArray(entry.scope) ? entry.scope : [entry.scope];
-    return hasAnyScope(scopes, entry.resourceId, entry.projectId);
-  });
+  const visible = visibleNavEntries(items, hasAnyScope);
 
   const first = visible[0];
   if (!first) return null;
