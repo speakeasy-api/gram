@@ -206,8 +206,8 @@ export function AgentIdentityProfile({
           }
         >
           {/* Issuing is a flow of its own, so the button puts this section
-              into it. Without this the control is enabled and does nothing:
-              the panel only opens its own wizard in creation mode. */}
+              into it. The panel only lists and revokes keys: without this the
+              control is enabled and does nothing. */}
           {/* Whichever way in the agent actually uses comes first: a
               federated agent never holds a key, and leading with the key
               panel told it that it could not authenticate. Only the order and
