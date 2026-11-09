@@ -234,6 +234,11 @@ GRAM_SSL_CERT_FILE = "{{config_root}}/local/ssl/certs/local.pem"
 GRAM_SSL_KEY_FILE = "{{config_root}}/local/ssl/keys/local-key.pem"
 ## Additional certificate DNS names and IPs, comma-separated; zero:tailscale sets this locally.
 # GRAM_SSL_EXTRA_HOSTS = ""
+## Local certificate source: "mkcert" (a CA local to this machine) or
+## "tailscale" (a publicly trusted certificate for this machine's Tailnet DNS
+## name, renewed by `mise run tls:tailscale`). zero:tailscale sets it locally
+## when the tailnet has HTTPS certificates enabled.
+GRAM_TLS_PROVIDER = "mkcert"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

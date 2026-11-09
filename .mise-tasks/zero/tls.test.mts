@@ -261,3 +261,69 @@ test("validation accepts wildcard and international DNS names alongside IPv6", (
     "fd7a:115c:a1e0::1",
   ]);
 });
+
+test("Tailscale provider fetches the Tailnet certificate instead of running mkcert", (t) => {
+  const f = fixture(t);
+  const host = "dev-machine.example.ts.net";
+  const calls = f.run({
+    GRAM_TLS_PROVIDER: "tailscale",
+    GRAM_HOST: host,
+    GRAM_SERVER_URL: `https://${host}:8080`,
+    GRAM_SITE_URL: `https://${host}:5173`,
+    GRAM_DEVIDP_EXTERNAL_URL: `https://${host}:35291`,
+  });
+  assert.equal(
+    calls.some((call) => call.name === "mkcert"),
+    false,
+  );
+  const mise = calls.filter((call) => call.name === "mise");
+  assert.deepEqual(mise[0]?.args, ["run", "tls:tailscale", "--domain", host]);
+  for (const expected of [
+    "GRAM_SSL_CERT_FILE={{config_root}}/local/ssl/tailscale/cert.pem",
+    "GRAM_SSL_KEY_FILE={{config_root}}/local/ssl/tailscale/key.pem",
+    "GRAM_HTTP_SCHEME=https",
+  ]) {
+    assert.ok(
+      mise.some((call) => call.args.includes(expected)),
+      expected,
+    );
+  }
+});
+
+test("Tailscale provider rejects HTTPS endpoints on other hosts", (t) => {
+  const f = fixture(t);
+  const host = "dev-machine.example.ts.net";
+  const { result, calls } = f.runResult({
+    GRAM_TLS_PROVIDER: "tailscale",
+    GRAM_HOST: host,
+    GRAM_SERVER_URL: `https://${host}:8080`,
+    GRAM_SITE_URL: `https://${host}:5173`,
+    GRAM_DEVIDP_EXTERNAL_URL: "https://localhost:35291",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /GRAM_DEVIDP_EXTERNAL_URL uses localhost/);
+  assert.equal(
+    calls.some((call) => call.name === "mise" || call.name === "mkcert"),
+    false,
+  );
+});
+
+test("Tailscale provider still disables TLS for HTTP-only endpoints", (t) => {
+  const f = fixture(t);
+  const calls = f.run({
+    GRAM_TLS_PROVIDER: "tailscale",
+    GRAM_SERVER_URL: "http://localhost:8080",
+    GRAM_SITE_URL: "http://localhost:5173",
+    GRAM_DEVIDP_EXTERNAL_URL: "http://localhost:35291",
+  });
+  assert.ok(
+    calls.some(
+      (call) =>
+        call.name === "mise" && call.args.includes("GRAM_HTTP_SCHEME=http"),
+    ),
+  );
+  assert.equal(
+    calls.some((call) => call.args.includes("tls:tailscale")),
+    false,
+  );
+});

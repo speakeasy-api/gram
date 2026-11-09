@@ -23,6 +23,7 @@ import { parseTOML } from "confbox";
 interface TailscaleStatus {
   BackendState?: string;
   TailscaleIPs?: string[];
+  CertDomains?: string[] | null;
   Self?: { DNSName?: string; TailscaleIPs?: string[] };
 }
 
@@ -239,12 +240,28 @@ export async function setupTailscale(
     ),
   ];
   const savedHosts = new Set(commaList(local.env?.["GRAM_SSL_EXTRA_HOSTS"]));
+  // With HTTPS certificates enabled for the tailnet, browsers on other devices
+  // trust the stack without installing this machine's mkcert CA.
+  const tailnetCerts =
+    Array.isArray(status.CertDomains) && status.CertDomains.includes(hostname);
+  const certSettings: [string, string][] = tailnetCerts
+    ? [
+        ["GRAM_TLS_PROVIDER", "tailscale"],
+        // Runtime containers otherwise call back through host.docker.internal,
+        // which the Tailnet certificate does not cover. An explicit URL is
+        // developer-owned and stays.
+        ...(local.env?.["GRAM_ASSISTANT_RUNTIME_SERVER_URL"] === undefined
+          ? [["GRAM_ASSISTANT_RUNTIME_SERVER_URL", "{{env.GRAM_SERVER_URL}}"]]
+          : []),
+      ]
+    : [];
   if (
     !force &&
     local.env?.["GRAM_HOST"] === hostname &&
     local.env?.["GRAM_BIND_IP"] === bindAddress &&
     [hostname, ...ips].every((host) => savedHosts.has(host)) &&
-    dependents.every(([key, value]) => local.env?.[key] === value)
+    dependents.every(([key, value]) => local.env?.[key] === value) &&
+    certSettings.every(([key, value]) => local.env?.[key] === value)
   ) {
     skip(
       "Tailscale development settings are already configured for this machine.",
@@ -259,7 +276,9 @@ export async function setupTailscale(
     options.prompt ??
     ((host, ip) =>
       confirm({
-        message: `Configure local development for ${host} over Tailscale and bind public services to ${ip}?`,
+        message: tailnetCerts
+          ? `Configure local development for ${host} over Tailscale, bind public services to ${ip}, and use its Tailscale HTTPS certificate?`
+          : `Configure local development for ${host} over Tailscale and bind public services to ${ip}?`,
         initialValue: false,
       }))
   )(hostname, address);
@@ -304,9 +323,15 @@ export async function setupTailscale(
         ]),
       ].join(","),
     ],
+    ...certSettings,
   ];
   saveSettings(root, env, settings, original);
   console.log("Tailscale development settings saved in mise.local.toml.");
+  if (!tailnetCerts) {
+    console.log(
+      "HTTPS certificates are not enabled for this tailnet, so other devices must trust this machine's mkcert CA. Enable them on the DNS page of the Tailscale admin console, then run `mise run zero:tailscale --force`.",
+    );
+  }
   console.log(
     "Run `mise run zero:tls` to refresh certificates; ./zero runs it next.",
   );

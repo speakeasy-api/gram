@@ -150,6 +150,13 @@ retry = 0
 # outlives the repo. pitchfork is already running the stack it is watching, so
 # the scheduler comes and goes with it: a paused worktree needs no scheduler,
 # and `mise run wake` brings this back with everything else.
+# Not a service: renews this worktree's Tailscale HTTPS certificate daily and
+# restarts the daemons that serve it when it changes. Started by start only when
+# GRAM_TLS_PROVIDER=tailscale, and stopped with the stack like idle-pause.
+[daemons.tailscale-cert]
+run = "mise run tls:tailscale --restart"
+cron = "0 17 4 * * *"
+
 [daemons.idle-pause]
 run = "mise run idle-pause"
 env = { COMPOSE_PROJECT_NAME = "gram" }

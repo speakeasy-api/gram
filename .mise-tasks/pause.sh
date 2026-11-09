@@ -79,6 +79,7 @@ fi
 if pitchfork supervisor status &> /dev/null; then
     pitchfork stop --group application
     pitchfork stop idle-pause
+    pitchfork stop tailscale-cert
 fi
 
 # Pause before stopping Temporal to avoid catchup after deliberate sleep.

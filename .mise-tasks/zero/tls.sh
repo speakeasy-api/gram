@@ -3,6 +3,9 @@
 #MISE description="Install SSL certs for local development."
 #MISE hide=true
 #USAGE flag "--extra-hosts <hosts>" env="GRAM_SSL_EXTRA_HOSTS" default="" help="Comma-separated additional certificate DNS names and IP addresses."
+#USAGE flag "--provider <provider>" env="GRAM_TLS_PROVIDER" default="mkcert" help="Certificate source: mkcert (local CA) or tailscale (this machine's Tailnet certificate)." {
+#USAGE   choices "mkcert" "tailscale"
+#USAGE }
 
 set -euo pipefail
 
@@ -60,6 +63,28 @@ turn_on_tls() {
 
   mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/certs/local.pem"
   mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/keys/local-key.pem"
+  mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
+}
+
+use_tailscale_cert() {
+  local name url host
+  # The Tailscale certificate covers only the machine's Tailnet DNS name, so
+  # every HTTPS endpoint has to use it.
+  for name in GRAM_SERVER_URL GRAM_SITE_URL GRAM_DEVIDP_EXTERNAL_URL; do
+    url="${!name:-}"
+    is_https "$url" || continue
+    host="$(extract_hostname "$url")"
+    if [ "$host" != "${GRAM_HOST:-}" ]; then
+      echo "error: $name uses $host, but the Tailscale certificate only covers GRAM_HOST (${GRAM_HOST:-unset})." >&2
+      echo "Run \`mise run zero:tailscale --force\`, or set GRAM_TLS_PROVIDER=mkcert in mise.local.toml." >&2
+      exit 1
+    fi
+  done
+
+  echo "Found https endpoints: using the Tailscale certificate for $GRAM_HOST"
+  mise run tls:tailscale --domain "$GRAM_HOST"
+  mise set --file mise.local.toml GRAM_SSL_CERT_FILE="{{config_root}}/local/ssl/tailscale/cert.pem"
+  mise set --file mise.local.toml GRAM_SSL_KEY_FILE="{{config_root}}/local/ssl/tailscale/key.pem"
   mise set --file mise.local.toml GRAM_HTTP_SCHEME=https
 }
 
@@ -250,6 +275,10 @@ gen_keypair() {
 main() {
   local hosts
   if ! detect_tls; then turn_off_tls && exit 0; fi
+  if [ "${usage_provider:-${GRAM_TLS_PROVIDER:-mkcert}}" = tailscale ]; then
+    use_tailscale_cert
+    exit 0
+  fi
 
   check_command mkcert
   hosts="$(cert_names)"
