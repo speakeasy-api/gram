@@ -293,7 +293,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
 		{CodeUpstreamCredentialDenied, WhoAdmin, []string{"not allowed", "ask for access"}, []string{"this server.", "account"}},
 		{CodeUpstreamCredentialNotChosen, WhoAdmin, []string{"more than one", "choose"}, []string{"the app", "not set up"}},
-		{CodeCredentialChoiceInvalid, WhoApp, []string{"the app picked", "does not fit"}, []string{"does not accept"}},
+		{CodeCredentialChoiceInvalid, WhoApp, []string{"sign-in choice", "does not fit"}, []string{"does not accept", "picked"}},
 		{CodeSignInMethodNotAccepted, WhoApp, []string{"does not accept"}, []string{"ask for it to be allowed", "not allowed"}},
 	}
 	for _, tc := range cases {

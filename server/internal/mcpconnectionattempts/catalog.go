@@ -298,5 +298,5 @@ var (
 	CodeUpstreamCredentialDenied    = define("upstream_credential_denied", OutcomeBlocked, WhoAdmin, "This identity is not allowed to use this server's sign-in for the service.", "Ask for access to that sign-in.")
 	CodeUpstreamCredentialNotChosen = define("upstream_credential_not_chosen", OutcomeFailed, WhoAdmin, "This server has more than one sign-in for the service, and none was chosen.", "Choose which sign-in this identity uses for the server.")
 	CodeSignInMethodNotAccepted     = define("sign_in_method_not_accepted", OutcomeFailed, WhoApp, "This server does not accept this kind of sign-in.", "Connect to a server that accepts it, or use another way to sign in.")
-	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app picked a sign-in that does not fit this server.", "Update the app, or report the problem to its makers.")
+	CodeCredentialChoiceInvalid     = define("credential_choice_invalid", OutcomeFailed, WhoApp, "The app's sign-in choice does not fit this server.", "Update the app, or report the problem to its makers.")
 )
