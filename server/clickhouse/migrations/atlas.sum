@@ -1,4 +1,4 @@
-h1:4tM53Hwr7SrRAIqOv/Pwcky4A0NnRRn02D96pbabemE=
+h1:qb4ezIVJe5N9XltJCvzFl5mgaQjvhYdwcwJ3uG2LgNM=
 20251013090028_initial.sql h1:I90GAjfJN/3i4nLe4AThT5OW/Qgc0+5LOI2jZ6WQZME=
 20251028141444_add_indexes.sql h1:CDwn2EdBZ7Nrn9hx5vYguR1ljlP5hTxiOI6n/I25Cpk=
 20251029120230_add_other_indexes.sql h1:3EtD+3hW8+s5me23va+BdfiIKmfQKOdv4glrQ34fle4=
@@ -136,3 +136,4 @@ h1:4tM53Hwr7SrRAIqOv/Pwcky4A0NnRRn02D96pbabemE=
 20261023160527_trace-summaries-mcp-server-id.sql h1:VAT6mnAXtfYlLqhgfVutMZ+YnNV7BwYXqy6RHG9Hixo=
 20261026212708_attribute-agent-hook-events.sql h1:1OvSLMcqrxbheQ1GaGqeshqLPS1HKnOqM3Be/XzE+5E=
 20261104175254_connection-events.sql h1:XA3LzyikWv+QUg2AHnq3Ifa4VY3GBB+9Zz5EnzGH9qk=
+20261105132929_preserve-trace-tool-source.sql h1:2luU3Yba70FBkhT17zfbG48PHRIQFFn81azigKRf64I=
