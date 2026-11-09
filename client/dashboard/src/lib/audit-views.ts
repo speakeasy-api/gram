@@ -29,7 +29,7 @@ export const VIEW_OPTIONS: {
   {
     value: "all",
     label: "All changes",
-    tooltip: "Every configuration change, from your team and automated",
+    tooltip: "Every configuration change, made by your team or automatically",
   },
 ];
 
@@ -66,7 +66,7 @@ export const VIEW_INSIGHTS: Record<AuditView, string> = {
     "Showing automated changes: changes Speakeasy made on its own, such as publishing plugins.",
   security:
     "Showing access activity: machine access such as agents' runtimes admitting their workload identity.",
-  all: "Showing all configuration changes, from the team and automated.",
+  all: "Showing all configuration changes, made by the team or automatically.",
 };
 
 export function parseAuditView(value: string): AuditView {
