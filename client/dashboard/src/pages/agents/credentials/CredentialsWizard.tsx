@@ -312,6 +312,7 @@ export function CredentialsWizard({
   agent,
   initialPlatformKey,
   editing = false,
+  signInOnly = false,
   grants,
   onDone,
   onBusy,
@@ -329,6 +330,14 @@ export function CredentialsWizard({
    * issued from the agent's own page, and a platform from this flow.
    */
   editing?: boolean;
+  /**
+   * Issue another key to an agent that already exists, the same way its
+   * first key was issued: only the Agent sign-in, Install and Verify steps,
+   * for the servers it already reaches. The servers and their sign-in belong
+   * to the agent, not to one key, so they are not asked again. Needs `agent`,
+   * `editing` and `grants`.
+   */
+  signInOnly?: boolean;
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -432,7 +441,10 @@ export function CredentialsWizard({
   // back to. Replace rather than push: the browser's Back belongs to the
   // page the reader came from, and the wizard has its own Back.
   const [params, setParams] = useSearchParams();
-  const defaultStep = initialPlatformKey === undefined ? 0 : 1;
+  // Issuing another key starts at Agent sign-in: the steps before it describe
+  // the agent itself, which already exists.
+  const firstStep = signInOnly ? 3 : 0;
+  const defaultStep = signInOnly ? 3 : initialPlatformKey === undefined ? 0 : 1;
   // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
   // a deep link to the first step and leaves `defaultStep` unreachable.
   const linked = params.get("step");
@@ -528,7 +540,9 @@ export function CredentialsWizard({
   // while the reader has not chosen something else.
   const adopted = useRef(false);
   useEffect(() => {
-    if (adopted.current || !editing || admitted === undefined) return;
+    // Issuing a key is an API key whatever else the agent signs in with.
+    if (adopted.current || !editing || signInOnly || admitted === undefined)
+      return;
     // Both, not just the admission: the entry is looked up in the catalog, so
     // running before it arrives latches the custom key, and `adopted` then
     // stops the real platform from ever being recognised.
@@ -1575,9 +1589,13 @@ export function CredentialsWizard({
       setStep(defaultStep);
       return;
     }
+    if (step < firstStep) {
+      setStep(firstStep);
+      return;
+    }
     if (step <= lastStep) return;
     setStep(lastStep);
-  }, [existing, step, defaultStep, lastStep, setStep]);
+  }, [existing, step, defaultStep, firstStep, lastStep, setStep]);
 
   /**
    * Create the agent, discover what it may delegate, issue its first key, and
@@ -1740,8 +1758,8 @@ export function CredentialsWizard({
   );
   const summary = (
     <WizardSummary
-      step={step + 1}
-      stepCount={stepNames.length}
+      step={step + 1 - firstStep}
+      stepCount={stepNames.length - firstStep}
       name={name}
       rows={[
         {
@@ -2263,7 +2281,7 @@ export function CredentialsWizard({
           return (
             <WizardFooter
               note={note}
-              onBack={() => setStep(2)}
+              onBack={signInOnly ? undefined : () => setStep(2)}
               primary={
                 <Button
                   disabled={
@@ -2280,21 +2298,29 @@ export function CredentialsWizard({
             />
           );
         }
+        // An existing agent's key reaches the servers read back from its
+        // grants. Until that read has landed the reach is empty, and a key
+        // issued then would reach none of them.
+        const readingReach = editing && !reconciled;
         return (
           <WizardFooter
             note={
-              existing
-                ? "Issuing a key is recorded in the organization audit log."
-                : !project.id
-                  ? "Reading the project this agent will belong to…"
-                  : "Creating the agent is recorded in the organization audit log."
+              readingReach
+                ? "Reading the servers this agent reaches…"
+                : existing
+                  ? "Issuing a key is recorded in the organization audit log."
+                  : !project.id
+                    ? "Reading the project this agent will belong to…"
+                    : "Creating the agent is recorded in the organization audit log."
             }
-            onBack={() => setStep(2)}
+            onBack={signInOnly ? undefined : () => setStep(2)}
             primary={
               <Button
                 // An agent belongs to the project it is made in, so there is
                 // nothing to create until that project has resolved.
-                disabled={provisioning || (!existing && !project.id)}
+                disabled={
+                  provisioning || readingReach || (!existing && !project.id)
+                }
                 onClick={() => void provision()}
               >
                 {provisioning
@@ -2364,23 +2390,28 @@ export function CredentialsWizard({
   return (
     <div className="space-y-6">
       <WizardStepper
-        steps={stepNames}
-        current={step}
+        // Issuing another key shows only the steps it walks through, so the
+        // count reads "1 of 3" rather than starting on step 4.
+        steps={stepNames.slice(firstStep)}
+        current={step - firstStep}
         // While creating, only a step already completed is a destination: the
         // ones ahead are built from choices not yet made. Provisioning an
         // existing agent has no such order, so every step is reachable until
         // the key is issued.
         // Editing has settled everything a credential step would ask.
-        settledFrom={editing ? 3 : undefined}
+        // Issuing another key is the credential steps themselves, so none of
+        // them is settled.
+        settledFrom={editing && !signInOnly ? 3 : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
         // to it and finish the flow having provisioned nothing.
-        onJump={(next) =>
+        onJump={(index) => {
+          const next = index + firstStep;
           setStep(
             secret || credential === "workload" ? next : Math.min(next, 4),
-          )
-        }
+          );
+        }}
       />
       {error && (
         <p

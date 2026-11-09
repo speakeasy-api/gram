@@ -2220,6 +2220,7 @@ describe("Editing an agent that already exists", () => {
       grants?: unknown;
       withoutAuth?: boolean;
       permissions?: { write: boolean; authorize: boolean };
+      signInOnly?: boolean;
     } = {},
   ) {
     const client = new QueryClient({
@@ -2239,6 +2240,7 @@ describe("Editing an agent that already exists", () => {
                 : agent
             }
             editing
+            signInOnly={over.signInOnly}
             grants={
               [
                 ...((over.grants ?? grants) as never[]),
@@ -2369,6 +2371,54 @@ describe("Editing an agent that already exists", () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  describe("issuing another key from the Agent sign-in tab", () => {
+    it("shows only Agent sign-in, Install and Verify, starting on Agent sign-in", async () => {
+      editing({ signInOnly: true });
+      expect(
+        await screen.findByRole("heading", { name: "Agent sign-in" }),
+      ).toBeTruthy();
+      // The agent's name and servers belong to the agent, not to one key.
+      expect(screen.queryByLabelText("Name")).toBeNull();
+      expect(
+        screen.queryByRole("button", { name: /MCP Selection/ }),
+      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /MCP sign-in/ })).toBeNull();
+      const current = screen.getByRole("button", { name: /Agent sign-in/ });
+      expect(current.getAttribute("aria-current")).toBe("step");
+      expect(screen.getByRole("button", { name: /Install/ })).toBeTruthy();
+      expect(screen.getByRole("button", { name: /Verify/ })).toBeTruthy();
+      // Nothing to go back to: the steps before describe the agent.
+      expect(screen.queryByRole("button", { name: "Back" })).toBeNull();
+    });
+
+    it("issues the key for the servers the agent already reaches, without asking for a name or expiry", async () => {
+      mocks.listDelegableGrants.mockResolvedValue([grant]);
+      editing({ signInOnly: true });
+      const issue = await screen.findByRole("button", { name: "Issue key" });
+      // Held until the servers the key will reach have been read back.
+      await waitFor(() =>
+        expect((issue as HTMLButtonElement).disabled).toBe(false),
+      );
+      fireEvent.click(issue);
+
+      await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+      const form = mocks.createKey.mock.calls[0]?.[0]?.createKeyForm;
+      expect(form?.agentId).toBe("agent_one");
+      expect(
+        form?.requestedGrants?.map(
+          (entry: { selector: { resourceId: string } }) =>
+            entry.selector.resourceId,
+        ),
+      ).toEqual(["toolset_one"]);
+      // Named and dated the way the agent's first key was.
+      expect(form?.name).toMatch(/^Release Bot key /);
+      expect(form?.expiresAt).toBeInstanceOf(Date);
+      expect(
+        await screen.findByRole("heading", { name: "Connect the agent" }),
+      ).toBeTruthy();
+    });
   });
 
   it("opens on the agent's own name, which it lets you change", () => {
