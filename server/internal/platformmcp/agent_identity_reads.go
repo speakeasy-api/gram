@@ -58,6 +58,10 @@ var (
 	// authorization checks, which needs org:read.
 	ErrAgentChecksForbidden = errors.New("platform mcp agent checks forbidden")
 
+	// ErrAgentReadForbidden is a caller who may manage the agent with
+	// agent:write but lacks agent:read, which its checks need.
+	ErrAgentReadForbidden = errors.New("platform mcp agent read forbidden")
+
 	// ErrAgentChecksWindowInvalid is a malformed or out-of-range period.
 	ErrAgentChecksWindowInvalid = errors.New("platform mcp agent checks window invalid")
 )
@@ -456,13 +460,23 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	if agents.OwnsUnblocked(principal.UserID, agent.OwnerUserID, agent.OwnerReassignmentRequiredAt) {
 		return agent, nil
 	}
-	if err := s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}); err != nil {
-		if isAuthorizationRefusal(err) {
-			return zero, ErrAgentNotAvailable
-		}
+	err = s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	if err == nil {
+		return agent, nil
+	}
+	if !isAuthorizationRefusal(err) {
 		return zero, fmt.Errorf("authorize agent read: %w", err)
 	}
-	return agent, nil
+	if scope != authz.ScopeAgentRead {
+		return zero, ErrAgentNotAvailable
+	}
+	// agent:write does not include agent:read. A caller holding it already
+	// reads the agent through get_agent_mcp_access, so hiding the agent
+	// protects nothing; name the permission they lack instead.
+	if s.engine.Require(ctx, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) == nil {
+		return zero, ErrAgentReadForbidden
+	}
+	return zero, ErrAgentNotAvailable
 }
 
 // mcpNames names the MCP servers the checks are about, by the server's own ID

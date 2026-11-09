@@ -294,9 +294,11 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 		name    string
 		input   AgentAuthorizationChecksInput
 		caller  string
+		write   bool
 		org     string
 		wantErr error
 	}{
+		{name: "agent:write only", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil}, caller: stranger, write: true, wantErr: ErrAgentReadForbidden},
 		{name: "malformed", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("yesterday"), To: nil}, wantErr: ErrAgentChecksWindowInvalid},
 		{name: "reversed", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("2026-11-07T00:00:00Z"), To: new("2026-11-06T00:00:00Z")}, wantErr: ErrAgentChecksWindowInvalid},
 		{name: "past retention", input: AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: new("2026-01-01T00:00:00Z"), To: new("2026-11-06T00:00:00Z")}, wantErr: ErrAgentChecksWindowInvalid},
@@ -307,7 +309,11 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 	} {
 		callerCtx, caller := ctx, principal
 		if tc.caller != "" {
-			callerCtx, caller = f.callerContext(t, tc.caller, authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID))
+			grants := []authz.Grant{authz.NewGrant(authz.ScopeOrgRead, f.principal.OrganizationID)}
+			if tc.write {
+				grants = append(grants, authz.NewGrantWithSelector(authz.ScopeAgentWrite, authz.Selector{authz.SelectorKeyResourceKind: authz.ResourceKindAgent, authz.SelectorKeyResourceID: f.agentID.String()}))
+			}
+			callerCtx, caller = f.callerContext(t, tc.caller, grants...)
 		}
 		if tc.org != "" {
 			caller.OrganizationID = tc.org
@@ -385,6 +391,8 @@ func TestAgentMCPAccessHonorsBlocks(t *testing.T) {
 	f := newAgentIdentityFixture(t, "platform_mcp_agent_access_blocks")
 	open := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent open server")
 	blocked := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent blocked server")
+	disabled := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent disabled server")
+	require.NoError(t, testrepo.New(f.conn).SetMCPServerVisibilityFixture(t.Context(), testrepo.SetMCPServerVisibilityFixtureParams{Visibility: "disabled", ID: disabled, ProjectID: f.project.ID}))
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
 	f.grant(t, authz.ScopeMCPBlockedConnect, mcpConnectSelector(blocked.String(), f.project.ID.String()))
 
@@ -394,6 +402,7 @@ func TestAgentMCPAccessHonorsBlocks(t *testing.T) {
 	byID := agentServersByID(output)
 	require.Contains(t, byID, open.String())
 	require.NotContains(t, byID, blocked.String(), "an mcp:blocked_connect grant takes the server away")
+	require.NotContains(t, byID, disabled.String(), "no route serves a disabled server, whatever the grants")
 }
 
 func TestAgentMCPAccessMatchesServerAndToolsetIDs(t *testing.T) {

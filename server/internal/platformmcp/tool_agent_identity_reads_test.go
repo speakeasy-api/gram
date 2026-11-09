@@ -45,6 +45,7 @@ func TestAgentIdentityReadRefusalsDoNotRevealAgents(t *testing.T) {
 	for err, code := range map[error]string{
 		ErrAgentNotAvailable:        `"code":"not_found"`,
 		ErrAgentChecksForbidden:     `"code":"permission_denied"`,
+		ErrAgentReadForbidden:       `"code":"permission_denied"`,
 		ErrAgentChecksWindowInvalid: `"code":"invalid_request"`,
 		ErrForbidden:                `"code":"permission_denied"`,
 		ErrUnavailable:              `"code":"feature_unavailable"`,
