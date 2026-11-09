@@ -5881,15 +5881,6 @@ COMMENT ON COLUMN remote_sessions.deleted IS '@access: confidential';
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_client_issuer_id_key
 ON remote_sessions (remote_session_client_id, user_session_issuer_id, id);
 
--- Keep registration-only uniqueness until all writers support resource-qualified grants.
-CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_key
-ON remote_sessions (subject_urn, remote_session_client_id)
-WHERE deleted IS FALSE;
-
-CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_issuer_key
-ON remote_sessions (subject_urn, remote_session_client_id, user_session_issuer_id)
-WHERE deleted IS FALSE;
-
 -- Match the resource identity used by OAuth token routing, including legacy NULL.
 CREATE UNIQUE INDEX IF NOT EXISTS remote_sessions_subject_client_resource_key
 ON remote_sessions (subject_urn, remote_session_client_id, rtrim(resource, '/')) NULLS NOT DISTINCT
