@@ -683,9 +683,10 @@ open their effective assignments; the dropdown always offers compact member sear
     holds every scope, so only a session as the persona shows the owner view.
     The persona's user row and membership exist locally (`kwame@` the local
     seed domain), and the dev-idp can sign in as them: call `users.create`
-    with that email, `memberships.create` for that user in the dev-idp's
-    `speakeasy` org, then `devIdp.setCurrentUser` (mode `oauth2-1`) or pick
-    the user in the dev-idp dashboard's Local mode pane. Login resolves
+    with that email and `display_name: Kwame Mensah`, pass the returned
+    `user_id` and the `speakeasy` organization's UUID to `memberships.create`,
+    then pass that `user_id` to `devIdp.setCurrentUser` (mode `oauth2-1`), or
+    pick the user in the dev-idp dashboard's Local mode pane. Login resolves
     users by email, so the session lands on the seeded row.
     - **Team → Members** lists Kwame Mensah with the Member role only.
     - **Agents** lists **Deploy watcher** as Active, owned by Kwame Mensah.
