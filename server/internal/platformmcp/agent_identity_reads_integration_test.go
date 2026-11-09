@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -237,6 +238,7 @@ func TestAgentAuthorizationChecksListsDenialsFirst(t *testing.T) {
 				check("d1", "mcp:connect", "mcp", server.String(), "no_grants", 1),
 				check("d2", "mcp:connect", "mcp", server.String(), "no_grants", 5),
 				check("d3", "project:read", "project", f.project.ID.String(), "scope_unsatisfied", 9),
+				check("d4", "org:hooks_ingest", "", f.principal.OrganizationID, "scope_unsatisfied", 12),
 			}}, nil
 		}
 		return &accessgen.ListChallengesResult{Total: 1, Challenges: []*accessgen.AuthzChallenge{check("a1", "mcp:connect", "mcp", server.String(), "grant_matched", 2)}}, nil
@@ -248,23 +250,30 @@ func TestAgentAuthorizationChecksListsDenialsFirst(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, payloads, 2)
-	for i, outcome := range []string{"deny", "allow"} {
+	for i, tc := range []struct {
+		outcome  string
+		excluded []string
+	}{
+		{outcome: "deny", excluded: nil},
+		{outcome: "allow", excluded: []string{"org:hooks_ingest"}},
+	} {
 		payload := payloads[i]
-		require.Equal(t, outcome, *payload.Outcome, "denied checks are read first")
+		require.Equal(t, tc.outcome, *payload.Outcome, "denied checks are read first")
 		require.Equal(t, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()).String(), *payload.PrincipalUrn)
-		require.Equal(t, []string{"org:hooks_ingest"}, payload.ExcludeScopes)
+		require.Equal(t, tc.excluded, payload.ExcludeScopes, "only allowed hook checks are left out")
 		require.Equal(t, maxAgentChecksPerOutcome, payload.Limit)
 		require.Equal(t, "2026-10-31T12:00:00Z", *payload.From, "the period defaults to the week before now")
 		require.Equal(t, "2026-11-07T12:00:00Z", *payload.To)
 	}
 
-	require.Equal(t, []string{"org:hooks_ingest"}, output.HiddenScopes)
+	require.Equal(t, []string{"org:hooks_ingest"}, output.HiddenAllowedScopes)
 	require.Equal(t, 5, output.Denied.Total)
 	require.True(t, output.Denied.Truncated, "the total covers checks past the grouped page")
 	require.Equal(t, []AgentCheckGroup{
 		{Scope: "mcp:connect", ResourceKind: "mcp", ResourceID: server.String(), ResourceName: "Agent checked server", Count: 2, LastAt: "2026-11-07T11:59:00Z", Reason: "no_grants"},
 		{Scope: "project:read", ResourceKind: "project", ResourceID: f.project.ID.String(), ResourceName: "", Count: 1, LastAt: "2026-11-07T11:51:00Z", Reason: "scope_unsatisfied"},
-	}, output.Denied.Groups)
+		{Scope: "org:hooks_ingest", ResourceKind: "", ResourceID: f.principal.OrganizationID, ResourceName: "", Count: 1, LastAt: "2026-11-07T11:48:00Z", Reason: "scope_unsatisfied"},
+	}, output.Denied.Groups, "a denied hook event stays with the other denials")
 	require.Equal(t, AgentCheckOutcome{Total: 1, Truncated: false, Groups: []AgentCheckGroup{
 		{Scope: "mcp:connect", ResourceKind: "mcp", ResourceID: server.String(), ResourceName: "Agent checked server", Count: 1, LastAt: "2026-11-07T11:58:00Z", Reason: "grant_matched"},
 	}}, output.Allowed)
@@ -337,6 +346,45 @@ func TestAgentAuthorizationChecksRefusals(t *testing.T) {
 	require.Equal(t, 1, calls, "a caller without org:read never lists checks")
 }
 
+// agentAuthorizerFunc answers each check with its function.
+type agentAuthorizerFunc func(authz.Check) error
+
+func (f agentAuthorizerFunc) Require(_ context.Context, checks ...authz.Check) error {
+	for _, check := range checks {
+		if err := f(check); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func TestAgentAuthorizationChecksReportsAuthorizerFailures(t *testing.T) {
+	t.Parallel()
+
+	f := newAgentIdentityFixture(t, "platform_mcp_agent_checks_authorizer")
+	service := f.service(t, agentChecksFunc(nil))
+	outage := errors.New("grant store unavailable")
+	for _, tc := range []struct {
+		name    string
+		write   error
+		wantErr error
+	}{
+		{name: "agent:write refused", write: oops.C(oops.CodeForbidden), wantErr: ErrAgentNotAvailable},
+		{name: "agent:write held", write: nil, wantErr: ErrAgentReadForbidden},
+		{name: "agent:write check failed", write: outage, wantErr: outage},
+	} {
+		service.engine = agentAuthorizerFunc(func(check authz.Check) error {
+			if check.Scope == authz.ScopeAgentWrite {
+				return tc.write
+			}
+			return oops.C(oops.CodeForbidden)
+		})
+		ctx, principal := f.callerContext(t, "user_"+uuid.NewString())
+		_, err := service.AuthorizationChecks(ctx, principal, AgentAuthorizationChecksInput{AgentID: f.agentID.String(), From: nil, To: nil})
+		require.ErrorIs(t, err, tc.wantErr, tc.name)
+	}
+}
+
 func TestAgentMCPAccessCountsRoleGrants(t *testing.T) {
 	t.Parallel()
 
@@ -392,9 +440,12 @@ func TestAgentMCPAccessHonorsBlocks(t *testing.T) {
 	open := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent open server")
 	blocked := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent blocked server")
 	disabled := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent disabled server")
+	viewBlocked := seedAgentAccessServer(t, f.conn, f.project.ID, "Agent view blocked server")
 	require.NoError(t, testrepo.New(f.conn).SetMCPServerVisibilityFixture(t.Context(), testrepo.SetMCPServerVisibilityFixtureParams{Visibility: "disabled", ID: disabled, ProjectID: f.project.ID}))
 	f.grant(t, authz.ScopeMCPConnect, mcpConnectSelector(authz.WildcardResource, f.project.ID.String()))
 	f.grant(t, authz.ScopeMCPBlockedConnect, mcpConnectSelector(blocked.String(), f.project.ID.String()))
+	f.grant(t, authz.ScopeMCPBlockedRead, mcpConnectSelector(viewBlocked.String(), f.project.ID.String()))
+	f.grant(t, authz.ScopeMCPBlockedWrite, mcpConnectSelector(viewBlocked.String(), f.project.ID.String()))
 
 	callerCtx, principal := f.callerContext(t, f.principal.UserID)
 	output, err := f.service(t, agentChecksFunc(nil)).MCPAccess(callerCtx, principal, AgentIdentityInput{AgentID: f.agentID.String()})
@@ -402,6 +453,7 @@ func TestAgentMCPAccessHonorsBlocks(t *testing.T) {
 	byID := agentServersByID(output)
 	require.Contains(t, byID, open.String())
 	require.NotContains(t, byID, blocked.String(), "an mcp:blocked_connect grant takes the server away")
+	require.Contains(t, byID, viewBlocked.String(), "mcp:blocked_read and mcp:blocked_write take viewing and managing away, not connecting")
 	require.NotContains(t, byID, disabled.String(), "no route serves a disabled server, whatever the grants")
 }
 

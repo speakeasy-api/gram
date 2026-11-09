@@ -44,10 +44,12 @@ const (
 	maxAgentChecksWindow = 90 * 24 * time.Hour
 )
 
-// hiddenAgentCheckScopes are left out of an agent's checks, from the groups
-// and from the totals. An agent records one org:hooks_ingest check for every
-// hook event it sends, which buries the checks that say what it may reach.
-var hiddenAgentCheckScopes = []string{string(authz.ScopeOrgHooksIngest)}
+// hiddenAllowedAgentCheckScopes are left out of an agent's allowed checks,
+// from the groups and from the total. An agent records one org:hooks_ingest
+// check for every hook event it sends, which buries the checks that say what
+// it may reach. A denied one stays with the other denials, as the dashboard
+// keeps it, since a refused hook event is a failure to fix.
+var hiddenAllowedAgentCheckScopes = []string{string(authz.ScopeOrgHooksIngest)}
 
 var (
 	// ErrAgentNotAvailable covers an unknown agent and one the caller may not
@@ -95,7 +97,7 @@ type AgentAuthorizationChecks interface {
 // AgentIdentityReadService backs the agent identity read tools.
 type AgentIdentityReadService struct {
 	db     *pgxpool.Pool
-	engine *authz.Engine
+	engine deviceCoverageAuthorizer
 	roles  *access.RoleManager
 	checks AgentAuthorizationChecks
 	budget OperationBudget
@@ -108,9 +110,15 @@ func NewAgentIdentityReadService(logger *slog.Logger, db *pgxpool.Pool, engine *
 	if logger == nil {
 		return &AgentIdentityReadService{db: nil, engine: nil, roles: nil, checks: nil, budget: OperationBudget{Connection: nil, Organization: nil}, now: nil}
 	}
+	// A nil engine must stay a nil interface, so the service reports itself
+	// unavailable.
+	var authorizer deviceCoverageAuthorizer
+	if engine != nil {
+		authorizer = engine
+	}
 	return &AgentIdentityReadService{
 		db:     db,
-		engine: engine,
+		engine: authorizer,
 		roles:  access.NewRoleManager(logger, db, nil, nil, plugins.PublicationRequests{Enabled: false}, nil),
 		checks: checks,
 		budget: budget,
@@ -263,8 +271,9 @@ type AgentAuthorizationChecksOutput struct {
 
 	Allowed AgentCheckOutcome `json:"allowed"`
 
-	// HiddenScopes are left out of both outcomes and their totals.
-	HiddenScopes []string `json:"hidden_scopes"`
+	// HiddenAllowedScopes are left out of Allowed and its total. Denied
+	// checks of these scopes stay in Denied.
+	HiddenAllowedScopes []string `json:"hidden_allowed_scopes"`
 }
 
 // MCPAccess reads the MCP servers an agent may connect to and whose
@@ -388,12 +397,12 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 
 	fromText := from.Format(time.RFC3339Nano)
 	toText := to.Format(time.RFC3339Nano)
-	read := func(outcome string) (*accessgen.ListChallengesResult, error) {
+	read := func(outcome string, excludeScopes []string) (*accessgen.ListChallengesResult, error) {
 		result, err := s.checks.ListChallenges(ctx, &accessgen.ListChallengesPayload{
 			Outcome:       &outcome,
 			PrincipalUrn:  new(urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()),
 			Scope:         nil,
-			ExcludeScopes: hiddenAgentCheckScopes,
+			ExcludeScopes: excludeScopes,
 			ProjectID:     nil,
 			Resolved:      nil,
 			Ids:           nil,
@@ -412,11 +421,11 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 		}
 		return result, nil
 	}
-	denied, err := read("deny")
+	denied, err := read("deny", nil)
 	if err != nil {
 		return zero, err
 	}
-	allowed, err := read("allow")
+	allowed, err := read("allow", hiddenAllowedAgentCheckScopes)
 	if err != nil {
 		return zero, err
 	}
@@ -426,12 +435,12 @@ func (s *AgentIdentityReadService) AuthorizationChecks(ctx context.Context, prin
 		return zero, err
 	}
 	return AgentAuthorizationChecksOutput{
-		Agent:        agentIdentity(agent),
-		From:         fromText,
-		To:           toText,
-		Denied:       groupAgentChecks(denied, names),
-		Allowed:      groupAgentChecks(allowed, names),
-		HiddenScopes: slices.Clone(hiddenAgentCheckScopes),
+		Agent:               agentIdentity(agent),
+		From:                fromText,
+		To:                  toText,
+		Denied:              groupAgentChecks(denied, names),
+		Allowed:             groupAgentChecks(allowed, names),
+		HiddenAllowedScopes: slices.Clone(hiddenAllowedAgentCheckScopes),
 	}, nil
 }
 
@@ -473,8 +482,12 @@ func (s *AgentIdentityReadService) requireAgent(ctx context.Context, principal P
 	// agent:write does not include agent:read. A caller holding it already
 	// reads the agent through get_agent_mcp_access, so hiding the agent
 	// protects nothing; name the permission they lack instead.
-	if s.engine.Require(ctx, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil}) == nil {
+	err = s.engine.Require(ctx, authz.Check{Scope: authz.ScopeAgentWrite, ResourceKind: authz.ResourceKindAgent, ResourceID: agent.ID.String(), Dimensions: nil})
+	if err == nil {
 		return zero, ErrAgentReadForbidden
+	}
+	if !isAuthorizationRefusal(err) {
+		return zero, fmt.Errorf("authorize agent write: %w", err)
 	}
 	return zero, ErrAgentNotAvailable
 }
