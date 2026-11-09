@@ -2,7 +2,7 @@
 
 This document records what each chat collection path reveals today, so that later authorization work changes those answers only by explicit decision. It is the parity contract that chat lists must keep when their checks move to typed constructors. It covers listings, counts, source and link lookups, and summaries. Point reads (opening one chat) are included where they differ.
 
-`server/internal/chat/chat_collection_contract_test.go` runs the per-caller table for `ListChats` (page, total and past-the-end count), `ListSources`, `LoadChat` and `LoadChatOverview`, and the unauthorized case for `ListSessionLinks` too. Link masking and assistant summaries are pinned by the existing tests named below. Changing any answer below must change one of those tests, and the change must be listed in the PR as a behaviour change.
+`server/internal/chat/chat_collection_contract_test.go` runs the per-caller table for `ListChats` (page, total and past-the-end count), `ListSources`, `LoadChat` and `LoadChatOverview`, and the unauthorized case for `ListSessionLinks` too. Link masking, editable-agent sessions and the summary gate are pinned by the existing tests named below. The per-caller scope of assistant summaries (owned-agent sessions left out of own scope) is described here but not yet pinned by a test. Changing any answer below must change one of those tests, and the change must be listed in the PR as a behaviour change.
 
 ## How collections decide today
 
@@ -10,7 +10,9 @@ Every collection path goes through `chatVisibilityScope` in `server/internal/cha
 
 - `external_user_id`: when set, only that external user's sessions.
 - `user_id`: when set, only that user's sessions, plus the agent sessions described next.
-- `owned_agent_ids`: agent sessions that count as the caller's own. A session counts only if it has no `user_id`, an empty `external_user_id`, and an `agent_id` in this list. The list holds the caller's agents in the organization that are not deleted and not latched for owner reassignment.
+- `owned_agent_ids` (built from `ScopedAgentIDs`): agent sessions that count as the caller's own. A session counts only if it has no `user_id`, an empty `external_user_id`, and an `agent_id` in this list. The list is the union of two sets with different filters:
+  - **Owned agents** (`ListOwnedAgentIDs`): the caller's agents in the organization that are not deleted and not latched for owner reassignment.
+  - **Editable agents** (`editableAgentIDs`): every live agent in the organization that the caller holds `agent:write` on, found with `Filter`. Reassignment latching does not remove an agent from this set. It is empty when RBAC is not enforced, and when the enforcement check or the filter errors (logged, then owned agents only).
 
 Both identity inputs empty means every session in the project.
 
@@ -69,11 +71,12 @@ Edge cases the test fixture covers:
 - An owned agent stamped on another user's session does not make that session the agent owner's. It stays with the human it carries.
 - A foreign agent's session is never in the caller's own scope.
 
-These existing tests cover three more cases:
+These existing tests cover four more cases:
 
 - An agent latched for reassignment drops out of its owner's scope (`TestListChats_Member_LatchedAgentSessionsHidden`).
 - `ListSessionLinks` masks link ends (`TestListSessionLinks_MemberVisibilityScoped`).
 - Assistant summaries need project read and stay inside the assistant (`assistant_session_summary_test.go`).
+- A member with `agent:write` on another user's agent lists and opens that agent's sessions (`TestListChats_Member_SeesEditableAgentSessions`, `TestLoadChat_RBAC_AgentEditorReadsAgentSession`).
 
 ## Contract for later list work
 
@@ -88,7 +91,7 @@ Any rewrite of that operation (new constructors, SQL changes) must reproduce:
 
 1. Project-wide when the project-level read allows, or when the caller is the managed-assistant runtime.
 2. The external-user restriction first, ignoring payload filters.
-3. The own-scope predicate exactly as written above. That includes the human-identity precedence over `agent_id`, and the latched and deleted agent exclusion.
+3. The own-scope predicate exactly as written above. That includes the human-identity precedence over `agent_id`, the union of owned and editable agents with their separate filters, and the latched and deleted agent exclusion for owned agents.
 4. Owned-agent sessions left out of own-scope assistant summaries, and kept in project-wide ones.
 5. Own scope, not failure, when the project-level check errors or RBAC is not enforced.
 6. Unauthorized when the own scope has no user ID.
