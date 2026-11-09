@@ -188,7 +188,7 @@ func galleryDescriptors() []Descriptor {
 		func(r *Registrar) { registerRemoteRegistrationTool(r, registrations, nil) },
 		func(r *Registrar) { registerIdentityProviderTool(r, registrations) },
 		func(r *Registrar) { registerDistributionTools(r, nil, &DistributionService{}, registrations) },
-		func(r *Registrar) { registerCatalogTools(r, nil, OperationBudget{}, nil, nil) },
+		func(r *Registrar) { registerCatalogTools(r, nil, OperationBudget{}, nil, nil, registrations) },
 		func(r *Registrar) { registerCandidateInspectionTool(r, nil, nil, nil, OperationBudget{}) },
 		func(r *Registrar) { registerSearchDocsTool(r, nil, OperationBudget{}) },
 		func(r *Registrar) {

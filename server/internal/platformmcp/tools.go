@@ -427,7 +427,6 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
 			registerUnavailableCatalogTools(reg)
 		} else {
-			cardViewNeeded = true
 			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding, registrations)
 		}
 	}

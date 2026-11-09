@@ -34,6 +34,8 @@ type cardSpec struct {
 // cardTools lists every tool that draws a card.
 var cardTools = map[string]cardSpec{
 	// Who the session is and MCP server setup build their own cards.
+	// Catalog search draws its own carousel of server cards.
+	"search_mcp_catalog":                    {kind: cardKindList, route: "P/mcp/catalog", label: "Open catalog"},
 	"whoami":                                {kind: cardKindDetail, route: "", label: ""},
 	"register_catalog_mcp":                  {kind: cardKindReceipt, route: "P/mcp/{mcp}", label: "Open MCP server"},
 	"register_remote_mcp":                   {kind: cardKindReceipt, route: "P/mcp/{mcp}", label: "Open MCP server"},
@@ -240,7 +242,6 @@ var textOnlyTools = map[string]string{
 	"list_project_tools":                   textOnlyPicker,
 	"list_my_sessions":                     textOnlyPicker,
 	"list_my_servers":                      textOnlyPicker,
-	"search_mcp_catalog":                   textOnlyPicker,
 	"inspect_mcp_candidate":                textOnlyPicker,
 	"search_my_tools":                      textOnlyPicker,
 	"search_users":                         textOnlyPicker,
