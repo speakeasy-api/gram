@@ -10,7 +10,13 @@ import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { createServer, request } from "node:https";
 import type { IncomingHttpHeaders } from "node:http";
-import { dryRun, fail, readConfig, validateTLS } from "./lib.ts";
+import {
+  cleanupScenarios,
+  dryRun,
+  fail,
+  readConfig,
+  validateTLS,
+} from "./lib.ts";
 
 // One MiB bounds fixture evidence and MCP replies; each request has a five-second deadline.
 const maxBytes = 1 << 20;
@@ -24,6 +30,88 @@ function json(body: string) {
       "Fixture returned invalid JSON; response contents withheld.",
     );
   }
+}
+
+type Response = {
+  status: number;
+  headers: IncomingHttpHeaders;
+  body: string;
+};
+
+type Send = (
+  url: string,
+  method?: string,
+  body?: string,
+  headers?: Record<string, string>,
+) => Promise<Response>;
+
+// Establish one Streamable HTTP session before issuing any tool request.
+export async function connectMCP(send: Send, resource: string, bearer: string) {
+  const protocolVersion = "2025-03-26";
+  let sessionID: string | undefined;
+  let nextID = 0;
+  const headers = () => ({
+    Authorization: `Bearer ${bearer}`,
+    "Content-Type": "application/json",
+    Accept: "application/json, text/event-stream",
+    "MCP-Protocol-Version": protocolVersion,
+    ...(sessionID ? { "Mcp-Session-Id": sessionID } : {}),
+  });
+  async function rpc(method: string, params: object) {
+    const id = ++nextID;
+    const response = await send(
+      resource,
+      "POST",
+      JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+      headers(),
+    );
+    assert.ok(response.status === 200, "Authenticated MCP request failed.");
+    const parsed = json(response.body);
+    assert.ok(
+      parsed.jsonrpc === "2.0" &&
+        parsed.id === id &&
+        !parsed.error &&
+        parsed.result,
+      "MCP returned a protocol error.",
+    );
+    if (method === "initialize") {
+      assert.ok(
+        parsed.result.protocolVersion === protocolVersion,
+        "MCP did not negotiate the offered protocol version.",
+      );
+      const returnedSession = response.headers["mcp-session-id"];
+      assert.ok(
+        returnedSession === undefined ||
+          (typeof returnedSession === "string" && returnedSession.length > 0),
+        "MCP returned an invalid session binding.",
+      );
+      sessionID = returnedSession;
+    }
+    return parsed.result;
+  }
+  await rpc("initialize", {
+    protocolVersion,
+    capabilities: {},
+    clientInfo: { name: "synthetic-fixture-smoke", version: "0.1.0" },
+  });
+  const initialized = await send(
+    resource,
+    "POST",
+    JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+    headers(),
+  );
+  assert.ok(initialized.status === 202, "MCP initialized notification failed.");
+  return {
+    rpc,
+    async close() {
+      if (!sessionID) return;
+      const response = await send(resource, "DELETE", undefined, headers());
+      assert.ok(
+        [200, 202, 204, 405].includes(response.status),
+        "MCP session shutdown failed.",
+      );
+    },
+  };
 }
 
 async function smoke() {
@@ -97,7 +185,12 @@ async function smoke() {
     "Control accepted a missing secret.",
   );
   let bootID: string | undefined;
-  async function control(path: string, method = "GET", body?: object) {
+  async function control(
+    path: string,
+    method = "GET",
+    body?: object,
+    missingOK = false,
+  ) {
     const response = await send(
       `${base}/__control/${path}`,
       method,
@@ -108,7 +201,8 @@ async function smoke() {
       },
     );
     assert.ok(
-      response.status >= 200 && response.status < 300,
+      (response.status >= 200 && response.status < 300) ||
+        (missingOK && response.status === 404),
       `Control ${method} failed (${response.status}).`,
     );
     const observedBoot = response.headers["x-fixture-boot-id"];
@@ -117,6 +211,7 @@ async function smoke() {
       "Fixture restarted during the smoke.",
     );
     bootID = observedBoot as string;
+    if (missingOK && response.status === 404) return;
     return response.body ? json(response.body) : undefined;
   }
   await control("presets");
@@ -167,11 +262,11 @@ async function smoke() {
   try {
     for (const registration of ["dcr", "cimd"]) {
       const id = `zz-local-smoke-${randomBytes(8).toString("hex")}`;
+      created.push(id);
       const view = await control(`scenarios/${id}`, "PUT", {
         preset: `oauth-${registration}`,
         ttl_s: 120,
       });
-      created.push(id);
       const issuer = view.urls.issuer as string;
       const resource = view.urls.default as string;
       assert.ok(
@@ -265,43 +360,34 @@ async function smoke() {
       );
       assert.ok(refreshed.status === 200, "Refresh failed.");
       const bearer = json(refreshed.body).access_token;
-      async function rpc(method: string, params: object) {
-        const response = await send(
-          resource,
-          "POST",
-          JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-          {
-            Authorization: `Bearer ${bearer}`,
-            "Content-Type": "application/json",
-            Accept: "application/json, text/event-stream",
-            "MCP-Protocol-Version": "2025-03-26",
-          },
-        );
-        assert.ok(response.status === 200, "Authenticated MCP request failed.");
-        const parsed = json(response.body);
+      const mcp = await connectMCP(send, resource, bearer);
+      try {
+        const tools = await mcp.rpc("tools/list", {});
+        assert.ok(tools.tools.length > 0, "Scenario catalog is empty.");
+        const result = await mcp.rpc("tools/call", {
+          name: tools.tools[0].name,
+          arguments: { message: "synthetic smoke", nested: { value: 7 } },
+        });
         assert.ok(
-          !parsed.error && parsed.result,
-          "MCP returned a protocol error.",
+          !result.isError &&
+            result.structuredContent?.message === "synthetic smoke" &&
+            result.structuredContent?.nested?.value === 7,
+          "Authenticated echo changed arguments.",
         );
-        return parsed.result;
+      } finally {
+        await mcp.close();
       }
-      const tools = await rpc("tools/list", {});
-      assert.ok(tools.tools.length > 0, "Scenario catalog is empty.");
-      const result = await rpc("tools/call", {
-        name: tools.tools[0].name,
-        arguments: { message: "synthetic smoke", nested: { value: 7 } },
-      });
-      assert.ok(
-        !result.isError &&
-          result.structuredContent?.message === "synthetic smoke" &&
-          result.structuredContent?.nested?.value === 7,
-        "Authenticated echo changed arguments.",
-      );
       const events = await control(`scenarios/${id}/events?after=0&limit=200`);
       assert.ok(
         events.events.some(
           (event: any) => event.point === "token:refresh_token",
         ) &&
+          events.events.some(
+            (event: any) => event.mcp_method === "initialize",
+          ) &&
+          events.events.some(
+            (event: any) => event.mcp_method === "notifications/initialized",
+          ) &&
           events.events.some(
             (event: any) =>
               event.point === "mcp:tools/call" &&
@@ -319,16 +405,18 @@ async function smoke() {
       metadataFetches > 0 && callbacks === 2,
       "CIMD fetch or HTTPS callbacks were not observed.",
     );
-    console.log(
-      "Passed trusted HTTPS, control rejection/isolation, DCR + CIMD PKCE callbacks, refresh, authenticated echo and upstream event checks.",
-    );
   } finally {
     try {
-      for (const id of created) await control(`scenarios/${id}`, "DELETE");
+      await cleanupScenarios(created, async (id) => {
+        await control(`scenarios/${id}`, "DELETE", undefined, true);
+      });
     } finally {
       await new Promise<void>((accept) => client.close(() => accept()));
     }
   }
+  console.log(
+    "Passed trusted HTTPS, control rejection/isolation, DCR + CIMD PKCE callbacks, refresh, MCP handshake/session reuse, authenticated echo, upstream events and scenario cleanup.",
+  );
 }
 
-smoke().catch(fail);
+if (import.meta.main) smoke().catch(fail);

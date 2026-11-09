@@ -6,6 +6,7 @@ import {
   mkdirSync,
   readFileSync,
   renameSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
@@ -17,6 +18,22 @@ export const envFile = join(root, ".local/mcp-fixture.env");
 export const dryRun = process.env["usage_dry_run"] === "true";
 
 export type Config = Record<string, string>;
+
+// Every owned scenario gets a cleanup attempt, including an uncertain PUT.
+export async function cleanupScenarios(
+  ids: readonly string[],
+  remove: (id: string) => Promise<void>,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const id of ids) {
+    try {
+      await remove(id);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) throw failures[0];
+}
 
 function origin(value: string): string {
   const url = new URL(value);
@@ -74,13 +91,14 @@ export function readConfig(): Config {
   return config;
 }
 
-async function checkPort(value: number): Promise<void> {
+async function checkPort(value: number, busyMessage?: string): Promise<void> {
   await new Promise<void>((accept, reject) => {
     const listener = createServer();
     listener.once("error", () =>
       reject(
         new Error(
-          `Loopback port ${value} is busy; select an unused worktree port with --port or --client-port.`,
+          busyMessage ??
+            `Loopback port ${value} is busy; select an unused worktree port with --port or --client-port.`,
         ),
       ),
     );
@@ -91,6 +109,13 @@ async function checkPort(value: number): Promise<void> {
 }
 
 export function validateTLS(config: Config): void {
+  // stat follows a development-key symlink and checks the actual key's mode.
+  const keyInfo = statSync(config["FIXTURE_TLS_KEY_FILE"]);
+  if (!keyInfo.isFile() || (keyInfo.mode & 0o077) !== 0) {
+    throw new Error(
+      "The TLS private key target must be a regular file with no group or other permission bits. Supply a private --key-file; fixture tasks do not change existing key permissions.",
+    );
+  }
   const certificate = readFileSync(config["FIXTURE_TLS_CERT_FILE"]);
   const key = readFileSync(config["FIXTURE_TLS_KEY_FILE"]);
   const ca = readFileSync(config["FIXTURE_CA_FILE"]);
@@ -229,7 +254,11 @@ export async function prepare(): Promise<Config> {
   validateTLS(config);
   const changed =
     existing && JSON.stringify(existing) !== JSON.stringify(config);
-  if (changed) await checkPort(port(existing["FIXTURE_PORT"]));
+  if (changed)
+    await checkPort(
+      port(existing["FIXTURE_PORT"]),
+      "Stop this worktree's fixture with mise run fixture:stop before changing its configuration. If it is already stopped, free its stored port first.",
+    );
   if (!existing || changed) {
     await checkPort(listenPort);
     await checkPort(clientPort);

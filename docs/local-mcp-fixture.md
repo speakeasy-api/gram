@@ -7,6 +7,9 @@ Prepare the stack's development certificate first (`./zero` normally does this).
 The certificate must cover `127.0.0.1`. The tasks use the existing
 `GRAM_SSL_CERT_FILE`, `GRAM_SSL_KEY_FILE` and local mkcert CA; they never disable
 certificate verification or install a new trust root.
+The private-key target must have no group or other permission bits. A symlink to
+a private regular key is allowed; tasks reject an exposed key without changing
+its permissions. Supply an owned private key with `--key-file` when needed.
 
 ```sh
 GRAM_MCP_FIXTURE=local mise run fixture:start --dry-run
@@ -39,14 +42,17 @@ origins plus that isolated smoke client. The fixture receives `SSL_CERT_FILE`
 pointing at the local CA, so its CIMD fetches can verify the stack's HTTPS
 certificate. The smoke checks both directions of TLS using an owned synthetic
 client; it requires no application stack, account login or browser. It validates
-DCR and CIMD, PKCE, HTTPS callbacks, refresh, tool echo, control authentication,
+DCR and CIMD, PKCE, HTTPS callbacks, refresh, MCP initialization/session reuse,
+tool echo, control authentication,
 scenario cleanup and upstream events. Gateway behavior is tested separately by
 the Reflow flows against the running stack.
 
 The fixture executable uses explicit `mise exec` with immutable revision
-`7cec927eaab8348c0699c6faf547843e3bf9f4ae`. The private benchmark package is not
+`9c6d4f8c2e9828924bbafa7c249ad3eddc234606`. The private benchmark package is not
 in the global tool set, so normal `mise install`, setup and CI do not fetch it.
-Only an actual fixture launch resolves and installs it. That launch requires
+Only an actual fixture launch resolves and installs it. Installation uses the
+caller's normal HTTPS trust before the resolved binary receives the local CA
+and control secret. That launch requires
 Git authentication with read access to `speakeasy-api/benchmark-mcp-server`;
 mise's GitHub token alone does not provide Go's Git authentication. It sets
 `GOPRIVATE`, `GONOPROXY` and `GONOSUMDB` for that module in the child process,
@@ -62,3 +68,9 @@ a unique `namespace` in its ignored `pitchfork.local.toml` before starting.
 
 Native TLS and the outbound tunnel cannot share a listener yet. For a local
 tunnel fixture, run a separate HTTP process or use TLS termination at ingress.
+
+Focused task checks use owned synthetic keys and processes:
+
+```sh
+mise exec -- node --test .mise-tasks/fixture/fixture.test.mts
+```
