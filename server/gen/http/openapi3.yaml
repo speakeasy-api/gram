@@ -104660,6 +104660,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -107045,6 +107046,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -134983,6 +134985,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.
@@ -136156,6 +136159,7 @@ components:
                         - product_telemetry
                         - risk_findings
                         - tool_call_logs
+                        - mcp_connection_logs
                 enabled:
                     type: boolean
                     description: Whether the route is enabled.

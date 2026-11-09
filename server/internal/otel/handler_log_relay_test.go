@@ -566,3 +566,64 @@ func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testin
 	require.Equal(t, []string{"api_request"}, relayRequestLogBodies(requests[0].request))
 	require.Equal(t, int64(1), agentEventCount(t, reader, meterLogRelayRecordsDropped, attr.ReasonKey, string(relayReasonExcluded)))
 }
+
+func connectionLogRelayRecord(body, organizationID, projectID string) *otelv1.LogRecord {
+	record := relayTestLogRecord(body, organizationID, projectID, 0)
+	record.SetAttributes([]*otelv1.LogRecord_KeyValue{logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), dialect.ConnectionLogScope)})
+	return record
+}
+
+func TestLogRelayHandlerSendsConnectionLogsOnlyToTheirRoute(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+
+	db, enc, _ := newRelayRouteTest(t, "/v1/logs")
+	projectID := createRelayTestProject(t, db, "org-test")
+	telemetryDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "telemetry"}), "include")
+	connectionDestination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "connection"}), "include")
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: telemetryDestination.ID, Valid: true})
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceMCPConnectionLogs, true, uuid.NullUUID{UUID: connectionDestination.ID, Valid: true})
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	handler := NewLogRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, policy)
+	messages, failures := logRelayTestMessages(
+		connectionLogRelayRecord("attempt", "org-test", projectID.String()),
+		relayTestLogRecord("telemetry", "org-test", projectID.String(), 0),
+	)
+
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	for _, failure := range failures {
+		require.NoError(t, failure)
+	}
+	bodiesByCustomer := make(map[string][]string)
+	for _, request := range capture.snapshot() {
+		bodiesByCustomer[request.customer] = append(bodiesByCustomer[request.customer], relayRequestLogBodies(request.request)...)
+	}
+	require.Equal(t, map[string][]string{"telemetry": {"telemetry"}, "connection": {"attempt"}}, bodiesByCustomer)
+}
+
+func TestLogRelayHandlerNeverSendsConnectionLogsToProductTelemetry(t *testing.T) {
+	t.Parallel()
+
+	capture := &logRelayRequestCapture{mu: sync.Mutex{}, requests: nil}
+	server := httptest.NewServer(http.HandlerFunc(capture.handler))
+	t.Cleanup(server.Close)
+
+	db, enc, _ := newRelayRouteTest(t, "/v1/logs")
+	projectID := createRelayTestProject(t, db, "org-test")
+	destination := createRelayTestDestination(t, db, "org-test", projectID, server.URL, encryptRelayTestHeaders(t, enc, map[string]string{"X-Customer": "telemetry"}), "include")
+	createRelayTestRoute(t, db, "org-test", projectID, dataexports.DataSourceProductTelemetry, true, uuid.NullUUID{UUID: destination.ID, Valid: true})
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
+	require.NoError(t, err)
+	handler := NewLogRelayHandler(testenv.NewLogger(t), testenv.NewMeterProvider(t), db, enc, policy)
+	messages, failures := logRelayTestMessages(connectionLogRelayRecord("attempt", "org-test", projectID.String()))
+
+	require.NoError(t, handler.handleBatch(t.Context(), messages))
+	require.NoError(t, failures[0])
+	require.Empty(t, capture.snapshot())
+}

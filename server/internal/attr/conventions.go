@@ -796,11 +796,21 @@ const (
 	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
+	ConnectionAttemptIDKey            = attribute.Key("gram.connection.attempt.id")
 	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
+	ConnectionDurationKey             = attribute.Key("gram.connection.duration")
+	ConnectionGrantTypeKey            = attribute.Key("gram.connection.grant_type")
+	ConnectionMemberIDKey             = attribute.Key("gram.connection.member.id")
 	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
 	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionRepeatsKey              = attribute.Key("gram.connection.repeats")
+	ConnectionRetriesKey              = attribute.Key("gram.connection.retries")
+	ConnectionServerIDKey             = attribute.Key("gram.connection.server.id")
+	ConnectionServerKindKey           = attribute.Key("gram.connection.server.kind")
 	ConnectionStepKey                 = attribute.Key("gram.connection.step")
+	ConnectionSubjectKindKey          = attribute.Key("gram.connection.subject_kind")
+	ConnectionWhatToDoKey             = attribute.Key("gram.connection.what_to_do")
 	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
@@ -3124,6 +3134,19 @@ func ConnectionOutcome(v string) attribute.KeyValue  { return ConnectionOutcomeK
 func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
 func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
 func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
+
+func ConnectionAttemptID(v string) attribute.KeyValue   { return ConnectionAttemptIDKey.String(v) }
+func ConnectionGrantType(v string) attribute.KeyValue   { return ConnectionGrantTypeKey.String(v) }
+func ConnectionMemberID(v string) attribute.KeyValue    { return ConnectionMemberIDKey.String(v) }
+func ConnectionServerID(v string) attribute.KeyValue    { return ConnectionServerIDKey.String(v) }
+func ConnectionServerKind(v string) attribute.KeyValue  { return ConnectionServerKindKey.String(v) }
+func ConnectionSubjectKind(v string) attribute.KeyValue { return ConnectionSubjectKindKey.String(v) }
+func ConnectionWhatToDo(v string) attribute.KeyValue    { return ConnectionWhatToDoKey.String(v) }
+func ConnectionRepeats(v uint32) attribute.KeyValue     { return ConnectionRepeatsKey.Int64(int64(v)) }
+func ConnectionRetries(v uint32) attribute.KeyValue     { return ConnectionRetriesKey.Int64(int64(v)) }
+func ConnectionDuration(v time.Duration) attribute.KeyValue {
+	return ConnectionDurationKey.Float64(v.Seconds())
+}
 
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {

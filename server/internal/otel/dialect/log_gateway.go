@@ -7,6 +7,9 @@ import (
 // GatewayLogScope is the scope the MCP gateway emits its tool call records under.
 const GatewayLogScope = "github.com/speakeasy-api/gram/server/internal/mcp"
 
+// ConnectionLogScope is the scope failed MCP connection attempts are exported under.
+const ConnectionLogScope = "github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+
 const (
 	gatewayMCPClientNameKey    = "gram.mcp.client.name"
 	gatewayToolsetSlugKey      = "gram.toolset.slug"

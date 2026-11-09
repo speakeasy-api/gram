@@ -82,6 +82,9 @@ const (
 	dropRateLimited  dropReason = "rate_limited"
 	dropQueueReserve dropReason = "queue_reserved"
 	dropRepeatsLost  dropReason = "repeats_lost"
+
+	dropExportQueueFull dropReason = "export_queue_full"
+	dropExportFailed    dropReason = "export_failed"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -348,6 +351,7 @@ type Recorder struct {
 	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
 	deviceKeys  DeriveKey
+	exporter    *exporter
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
@@ -386,6 +390,9 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropRateLimited:  {},
 		dropQueueReserve: {},
 		dropRepeatsLost:  {},
+
+		dropExportQueueFull: {},
+		dropExportFailed:    {},
 	}
 }
 
@@ -427,6 +434,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		limiter:      newOnceLimiter(),
 		logsEnabled:  logsEnabled,
 		deviceKeys:   nil,
+		exporter:     nil,
 		capture:      nil,
 		cfg:          cfg,
 		steps:        steps,
@@ -446,6 +454,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	for _, opt := range opts {
 		opt(r)
 	}
+	r.startExport(meter)
 	go r.run()
 	return r
 }
@@ -459,6 +468,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		limiter:      nil,
 		logsEnabled:  logsEnabled,
 		deviceKeys:   nil,
+		exporter:     nil,
 		capture:      capture,
 		cfg:          config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
 		steps:        nil,
@@ -705,6 +715,7 @@ func (r *Recorder) logDrainLosses(ctx context.Context, before map[dropReason]int
 func (r *Recorder) run() {
 	defer close(r.done)
 	defer r.cancelWriter()
+	defer r.stopExport()
 
 	ticker := time.NewTicker(r.cfg.flushInterval)
 	defer ticker.Stop()
@@ -730,7 +741,9 @@ func (r *Recorder) run() {
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
 			r.surviving(events(rows...), func() {
-				if !r.insert(rows) && stopping() {
+				if r.insert(rows) {
+					r.exportRows(rows)
+				} else if stopping() {
 					drainFailed = true
 				}
 			})

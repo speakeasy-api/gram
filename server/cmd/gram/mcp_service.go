@@ -56,6 +56,7 @@ import (
 	"github.com/speakeasy-api/gram/tunnel/metricspub"
 	"github.com/speakeasy-api/gram/tunnel/route"
 	"github.com/urfave/cli/v2"
+	"go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
@@ -72,6 +73,41 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 		resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 		dialect.GatewayLogScope)
 }
+
+// connectionLogExport publishes failed connection attempts to the otel pipeline
+// under the row's own organization and project, for organizations with the flag.
+type connectionLogExport struct {
+	logs     *otelpub.Logger
+	features feature.Provider
+	logger   *slog.Logger
+}
+
+func newConnectionLogExport(logger *slog.Logger, publisher gcp.Publisher[*otelv1.InboundLogRecord], features feature.Provider) mcpconnectionattempts.RecorderOption {
+	return mcpconnectionattempts.WithExport(&connectionLogExport{
+		logs: otelpub.NewLogger(publisher,
+			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
+			dialect.ConnectionLogScope),
+		features: features,
+		logger:   logger,
+	})
+}
+
+func (e *connectionLogExport) Enabled(ctx context.Context, organizationID string) bool {
+	evaluation, err := feature.EvaluateFlag(ctx, e.features, feature.FlagMCPConnectionLogExport, organizationID, nil)
+	if err != nil {
+		e.logger.WarnContext(ctx, "evaluate connection log export flag", attr.SlogError(err))
+	}
+	return evaluation == feature.EvaluationEnabled
+}
+
+func (e *connectionLogExport) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {
+	if err := e.logs.Log(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record); err != nil {
+		return fmt.Errorf("log connection attempt: %w", err)
+	}
+	return nil
+}
+
+func (e *connectionLogExport) Close() { e.logs.Close() }
 
 type mcpServiceDependencies struct {
 	Connections    *mcpconnectionattempts.Recorder
