@@ -69,7 +69,7 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 	}
 	tx, err := beginner.Begin(ctx)
 	if err != nil {
-		return RemoteSession{}, err
+		return RemoteSession{}, fmt.Errorf("begin session token storage: %w", err)
 	}
 	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
 	queries := q.WithTx(tx)
@@ -81,7 +81,7 @@ func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg 
 		return RemoteSession{}, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return RemoteSession{}, err
+		return RemoteSession{}, fmt.Errorf("commit session token storage: %w", err)
 	}
 	return row, nil
 }

@@ -182,7 +182,8 @@ func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunn
 
 // refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
 func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
-	if _, held := errors.AsType[*proxy.ToolResultError](err); held {
+	// A tool the catalog doesn't have is not a connection outcome.
+	if _, held := errors.AsType[*proxy.ToolResultError](err); held || errors.Is(err, errToolNotOnUpstream) {
 		var none mcpconnectionattempts.Code
 		return none, false
 	}

@@ -597,11 +597,12 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	}
 	if authentication.ownClientsOnly {
 		if serverID := endpoint.proxiedServerID(); serverID.Valid {
-			tokens, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable, endpoint.UpstreamResource)
+			resolved, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable, endpoint.UpstreamResource)
 			if err != nil {
 				return nil, fmt.Errorf("resolve server clients: %w", err)
 			}
-			return tokens, nil
+			authentication.serverAssociation = &resolved.Association
+			return resolved.Tokens, nil
 		}
 	}
 	if skipUnusable {

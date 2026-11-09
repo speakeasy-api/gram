@@ -55,12 +55,11 @@ export function identityRailItems(
         active: detail.activity.active,
       },
       {
-        // The agent's way in: its endpoint, the keys it holds, and the
-        // platforms that sign in as it. Named for what it carries rather
-        // than for the wizard step that first hands them over — setting an
-        // agent up happens once, holding its credentials is forever.
-        key: "credentials",
-        title: "Credentials",
+        // The agent's way in: the keys it holds and the platforms that sign
+        // in as it. Named like the wizard step that first sets it up, so
+        // issuing another key reads as the same thing as issuing the first.
+        key: "sign-in",
+        title: "Agent sign-in",
         href: `${detail.credentials.href(encodedUrn)}${search}`,
         active: detail.credentials.active,
       },

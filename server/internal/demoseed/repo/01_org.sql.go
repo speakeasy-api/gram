@@ -901,7 +901,6 @@ INSERT INTO organization_setup_tasks
   (organization_id, task_key, status, assignee_user_id, assignee_email, hidden_at)
 VALUES
   ($1::text, 'identity-provider', 'todo', NULL, NULL, NULL),
-  ($1::text, 'create-marketplace', 'todo', NULL, NULL, NULL),
   ($1::text, 'distribute-servers', 'todo', NULL, NULL, NULL),
   ($1::text, 'enable-logging', 'todo', NULL, NULL, NULL),
   ($1::text, 'anthropic-observability', 'todo', NULL, NULL, NULL),

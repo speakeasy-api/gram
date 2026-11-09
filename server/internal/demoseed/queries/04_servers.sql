@@ -219,14 +219,12 @@ VALUES
   (@remote_session_client_id::uuid,
    @user_session_issuer_id::uuid);
 
--- mcp_servers.remote_session_issuer_id is denormalized from the live client
--- bindings, and the app recomputes it after the commit that writes them
--- (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
--- goes through that path, so stamp what the resync would derive: exactly one
--- remote issuer is bound to this server's user session issuer (the
--- attachment fixture's client below sits under the same one). Left NULL,
--- upstream token routing fails closed and Linear reads as having no identity.
--- name: ServersStampLinearRemoteSessionIssuer :exec
+-- mcp_servers.remote_session_issuer_id is denormalized from a server's client
+-- associations, and the app recomputes it after the commit that writes them
+-- (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+-- that path, so stamp what the resync would derive. Left NULL, upstream token
+-- routing fails closed and the server reads as having no identity.
+-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = @remote_session_issuer_id::uuid
 WHERE id = @mcp_server_id::uuid

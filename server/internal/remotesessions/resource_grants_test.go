@@ -332,12 +332,18 @@ func TestRemoteSessionResourceGrants_LegacyReferenceRemainsIndependentlyRevocabl
 	ctx, f := newAuthClientTokenFixture(t, "legacy-resource-reference")
 	expandResourceGrantIndexes(t, ctx, f.ti.conn)
 	subject := urn.NewUserSubject("legacy-reference-user")
-	legacy := f.consent(t, subject, f.signInA, f.clientID, "legacy-reference-token")
+	f.consent(t, subject, f.signInA, f.clientID, "legacy-reference-token")
 	encrypted, err := f.enc.Encrypt([]byte("bound-b-token"))
 	require.NoError(t, err)
 	q := repo.New(f.ti.conn)
-	b, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, Resource: conv.ToPGText("https://legacy-ref-b.example/mcp"), AccessTokenEncrypted: encrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+	// Establish two bound grants before adding legacy NULL data, avoiding singleton adoption.
+	params := repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, Resource: conv.ToPGText("https://legacy-ref-a.example/mcp"), AccessTokenEncrypted: encrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}}
+	_, err = q.UpsertRemoteSession(ctx, params)
 	require.NoError(t, err)
+	params.Resource = conv.ToPGText("https://legacy-ref-b.example/mcp")
+	b, err := q.UpsertRemoteSession(ctx, params)
+	require.NoError(t, err)
+	legacy := f.consent(t, subject, f.signInA, f.clientID, "legacy-reference-token")
 	ref := remotesessions.RemoteSessionRef{ID: legacy.ID, Subject: subject, ClientID: f.clientID, ProjectID: f.projectID, OrganizationID: f.organizationID, UpdatedAt: legacy.UpdatedAt.Time}
 	stale := ref
 	stale.UpdatedAt = stale.UpdatedAt.Add(time.Hour)
@@ -430,6 +436,7 @@ func TestRemoteSessionResourceGrants_BackfillCollision(t *testing.T) {
 				require.NoError(t, err)
 				legacy = row
 			}
+			//nolint:glint // notestingrawsql: hold a transaction across generated writes to instrument consent/refresh serialization.
 			tx, err := f.ti.conn.Begin(ctx)
 			require.NoError(t, err)
 			defer func() { _ = tx.Rollback(ctx) }()

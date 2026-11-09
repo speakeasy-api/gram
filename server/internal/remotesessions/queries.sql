@@ -3774,6 +3774,9 @@ FOR UPDATE;
 -- the issuer of a gateway they are a member of, or as the organization's only
 -- organization-level issuer.
 --
+-- association_provider_ids: the distinct live providers of the configured
+-- server's live client associations, the same on every row.
+--
 -- Organization-wide, because an organization-owned client bound to an
 -- organization-level issuer serves servers in every project.
 SELECT
@@ -3840,7 +3843,24 @@ SELECT
         )
       )
     ORDER BY a.mcp_server_id
-  )::uuid[] AS other_mcp_server_ids
+  )::uuid[] AS other_mcp_server_ids,
+  ARRAY(
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = @mcp_server_id::uuid
+        AND a.organization_id = @organization_id::text
+        AND a.deleted IS FALSE
+  )::uuid[] AS association_provider_ids
 FROM unnest(@remote_session_client_ids::uuid[]) AS requested(client_id);
 
 -- name: DescribeUserSessionIssuerConsumers :one

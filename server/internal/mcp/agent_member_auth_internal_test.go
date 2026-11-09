@@ -312,7 +312,7 @@ func TestAgentMemberRoutingPreservesAmbiguity(t *testing.T) {
 			uuid.New(): {Token: "second", Resource: resource},
 		}, nil
 	}}
-	_, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "")
+	_, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "", false)
 	require.Equal(t, "remote", backend)
 	require.ErrorIs(t, err, errAmbiguousMemberCredential)
 }
