@@ -125,6 +125,9 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// agentFix, on an agent gateway, builds the links someone who can edit
+	// the agent opens to fix a member the agent cannot use; nil elsewhere.
+	agentFix *agentFixLinks
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
 	skillsOverMCP *bool
@@ -636,7 +639,7 @@ func (s *Service) callMetaServerTool(
 			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
 			return nil, err
 		}
-		s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		s.logMetaDiscovery(ctx, gate, params.Name, start, err, nil)
 		return nil, err
 	}
 
@@ -647,13 +650,21 @@ func (s *Service) callMetaServerTool(
 		return s.executeMetaCode(ctx, logger, mcpEndpoint, metaServer, gate, members, req, params)
 	}
 	var body json.RawMessage
+	// callFailure is a describe_server answered with an isError result because
+	// its member failed; memberFailures are every member a describe could not
+	// reach, each logged on that member.
+	var callFailure *metaMemberFailure
+	var memberFailures []metaMemberFailure
 	switch params.Name {
 	case metamcp.ToolListServers:
 		body, err = s.handleMetaListServersCall(authz.WithoutChallenges(ctx), logger, gate, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
-		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
+		body, callFailure, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
+		if callFailure != nil {
+			memberFailures = []metaMemberFailure{*callFailure}
+		}
 	case metamcp.ToolDescribeTools:
-		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+		body, memberFailures, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
 		body, err = s.handleMetaConnectionStatusCall(authz.WithoutChallenges(ctx), logger, gate, members, req)
 	default:
@@ -662,14 +673,23 @@ func (s *Service) callMetaServerTool(
 		// or, when it fails before one, its own.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
-	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+	s.logMetaDiscovery(ctx, gate, params.Name, start, err, callFailure)
+	for _, failure := range memberFailures {
+		s.logMetaMemberDiscoveryFailure(ctx, gate, params.Name, start, failure)
+	}
 	return body, err
 }
 
 // logMetaDiscovery writes one meta_discovery telemetry row for a gateway
-// discovery call. Failures record their oops status code.
-func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
-	s.telemLogger.Log(ctx, metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr))
+// discovery call. Failures record their oops status code, and a call answered
+// as an isError result because its member failed records that failure.
+func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error, memberFailure *metaMemberFailure) {
+	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
+	if memberFailure != nil {
+		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+	}
+	s.telemLogger.Log(ctx, params)
 }
 
 // metaDiscoveryLogParams builds a meta_discovery telemetry row for a gateway
@@ -911,6 +931,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion:   request.resolution,
 		connectURL:        connectURL,
+		agentFix:          s.newAgentFixLinks(ctx, logger, metaServer.OrganizationID, membership.agentID),
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}

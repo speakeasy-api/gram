@@ -126,9 +126,7 @@ describe("ClaudeOrgInstructionsStep", () => {
       "Add the organization instruction",
       "Check it in a new conversation",
     ]);
-    expect(
-      screen.getByText(/python3 -c "print\('hello world'\)"/),
-    ).toBeTruthy();
+    expect(screen.getByText(/echo "Speakeasy session check-in"/)).toBeTruthy();
     expect(
       screen.getByText(/completes on its own once Speakeasy receives/),
     ).toBeTruthy();

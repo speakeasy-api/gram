@@ -25,7 +25,7 @@ export function ClaudePluginRegistrationStep({
   return (
     <StepContainer
       title="Register Speakeasy's plugins in Claude"
-      description="Claude Desktop runs only plugins registered on your Claude organization. A copy the device agent installs on a laptop isn't used, so an Owner or Primary Owner registers Speakeasy's marketplace in Claude.ai. This needs a Claude Team or Enterprise plan."
+      description="Claude Desktop only runs plugins registered in your Claude organization. A copy the device agent installs isn't used. Needs an Owner or Primary Owner on Team or Enterprise."
       onContinue={onComplete}
     >
       <div className="space-y-8">
@@ -40,7 +40,7 @@ export function ClaudePluginRegistrationStep({
           index={2}
           slug="register-plugins"
           title="Register the plugins in Claude.ai"
-          description="Sync the marketplace, mark the observability plugin Required, choose how your MCP plugins install, and allow Speakeasy through Claude's network egress settings."
+          description="Sync the marketplace, set plugin access, and allow Speakeasy's domains."
         >
           <PlatformStepList
             platformId="claude-cowork"

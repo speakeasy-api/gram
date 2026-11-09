@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -587,8 +590,17 @@ func TestServeAgentGateway_AllServersKeyReachesServersAddedLater(t *testing.T) {
 	require.NotContains(t, body, blockedSlug, "the owner's exclusion still hides the blocked server")
 }
 
-func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
-	t.Parallel()
+// ownerAttachedMember is an agent gateway whose granted member signs in
+// through its owner's connection, attached to the agent.
+type ownerAttachedMember struct {
+	ti       *testInstance
+	fx       agentGatewayFixture
+	upstream *recordingUpstream
+	binding  remotesessionsrepo.AttachPrincipalRemoteSessionBindingRow
+}
+
+func seedOwnerAttachedMember(t *testing.T) (context.Context, ownerAttachedMember) {
+	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedAgentGateway(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -614,6 +626,13 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	require.Len(t, sessions, 1)
 	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
 	require.NoError(t, err)
+	return ctx, ownerAttachedMember{ti: ti, fx: fx, upstream: upstream, binding: binding}
+}
+
+func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
+	t.Parallel()
+	ctx, seeded := seedOwnerAttachedMember(t)
+	ti, fx, upstream, binding := seeded.ti, seeded.fx, seeded.upstream, seeded.binding
 	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
@@ -628,6 +647,101 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
 	require.NoError(t, err)
 	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// An agent whose delegated connection stops working cannot sign in itself.
+// The tool error and connection_status send it to someone who can edit it,
+// with the agent's MCP sign-in page, and never to a gateway administrator.
+// They name no one and hand the agent no credential.
+func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
+	t.Parallel()
+	ctx, seeded := seedOwnerAttachedMember(t)
+	ti, fx := seeded.ti, seeded.fx
+	_, err := testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, seeded.binding.ID)
+	require.NoError(t, err)
+
+	agent, err := agentsrepo.New(ti.conn).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: fx.agent.OrganizationID, ID: fx.agent.ID})
+	require.NoError(t, err)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectSlug := conv.PtrValOr(authCtx.ProjectSlug, "")
+	if agent.ProjectID.Valid {
+		project, err := projectsrepo.New(ti.conn).GetProjectByID(ctx, agent.ProjectID.UUID)
+		require.NoError(t, err)
+		projectSlug = project.Slug
+	}
+	require.NotEmpty(t, projectSlug)
+	link := fmt.Sprintf("/%s/projects/%s/identities/agents/%s/edit?step=2", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
+	editors := "Ask someone who can edit this agent"
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q needs re-authentication", fx.granted))
+	require.Contains(t, text, editors+" to open ")
+	require.Contains(t, text, link+" and reconnect it, then retry")
+	require.NotContains(t, text, "administrator")
+	require.NotContains(t, text, "owner-assigned-token")
+
+	status := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "connection_status", "arguments": map[string]any{}})
+	response, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, status)
+	require.NoError(t, err)
+	rpc := decodeRPCResponse(t, response)
+	text, isError = metaToolResultText(t, rpc)
+	require.False(t, isError, text)
+	require.Contains(t, text, "that this agent cannot give itself. "+editors+" to open ")
+	require.NotContains(t, text, "administrator")
+	require.NotContains(t, text, "sign-in page")
+	require.NotContains(t, text, "its owner")
+	var result struct {
+		StructuredContent metamcp.ConnectionStatusResult `json:"structuredContent"`
+	}
+	require.NoError(t, json.Unmarshal(rpc["result"], &result))
+	require.Equal(t, metamcp.ConnectionStatusAudienceAgentEditors, result.StructuredContent.Audience)
+	require.True(t, strings.HasSuffix(result.StructuredContent.ConnectURL, link), result.StructuredContent.ConnectURL)
+	row := slices.IndexFunc(result.StructuredContent.Servers, func(s metamcp.ConnectionStatusServer) bool { return s.Slug == fx.granted })
+	require.GreaterOrEqual(t, row, 0)
+	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
+	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
+	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// A server with no OAuth sign-in whose upstream refuses the call needs a
+// credential configured on the server. Routing finds the agent no connection
+// of its own for it (agentOAuthSignIn), so the refusal asks an admin of the
+// server's project, never the agent's sign-in step.
+func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	// Counted, so the test proves the upstream's own 401 led to the advice.
+	var refusals atomic.Int32
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		refusals.Add(1)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.URL})
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: mcpservers.VisibilityPrivate})
+	require.NoError(t, err)
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q needs a credential configured for it in Speakeasy", fx.granted))
+	require.Contains(t, text, "Ask an admin of the server's project to add or fix the server's credential, then retry")
+	require.NotContains(t, text, "/edit?step=2", "the agent's sign-in step cannot add a server's credential")
+	require.NotContains(t, text, "re-authentication")
+	require.NotContains(t, text, "administrator")
+	require.Positive(t, refusals.Load(), "the upstream answered the call with its 401")
 }
 
 // A platform tool runs in its server's project, but the agent gateway is

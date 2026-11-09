@@ -145,6 +145,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          connectURL,
 		consentDiagnostics:  nil,
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}

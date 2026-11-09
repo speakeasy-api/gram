@@ -6681,6 +6681,60 @@ func (q *Queries) ListPlatformMCPProjectAssistants(ctx context.Context, arg List
 	return items, nil
 }
 
+const listPlatformMCPProjectCatalogServers = `-- name: ListPlatformMCPProjectCatalogServers :many
+SELECT r.id AS registration_id, r.catalog_provider, r.catalog_reference, s.id AS mcp_server_id, s.slug AS mcp_server_slug
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_servers s ON s.id = r.mcp_server_id AND s.project_id = r.project_id AND s.deleted IS FALSE
+WHERE r.organization_id = $1
+  AND r.project_id = $2
+  AND r.status = 'registered'
+  AND r.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id
+LIMIT 500
+`
+
+type ListPlatformMCPProjectCatalogServersParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type ListPlatformMCPProjectCatalogServersRow struct {
+	RegistrationID   uuid.UUID
+	CatalogProvider  string
+	CatalogReference string
+	McpServerID      uuid.UUID
+	McpServerSlug    pgtype.Text
+}
+
+// The catalog servers a project already has, so catalog result cards can say
+// which are added and link to each one. Every join is pinned to the
+// registration's organization and project.
+func (q *Queries) ListPlatformMCPProjectCatalogServers(ctx context.Context, arg ListPlatformMCPProjectCatalogServersParams) ([]ListPlatformMCPProjectCatalogServersRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPProjectCatalogServers, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPProjectCatalogServersRow
+	for rows.Next() {
+		var i ListPlatformMCPProjectCatalogServersRow
+		if err := rows.Scan(
+			&i.RegistrationID,
+			&i.CatalogProvider,
+			&i.CatalogReference,
+			&i.McpServerID,
+			&i.McpServerSlug,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listPlatformMCPProjectPlugins = `-- name: ListPlatformMCPProjectPlugins :many
 
 SELECT

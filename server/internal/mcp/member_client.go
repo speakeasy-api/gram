@@ -407,7 +407,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		if !ok {
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
-		return memberConnectionError{memberAuthFailure(member, dial), code}
+		return memberConnectionError{memberAuthFailure(member, dial, status), code}
 	}
 	status := rt.status()
 	if upstreamStatusOK(status) {
