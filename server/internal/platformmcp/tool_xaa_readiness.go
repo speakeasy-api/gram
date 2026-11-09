@@ -17,6 +17,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	srv "github.com/speakeasy-api/gram/server/gen/okta_resource_connections"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -106,7 +107,7 @@ func (r *PostgresReader) WithXAAReadiness(connections xaaConnectionsReader, sign
 func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovernor, outbound *url.URL) *PostgresReader {
 	if r.xaaReadiness != nil && r.db != nil {
 		r.xaaReadiness.identity = &postgresXAAIdentityInspector{logger: r.logger, db: r.db, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: outbound, Registration: nil}}
-		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r}
+		r.xaaReadiness.servers = &postgresXAAServerReader{reader: r, authEnforcement: authenforcement.NewGate(r.db)}
 	}
 	return r
 }
@@ -115,6 +116,11 @@ func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovern
 // WithAuthorization may compose after WithXAAIdentityChaining.
 type postgresXAAServerReader struct {
 	reader *PostgresReader
+
+	// authEnforcement reads which organizations choose upstream
+	// authentication through typed auth clients, where a server's
+	// authorization server comes from what it offers.
+	authEnforcement *authenforcement.Gate
 }
 
 func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error) {
@@ -123,7 +129,11 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 	if engine == nil {
 		return none, false, ErrUnavailable
 	}
-	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID})
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return none, false, fmt.Errorf("read upstream auth enforcement: %w", err)
+	}
+	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID, TypedAuthEnforced: enforced})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return none, false, nil
