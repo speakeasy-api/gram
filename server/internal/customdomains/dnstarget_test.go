@@ -126,7 +126,7 @@ func TestEnsureDNSTargetToken_AssignsMissingToken(t *testing.T) {
 	require.False(t, domain.DnsTargetToken.Valid)
 
 	source, calls := tokenSequence(t, "assign2345")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
 	require.NoError(t, err)
 	require.Equal(t, "assign2345", token)
 	require.Equal(t, 1, *calls)
@@ -144,11 +144,11 @@ func TestEnsureDNSTargetToken_KeepsExistingToken(t *testing.T) {
 	require.NoError(t, err)
 
 	first, _ := tokenSequence(t, "first23456")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, first)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, first)
 	require.NoError(t, err)
 
 	second, _ := tokenSequence(t, "second2345")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, second)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, second)
 	require.NoError(t, err)
 	require.Equal(t, "first23456", token)
 }
@@ -160,14 +160,14 @@ func TestEnsureDNSTargetToken_RetriesOnCollision(t *testing.T) {
 	existing, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-ensure-existing", Domain: "existing.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 	taken, _ := tokenSequence(t, "taken23456")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
 	require.NoError(t, err)
 
 	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-ensure-retry", Domain: "retry.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 
 	source, calls := tokenSequence(t, "taken23456", "fresh23456")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
 	require.NoError(t, err)
 	require.Equal(t, "fresh23456", token)
 	require.Equal(t, 2, *calls)
@@ -180,14 +180,14 @@ func TestEnsureDNSTargetToken_GivesUpAfterRepeatedCollisions(t *testing.T) {
 	existing, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-ensure-existing", Domain: "existing.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 	taken, _ := tokenSequence(t, "taken23456")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
 	require.NoError(t, err)
 
 	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-ensure-exhaust", Domain: "exhaust.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 
 	source, calls := tokenSequence(t, "taken23456", "taken23456", "taken23456")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, source)
 	require.ErrorContains(t, err, "attempts collided")
 	require.Equal(t, 3, *calls)
 
@@ -203,7 +203,7 @@ func TestEnsureDNSTargetToken_CollisionKeepsCallerTransactionUsable(t *testing.T
 	existing, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-ensure-existing", Domain: "existing.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 	taken, _ := tokenSequence(t, "taken23456")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, existing.OrganizationID, existing.ID, taken)
 	require.NoError(t, err)
 
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction tests that a token collision rolls back only its savepoint
@@ -214,7 +214,7 @@ func TestEnsureDNSTargetToken_CollisionKeepsCallerTransactionUsable(t *testing.T
 	require.NoError(t, err)
 
 	source, _ := tokenSequence(t, "taken23456", "fresh23456")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, tx, domain.OrganizationID, domain.ID, source)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, tx, domain.OrganizationID, domain.ID, source)
 	require.NoError(t, err)
 	require.Equal(t, "fresh23456", token)
 
@@ -238,7 +238,7 @@ func TestEnsureDNSTargetToken_ConcurrentAssignerReturnsCommittedToken(t *testing
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
 	first, _ := tokenSequence(t, "aaaaa23456")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, tx, domain.OrganizationID, domain.ID, first)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, tx, domain.OrganizationID, domain.ID, first)
 	require.NoError(t, err)
 	require.Equal(t, "aaaaa23456", token)
 
@@ -248,7 +248,7 @@ func TestEnsureDNSTargetToken_ConcurrentAssignerReturnsCommittedToken(t *testing
 	}
 	done := make(chan result, 1)
 	go func() {
-		token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, domain.ID, func() string { return "bbbbb23456" })
+		token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, domain.ID, func() string { return "bbbbb23456" })
 		done <- result{token: token, err: err}
 	}()
 
@@ -284,7 +284,7 @@ func TestEnsureDNSTargetToken_SkipsDomainThatIsNotLive(t *testing.T) {
 
 	for _, id := range []uuid.UUID{domain.ID, uuid.New()} {
 		source, _ := tokenSequence(t, "unused2345")
-		token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, domain.OrganizationID, id, source)
+		token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, domain.OrganizationID, id, source)
 		require.NoError(t, err)
 		require.Empty(t, token)
 	}
@@ -302,7 +302,7 @@ func TestEnsureDNSTargetToken_SkipsDomainOfAnotherOrganization(t *testing.T) {
 	require.NoError(t, err)
 
 	source, _ := tokenSequence(t, "other23456")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, "org-ensure-other", domain.ID, source)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, "org-ensure-other", domain.ID, source)
 	require.NoError(t, err)
 	require.Empty(t, token)
 
@@ -318,7 +318,7 @@ func TestDeleteCustomDomain_FreesTokenForReuse(t *testing.T) {
 	deleted, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-free-deleted", Domain: "freed.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 	first, _ := tokenSequence(t, "reused2345")
-	_, err = customdomains.EnsureDNSTargetToken(ctx, ti.conn, deleted.OrganizationID, deleted.ID, first)
+	_, err = customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, deleted.OrganizationID, deleted.ID, first)
 	require.NoError(t, err)
 
 	require.NoError(t, ti.repo.DeleteCustomDomain(ctx, "org-free-deleted"))
@@ -330,7 +330,7 @@ func TestDeleteCustomDomain_FreesTokenForReuse(t *testing.T) {
 	successor, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{OrganizationID: "org-free-successor", Domain: "successor.example.com", IpAllowlist: []string{}})
 	require.NoError(t, err)
 	second, calls := tokenSequence(t, "reused2345")
-	token, err := customdomains.EnsureDNSTargetToken(ctx, ti.conn, successor.OrganizationID, successor.ID, second)
+	token, err := customdomains.EnsureDNSTargetTokenWithSource(ctx, ti.conn, successor.OrganizationID, successor.ID, second)
 	require.NoError(t, err)
 	require.Equal(t, "reused2345", token)
 	require.Equal(t, 1, *calls)
@@ -369,24 +369,4 @@ func TestCreateDomain_ReverifyBackfillsDNSTargetToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, existing.ID, domain.ID)
 	require.Regexp(t, dnsTargetTokenPattern, domain.DnsTargetToken.String)
-}
-
-func TestDeleteDomain_ClearsDNSTargetToken(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestCustomDomainsService(t)
-	authCtx := testAuthContext(t, ctx)
-	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)})
-	_, err := ti.service.CreateDomain(ctx, &gen.CreateDomainPayload{Domain: "cleared.example.com"})
-	require.NoError(t, err)
-	domain, err := ti.repo.GetCustomDomainByOrganization(ctx, authCtx.ActiveOrganizationID)
-	require.NoError(t, err)
-	require.True(t, domain.DnsTargetToken.Valid)
-
-	require.NoError(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
-
-	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
-	require.NoError(t, err)
-	require.True(t, tombstone.Deleted)
-	require.False(t, tombstone.DnsTargetToken.Valid)
 }

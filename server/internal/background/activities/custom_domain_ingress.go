@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -168,11 +167,7 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 
 	// Backfill rows created before DNS target tokens existed. Nothing routes on
 	// the token yet, so a failure must not block Apply.
-	if !desired.DnsTargetToken.Valid {
-		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, desired.OrganizationID, desired.ID, customdomains.NewDNSTargetToken); err != nil {
-			c.logger.WarnContext(ctx, "failed to backfill custom domain dns target token", attr.SlogError(err), attr.SlogURLDomain(desired.Domain))
-		}
-	}
+	backfillDNSTargetToken(ctx, c.logger, c.db, desired.OrganizationID, desired.ID, desired.Domain, desired.DnsTargetToken)
 
 	result, err := provisioner.Apply(ctx, config)
 	if err != nil {

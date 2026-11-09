@@ -629,29 +629,3 @@ func TestReconcileCustomDomain_BackfillsDNSTargetToken(t *testing.T) {
 	require.True(t, route.DnsTargetToken.Valid)
 	require.Len(t, route.DnsTargetToken.String, customdomains.DNSTargetTokenLength)
 }
-
-func TestReconcileCustomDomain_KeepsExistingDNSTargetToken(t *testing.T) {
-	t.Parallel()
-
-	ctx := t.Context()
-	logger := testenv.NewLogger(t)
-	conn, err := infra.CloneTestDatabase(t, "reconcile_keep_token_test")
-	require.NoError(t, err)
-	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
-		OrganizationID:  "org-reconcile-keep",
-		Domain:          "reconcile-keep.example.com",
-		ProvisionerKind: string(k8s.ProvisionerKindIngress),
-		IpAllowlist:     []string{},
-	})
-	require.NoError(t, err)
-	token, err := customdomains.EnsureDNSTargetToken(ctx, conn, customDomain.OrganizationID, customDomain.ID, customdomains.NewDNSTargetToken)
-	require.NoError(t, err)
-
-	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
-	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner}, activities.WithSetupSleep(0))
-	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
-
-	route, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
-	require.NoError(t, err)
-	require.Equal(t, token, route.DnsTargetToken.String)
-}

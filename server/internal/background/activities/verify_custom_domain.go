@@ -130,7 +130,7 @@ func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args Ver
 	if err != nil {
 		return noRow, fmt.Errorf("create legacy custom domain: %w", err)
 	}
-	token, err := customdomains.EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
+	token, err := customdomains.EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID)
 	if err != nil {
 		return noRow, fmt.Errorf("assign legacy custom domain dns target token: %w", err)
 	}
@@ -202,7 +202,7 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 
 	// Pending rows created before token support need a target before setup can finish.
 	if !domain.DnsTargetToken.Valid {
-		if _, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken); err != nil {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID); err != nil {
 			return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
 		}
 	}

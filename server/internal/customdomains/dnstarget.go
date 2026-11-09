@@ -25,7 +25,7 @@ const (
 	// target (<token>.<suffix>) short enough to type.
 	DNSTargetTokenLength = 10
 
-	// maxDNSTargetTokenAttempts bounds how many tokens EnsureDNSTargetToken
+	// maxDNSTargetTokenAttempts bounds how many tokens ensureDNSTargetToken
 	// tries before giving up. A collision is already negligible at 50 bits,
 	// so needing a third attempt points at a broken token source rather than
 	// bad luck.
@@ -80,15 +80,21 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 	return token.String + "." + suffix, true
 }
 
-// EnsureDNSTargetToken assigns a DNS target token to the organization's live
-// custom domain with the given id when it has none, and returns the domain's
-// token. It returns an empty token and no error when the organization has no
-// live domain with that id (missing or soft deleted).
+// EnsureDNSTargetToken assigns a random DNS target token to the
+// organization's live custom domain with the given id when it has none, and
+// returns the domain's token. It returns an empty token and no error when the
+// organization has no live domain with that id (missing or soft deleted).
 //
 // Each attempt runs in its own transaction from db, so a token collision on
-// the live-row unique index is retried with a new token from newToken without
-// aborting a caller's enclosing transaction.
-func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
+// the live-row unique index is retried with a new token without aborting a
+// caller's enclosing transaction.
+func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID) (string, error) {
+	return ensureDNSTargetToken(ctx, db, organizationID, id, NewDNSTargetToken)
+}
+
+// ensureDNSTargetToken is EnsureDNSTargetToken with the token source as a
+// parameter, so tests can force collisions.
+func ensureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
 	for range maxDNSTargetTokenAttempts {
 		token, err := assignDNSTargetToken(ctx, db, organizationID, id, newToken())
 		var pgErr *pgconn.PgError

@@ -419,4 +419,9 @@ func TestDeleteDomain_AuditSnapshotKeepsDNSTargetToken(t *testing.T) {
 	require.Equal(t, "delete-token.example.com", beforeSnapshot["Domain"])
 	require.Equal(t, "abcdefgh23", beforeSnapshot["DNSTargetToken"])
 	require.Equal(t, "abcdefgh23."+testDNSTargetSuffix, beforeSnapshot["DNSTarget"])
+
+	tombstone, err := ti.repo.GetCustomDomainRouteConfig(ctx, domain.ID)
+	require.NoError(t, err)
+	require.True(t, tombstone.Deleted)
+	require.False(t, tombstone.DnsTargetToken.Valid, "a deleted domain releases its token")
 }
