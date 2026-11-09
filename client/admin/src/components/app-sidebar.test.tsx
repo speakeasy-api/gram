@@ -233,6 +233,10 @@ describe("AppSidebar", () => {
             href: "/upstream-oauth-migration",
           },
           { label: "Fleet health", href: "/fleet-health" },
+          {
+            label: "Platform MCP feedback",
+            href: "/platform-mcp-feedback",
+          },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",

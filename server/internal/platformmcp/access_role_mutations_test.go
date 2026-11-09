@@ -122,6 +122,36 @@ func TestAccessRoleReceiptRejectsUnknownOrUnsafePayloads(t *testing.T) {
 	result.ResultCategory = "updated"
 	require.True(t, validAccessRoleMutationReceiptResult(operationUpdateMCPAccessRole, result))
 	require.False(t, validAccessRoleMutationReceiptResult(operationCreateMCPAccessRole, result))
+
+	// The sensitive scopes a receipt names are a closed set: the catalogue's.
+	result.SensitiveScopesAdded = []string{string(authz.ScopeChatRead)}
+	require.True(t, validAccessRoleMutationReceiptResult(operationUpdateMCPAccessRole, result))
+	result.SensitiveScopesAdded = []string{string(authz.ScopeProjectRead)}
+	require.False(t, validAccessRoleMutationReceiptResult(operationUpdateMCPAccessRole, result))
+	result.SensitiveScopesAdded = []string{"principal_urn"}
+	require.False(t, validAccessRoleMutationReceiptResult(operationUpdateMCPAccessRole, result))
+}
+
+func TestAccessRoleReceiptNamesSensitiveScopesTheWriteAdded(t *testing.T) {
+	t.Parallel()
+
+	service := &AccessRoleMutationService{versionKey: make([]byte, 32)}
+	roleID := uuid.NewString()
+	before := &accessgen.Role{ID: roleID, Name: "Reviewers", Grants: []*accessgen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}, {Scope: string(authz.ScopeChatRead)}}}
+	after := &accessgen.Role{ID: roleID, Name: "Reviewers", Grants: []*accessgen.RoleGrant{{Scope: string(authz.ScopeProjectRead)}, {Scope: string(authz.ScopeChatWrite)}, {Scope: string(authz.ScopeLogRead)}}}
+
+	result, err := service.receiptResult(before, after, "org-reviewers", "updated", "complete")
+	require.NoError(t, err)
+	require.Equal(t, []string{string(authz.ScopeChatWrite), string(authz.ScopeLogRead)}, result.SensitiveScopesAdded)
+
+	// An MCP connect grant, the only kind the MCP role tools write, adds
+	// nothing sensitive, so the field stays absent from the payload.
+	created, err := service.receiptResult(nil, &accessgen.Role{ID: roleID, Name: "Operators", Grants: []*accessgen.RoleGrant{{Scope: string(authz.ScopeMCPConnect)}}}, "org-operators", "created", "pending")
+	require.NoError(t, err)
+	require.Nil(t, created.SensitiveScopesAdded)
+	payload, err := encodeAccessRoleMutationReceipt(operationCreateMCPAccessRole, created)
+	require.NoError(t, err)
+	require.NotContains(t, string(payload), "sensitive_scopes_added")
 }
 
 func TestAccessRoleRemovalDoesNotRequireCurrentCatalog(t *testing.T) {

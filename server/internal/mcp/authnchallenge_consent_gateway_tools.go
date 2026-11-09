@@ -164,6 +164,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -174,6 +175,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}
@@ -233,12 +235,14 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	for _, member := range members {
 		ids = append(ids, member.serverID)
 	}
-	backendHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
+	backendHashes, _, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	captured := map[string]*memberCatalog{}
-	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
+	// Listing every member's tools for the consent page names none of them,
+	// so it records no authorization check for any.
+	inventory, unavailableMembers, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}

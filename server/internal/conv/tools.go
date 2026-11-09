@@ -41,19 +41,7 @@ func GetToolURN(tool types.Tool) (*urn.Tool, error) {
 		}
 		return &toolURN, nil
 	}
-	if tool.ExternalMcpToolDefinition != nil {
-		err := toolURN.UnmarshalText([]byte(tool.ExternalMcpToolDefinition.ToolUrn))
-		if err != nil {
-			return nil, urn.ErrInvalid
-		}
-		return &toolURN, nil
-	}
-
 	return nil, urn.ErrInvalid
-}
-
-func IsProxyTool(tool *types.Tool) bool {
-	return tool != nil && tool.ExternalMcpToolDefinition != nil && tool.ExternalMcpToolDefinition.Type != nil && *tool.ExternalMcpToolDefinition.Type == "proxy"
 }
 
 func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
@@ -157,30 +145,6 @@ func ToBaseTool(tool *types.Tool) (types.BaseToolAttributes, error) {
 		}, nil
 	}
 
-	if tool.ExternalMcpToolDefinition != nil {
-		if len(tool.ExternalMcpToolDefinition.Schema) > 0 {
-			schema = tool.ExternalMcpToolDefinition.Schema
-		}
-		return types.BaseToolAttributes{
-			ID:            tool.ExternalMcpToolDefinition.ID,
-			ToolUrn:       tool.ExternalMcpToolDefinition.ToolUrn,
-			ProjectID:     tool.ExternalMcpToolDefinition.ProjectID,
-			Name:          tool.ExternalMcpToolDefinition.Name,
-			CanonicalName: tool.ExternalMcpToolDefinition.CanonicalName,
-			Description:   tool.ExternalMcpToolDefinition.Description,
-			SchemaVersion: tool.ExternalMcpToolDefinition.SchemaVersion,
-			Schema:        schema,
-			CreatedAt:     tool.ExternalMcpToolDefinition.CreatedAt,
-			UpdatedAt:     tool.ExternalMcpToolDefinition.UpdatedAt,
-			Confirm:       nil,
-			ConfirmPrompt: nil,
-			Summarizer:    nil,
-			Canonical:     nil,
-			Variation:     nil,
-			Annotations:   tool.ExternalMcpToolDefinition.Annotations,
-		}, nil
-	}
-
 	return types.BaseToolAttributes{}, urn.ErrInvalid
 }
 
@@ -264,18 +228,6 @@ func ApplyVariation(tool types.Tool, variation types.ToolVariation) {
 		if newSchema, err := variedToolSchema(baseTool.Schema, baseTool.Summarizer); err == nil {
 			tool.PlatformToolDefinition.Schema = newSchema
 		}
-	}
-
-	if tool.ExternalMcpToolDefinition != nil {
-		tool.ExternalMcpToolDefinition.Name = PtrValOrEmpty(variation.Name, tool.ExternalMcpToolDefinition.Name)
-		tool.ExternalMcpToolDefinition.Description = PtrValOrEmpty(variation.Description, tool.ExternalMcpToolDefinition.Description)
-		tool.ExternalMcpToolDefinition.Confirm = Default(variation.Confirm, tool.ExternalMcpToolDefinition.Confirm)
-		tool.ExternalMcpToolDefinition.ConfirmPrompt = Default(variation.ConfirmPrompt, tool.ExternalMcpToolDefinition.ConfirmPrompt)
-		tool.ExternalMcpToolDefinition.Summarizer = Default(variation.Summarizer, tool.ExternalMcpToolDefinition.Summarizer)
-		tool.ExternalMcpToolDefinition.Annotations = annotationOverrides
-
-		tool.ExternalMcpToolDefinition.Canonical = &canonicalAttributes
-		tool.ExternalMcpToolDefinition.Variation = &variation
 	}
 }
 
@@ -420,7 +372,6 @@ type ToolListEntry struct {
 }
 
 // ToToolListEntry extracts tool list entry fields from a tool.
-// Returns error for proxy tools that must be unfolded first.
 func ToToolListEntry(tool *types.Tool) (ToolListEntry, error) {
 	if tool == nil {
 		return ToolListEntry{

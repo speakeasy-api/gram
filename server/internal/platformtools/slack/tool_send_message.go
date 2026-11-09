@@ -48,7 +48,7 @@ type postMessageResponse struct {
 
 // NewSendMessageTool returns the Slack send-message tool. router may be nil,
 // in which case route_replies "self" is rejected.
-func NewSendMessageTool(httpClient *guardian.HTTPClient, router ThreadRouter) core.PlatformToolExecutor {
+func NewSendMessageTool(httpClient *guardian.HTTPClient, router ThreadRouter) *slackTool {
 	readOnly := false
 	destructive := false
 	idempotent := false

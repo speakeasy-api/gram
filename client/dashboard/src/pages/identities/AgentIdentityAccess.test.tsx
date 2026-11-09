@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   identityLink: vi.fn(),
   allAuthClients: vi.fn(),
   hasScope: vi.fn(),
+  scopesError: false,
 }));
 vi.mock("@/components/identity-link", () => ({
   IdentityLink: ({
@@ -93,10 +94,34 @@ vi.mock("./GrantOnBehalfOf", () => ({
     <span>{`on behalf of, for ${resourceId}`}</span>
   ),
 }));
+vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
+  useListAgentPolicyScopes: () => ({
+    data: mocks.scopesError
+      ? undefined
+      : {
+          scopes: [
+            {
+              slug: "inference:execute",
+              label: "Run inference",
+              description: "Run inference in selected projects.",
+              resourceType: "inference",
+              category: "inference",
+              visibility: "user_visible",
+              agentEligible: true,
+              sensitive: false,
+              subScopes: [],
+            },
+          ],
+        },
+    isLoading: false,
+    isError: mocks.scopesError,
+  }),
+}));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
     projectMap: new Map([
       ["project_example", { slug: "example", name: "Example project" }],
+      ["project_other", { slug: "other", name: "Other project" }],
     ]),
     toolsetMap: new Map([
       [
@@ -108,7 +133,16 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
         },
       ],
     ]),
-    mcpServerMap: new Map(),
+    mcpServerMap: new Map([
+      [
+        "server_remote",
+        {
+          slug: "remote-server",
+          name: "Remote server",
+          projectId: "project_example",
+        },
+      ],
+    ]),
   }),
 }));
 const agent: ManagedAgent = {
@@ -142,6 +176,7 @@ beforeEach(() => {
       ? { data: authClients, isSuccess: true }
       : { data: undefined, isSuccess: false },
   );
+  mocks.scopesError = false;
   mocks.list.mockResolvedValue([]);
   mocks.listMembers.mockResolvedValue({
     members: [
@@ -172,7 +207,13 @@ describe("Agent profile permissions", () => {
       },
     ]);
     setup();
-    await screen.findByText("inference:execute");
+    const slug = await screen.findByText("inference:execute");
+    expect(slug.parentElement?.textContent).toBe(
+      "Run inference (inference:execute)",
+    );
+    expect(
+      screen.getByText("Run inference in selected projects."),
+    ).toBeTruthy();
     expect(screen.getAllByText("Agent permissions")).toHaveLength(1);
     expect(screen.queryByText("Inference access")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
@@ -211,6 +252,106 @@ describe("Agent profile permissions", () => {
     expect(mocks.list).toHaveBeenCalledWith({ agentId: agent.id }, undefined, {
       signal: expect.any(AbortSignal),
     });
+  });
+  it("lists the servers the agent reaches first, edited in its setup flow", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "read_grant",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "project_example" },
+      },
+      {
+        id: "connect_grant",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_example",
+          projectId: "project_example",
+        },
+      },
+    ]);
+    setup();
+    await screen.findByText("mcp:connect");
+    const titles = screen
+      .getAllByText(/^(MCP servers|Other permissions)$/)
+      .map((title) => title.textContent);
+    expect(titles).toEqual(["MCP servers", "Other permissions"]);
+    expect(
+      screen.getByRole("link", { name: "Edit servers" }).getAttribute("href"),
+    ).toMatch(/\/identities\/agents\/agent_example\/edit\?step=1$/);
+    expect(screen.getAllByText("mcp:connect")).toHaveLength(1);
+    expect(screen.getByText("project:read")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    const dialog = screen.getByRole("dialog", { name: "Edit permissions" });
+    expect(dialog.textContent).not.toContain("mcp:connect");
+  });
+  it("offers to add servers when the agent reaches none", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "read_grant",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "project_example" },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText("This agent cannot connect to any MCP server."),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Edit servers" })).toBeTruthy();
+  });
+  it("does not say the agent cannot connect when mcp:write lets it", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "write_grant",
+        scope: "mcp:write",
+        selector: { resourceKind: "mcp", resourceId: "*" },
+      },
+    ]);
+    setup();
+    expect(
+      await screen.findByText(
+        /Its mcp:write permissions, listed with its other permissions, also let it connect/,
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This agent cannot connect to any MCP server."),
+    ).toBeNull();
+  });
+  it("names every server's project, whether or not its grant stores one", async () => {
+    // The setup flow stores a server with its project; the permission picker
+    // stores the server alone. A stored project wins over the server's own,
+    // so the hosted grant stores a different project than its server's.
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_hosted",
+        scope: "mcp:connect",
+        selector: {
+          resourceKind: "mcp",
+          resourceId: "server_example",
+          projectId: "project_other",
+        },
+      },
+      {
+        id: "grant_remote",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_remote" },
+      },
+      {
+        id: "grant_unknown",
+        scope: "mcp:connect",
+        selector: { resourceKind: "mcp", resourceId: "server_gone" },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("Remote server")).toBeTruthy();
+    // The hosted row keeps its stored project; the picker row reads its
+    // server's project.
+    expect(screen.getAllByText("Project: Other project")).toHaveLength(1);
+    expect(screen.getAllByText("Project: Example project")).toHaveLength(1);
+    // A server the inventory does not know is still listed, with no project
+    // and no bare id.
+    expect(screen.getByText("server_gone")).toBeTruthy();
+    expect(screen.queryByText(/Project: server_gone/)).toBeNull();
   });
   it("shows an org permission as the whole organization unless narrowed to a project", async () => {
     mocks.list.mockResolvedValue([
@@ -258,6 +399,18 @@ describe("Agent profile permissions", () => {
       );
     },
   );
+  it("shows an org permission stored with the organization's id as the whole organization", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "grant_sync",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "org_example" },
+      },
+    ]);
+    setup();
+    expect(await screen.findByText("Whole organization")).toBeTruthy();
+    expect(screen.queryByText(/org_example/)).toBeNull();
+  });
   it("updates after saving permissions in Agent Identity", async () => {
     const client = setup();
     await screen.findByText("No permissions configured for this agent.");
@@ -501,6 +654,23 @@ describe("Agent profile permissions", () => {
       await screen.findByText("Any service account in the organization"),
     ).toBeTruthy();
     expect(mocks.allAuthClients).not.toHaveBeenCalledWith({ enabled: true });
+  });
+  it("keeps the slugs and says so when the permission catalogue fails to load", async () => {
+    mocks.scopesError = true;
+    mocks.list.mockResolvedValue([
+      {
+        id: "inference_grant",
+        scope: "inference:execute",
+        selector: { resourceKind: "inference", resourceId: "*" },
+      },
+    ]);
+    setup();
+    const slug = await screen.findByText("inference:execute");
+    expect(slug.parentElement?.textContent).toBe("inference:execute");
+    expect(screen.queryByText("Run inference")).toBeNull();
+    expect(
+      screen.getByText(/Permission names could not be loaded/),
+    ).toBeTruthy();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

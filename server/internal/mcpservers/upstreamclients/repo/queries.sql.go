@@ -1131,6 +1131,48 @@ func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg Lis
 	return items, nil
 }
 
+const listMCPServerUpstreamIssuers = `-- name: ListMCPServerUpstreamIssuers :many
+SELECT DISTINCT c.remote_session_issuer_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+ AND i.deleted IS FALSE
+WHERE a.mcp_server_id = $1::uuid
+  AND a.project_id = $2::uuid
+  AND a.deleted IS FALSE
+ORDER BY c.remote_session_issuer_id
+`
+
+type ListMCPServerUpstreamIssuersParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// The distinct live providers one MCP server reaches through its live client
+// associations.
+func (q *Queries) ListMCPServerUpstreamIssuers(ctx context.Context, arg ListMCPServerUpstreamIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerUpstreamIssuers, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_issuer_id uuid.UUID
+		if err := rows.Scan(&remote_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_issuer_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
 SELECT latest.mcp_server_id,
        latest.auth_client_id::uuid AS auth_client_id
