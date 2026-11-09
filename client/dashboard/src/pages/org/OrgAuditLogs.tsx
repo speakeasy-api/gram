@@ -1045,59 +1045,97 @@ function OrgAuditLogsInner() {
           }}
         >
           <Page.Toolbar>
-            <Page.Toolbar.Leading>
-              <SegmentedControl
-                ariaLabel="Audit log view"
-                value={view}
-                onChange={(value) => {
-                  // Actions, actors and surfaces differ between views, so a
-                  // filter chosen in one could leave another empty.
-                  void setSelectedView(value);
-                  clearFilterValue("action");
-                  clearFilterValue("actor");
-                  clearFilterValue("surface");
-                }}
-                options={VIEW_OPTIONS}
+            <Page.Toolbar.Row>
+              <Page.Toolbar.Leading>
+                <SegmentedControl
+                  ariaLabel="Audit log view"
+                  value={view}
+                  onChange={(value) => {
+                    // Actions, actors and surfaces differ between views, so a
+                    // filter chosen in one could leave another empty.
+                    void setSelectedView(value);
+                    clearFilterValue("action");
+                    clearFilterValue("actor");
+                    clearFilterValue("surface");
+                  }}
+                  options={VIEW_OPTIONS}
+                />
+              </Page.Toolbar.Leading>
+              <Page.Toolbar.Actions>
+                <div className="flex items-center gap-3">
+                  <Text small muted>
+                    Timestamp
+                  </Text>
+                  <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                    <Text
+                      small
+                      className={
+                        tsMode === "utc"
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      UTC
+                    </Text>
+                    <Switch
+                      checked={tsMode === "local"}
+                      onCheckedChange={(checked) => {
+                        void setTimestampMode(checked ? "local" : "utc");
+                      }}
+                      aria-label="Toggle timestamp timezone"
+                    />
+                    <Text
+                      small
+                      className={
+                        tsMode === "local"
+                          ? "text-foreground"
+                          : "text-muted-foreground"
+                      }
+                    >
+                      Local
+                    </Text>
+                  </div>
+                </div>
+              </Page.Toolbar.Actions>
+            </Page.Toolbar.Row>
+            <Page.Toolbar.Row>
+              <Page.Toolbar.Search
+                value={searchQuery}
+                onChange={handleSearchChange}
+                placeholder="Search audit logs"
               />
-            </Page.Toolbar.Leading>
-            <Page.Toolbar.Search
-              value={searchQuery}
-              onChange={handleSearchChange}
-              placeholder="Search audit logs"
-            />
-            <Page.Toolbar.Filters
-              schema={AUDIT_LOG_FILTERS}
-              values={filterValues}
-              optionsById={{
-                project: projects.map((project) => ({
-                  value: project.slug,
-                  label: project.slug,
-                })),
-                action: actionOptions.map((option) => ({
-                  value: option.value,
-                  label: option.displayName,
-                  description: auditLogCountDescription(option.count),
-                })),
-                actor: actorOptions.map((option) => ({
-                  value: option.value,
-                  label: option.displayName,
-                  description: auditLogCountDescription(option.count),
-                })),
-                surface: surfaceOptions.map((option) => ({
-                  value: option.value,
-                  label: option.displayName,
-                  description: auditLogCountDescription(option.count),
-                })),
-                resource: resourceOptions,
-              }}
-              onChange={
-                setFilterValue as (id: string, value: FilterValue) => void
-              }
-              onClear={clearFilterValue as (id: string) => void}
-              onClearAll={clearAllFilters}
-            />
-            <Page.Toolbar.Actions>
-              <div className="flex items-center gap-3">
+              <Page.Toolbar.Filters
+                schema={AUDIT_LOG_FILTERS}
+                values={filterValues}
+                optionsById={{
+                  project: projects.map((project) => ({
+                    value: project.slug,
+                    label: project.slug,
+                  })),
+                  action: actionOptions.map((option) => ({
+                    value: option.value,
+                    label: option.displayName,
+                    description: auditLogCountDescription(option.count),
+                  })),
+                  actor: actorOptions.map((option) => ({
+                    value: option.value,
+                    label: option.displayName,
+                    description: auditLogCountDescription(option.count),
+                  })),
+                  surface: surfaceOptions.map((option) => ({
+                    value: option.value,
+                    label: option.displayName,
+                    description: auditLogCountDescription(option.count),
+                  })),
+                  resource: resourceOptions,
+                }}
+                onChange={
+                  setFilterValue as (id: string, value: FilterValue) => void
+                }
+                onClear={clearFilterValue as (id: string) => void}
+                onClearAll={clearAllFilters}
+              />
+              <Page.Toolbar.Actions>
                 {searchQuery ? (
                   <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
                     <span aria-live="polite" className="min-w-8 text-center">
@@ -1125,40 +1163,8 @@ function OrgAuditLogsInner() {
                     </button>
                   </div>
                 ) : null}
-                <Text small muted>
-                  Timestamp
-                </Text>
-                <div className="bg-background flex h-8 items-center gap-2 border px-3">
-                  <Text
-                    small
-                    className={
-                      tsMode === "utc"
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    UTC
-                  </Text>
-                  <Switch
-                    checked={tsMode === "local"}
-                    onCheckedChange={(checked) => {
-                      void setTimestampMode(checked ? "local" : "utc");
-                    }}
-                    aria-label="Toggle timestamp timezone"
-                  />
-                  <Text
-                    small
-                    className={
-                      tsMode === "local"
-                        ? "text-foreground"
-                        : "text-muted-foreground"
-                    }
-                  >
-                    Local
-                  </Text>
-                </div>
-              </div>
-            </Page.Toolbar.Actions>
+              </Page.Toolbar.Actions>
+            </Page.Toolbar.Row>
           </Page.Toolbar>
         </div>
 
