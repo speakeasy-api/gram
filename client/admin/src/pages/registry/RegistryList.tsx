@@ -23,9 +23,11 @@ import { Badge } from "@/components/ui/badge";
 import { CATALOG_NOTICE } from "./RegistryEntryEditor";
 import { registrySearch, type RegistrySearch } from "./registrySearch";
 import { RegistryPromotionCandidates } from "./RegistryPromotionCandidates";
+import { CatalogRegistrySync } from "./CatalogRegistrySync";
 import { RegistryOktaUnmapped } from "./RegistryOktaUnmapped";
 
 export function RegistryList(): JSX.Element {
+  const [showSync, setShowSync] = useState(false);
   // Read from the location rather than the route, so the filters and the
   // navigation key below always come from the same update, and the list also
   // renders outside its route in tests.
@@ -93,6 +95,14 @@ export function RegistryList(): JSX.Element {
         </Button>
       </div>
       <p className="text-muted-foreground text-sm">{CATALOG_NOTICE}</p>
+      <Button
+        variant="outline"
+        aria-expanded={showSync}
+        onClick={() => setShowSync(true)}
+      >
+        Catalog Registry Sync
+      </Button>
+      {showSync && <CatalogRegistrySync />}
       <div className="flex flex-wrap items-center gap-2">
         <Input
           aria-label="Search registry"

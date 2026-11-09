@@ -41,6 +41,7 @@ func TestCatalogSyncStartupConfiguration(t *testing.T) {
 			t.Parallel()
 			flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
 			flags.String("environment", tt.environment, "")
+			flags.Bool("catalog-source-managed", tt.url != "" || tt.audience != "" || tt.reader != "", "")
 			flags.String("catalog-source-url", tt.url, "")
 			flags.String("catalog-source-audience", tt.audience, "")
 			flags.String("catalog-source-reader", tt.reader, "")
@@ -76,6 +77,7 @@ func TestCatalogSyncStartupRequiresPlatformAssetStorage(t *testing.T) {
 			t.Parallel()
 			flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
 			flags.String("environment", environment, "")
+			flags.Bool("catalog-source-managed", true, "")
 			flags.String("catalog-source-url", "https://production.example.test/admin/catalog.export", "")
 			flags.String("catalog-source-audience", "aud", "")
 			flags.String("catalog-source-reader", "reader@example.iam.gserviceaccount.com", "")
@@ -84,4 +86,33 @@ func TestCatalogSyncStartupRequiresPlatformAssetStorage(t *testing.T) {
 			require.EqualError(t, err, "catalog sync requires configured platform asset storage")
 		})
 	}
+}
+
+func TestCatalogSyncRequiresExplicitSourceManagedMode(t *testing.T) {
+	t.Parallel()
+	for _, environment := range []string{"local", "dev"} {
+		t.Run(environment, func(t *testing.T) {
+			t.Parallel()
+			flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
+			flags.String("environment", environment, "")
+			flags.Bool("catalog-source-managed", false, "")
+			flags.String("catalog-source-url", "https://production.example.test/admin/catalog.export", "")
+			flags.String("catalog-source-audience", "aud", "")
+			flags.String("catalog-source-reader", "reader@example.iam.gserviceaccount.com", "")
+			c := cli.NewContext(cli.NewApp(), flags, nil)
+			err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, &mcpregistry.CatalogAssetStore{})
+			require.ErrorContains(t, err, "GRAM_CATALOG_SOURCE_MANAGED=true")
+			require.ErrorContains(t, err, "restart")
+		})
+	}
+}
+
+func TestCatalogSourceManagedModeRequiresSourceConfiguration(t *testing.T) {
+	t.Parallel()
+	flags := flag.NewFlagSet("catalog", flag.ContinueOnError)
+	flags.String("environment", "local", "")
+	flags.Bool("catalog-source-managed", true, "")
+	c := cli.NewContext(cli.NewApp(), flags, nil)
+	err := configureCatalogSync(t.Context(), c, goahttp.NewMuxer(), &admin.Service{}, nil, &mcpregistry.CatalogAssetStore{})
+	require.ErrorContains(t, err, "source URL and audience")
 }

@@ -680,6 +680,7 @@ func mcpRuntimeFlags() []cli.Flag {
 
 func serverFlags() []cli.Flag {
 	flags := append(mcpRuntimeFlags(),
+		catalogSourceManagedFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
@@ -2269,7 +2270,7 @@ func newStartCommand() *cli.Command {
 						IssuerMetadataRefresher:        issuerMetadataRefresher,
 						RemoteSessionAssertionSigner:   clientAssertionSigner,
 						IssuerKeySweeper:               issuerKeySweeper(identityProviderProvisioner),
-						StartupSeeds:                   startupSeeds(logger, db, siteURL),
+						StartupSeeds:                   startupSeeds(logger, db, siteURL, c.String("environment"), c.Bool("catalog-source-managed")),
 						EmailService:                   emailService,
 						AssistantsCore:                 assistantsCore,
 						TemporalEnv:                    temporalEnv,

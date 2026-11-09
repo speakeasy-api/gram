@@ -86,6 +86,7 @@ import (
 
 func workerRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
+		catalogSourceManagedFlag(),
 		&cli.StringFlag{
 			Name:     "environment",
 			Usage:    "The current server environment", // local, dev, prod
@@ -909,7 +910,7 @@ func newWorkerCommand() *cli.Command {
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
 				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
-				StartupSeeds:                   startupSeeds(logger, db, siteURL),
+				StartupSeeds:                   startupSeeds(logger, db, siteURL, c.String("environment"), c.Bool("catalog-source-managed")),
 				AssistantsCore:                 assistantsCore,
 				TemporalEnv:                    temporalEnv,
 				PIScanner:                      piScanner,

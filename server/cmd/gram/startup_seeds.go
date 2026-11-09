@@ -22,8 +22,8 @@ import (
 // startupSeeds lists the reference data every worker keeps applied. To ship
 // new data, change the seed's source in code: its Version moves and the next
 // deploy applies it. To add a kind of seed, append one here.
-func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) []activities.StartupSeed {
-	return []activities.StartupSeed{
+func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL, environment string, sourceManaged bool) []activities.StartupSeed {
+	seeds := []activities.StartupSeed{
 		{
 			Name:    "registry-okta",
 			Version: oktaseed.Version(),
@@ -49,6 +49,17 @@ func startupSeeds(logger *slog.Logger, db *pgxpool.Pool, assetBaseURL *url.URL) 
 			},
 		},
 	}
+	// A source-managed destination must not recreate removed upstream entries or
+	// enrich testing edits on worker restart or explicit reseed. Production keeps
+	// its existing reference-data authority regardless of this local/dev option.
+	if sourceManaged && (environment == "local" || environment == "dev") {
+		seeds = slices.DeleteFunc(seeds, func(seed activities.StartupSeed) bool { return seed.Name == "registry-okta" })
+	}
+	return seeds
+}
+
+func catalogSourceManagedFlag() cli.Flag {
+	return &cli.BoolFlag{Name: "catalog-source-managed", EnvVars: []string{"GRAM_CATALOG_SOURCE_MANAGED"}, Usage: "Use production as local/dev catalog authority; suppress the legacy registry seed and require explicit source bootstrap configuration"}
 }
 
 // newAppSeedCommand applies the startup seeds directly, for a database
@@ -58,6 +69,8 @@ func newAppSeedCommand() *cli.Command {
 		Name:  "app-seed",
 		Usage: "Apply the reference data that workers keep applied when they start (idempotent)",
 		Flags: []cli.Flag{
+			catalogSourceManagedFlag(),
+			&cli.StringFlag{Name: "environment", EnvVars: []string{"GRAM_ENVIRONMENT"}},
 			&cli.StringFlag{Name: "site-url", EnvVars: []string{"GRAM_SITE_URL"}, Required: true},
 			&cli.StringFlag{
 				Name:     "database-url",
@@ -86,7 +99,7 @@ func newAppSeedCommand() *cli.Command {
 			}
 			defer db.Close()
 
-			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL), c.StringSlice("name"))
+			seeds, err := selectStartupSeeds(startupSeeds(logger, db, assetBaseURL, c.String("environment"), c.Bool("catalog-source-managed")), c.StringSlice("name"))
 			if err != nil {
 				return err
 			}

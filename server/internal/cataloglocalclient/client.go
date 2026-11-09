@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"golang.org/x/net/html"
 )
@@ -21,9 +22,9 @@ import (
 // DefaultEmail is an existing identity in mock-oidc/mock-oidc.example.yaml.
 const DefaultEmail = "eng@speakeasyapi.dev"
 
-// Sync uses only the configured loopback Admin server and mock OIDC provider.
+// authenticated uses only the configured loopback Admin server and mock OIDC provider.
 // It never follows redirects automatically, persists credentials, or accesses storage.
-func Sync(ctx context.Context, adminURL, providerURL, email string) (*mcpregistry.CatalogImportResult, error) {
+func authenticated(ctx context.Context, adminURL, providerURL, email string, operation func(*http.Client, *url.URL) (any, error)) (any, error) {
 	admin, err := localOrigin(adminURL)
 	if err != nil {
 		return nil, fmt.Errorf("local Admin URL: %w", err)
@@ -90,19 +91,114 @@ func Sync(ctx context.Context, adminURL, providerURL, email string) (*mcpregistr
 	if _, err := redirect(resp, admin, "/"); err != nil {
 		return nil, err
 	}
-	resp, err = request(ctx, ac, http.MethodPost, admin.JoinPath("/admin/catalog.sync"), "{}", "application/json")
+	return operation(ac, admin)
+}
+
+// Validate rejects ambiguous writes before authentication or network access.
+func Validate(action, planID string) error {
+	switch action {
+	case "bootstrap", "preview", "status":
+		if planID != "" {
+			return fmt.Errorf("--plan-id is accepted only with --action apply")
+		}
+	case "apply":
+		id, err := uuid.Parse(planID)
+		if err != nil || id == uuid.Nil {
+			return fmt.Errorf("apply requires --plan-id with the exact nonzero preview UUID; selecting that ID explicitly confirms its application")
+		}
+	default:
+		return fmt.Errorf("--action must be bootstrap, preview, apply, or status")
+	}
+	return nil
+}
+
+// Run performs the selected action using an ephemeral authenticated local session.
+// The client never previews, retries, or substitutes a plan during apply.
+// The backend still checks source staleness before applying that exact ID.
+func Run(ctx context.Context, adminURL, providerURL, email, action, planID string) (any, error) {
+	if err := Validate(action, planID); err != nil {
+		return nil, err
+	}
+	return authenticated(ctx, adminURL, providerURL, email, func(client *http.Client, admin *url.URL) (any, error) {
+		if action == "bootstrap" {
+			var status mcpregistry.CatalogRefreshStatus
+			if err := post(ctx, client, admin, "catalog.refresh", `{"action":"status"}`, &status); err != nil {
+				return nil, err
+			}
+			// Conflict-only imports establish provenance too. Never use full success
+			// alone as the condition for importing again and overwriting local edits.
+			if status.LastFullSuccessAt != nil || status.LastFullSuccessRevision != "" || status.LastAttemptState != "" || status.LastAttemptRevision != "" || len(status.Conflicts) > 0 || status.Failure != "" {
+				if status.Failure != "" || (status.LastAttemptState != "" && status.LastAttemptState != "completed") || len(status.Conflicts) > 0 {
+					return &status, fmt.Errorf("catalog has unresolved conflicts or a failed attempt; inspect --action status and --action preview; bootstrap will not refresh existing catalog state")
+				}
+				return &status, nil
+			}
+			var result mcpregistry.CatalogImportResult
+			if err := post(ctx, client, admin, "catalog.sync", "{}", &result); err != nil {
+				return nil, err
+			}
+			if len(result.Conflicts) > 0 {
+				return &result, fmt.Errorf("catalog bootstrap has unresolved conflicts; inspect --action status and --action preview")
+			}
+			return &result, nil
+		}
+		body, err := json.Marshal(struct {
+			Action string `json:"action"`
+			PlanID string `json:"planId,omitempty"`
+		}{action, planID})
+		if err != nil {
+			return nil, err
+		}
+		var result json.RawMessage
+		if err := post(ctx, client, admin, "catalog.refresh", string(body), &result); err != nil {
+			return nil, err
+		}
+		if action == "apply" {
+			var receipt mcpregistry.CatalogRefreshReceipt
+			if err := json.Unmarshal(result, &receipt); err != nil {
+				return nil, err
+			}
+			if receipt.State != "completed" {
+				return result, fmt.Errorf("catalog apply returned %q; inspect --action status and preview unresolved changes", receipt.State)
+			}
+		}
+		return result, nil
+	})
+}
+
+// Sync preserves the initial-import API for existing local callers.
+func Sync(ctx context.Context, adminURL, providerURL, email string) (*mcpregistry.CatalogImportResult, error) {
+	result, err := authenticated(ctx, adminURL, providerURL, email, func(client *http.Client, admin *url.URL) (any, error) {
+		var result mcpregistry.CatalogImportResult
+		err := post(ctx, client, admin, "catalog.sync", "{}", &result)
+		return &result, err
+	})
 	if err != nil {
 		return nil, err
 	}
+	return result.(*mcpregistry.CatalogImportResult), nil
+}
+
+func post(ctx context.Context, client *http.Client, admin *url.URL, endpoint, body string, result any) error {
+	resp, err := request(ctx, client, http.MethodPost, admin.JoinPath("/admin/"+endpoint), body, "application/json")
+	if err != nil {
+		return fmt.Errorf("contact local Admin (ensure the local stack is running): %w", err)
+	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("catalog sync returned HTTP %d", resp.StatusCode)
+		switch resp.StatusCode {
+		case http.StatusConflict:
+			return fmt.Errorf("catalog request returned HTTP 409: plan is stale; preview again and explicitly apply the new plan ID")
+		case http.StatusUnauthorized, http.StatusForbidden:
+			return fmt.Errorf("catalog request returned HTTP %d: verify local staff OIDC identity; request production source access through C1 (ConductorOne) if needed", resp.StatusCode)
+		default:
+			return fmt.Errorf("catalog request returned HTTP %d: inspect local Admin logs and source configuration; for production source permissions request access through C1 (ConductorOne)", resp.StatusCode)
+		}
 	}
-	var result mcpregistry.CatalogImportResult
-	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(&result); err != nil {
-		return nil, fmt.Errorf("decode catalog sync result: %w", err)
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(result); err != nil {
+		return fmt.Errorf("decode catalog result: %w", err)
 	}
-	return &result, nil
+	return nil
 }
 
 func localOrigin(raw string) (*url.URL, error) {

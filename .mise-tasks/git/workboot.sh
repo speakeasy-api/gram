@@ -53,19 +53,26 @@ mise run stop || true
 if INFRA_READINESS_TIMEOUT=300 ./zero --agent; then
     pause_stack
     exit 0
+else
+    boot_status=$?
 fi
 
-# `mise run seed` is `zero`'s last step, and the one that fills the org with
-# data and lifts it off the demo gate -- a boot that stops here leaves a
-# dashboard that looks broken. It talks only to Postgres and ClickHouse (no
-# server, no dev-idp handshake), so the remaining failure mode is a database
-# still settling on a cold volume. Retry the seed alone -- if `zero` failed
-# earlier than seeding, these retries fail too and the boot is reported failed
-# anyway.
+# zero reserves 20 for seed failure, 21 for catalog bootstrap failure. Only
+# retry the seed boundary: earlier setup failures and catalog access failures
+# cannot be repaired (or masked as success) by reseeding.
+if [ "$boot_status" -ne 20 ]; then
+    exit "$boot_status"
+fi
+
 for delay in 15 30 60; do
     sleep "$delay"
     echo "Retrying seed after a ${delay}s wait..."
     if mise run seed; then
+        # Keep the same post-seed boundary as zero before reporting success.
+        if ! mise run catalog:bootstrap; then
+            echo "Catalog bootstrap failed; fix the reported issue and retry mise run catalog:bootstrap." >&2
+            exit 21
+        fi
         pause_stack
         exit 0
     fi

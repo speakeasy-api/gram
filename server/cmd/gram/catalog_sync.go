@@ -24,6 +24,7 @@ func catalogSourceIdentity(sourceURL, audience string) string {
 
 func catalogSyncFlags() []cli.Flag {
 	return []cli.Flag{
+		catalogSourceManagedFlag(),
 		&cli.StringFlag{Name: "catalog-export-audience", EnvVars: []string{"GRAM_CATALOG_EXPORT_AUDIENCE"}, Usage: "Exact Google ID-token audience for the production-only internal catalog export"},
 		&cli.StringSliceFlag{Name: "catalog-export-subjects", EnvVars: []string{"GRAM_CATALOG_EXPORT_SUBJECTS"}, Usage: "Allowlisted immutable Google service-account subject IDs for read-only catalog export"},
 		&cli.StringFlag{Name: "catalog-source-url", EnvVars: []string{"GRAM_CATALOG_SOURCE_URL"}, Usage: "Fixed internal HTTPS production catalog export endpoint for local/dev sync"},
@@ -38,9 +39,15 @@ func configureCatalogSync(ctx context.Context, c *cli.Context, mux goahttp.Muxer
 	environment := c.String("environment")
 	var source admin.CatalogSource
 	sourceURL, audience, reader := c.String("catalog-source-url"), c.String("catalog-source-audience"), c.String("catalog-source-reader")
-	if sourceURL != "" || audience != "" || reader != "" {
+	if c.Bool("catalog-source-managed") || sourceURL != "" || audience != "" || reader != "" {
 		if environment != "local" && environment != "dev" {
 			return fmt.Errorf("catalog destination configuration is allowed only in local/dev")
+		}
+		// Sync and registry seeding must share one explicit authority choice.
+		// Source settings alone cannot enable writes while workers retain the
+		// legacy seed that would recreate removals or enrich testing edits.
+		if !c.Bool("catalog-source-managed") {
+			return fmt.Errorf("catalog sync requires GRAM_CATALOG_SOURCE_MANAGED=true for Admin, server, worker, and app-seed; configure the mode consistently and restart running services before syncing")
 		}
 		if sourceURL == "" || audience == "" {
 			return fmt.Errorf("catalog source URL and audience must both be configured")

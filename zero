@@ -231,7 +231,15 @@ if $started; then
     wait "$server_cache_pid" || true
 
     mise run "$start_task"
-    mise run seed
+    # Exit statuses are consumed by git:workboot: only seed failures may retry
+    # seeding. A catalog failure must never become a seed-only success.
+    if ! mise run seed; then
+        exit 20
+    fi
+    if ! mise run catalog:bootstrap; then
+        echo "Catalog bootstrap failed. Fix the reported configuration/access issue and retry mise run catalog:bootstrap." >&2
+        exit 21
+    fi
 else
     # Nothing will consume the cache, so stop paying for it: without this the
     # build runs to completion in the background of a `./zero` the user
