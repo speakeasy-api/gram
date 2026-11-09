@@ -39,6 +39,7 @@ import {
   getInitials,
   isDisplayableBucket,
 } from "@/pages/access/challengeHelpers";
+import { OrgHomeNoAccess } from "@/pages/org/OrgHomeNoAccess";
 import { OrgWelcomeBanner } from "@/pages/org/OrgWelcomeBanner";
 import { useOrgRoutes } from "@/routes";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
@@ -106,6 +107,7 @@ export default function OrgHome(): JSX.Element {
         <RequireScope
           scope={["org:read", "project:read", "org:admin"]}
           level="page"
+          fallback={<OrgHomeNoAccess />}
         >
           <OrgHomeInner />
         </RequireScope>
