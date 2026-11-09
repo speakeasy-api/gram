@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -241,7 +242,7 @@ func dashboardURL(event ActivityEvent, enrichment Enrichment, siteURL *url.URL) 
 	}
 
 	if enrichment.Organization.Slug != "" {
-		return siteURL.JoinPath(enrichment.Organization.Slug).String()
+		return dashboardlinks.OrganizationHome(enrichment.Organization.Slug).URL(siteURL)
 	}
 
 	return siteURL.String()

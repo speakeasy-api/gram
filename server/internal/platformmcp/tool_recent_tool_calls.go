@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	telemetrysvc "github.com/speakeasy-api/gram/server/internal/telemetry"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -185,7 +186,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		Window:      window,
 		Calls:       calls,
 		More:        more,
-		ToolLogsURL: r.recentToolCalls.dashboardURL.JoinPath(organization.Slug, "projects", project.Slug, "logs").String(),
+		ToolLogsURL: dashboardlinks.Logs(organization.Slug, project.Slug).URL(r.recentToolCalls.dashboardURL),
 	}, nil
 }
 

@@ -16,6 +16,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -161,7 +162,7 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 		return CreateDataExportOutput{}, fmt.Errorf("commit data export creation: %w", err)
 	}
 
-	managementURL := r.dataExportMutations.dashboardURL.JoinPath(organization.Slug, "data", "exports").String()
+	managementURL := dashboardlinks.DataExports(organization.Slug).URL(r.dataExportMutations.dashboardURL)
 	return CreateDataExportOutput{
 		Destination: DataExportDestination{
 			ID:            destination.ID.String(),

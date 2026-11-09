@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 )
 
@@ -47,7 +48,7 @@ func (s *ShadowMCPReviewLinkService) ShadowMCPReviewURL(ctx context.Context, pri
 	if err != nil || organizationSlug == "" {
 		return ""
 	}
-	return s.dashboardURL.JoinPath(organizationSlug, "projects", project.Slug, "shadow-ai", "mcps", serverSlug).String()
+	return dashboardlinks.ShadowAIMCP(organizationSlug, project.Slug, serverSlug).URL(s.dashboardURL)
 }
 
 // ShadowMCPStanding is where a direct-remote server stands with the project's

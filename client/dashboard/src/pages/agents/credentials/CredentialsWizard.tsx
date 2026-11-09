@@ -56,6 +56,11 @@ import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import {
+  WIZARD_STEPS as STEPS,
+  wizardStepIndex,
+  wizardStepParam,
+} from "./wizard-steps";
 import { hasPlatformSetup, platformSetup } from "./platformSetups";
 import {
   DEVICE_AGENT_SYNC_SCOPE,
@@ -120,16 +125,6 @@ import {
  * before Install is still a draft the user can abandon without leaving a
  * half-made agent behind.
  */
-
-/** Each step's name, and the one or two words it shrinks to in a full row. */
-const STEPS = [
-  { label: "Name", short: "Name" },
-  { label: "MCP Selection", short: "MCPs" },
-  { label: "MCP sign-in", short: "MCP sign-in" },
-  { label: "Agent sign-in", short: "Agent sign-in" },
-  { label: "Install", short: "Install" },
-  { label: "Verify", short: "Verify" },
-];
 
 /** How the agent proves who it is. */
 type Credential = "api-key" | "workload";
@@ -433,20 +428,16 @@ export function CredentialsWizard({
   // page the reader came from, and the wizard has its own Back.
   const [params, setParams] = useSearchParams();
   const defaultStep = initialPlatformKey === undefined ? 0 : 1;
-  // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
-  // a deep link to the first step and leaves `defaultStep` unreachable.
-  const linked = params.get("step");
-  const fromUrl =
-    linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
-  const step =
-    Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
+  // `?step=` names the step (`?step=servers`); an index from an older link
+  // still opens the step it meant.
+  const step = wizardStepIndex(params.get("step"), defaultStep);
   // Stable, so an effect that corrects the step can depend on it.
   const setStep = useCallback(
     (next: number) => {
       setParams(
         (current) => {
           const updated = new URLSearchParams(current);
-          updated.set("step", String(next));
+          updated.set("step", wizardStepParam(next));
           return updated;
         },
         { replace: true },
@@ -1545,7 +1536,7 @@ export function CredentialsWizard({
             short: entry.short,
           })),
         ]
-      : STEPS;
+      : [...STEPS];
   /** The platform setup step on screen, when one is. */
   const workloadStep =
     credential === "workload" ? workload.steps[step - 4] : undefined;

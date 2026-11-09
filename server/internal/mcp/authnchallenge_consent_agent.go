@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -14,6 +13,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -95,10 +95,10 @@ func (s *Service) agentSetupURL(ctx context.Context, logger *slog.Logger, organi
 		logger.WarnContext(ctx, "agent setup organization unavailable")
 		return "", fmt.Errorf("read organization metadata: %w", err)
 	}
-	setupURL, err := url.JoinPath(s.siteURL.String(), organization.Slug, "agent-management")
-	if err != nil {
+	setupURL := dashboardlinks.AgentManagement(organization.Slug).URL(s.siteURL)
+	if setupURL == "" {
 		logger.WarnContext(ctx, "agent setup URL unavailable")
-		return "", fmt.Errorf("build agent setup URL: %w", err)
+		return "", errors.New("build agent setup URL: no dashboard URL")
 	}
 	return setupURL, nil
 }

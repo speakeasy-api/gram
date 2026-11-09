@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -792,7 +793,7 @@ func stripeCheckoutBillingURL(idempotencyKey string, siteURL *url.URL, organizat
 			}
 		}
 	}
-	return base.JoinPath(organizationSlug, "billing").String(), nil
+	return dashboardlinks.Billing(organizationSlug).URL(base), nil
 }
 
 func checkoutOptionalTime(value pgtype.Timestamptz) *time.Time {

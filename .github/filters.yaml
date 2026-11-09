@@ -6,6 +6,8 @@ server:
   - "agents/**"
   - "ci/**"
   - "server/**"
+  # The dashboard link contract: server/internal/dashboardlinks tests read it.
+  - "client/dashboard/src/server-links.json"
   - "infra/**"
   - ".mise-tasks/test/ci.sh"
   - ".mise-tasks/test/server.sh"

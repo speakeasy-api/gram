@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -128,7 +129,7 @@ func (r *PostgresReader) ListDataExports(ctx context.Context, principal Principa
 	output := ListDataExportsOutput{
 		Destinations:  make([]DataExportDestination, 0, len(destinations)),
 		Routes:        make([]DataExportRoute, 0, len(routes)),
-		ManagementURL: r.dataExports.dashboardURL.JoinPath(organization.Slug, "data", "exports").String(),
+		ManagementURL: dashboardlinks.DataExports(organization.Slug).URL(r.dataExports.dashboardURL),
 		Truncated:     destinationsTruncated || routesTruncated,
 	}
 	for _, row := range destinations {

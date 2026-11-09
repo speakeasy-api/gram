@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -275,7 +276,7 @@ func (s *Service) firstPartyBrowserError(err error) error {
 		return fmt.Errorf("recover dashboard connection: %w", err)
 	}
 	return fmt.Errorf("recover dashboard connection: %w", oops.WithBrowserRecovery(err, &oauthui.RecoveryLink{
-		URL:   s.siteURL.JoinPath("@self").String(),
+		URL:   dashboardlinks.Self().URL(s.siteURL),
 		Label: "Return to dashboard",
 	}))
 }

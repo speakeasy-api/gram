@@ -11,6 +11,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/hooks/repo"
 )
 
@@ -47,11 +48,7 @@ type toolCallBlockParams struct {
 // insertToolCallBlock). The link is on the organization's default host.
 // Returns "" when no dashboard URL is available.
 func (s *Service) blockViewURL(ctx context.Context, organizationID string, blockID uuid.UUID) string {
-	siteURL := s.orgSiteURL(ctx, organizationID)
-	if siteURL == nil {
-		return ""
-	}
-	return siteURL.JoinPath("blocks", blockID.String()).String()
+	return dashboardlinks.Block(blockID.String()).URL(s.orgSiteURL(ctx, organizationID))
 }
 
 // insertToolCallBlock persists the durable block row for a pre-minted id. It is

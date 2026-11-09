@@ -44,6 +44,7 @@ import { serverLabel } from "@/lib/auth-clients";
 import { mcpServerRouteParam } from "@/lib/sources";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import { Link } from "react-router";
+import type { WizardStepId } from "@/pages/agents/credentials/wizard-steps";
 
 /**
  * Every narrowing beyond the resource itself, including constraints the
@@ -508,7 +509,7 @@ export function AgentIdentityPermissions({
               {/* The setup flow's server step, where servers are picked
                   together with how the agent signs in to each. */}
               <Link
-                to={`${routes.identities.agents.edit.href(agent.id)}?step=1`}
+                to={`${routes.identities.agents.edit.href(agent.id)}?step=${"servers" satisfies WizardStepId}`}
               >
                 Edit servers
               </Link>

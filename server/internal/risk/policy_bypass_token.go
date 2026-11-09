@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 )
 
 // errPolicyBypassRequestStoreUnavailable marks a failure to reach the cache
@@ -122,9 +123,6 @@ func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL 
 	if err != nil {
 		return "", "", time.Time{}, err
 	}
-	requestURL := siteURL.JoinPath("risk-policy-bypass", "request")
-	query := url.Values{}
-	query.Set("request_token", token)
 	// Carry the token in the URL fragment, never the query string. The token
 	// is a bearer credential: whoever holds it can redeem the link. A fragment
 	// never leaves the browser, so it stays out of server access logs,
@@ -133,8 +131,7 @@ func GeneratePolicyBypassRequestURL(ctx context.Context, c cache.Cache, siteURL 
 	// and strips the fragment from history after reading it. Shortening the
 	// token to an rpbr2 cache id (AIS-228) did not change this: a short id is
 	// no less a secret, so it still belongs in the fragment.
-	requestURL.Fragment = query.Encode()
-	return requestURL.String(), token, expiry, nil
+	return dashboardlinks.RiskPolicyBypassRequest(token).URL(siteURL), token, expiry, nil
 }
 
 // GeneratePolicyBypassRequestToken stores the request state in the cache and

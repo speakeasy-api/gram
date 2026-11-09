@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 )
 
 // Epic G — "warn"/challenge acknowledgement token (rpak1).
@@ -122,11 +123,7 @@ func GeneratePolicyAckURL(ctx context.Context, c cache.Cache, siteURL *url.URL, 
 	if err != nil {
 		return "", time.Time{}, err
 	}
-	ackURL := siteURL.JoinPath("risk-policy-challenge", "acknowledge")
-	query := url.Values{}
-	query.Set("ack_token", token)
-	ackURL.Fragment = query.Encode()
-	return ackURL.String(), expiry, nil
+	return dashboardlinks.RiskPolicyChallengeAcknowledge(token).URL(siteURL), expiry, nil
 }
 
 // GeneratePolicyAckToken stores the challenge state in the cache and returns the

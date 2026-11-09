@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -1140,7 +1141,7 @@ func (s *Service) captureDeploymentProcessedEvent(
 		"functions_asset_count":           len(dep.FunctionsAssets),
 		"openapiv3_asset_count":           len(dep.Openapiv3Assets),
 		"first_deployment_with_functions": firstDeploymentWithFunctions,
-		"logs_url":                        s.siteURL.JoinPath(organizationSlug, projectSlug, "deployments", dep.ID).String(),
+		"logs_url":                        dashboardlinks.Deployment(organizationSlug, projectSlug, dep.ID).URL(s.siteURL),
 	}
 
 	if previousDeployment != nil {

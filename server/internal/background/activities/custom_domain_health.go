@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/dashboardlinks"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -325,10 +326,7 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 	if err != nil {
 		return fmt.Errorf("get organization for custom domain health notification: %w", err)
 	}
-	domainLink := ""
-	if siteURL := c.orgHosts.SiteURL(organization.DefaultHost); siteURL != nil {
-		domainLink = siteURL.JoinPath(organization.Slug, "domains").String()
-	}
+	domainLink := dashboardlinks.Domains(organization.Slug).URL(c.orgHosts.SiteURL(organization.DefaultHost))
 
 	recipients, resolutionErr := authz.ResolveOrganizationAdminEmails(ctx, c.db, organizationID)
 	notificationErrors := []error{resolutionErr}

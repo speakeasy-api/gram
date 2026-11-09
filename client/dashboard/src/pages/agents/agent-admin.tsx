@@ -30,6 +30,7 @@ import { useRoutes } from "@/routes";
 import { AlertTriangle, Pencil } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { WizardStepId } from "@/pages/agents/credentials/wizard-steps";
 
 function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
   const organization = useOrganization();
@@ -138,7 +139,7 @@ export function AgentIdentityFacts({
           {agent.permissions.write && (
             <Link
               className="underline underline-offset-4"
-              to={`${routes.identities.agents.edit.href(agent.id)}?step=2`}
+              to={`${routes.identities.agents.edit.href(agent.id)}?step=${"mcp-sign-in" satisfies WizardStepId}`}
             >
               Review connections
             </Link>
