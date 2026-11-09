@@ -27,11 +27,14 @@ export function StepAuthentication({
   connections,
   allServers,
   onRemove,
+  showHeader = true,
 }: {
   servers: InventoryServer[];
   connections: OwnerConnections;
   allServers: boolean;
   onRemove: (id: string) => void;
+  /** False where the page around it already titles the step. */
+  showHeader?: boolean;
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
@@ -58,11 +61,13 @@ export function StepAuthentication({
   );
   return (
     <div className="space-y-5">
-      <WizardStepHeader
-        title="MCP sign-in"
-        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
-      />
-      <SignInPath hop="mcp" />
+      {showHeader && (
+        <WizardStepHeader
+          title="MCP sign-in"
+          description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
+        />
+      )}
+      <SignInPath hop="mcp" onTab={!showHeader} />
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}

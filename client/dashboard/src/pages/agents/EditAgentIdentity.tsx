@@ -1,6 +1,11 @@
 import { ArrowLeft } from "lucide-react";
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import {
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router";
 
 import { InsightsConfig } from "@/components/insights-dock";
 import { FormPage } from "@/components/page-templates";
@@ -18,21 +23,42 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { CredentialsWizard } from "./credentials/CredentialsWizard";
 
+/** The wizard's Agent sign-in step: everything before it has a tab now. */
+const AGENT_SIGN_IN_STEP = 3;
+
 /**
- * Changing what an agent already is: its name and the servers it reaches.
+ * Changing how an existing agent signs in to Speakeasy: the setup wizard from
+ * its Agent sign-in step, opened from the agent's credentials tab.
  *
- * The same wizard as registering one, because the questions are the same
- * ones and the answers are the same shape. What it does not carry is the
- * credential half: a key is issued from the agent's own page, and a platform
- * is federated from the flow that creates it.
+ * Its name is renamed in the agent page's header and its servers changed on
+ * the MCP sign-in tab, so links to the earlier steps (no step, the name, the
+ * servers, their sign-in) land there instead.
  */
 export default function EditAgentIdentity(): JSX.Element {
+  const routes = useRoutes();
+  const { agentId = "" } = useParams<{ agentId: string }>();
+  const [params] = useSearchParams();
+  const step = Number(params.get("step") ?? "");
+  if (!Number.isInteger(step) || step < AGENT_SIGN_IN_STEP) {
+    const view = step === 1 ? "?view=servers" : "";
+    return (
+      <Navigate
+        to={`${routes.identities.detail.mcpSignIn.href(
+          encodeIdentityUrn(`agent:${agentId}`),
+        )}${view}`}
+        replace
+      />
+    );
+  }
+  return <EditAgentSignIn agentId={agentId} />;
+}
+
+function EditAgentSignIn({ agentId }: { agentId: string }): JSX.Element {
   const routes = useRoutes();
   const navigate = useNavigate();
   const sdk = useSdkClient();
   const organization = useOrganization();
   const queryClient = useQueryClient();
-  const { agentId = "" } = useParams<{ agentId: string }>();
   const [busy, setBusy] = useState(false);
 
   const agentQuery = useQuery({
@@ -47,12 +73,12 @@ export default function EditAgentIdentity(): JSX.Element {
 
   const done = (id?: string) => {
     // The wizard seeds its server selection from these grants, so a cached
-    // pre-save read would reopen Edit with the servers the save just changed
+    // pre-save read would reopen it with the servers the save just changed
     // — and the next save, with nothing touched, would take one back out.
     void invalidateAgentsListPolicyGrants(queryClient, [{ agentId }]);
     void navigate(
       id
-        ? routes.identities.detail.overview.href(
+        ? routes.identities.detail.credentials.href(
             encodeIdentityUrn(`agent:${id}`),
           )
         : routes.identities.agents.href(),
@@ -74,7 +100,7 @@ export default function EditAgentIdentity(): JSX.Element {
         [`/identities/agents/${agentId}`]: `/identities/${encodeIdentityUrn(`agent:${agentId}`)}/overview`,
       }}
       title={agent ? `Edit ${agent.name}` : "Edit agent identity"}
-      description="Change what this agent is called and which servers it can reach."
+      description="Change how this agent signs in to Speakeasy."
       primaryAction={
         <Button variant="secondary" disabled={busy} onClick={() => done()}>
           <Button.LeftIcon>

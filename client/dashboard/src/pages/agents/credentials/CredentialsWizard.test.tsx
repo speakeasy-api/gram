@@ -3716,6 +3716,108 @@ describe("Editing an agent that already exists", () => {
   });
 });
 
+// The agent page's MCP sign-in tab: the servers and their sign-in, changed in
+// place rather than by walking the setup wizard again.
+describe("The MCP sign-in tab", () => {
+  const agent = {
+    id: "agent_one",
+    name: "Release Bot",
+    lifecycle: "active",
+    projectId: "project_one",
+    permissions: { write: true, authorize: true },
+  } as never;
+
+  const grants = [
+    {
+      id: "grant_one",
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_one",
+        projectId: "project_one",
+      },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+    {
+      id: "grant_auth",
+      effect: "allow",
+      scope: "mcp:auth",
+      selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  ] as never;
+
+  function tab(initialEditView?: "servers" | "sign-in") {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const onDone = vi.fn();
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CredentialsWizard
+            agent={agent}
+            section
+            initialEditView={initialEditView}
+            grants={grants}
+            onDone={(id) => {
+              onDone(id);
+            }}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return { onDone };
+  }
+
+  it("opens on the servers' sign-in, with no setup steps around it", async () => {
+    tab();
+    expect(
+      await screen.findByRole("button", { name: "Save changes" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Change servers" })).toBeTruthy();
+    // Nothing of setting the agent up: no name, no stepper, no summary.
+    expect(screen.queryByLabelText("Name")).toBeNull();
+    expect(screen.queryByText(/Step \d of/i)).toBeNull();
+    // The tab already says what it is, so the step's own heading is gone,
+    // and the diagram marks the tab rather than a step.
+    expect(screen.queryByRole("heading", { name: "MCP sign-in" })).toBeNull();
+    expect(screen.getAllByText("This tab").length).toBeGreaterThan(0);
+    expect(screen.queryByText("This step")).toBeNull();
+  });
+
+  it("opens the server picker for links that came to change the servers", async () => {
+    tab("servers");
+    expect(
+      await screen.findByRole("heading", { name: "MCP Selection" }),
+    ).toBeTruthy();
+  });
+
+  it("changes the servers, comes back to their sign-in, and saves in place", async () => {
+    const { onDone } = tab();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Change servers" }),
+    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const save = await screen.findByRole("button", { name: "Save changes" });
+    await waitFor(() =>
+      expect((save as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(save);
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm
+        ?.grantId,
+    ).toBe("grant_one");
+    expect(mocks.renameAgent).not.toHaveBeenCalled();
+  });
+});
+
 describe("Servers that sign in as a person", () => {
   const linear = {
     id: "server_linear",

@@ -43,16 +43,24 @@ export function identityRailItems(
         active: detail.permissions.active,
       },
       {
+        // Where the agent's servers and their sign-in are changed. It sits
+        // beside Permissions because the two answer what the agent may reach.
+        key: "mcp-sign-in",
+        title: "MCP sign-in",
+        href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
+        active: detail.mcpSignIn.active,
+      },
+      {
         key: "sessions",
         title: "Sessions",
         href: `${detail.sessions.href(encodedUrn)}${search}`,
         active: detail.sessions.active,
       },
       {
-        key: "activity",
-        title: "Activity",
-        href: `${detail.activity.href(encodedUrn)}${search}`,
-        active: detail.activity.active,
+        key: "audit-trail",
+        title: "Audit trail",
+        href: `${detail.auditTrail.href(encodedUrn)}${search}`,
+        active: detail.auditTrail.active,
       },
       {
         // The agent's way in: the keys it holds and the platforms that sign

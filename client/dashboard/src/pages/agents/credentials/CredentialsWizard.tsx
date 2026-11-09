@@ -308,11 +308,17 @@ function GrantedScopes({
   );
 }
 
+/** The server picker and the sign-in step, by their index in `STEPS`. */
+const SERVERS_STEP = 1;
+const SIGN_IN_STEP = 2;
+
 export function CredentialsWizard({
   agent,
   initialPlatformKey,
-  editing = false,
+  editing: editingProp = false,
   signInOnly = false,
+  section = false,
+  initialEditView = "sign-in",
   grants,
   onDone,
   onBusy,
@@ -325,9 +331,8 @@ export function CredentialsWizard({
    */
   initialPlatformKey?: string;
   /**
-   * Change what an agent already is — its name, its reach — rather than
-   * provision it again. The credential steps are not part of that: a key is
-   * issued from the agent's own page, and a platform from this flow.
+   * Change what an agent already is rather than provision it again. Opened
+   * from its credentials tab to change how it signs in to Speakeasy.
    */
   editing?: boolean;
   /**
@@ -338,6 +343,16 @@ export function CredentialsWizard({
    * `editing` and `grants`.
    */
   signInOnly?: boolean;
+  /**
+   * The agent page's MCP sign-in tab: which servers an existing agent reaches
+   * and how Speakeasy signs in to each. Implies `editing`. Only the server
+   * picker and the sign-in step are shown, with no stepper or summary: the
+   * agent is already set up, and the tab is not a walk through setting it up
+   * again. Saving stays on the tab.
+   */
+  section?: boolean;
+  /** Which of the tab's two views opens first. */
+  initialEditView?: "servers" | "sign-in";
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -355,6 +370,7 @@ export function CredentialsWizard({
    */
   verifyPollMs?: number;
 }): JSX.Element {
+  const editing = editingProp || section;
   const sdk = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
@@ -450,11 +466,21 @@ export function CredentialsWizard({
   const linked = params.get("step");
   const fromUrl =
     linked === null || linked.trim() === "" ? Number.NaN : Number(linked);
-  const step =
+  // Editing is a tab on the agent's page, not a flow with an address per
+  // step: it has two views, and which one is open is only this page's.
+  const [editStep, setEditStep] = useState(
+    initialEditView === "servers" ? SERVERS_STEP : SIGN_IN_STEP,
+  );
+  const urlStep =
     Number.isInteger(fromUrl) && fromUrl >= 0 ? fromUrl : defaultStep;
+  const step = section ? editStep : urlStep;
   // Stable, so an effect that corrects the step can depend on it.
   const setStep = useCallback(
     (next: number) => {
+      if (section) {
+        setEditStep(next);
+        return;
+      }
       setParams(
         (current) => {
           const updated = new URLSearchParams(current);
@@ -464,7 +490,7 @@ export function CredentialsWizard({
         { replace: true },
       );
     },
-    [setParams],
+    [section, setParams],
   );
   const [name, setName] = useState(agent?.name ?? "");
   // Names are unique in the organization, case aside. Asking once typing
@@ -1434,9 +1460,9 @@ export function CredentialsWizard({
       await queryClient.invalidateQueries({
         queryKey: ["owner-connections"],
       });
-      // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes. It returns to the agent's
-      // own page, where the change shows.
+      // Saving is the end of editing. The full flow returns to the agent's
+      // own page, where the change shows; the MCP sign-in tab stays put and
+      // re-reads the saved grants into itself.
       onDone(agent.id);
     } catch (failure) {
       setError(
@@ -2024,6 +2050,8 @@ export function CredentialsWizard({
       case 2:
         return (
           <StepAuthentication
+            // On the agent's MCP sign-in tab the tab's own title says this.
+            showHeader={!section}
             servers={
               allServers ? listedServers : selected.map((entry) => entry.server)
             }
@@ -2147,6 +2175,72 @@ export function CredentialsWizard({
             : null;
 
   const footer = () => {
+    // Editing has two views: the servers and their sign-in, where saving
+    // happens, and the picker that changes which servers there are.
+    if (section) {
+      if (step === SERVERS_STEP) {
+        return (
+          <WizardFooter
+            note={
+              blocked ??
+              (allServers
+                ? "All servers selected."
+                : `${selected.length} of ${listedServers.length} servers selected.`)
+            }
+            onBack={() => setStep(SIGN_IN_STEP)}
+            primary={
+              <Button
+                disabled={!!blocked}
+                onClick={() => setStep(SIGN_IN_STEP)}
+              >
+                Continue
+              </Button>
+            }
+          />
+        );
+      }
+      return (
+        <WizardFooter
+          note={
+            authStop ??
+            (authPending ? authPendingNote : null) ??
+            (enforcementPending ? enforcementPendingNote : null) ??
+            refusedChoice ??
+            (reconciled
+              ? "Changing what an agent reaches is recorded in the organization audit log."
+              : inventory.isError
+                ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
+                : "Reading the servers this agent reaches…")
+          }
+          primary={
+            <>
+              <Button
+                variant="secondary"
+                disabled={saving}
+                onClick={() => setStep(SERVERS_STEP)}
+              >
+                Change servers
+              </Button>
+              <Button
+                // Nothing may be written until the stored grants are in the
+                // selection: the diff against an empty one withdraws them all.
+                disabled={
+                  saving ||
+                  !reconciled ||
+                  refusedChoice !== null ||
+                  authStop !== null ||
+                  authPending ||
+                  enforcementPending
+                }
+                onClick={() => void save()}
+              >
+                {saving ? "Saving…" : "Save changes"}
+              </Button>
+            </>
+          }
+        />
+      );
+    }
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
     if (editing && step < 3) {
@@ -2403,6 +2497,27 @@ export function CredentialsWizard({
     }
   };
 
+  const errorAlert = error && (
+    <p
+      role="alert"
+      className="border-destructive text-destructive border p-3 text-sm"
+    >
+      {error}
+    </p>
+  );
+
+  // A tab on the agent's page: no steps to count and no summary of a draft,
+  // because nothing here is a draft. The agent page already names it.
+  if (section) {
+    return (
+      <div className="space-y-6">
+        {errorAlert}
+        <div>{body()}</div>
+        {footer()}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <WizardStepper
@@ -2429,14 +2544,7 @@ export function CredentialsWizard({
           );
         }}
       />
-      {error && (
-        <p
-          role="alert"
-          className="border-destructive text-destructive border p-3 text-sm"
-        >
-          {error}
-        </p>
-      )}
+      {errorAlert}
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_260px] lg:gap-16">
         <div>{body()}</div>
         {/* The cell stretches to the row's height on purpose: a sticky child

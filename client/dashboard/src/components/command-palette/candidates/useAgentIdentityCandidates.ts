@@ -146,13 +146,38 @@ export function useAgentIdentityCandidates({
             );
           },
         };
+        if (!agent.permissions?.write) return [identity, signIn];
+        // Where its servers are changed and an expired connection is fixed,
+        // so "reconnect Linear for the release bot" lands on the tab for it.
+        const mcpSignIn: LauncherCandidate = {
+          ...identity,
+          id: `agent-mcp-sign-in:${agent.id}`,
+          title: `${agent.name} · MCP sign-in`,
+          detail: "Change MCP servers · reconnect expired sign-ins",
+          keywords: [
+            ...identity.keywords,
+            "mcp",
+            "servers",
+            "sign-in",
+            "connection",
+            "reconnect",
+          ],
+          run: () => {
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.mcpSignIn.href(encodeIdentityUrn(urn)),
+                search,
+              ),
+            );
+          },
+        };
         // Request headers may fall back to the default project in the org shell;
         // only a real project route can offer this project-scoped control.
-        if (!routeProjectSlug || !agent.permissions?.write)
-          return [identity, signIn];
+        if (!routeProjectSlug) return [identity, signIn, mcpSignIn];
         return [
           identity,
           signIn,
+          mcpSignIn,
           {
             ...identity,
             id: `agent-inference-access:${agent.id}`,

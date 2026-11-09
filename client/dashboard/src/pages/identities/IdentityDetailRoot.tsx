@@ -27,11 +27,8 @@ import {
 } from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
-import {
-  AgentHeaderActions,
-  AgentIdentityProfile,
-  AgentRenameAction,
-} from "./AgentIdentityProfile";
+import { AgentIdentityProfile } from "./AgentIdentityProfile";
+import { AgentName } from "@/pages/agents/agent-admin";
 import { useIdentitySubject } from "./useIdentitySubject";
 import {
   useCallback,
@@ -272,16 +269,17 @@ function IdentityDetailContent(): JSX.Element {
         >
           <IdentityHeader
             identity={identity}
-            nameAction={
-              identity.agent && (
-                <AgentRenameAction
-                  agent={identity.agent}
-                  refresh={() => void identityQuery.refetch()}
-                />
-              )
-            }
-            actions={
-              identity.agent && <AgentHeaderActions agent={identity.agent} />
+            renderName={
+              identity.agent
+                ? (className) =>
+                    identity.agent && (
+                      <AgentName
+                        agent={identity.agent}
+                        className={className}
+                        refresh={() => void identityQuery.refetch()}
+                      />
+                    )
+                : undefined
             }
           />
         </div>
@@ -339,14 +337,14 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
-  nameAction,
-  actions,
+  renderName,
 }: {
   identity: IdentityModel;
-  /** A control on the name itself (rename), shown beside it on hover. */
-  nameAction?: ReactNode;
-  /** Controls on the subject itself, in the header's top right. */
-  actions?: ReactNode;
+  /**
+   * The title, when it is more than text: an agent's is renamed in place.
+   * Given the title's typography so every header reads the same.
+   */
+  renderName?: (className: string) => ReactNode;
 }): JSX.Element {
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
@@ -375,20 +373,19 @@ function IdentityHeader({
             <AvatarFallback>{getInitials(identity.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-col gap-1">
-            <div className="group/name flex min-w-0 items-center gap-1">
-              <h1
-                className={
-                  nameIsAddress
-                    ? "truncate font-mono text-xl"
-                    : "text-display-sm truncate font-thin"
-                }
-              >
-                {identity.displayName}
-              </h1>
-              {nameAction && (
-                <span className="shrink-0 opacity-0 transition-opacity group-hover/name:opacity-100 focus-within:opacity-100">
-                  {nameAction}
-                </span>
+            <div className="flex min-w-0 items-center gap-1">
+              {renderName ? (
+                renderName("text-display-sm font-thin")
+              ) : (
+                <h1
+                  className={
+                    nameIsAddress
+                      ? "truncate font-mono text-xl"
+                      : "text-display-sm truncate font-thin"
+                  }
+                >
+                  {identity.displayName}
+                </h1>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -404,9 +401,6 @@ function IdentityHeader({
             </div>
           </div>
         </div>
-        {actions && (
-          <div className="flex shrink-0 items-center gap-2">{actions}</div>
-        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
