@@ -375,6 +375,11 @@ func cardServesMember(card remoteSessionCard, member metaMember) bool {
 	return memberUsesClient(member, clientID, card.remoteSessionIssuerID, card.projectID)
 }
 
+// reconnectsDespiteOutage is a connection that an outage ending would not fix: refused, inactive, or missing openid.
+func (c remoteSessionCard) reconnectsDespiteOutage() bool {
+	return c.Rejected || c.Inactive || c.IdentityReconnect
+}
+
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
 	if card.Unavailable {

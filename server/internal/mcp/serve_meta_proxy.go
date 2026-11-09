@@ -703,7 +703,7 @@ const maxProxiedListPages = 8
 // describeMetaMember reads one member's tool catalog through whichever
 // path serves it: the hosted model view, or the member's own tools/list.
 func (s *Service) describeMetaMember(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
-	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+	if err := s.validateCatalogMember(ctx, gate, member, catalogCheckRecorded); err != nil {
 		return nil, err
 	}
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {

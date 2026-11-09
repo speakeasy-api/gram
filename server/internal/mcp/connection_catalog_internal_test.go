@@ -90,7 +90,7 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 				}},
 			}
 			tt.change(gate, &member)
-			err := s.validateCatalogMember(t.Context(), gate, member)
+			err := s.validateCatalogMember(t.Context(), gate, member, catalogCheckRecorded)
 			if tt.reason == "" {
 				if member.upstreamUnavailable != nil {
 					require.ErrorIs(t, err, upstreamError)
@@ -133,7 +133,7 @@ func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.
 	for range cap(results) {
 		calls.Go(func() {
 			copiedGate := gate
-			results <- s.validateCatalogMember(t.Context(), &copiedGate, member)
+			results <- s.validateCatalogMember(t.Context(), &copiedGate, member, catalogCheckRecorded)
 		})
 	}
 	calls.Wait()
@@ -145,12 +145,12 @@ func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.
 	// Different members and reasons remain distinguishable within an execution.
 	other := member
 	other.serverID = uuid.New()
-	require.Error(t, s.validateCatalogMember(t.Context(), &gate, other))
-	require.Error(t, s.rejectCatalogMember(t.Context(), &gate, member, "configuration_changed", "changed", nil))
+	require.Error(t, s.validateCatalogMember(t.Context(), &gate, other, catalogCheckRecorded))
+	require.Error(t, s.rejectCatalogMember(t.Context(), &gate, member, catalogCheckRecorded, "configuration_changed", "changed", nil))
 	require.Equal(t, 3, bytes.Count(logs.Bytes(), []byte("\n")))
 	// A fresh execution reports the still-stale member again.
 	gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
-	require.Error(t, s.validateCatalogMember(t.Context(), &gate, member))
+	require.Error(t, s.validateCatalogMember(t.Context(), &gate, member, catalogCheckRecorded))
 	require.Equal(t, 4, bytes.Count(logs.Bytes(), []byte("\n")))
 }
 

@@ -115,7 +115,7 @@ func (s *Service) codeCallableMembers(ctx context.Context, gate *metaGateContext
 	selected := catalogSelectedMembers(gate, members)
 	callable := make([]metaMember, 0, len(selected))
 	for _, member := range selected {
-		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
+		if err := s.validateCatalogMember(ctx, gate, member, catalogCheckRecorded); err != nil {
 			if !needsNewConsent(err) || !keepConsentRequired {
 				continue
 			}
