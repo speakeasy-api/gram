@@ -136,7 +136,7 @@ func TestToolUsageHookEventsFilterByAgentIdentity(t *testing.T) {
 			GramProjectID: projectID,
 			TimeStart:     timeStart,
 			TimeEnd:       timeEnd,
-		})
+		}, repo.AllToolUsageFilterOptionGroups)
 		require.NoError(t, err)
 		agents := make(map[string]uint64)
 		for _, user := range options.Users {
