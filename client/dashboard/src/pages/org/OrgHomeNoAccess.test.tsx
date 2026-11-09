@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useParams } from "react-router";
 
 import { OrgHomeNoAccess } from "./OrgHomeNoAccess";
 
@@ -11,15 +11,17 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ name: "Acme", slug: "acme", projects }),
 }));
 
+function ProjectPage() {
+  const { slug } = useParams();
+  return <p data-testid="project-page">{slug}</p>;
+}
+
 function renderAtOrgHome() {
   render(
     <MemoryRouter initialEntries={["/acme"]}>
       <Routes>
         <Route path="/acme" element={<OrgHomeNoAccess />} />
-        <Route
-          path="/acme/projects/:slug"
-          element={<p data-testid="project-page">project page</p>}
-        />
+        <Route path="/acme/projects/:slug" element={<ProjectPage />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -36,13 +38,20 @@ describe("OrgHomeNoAccess", () => {
     projects = [alpha, beta];
     localStorage.setItem("preferredProject", "beta");
     renderAtOrgHome();
-    expect(screen.getByTestId("project-page")).toBeTruthy();
+    expect(screen.getByTestId("project-page").textContent).toBe("beta");
+  });
+
+  it("falls back to the default project", () => {
+    projects = [alpha, { id: "p-3", name: "Default", slug: "default" }, beta];
+    localStorage.setItem("preferredProject", "gone");
+    renderAtOrgHome();
+    expect(screen.getByTestId("project-page").textContent).toBe("default");
   });
 
   it("redirects to the only readable project", () => {
     projects = [alpha];
     renderAtOrgHome();
-    expect(screen.getByTestId("project-page")).toBeTruthy();
+    expect(screen.getByTestId("project-page").textContent).toBe("alpha");
   });
 
   it("ignores a stored project the viewer can no longer read", () => {
