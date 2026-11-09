@@ -480,7 +480,7 @@
       "id": "cowork-org-instructions",
       "name": "Cowork organization instructions",
       "vendor": "Anthropic",
-      "plans": "Team plans; personal accounts not possible",
+      "plans": "Team only; Enterprise uses the Compliance API and inference hooks; personal accounts not possible",
       "facts": {
         "org": {
           "status": "na",
