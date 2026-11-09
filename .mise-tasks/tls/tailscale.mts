@@ -149,7 +149,50 @@ export async function fetchPair(
   return splitPEM(result.stdout);
 }
 
-/** True while a pause, wake or start owns this worktree's stack. */
+function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    // EPERM: the process exists but belongs to someone else.
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
+/**
+ * Clears a stack lock whose owner process is gone, following the protocol in
+ * `mise run wake`: removal happens under its own exclusive `.reap` symlink, and
+ * the owner is re-read there, so a live holder that took the lock in between
+ * is never evicted. Returns true if it removed a stale lock.
+ */
+export function reapStaleLock(lock: string): boolean {
+  const reap = `${lock}.reap`;
+  try {
+    symlinkSync(String(process.pid), reap);
+  } catch {
+    return false;
+  }
+  try {
+    let identity: string;
+    try {
+      identity = readlinkSync(lock);
+    } catch {
+      return false;
+    }
+    const owner = Number.parseInt(identity.split(":")[0] ?? "", 10);
+    if (!Number.isInteger(owner) || owner <= 0 || processAlive(owner)) {
+      return false;
+    }
+    console.warn(
+      `Clearing a stack lock left behind by a dead process (${owner}).`,
+    );
+    rmSync(lock, { force: true });
+    return true;
+  } finally {
+    rmSync(reap, { force: true });
+  }
+}
+
 /**
  * Restarts the TLS daemons while holding this worktree's stack lock, the same
  * symlink pause, wake and start take, so a restart cannot interleave with a
@@ -170,10 +213,18 @@ export async function restartUnderStackLock(
   const gitdir = result.stdout.trim();
   const lock = join(gitdir, "gram-stack-lock");
   const identity = `${process.pid}:unpause`;
-  try {
-    // Exclusive create: fails while any lifecycle operation owns the stack.
-    symlinkSync(identity, lock);
-  } catch {
+  const acquire = (): boolean => {
+    try {
+      // Exclusive create: fails while any lifecycle operation owns the stack.
+      symlinkSync(identity, lock);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  // A holder killed mid-operation (including an earlier renewal) leaves its
+  // lock behind; clear it rather than skipping every restart until a wake.
+  if (!acquire() && !(reapStaleLock(lock) && acquire())) {
     return "a pause, wake or start is in progress; it starts the daemons with the new certificate";
   }
   try {

@@ -210,14 +210,16 @@ test("restart holds the stack lock while it runs and releases it", async (t) => 
 test("restart is skipped while another lifecycle operation owns the stack", async (t) => {
   const { root, gitdir } = gitRepo(t);
   const lock = join(gitdir, "gram-stack-lock");
-  symlinkSync("12345:pause", lock);
+  // A live owner: the process that started this test run.
+  const holder = `${process.ppid}:pause`;
+  symlinkSync(holder, lock);
   let restarted = false;
   const skipped = await restartUnderStackLock(root, async () => {
     restarted = true;
   });
   assert.match(skipped ?? "", /in progress/);
   assert.equal(restarted, false);
-  assert.equal(readlinkSync(lock), "12345:pause");
+  assert.equal(readlinkSync(lock), holder);
 });
 
 test("restart is skipped on a paused stack and releases the lock", async (t) => {
@@ -238,4 +240,20 @@ test("restart reports why it skipped outside a git checkout", async (t) => {
     assert.fail("must not restart");
   });
   assert.match(skipped ?? "", /git directory/);
+});
+
+test("restart clears a stack lock left by a dead process", async (t) => {
+  const { root, gitdir } = gitRepo(t);
+  const lock = join(gitdir, "gram-stack-lock");
+  const dead = spawnSync(process.execPath, ["-e", ""]).pid;
+  symlinkSync(`${dead}:unpause`, lock);
+  t.mock.method(console, "warn", () => {});
+  let restarted = false;
+  const skipped = await restartUnderStackLock(root, async () => {
+    restarted = true;
+  });
+  assert.equal(skipped, undefined);
+  assert.equal(restarted, true);
+  assert.equal(existsSync(lock), false);
+  assert.equal(existsSync(`${lock}.reap`), false);
 });
