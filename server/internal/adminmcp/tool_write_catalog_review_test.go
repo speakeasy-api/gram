@@ -35,7 +35,7 @@ func TestCatalogReviewWriterStartsForVerifiedStaff(t *testing.T) {
 	t.Parallel()
 	f := newWriteFixture(t, "admin_mcp_promotion_review")
 	ctx := writeContext(t, f)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationStartRegistryPromotionReview: true}} //nolint:exhaustive // Only the review operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	reviews := &fakePromotionReviews{}
 	writer := &catalogReviewWriter{runner: f.runner, writes: writes, starter: reviews}
 	input := CatalogPromotionTargetInput{OrganizationID: "org-synthetic", ProjectID: uuid.NewString(), MCPServerID: uuid.NewString()}
@@ -56,7 +56,7 @@ func TestCatalogReviewWriterRefusals(t *testing.T) {
 	t.Parallel()
 	f := newWriteFixture(t, "admin_mcp_promotion_review_refusals")
 	ctx := writeContext(t, f)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationStartRegistryPromotionReview: true}} //nolint:exhaustive // Only the review operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	input := CatalogPromotionTargetInput{OrganizationID: "org-synthetic", ProjectID: uuid.NewString(), MCPServerID: uuid.NewString()}
 
 	_, err := (&catalogReviewWriter{runner: f.runner, writes: WriteConfig{}, starter: &fakePromotionReviews{}}).apply(ctx, input)
@@ -81,7 +81,7 @@ func TestCatalogReviewWriterRefusesChangedConnectionsBeforeSpending(t *testing.T
 	t.Parallel()
 	f := newWriteFixture(t, "admin_mcp_promotion_review_revoked")
 	ctx := writeContext(t, f)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationStartRegistryPromotionReview: true}} //nolint:exhaustive // Only the review operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	reviews := &fakePromotionReviews{}
 	f.reauth()
 
