@@ -303,7 +303,7 @@ var (
 	executePlatformCodeSchema  = json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":65536,"description":"Python program; its final JSON-compatible expression is returned."},"tools":{"type":"array","maxItems":10000,"uniqueItems":true,"items":{"type":"string"},"description":"Optional exact platform--<tool> allowlist narrowing this execution. Omit for every permitted tool; [] permits none."}},"required":["code"],"additionalProperties":false}`)
 )
 
-const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper; top-level await works. Each run starts fresh and returns its final expression as JSON.
+const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper. Each run starts fresh and returns its final expression as JSON.
 
 Search and describe in one run:
 
@@ -315,7 +315,7 @@ Next run, call with the described inputSchema:
     r = await tools.call("platform--search_mcp_catalog", {"query": "linear"})
     r["data"] if r["ok"] else r
 
-Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
+Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call gives ok False, error "tool_call_rejected" and the reason in content.
 
 Write tools keep their safeguards: preview with confirmed false and make a confirmed call only after the user explicitly agrees. Errors and cancellation never undo writes; on an unknown outcome read the state again, never replay.
 
