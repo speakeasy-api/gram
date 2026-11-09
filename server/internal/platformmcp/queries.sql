@@ -4217,6 +4217,20 @@ WHERE r.id = @registration_id
   AND a.kind = 'image'
   AND a.deleted IS FALSE;
 
+-- name: ListPlatformMCPProjectCatalogServers :many
+-- The catalog servers a project already has, so catalog result cards can say
+-- which are added and link to each one. Every join is pinned to the
+-- registration's organization and project.
+SELECT r.id AS registration_id, r.catalog_provider, r.catalog_reference, s.id AS mcp_server_id, s.slug AS mcp_server_slug
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_servers s ON s.id = r.mcp_server_id AND s.project_id = r.project_id AND s.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.status = 'registered'
+  AND r.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id
+LIMIT 500;
+
 -- name: GetPlatformMCPFeedbackFixture :one
 -- Test fixture: reads stored feedback columns that no production query returns.
 SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at

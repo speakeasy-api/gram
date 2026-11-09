@@ -472,6 +472,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
+		WithCatalogLogos(config.Logger, config.GuardianPolicy.PooledClient()).
 		WithSignInConnectLinks(config.DB, config.ServerURL).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)
@@ -1276,6 +1277,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithIdentityProviderAttachment(platformmcp.NewCatalogIdentityProviderAttachmentService(config.Logger, config.MeterProvider, config.DB, config.IdentityCommitter, config.GuardianPolicy, config.ServerURL)).
 		WithClientAdmission(platformmcp.NewClientAdmissionService(config.DB, config.AuditLogger)).
 		WithCardLogos(config.Logger, config.DB, config.AssetStorage).
+		WithCatalogLogos(config.Logger, config.GuardianPolicy.PooledClient()).
 		WithSignInConnectLinks(config.DB, config.ServerURL).
 		WithTelemetry(telemetry)
 	dashboardSetupStarter := platformmcp.NewDashboardSetupService(store, registrationGate, authorizer, adapters, budgets.SetupStart)

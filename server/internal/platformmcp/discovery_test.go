@@ -542,7 +542,7 @@ func TestFirstRunToolsFitHostBudget(t *testing.T) {
 	t.Parallel()
 
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "first-run-budget"}, nil))
-	registerCatalogTools(reg, nil, OperationBudget{}, nil, nil)
+	registerCatalogTools(reg, nil, OperationBudget{}, nil, nil, nil)
 	registerCandidateInspectionTool(reg, nil, nil, nil, OperationBudget{})
 	registerCatalogRegistrationTool(reg, &RegistrationService{}, nil)
 	registerRemoteRegistrationTool(reg, &RegistrationService{}, nil)

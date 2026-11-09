@@ -430,7 +430,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
 			registerUnavailableCatalogTools(reg)
 		} else {
-			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+			cardViewNeeded = true
+			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding, registrations)
 		}
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
@@ -596,7 +597,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyOpenWorldAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog"))
 	}
 }
 
