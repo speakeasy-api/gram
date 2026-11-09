@@ -256,7 +256,9 @@ const (
 	// aivendors product ID of the connection's verified CIMD client, or
 	// "unknown") and "organization_id". Release conditions match on those
 	// person properties, so a harness joins or leaves the treatment by editing
-	// a condition. Fails closed to the full catalogue.
+	// a condition. Fails closed to the full catalogue. ChatGPT always gets the
+	// full catalogue, because the ChatGPT app directory rejects tools that run
+	// other tools by name.
 	FlagPlatformMCPDiscoveryMode Flag = "platform-mcp-discovery-mode"
 
 	// FlagPlatformMCPGatewayProxy lets a Platform MCP connection use the

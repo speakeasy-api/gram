@@ -113,12 +113,22 @@ func harnessForClient(clientID string) string {
 
 // discoveryModeFor resolves the surface for one request. Every failure serves
 // the full catalogue, the pre-rollout behaviour.
+//
+// ChatGPT always gets the full catalogue, whatever the flag says. The ChatGPT
+// app directory requires every model-callable operation to be listed upfront
+// as its own tool, so the meta-tools that run other tools by name fail its
+// review. ChatGPT connectors share one client_id per MCP server origin, so the
+// reviewed app cannot be told apart from other ChatGPT connections.
 func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, principal Principal) discoveryMode {
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
+	harness := harnessForClient(principal.ClientID)
+	if harness == chatGPTProductID {
+		return discoveryFull
+	}
 	variant, err := feature.FlagVariantLocal(ctx, r.discovery.Flags, feature.FlagPlatformMCPDiscoveryMode, principal.OrganizationID, nil, map[string]string{
-		"harness":         harnessForClient(principal.ClientID),
+		"harness":         harness,
 		"organization_id": principal.OrganizationID,
 	})
 	if err != nil {
@@ -315,7 +325,7 @@ Python subset; import asyncio for asyncio.gather. No packages, filesystem, envir
 // The first-run tools listed next to them depend on the caller; for every other
 // tool, what a caller may use is decided when it searches, describes or calls.
 func discoveryTools(mode discoveryMode) []*mcp.Tool {
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: new(false)}
+	readOnly := readOnlyAnnotations()
 	tools := []*mcp.Tool{
 		{
 			Name:        searchPlatformToolsName,
