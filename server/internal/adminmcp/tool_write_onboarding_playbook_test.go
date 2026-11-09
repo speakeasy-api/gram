@@ -51,7 +51,7 @@ func seedPlaybooks(t *testing.T, f writeFixture) playbookSeeds {
 }
 
 func newOnboardingPlaybookWriter(f writeFixture) *onboardingPlaybookWriter {
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationAssignOrganizationOnboardingPlaybook: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	writes := WriteConfig{Enabled: true}
 	return &onboardingPlaybookWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes}
 }
 

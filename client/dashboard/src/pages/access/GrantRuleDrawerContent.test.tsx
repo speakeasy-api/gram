@@ -414,6 +414,41 @@ describe.each(projectResourceTypes)(
   },
 );
 
+describe("grant rule picker copy", () => {
+  it("names the role in the role editor", () => {
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This role reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.getByText(/Plugins shared with this role/)).toBeTruthy();
+  });
+
+  it("names the agent, and leaves out plugins, on an agent", () => {
+    // Plugins are shared with roles, never with an agent.
+    render(
+      <GrantRuleDrawerContent
+        resourceType="mcp"
+        scope="mcp:connect"
+        subject="agent"
+        selectors={null}
+        onChangeSelectors={() => {}}
+      />,
+    );
+    expect(
+      screen.getByText("This agent reaches every server in every project."),
+    ).toBeTruthy();
+    expect(screen.queryByText(/this role/i)).toBeNull();
+    expect(screen.queryByText(/Plugins shared/)).toBeNull();
+  });
+});
+
 describe("grant rule picker checkboxes", () => {
   it("names each server checkbox after the server and its project", () => {
     mocks.inventory = {
@@ -457,4 +492,34 @@ describe("grant rule picker checkboxes", () => {
     fireEvent.click(screen.getByRole("button", { name: /Specific projects/ }));
     expect(screen.getByRole("checkbox", { name: "Project one" })).toBeTruthy();
   });
+});
+
+describe("grant rule project toggle", () => {
+  // A project-wide selector may be stored with no resource id. It ticks the
+  // project, so unticking the project must remove it too.
+  it.each(["mcp", "inference"] as const)(
+    "unticks a %s project-wide selector stored with no resource id",
+    (resourceType) => {
+      const onChangeSelectors = vi.fn<(selectors: Selector[] | null) => void>();
+      const stored: Selector = {
+        resourceKind: resourceType,
+        resourceId: "",
+        projectId: "project_one",
+      };
+      render(
+        <GrantRuleDrawerContent
+          resourceType={resourceType}
+          scope={
+            resourceType === "inference" ? "inference:execute" : "mcp:read"
+          }
+          selectors={[stored]}
+          onChangeSelectors={onChangeSelectors}
+        />,
+      );
+      const row = screen.getByRole("checkbox", { name: "Project one" });
+      expect(row.getAttribute("aria-checked")).toBe("true");
+      fireEvent.click(row);
+      expect(onChangeSelectors).toHaveBeenLastCalledWith([]);
+    },
+  );
 });

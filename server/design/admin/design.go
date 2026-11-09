@@ -163,6 +163,7 @@ var AdminProjectDetail = Type("AdminProjectDetail", func() {
 	Attribute("functions_runner_version", String, "Functions runner version pin, if set.")
 	Attribute("toolset_count", Int, "Number of active toolsets in the project.")
 	Attribute("deployment_count", Int, "Total number of deployments in the project.")
+	Attribute("active_deployment_id", String, "The deployment the project currently serves. Absent when no deployment has completed.")
 	Attribute("http_tool_count", Int, "Number of active HTTP tool definitions in the project.")
 	Attribute("environment_count", Int, "Number of active environments in the project.")
 	Attribute("api_key_count", Int, "Number of active API keys in the project.")
@@ -1424,6 +1425,7 @@ var _ = Service("admin", func() {
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")
@@ -1495,4 +1497,5 @@ var _ = Service("admin", func() {
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
+	projectRedeployMethods()
 })

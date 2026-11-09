@@ -101,6 +101,11 @@ var redactedQueryParams = map[string]bool{
 
 	// Chat search terms, which are user-typed free text.
 	"search": true,
+
+	// Product analytics session id forwarded by the sign-up page on
+	// auth.login. It joins a browser session (and its replay) to an identified
+	// user, so it stays out of logs that already carry IP and user agent.
+	"analytics_session_id": true,
 }
 
 // logSafeURL renders a request URL for logs and observability context with

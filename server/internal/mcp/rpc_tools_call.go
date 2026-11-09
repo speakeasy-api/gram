@@ -482,6 +482,16 @@ func handleToolsCall(
 		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		// A call the gateway answered with an error has no tool output, so
+		// the row carries the error's most specific client-safe message, the
+		// same text its tool event records.
+		if rw.failure != nil {
+			message := toolCallFailureMessage(rw.failure)
+			logAttrs[attr.ErrorMessageKey] = message
+			if rw.body.Len() == 0 {
+				logAttrs.RecordResponseBodyContent([]byte(message))
+			}
+		}
 
 		if toolCallEnv.GramChatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
@@ -708,12 +718,28 @@ func handleToolsCall(
 // client can emit hundreds an hour, enough at error level to hold this
 // component's error-rate monitors at their threshold and mask a genuine
 // regression for a whole alert window.
+//
+// When the failure carries a ShareableError, the rejection answers with the
+// innermost one's code and message, which name what the caller has to change
+// (every ShareableError public message is written to be client-safe).
+// Otherwise it answers with a generic rejection.
 func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) (*oops.ShareableError, bool) {
 	if !oops.IsClientFault(err) {
 		return nil, false
 	}
 
+	if inner := oops.Innermost(err); inner != nil {
+		return oops.E(inner.Code, err, "%s", inner.Error()).LogWarn(ctx, logger, args...), true
+	}
+
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// toolCallFailureMessage is what a failed tool call records as its error, on
+// its Tool logs row and its tool event alike: the most specific client-safe
+// message the failure carries.
+func toolCallFailureMessage(failure *oops.ShareableError) string {
+	return oops.Innermost(failure).Error()
 }
 
 // recordToolCallErrorStatus keeps deferred billing and telemetry metadata in

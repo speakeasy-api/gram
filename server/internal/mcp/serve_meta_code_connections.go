@@ -85,7 +85,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if err != nil {
 		return nil, err
 	}
-	member, ok := findMetaMember(members, server)
+	member, ok := b.service.findNamedMember(ctx, gate, members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
@@ -260,7 +260,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	if gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser {
 		probeGate.chainUpstream = b.service.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
 	}
-	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
+	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate), false)
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {

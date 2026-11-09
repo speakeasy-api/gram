@@ -410,6 +410,7 @@ func (f *ProxyManager) BuildTarget(
 			organizationID: organizationID,
 			mcpServerID:    identity.McpServerID,
 			projectID:      projectID,
+			metrics:        f.mcpMetrics,
 			listUpstream:   nil,
 		}
 	}

@@ -49,7 +49,7 @@ func TestSupportMatrixWriterPreservesUnchangedFields(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUpdateSupportMatrix: true}} //nolint:exhaustive // Only the reviewed global operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &supportMatrixWriter{runner: f.runner, writes: writes}
 	ctx := writeContext(t, f)
 	current := supportMatrixSnapshot(t, f.db)
@@ -90,7 +90,7 @@ func TestSupportMatrixWriterRejectsInvalidTargetsNoOpsAndBounds(t *testing.T) {
 	f := newWriteFixture(t, "admin_mcp_support_matrix_validation")
 	require.NoError(t, adminservice.SeedSupportMatrix(t.Context(), f.db))
 	matrix := supportMatrixSnapshot(t, f.db)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUpdateSupportMatrix: true}} //nolint:exhaustive // Only the reviewed global operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &supportMatrixWriter{runner: f.runner, writes: writes}
 	ctx := writeContext(t, f)
 
@@ -117,7 +117,7 @@ func TestSupportMatrixWriterRefusesStaleRevision(t *testing.T) {
 	f := newWriteFixture(t, "admin_mcp_support_matrix_stale")
 	require.NoError(t, adminservice.SeedSupportMatrix(t.Context(), f.db))
 	matrix := supportMatrixSnapshot(t, f.db)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUpdateSupportMatrix: true}} //nolint:exhaustive // Only the reviewed global operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &supportMatrixWriter{runner: f.runner, writes: writes}
 	ctx := writeContext(t, f)
 
@@ -164,7 +164,7 @@ func TestSupportMatrixWriterSmallEditOnLargeDraft(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit(t.Context()))
 	matrix = supportMatrixSnapshot(t, f.db)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUpdateSupportMatrix: true}} //nolint:exhaustive // Only the matrix operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &supportMatrixWriter{runner: f.runner, writes: writes}
 	_, err = writer.apply(writeContext(t, f), SupportMatrixInput{Revision: matrix.Revision, Changes: []SupportMatrixChange{{Kind: "reference", MethodID: "device", Facts: []SupportMatrixFactChange{{CapabilityID: "org", Note: new("small edit")}}}}})
 	require.NoError(t, err)
@@ -223,7 +223,7 @@ func TestSupportMatrixWriterRejectsNoOp(t *testing.T) {
 	require.NoError(t, adminservice.SeedSupportMatrix(t.Context(), f.db))
 	matrix := supportMatrixSnapshot(t, f.db)
 	fact := matrix.Draft.References["device"]["org"]
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUpdateSupportMatrix: true}} //nolint:exhaustive // Only the reviewed global operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &supportMatrixWriter{runner: f.runner, writes: writes}
 	_, err := writer.apply(writeContext(t, f), SupportMatrixInput{Revision: matrix.Revision, Changes: []SupportMatrixChange{{Kind: "reference", MethodID: "device", Facts: []SupportMatrixFactChange{{CapabilityID: "org", Note: &fact.Note}}}}})
 	require.ErrorContains(t, err, "nothing would change")

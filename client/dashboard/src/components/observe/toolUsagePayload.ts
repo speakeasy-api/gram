@@ -4,6 +4,7 @@ import type {
 } from "@/components/observe/ObserveFilterBar";
 import {
   parseTargetFilter,
+  scopedToolUsageDefaultTypes,
   selectedHookSources,
   selectedTargetValues,
   selectedUserEmails,
@@ -196,4 +197,39 @@ export function useToolUsagePayload({
   );
 
   return { summaryPayload, sharedQueryKey };
+}
+
+const NO_FILTERS: FilterChip[] = [];
+const NO_EMAILS: string[] = [];
+
+/**
+ * The tool usage query inputs of a view pinned to one identity, with none of
+ * the Tool logs filters applied.
+ *
+ * An identity's page shows its usage above its own embedded Tool logs, and
+ * both ask the same endpoints the same question when nothing is narrowed.
+ * Built here the way the logs build theirs, the two keys are byte-identical
+ * and the page sends one request for each instead of two.
+ */
+export function useScopedToolUsagePayload({
+  userFilters,
+  includeLocalTools,
+  from,
+  to,
+}: {
+  userFilters: ToolUsageUserFilter[];
+  /** The page's "Show local tools" choice. */
+  includeLocalTools: boolean;
+  from: Date;
+  to: Date;
+}): ToolUsagePayload {
+  return useToolUsagePayload({
+    activeFilters: NO_FILTERS,
+    roleEmails: NO_EMAILS,
+    selectedHookTypes: scopedToolUsageDefaultTypes(includeLocalTools),
+    accountType: "",
+    scopedUserFilters: userFilters,
+    from,
+    to,
+  });
 }

@@ -21,7 +21,7 @@ func TestRegistryIconsAppliesAndChecksRevision(t *testing.T) {
 	t.Parallel()
 	f := newWriteFixture(t, "admin_mcp_registry_icons")
 	_, registry := newRegistryEntryWriter(t, f)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetRegistryIcons: true}} //nolint:exhaustive // Only the tested icon operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	writer := &registryIconsWriter{runner: f.runner, registry: registry, writes: writes}
 	original, err := registry.Create(t.Context(), json.RawMessage(registryRecord("example.test/"+uuid.NewString())))
 	require.NoError(t, err)
@@ -164,7 +164,7 @@ func TestRegistryIconsClearsLegacyIconsWithoutEchoingThem(t *testing.T) {
 			require.NoError(t, registryrepo.New(f.db).InsertRegistryEntryFixture(t.Context(), registryrepo.InsertRegistryEntryFixtureParams{ID: id, Data: raw, Published: false}))
 			entry, err := registry.Get(t.Context(), id)
 			require.NoError(t, err)
-			writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetRegistryIcons: true}} //nolint:exhaustive // Only the tested icon operation is enabled.
+			writes := WriteConfig{Enabled: true}
 			writer := &registryIconsWriter{runner: f.runner, registry: registry, writes: writes}
 			receipt, err := writer.apply(writeContext(t, f), SetRegistryIconsInput{EntryID: id.String(), ExpectedUpdatedAt: mcpregistry.Token(entry)})
 			require.NoError(t, err)

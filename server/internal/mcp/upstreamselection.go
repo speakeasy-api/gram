@@ -444,9 +444,11 @@ type agentKeyClient struct {
 // authorizeDirectAgentKey applies the agent gateway's checks for a key
 // without a credential choice to the server's own endpoint: every OAuth
 // registration the server offers through an auth client must be one the agent
-// may use. The request is then served only by those registrations, each
-// through the connection its permit was decided for, as the gateway serves
-// the same server. It returns the routing identity of a sole registration.
+// may use, and a refused one refuses the request. A registration the agent
+// holds no connection for is left out while another serves. The request is
+// then served only by the rest, each through the connection its permit was
+// decided for, as the gateway serves the same server. It returns the routing
+// identity of a sole served registration.
 func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *issuerGateAuthentication, agentID uuid.UUID) (upstreamChoice, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
@@ -464,18 +466,33 @@ func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *i
 		return none, nil
 	}
 	authorized := make([]agentKeyClient, 0, len(clients))
+	served := make([]remotesessions.Client, 0, len(clients))
+	var skipped error
 	for _, client := range clients {
 		connection, _, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, agentClientType(client))
+		// As on the agent gateway (agentMemberTokens), a client the agent
+		// holds no connection for is left out while another serves; a
+		// refused use refuses the server.
+		if agentConnectionMissing(err) {
+			if skipped == nil {
+				skipped = err
+			}
+			continue
+		}
 		if err != nil {
 			return none, s.directAgentKeyError(ctx, authentication, err)
 		}
 		authorized = append(authorized, agentKeyClient{id: client.ID, connection: connection})
+		served = append(served, client)
+	}
+	if len(authorized) == 0 {
+		return none, s.directAgentKeyError(ctx, authentication, skipped)
 	}
 	authentication.agentKeyClients = authorized
-	if len(clients) != 1 {
+	if len(served) != 1 {
 		return none, nil
 	}
-	return upstreamChoice{clientID: uuid.NullUUID{UUID: clients[0].ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: clients[0].RemoteSessionIssuerID, Valid: true}}, nil
+	return upstreamChoice{clientID: uuid.NullUUID{UUID: served[0].ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: served[0].RemoteSessionIssuerID, Valid: true}}, nil
 }
 
 // resolveAgentKeyClientTokens reads each authorized registration's credential
@@ -578,11 +595,12 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	}
 	if authentication.ownClientsOnly {
 		if serverID := endpoint.proxiedServerID(); serverID.Valid {
-			tokens, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
+			resolved, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
 			if err != nil {
 				return nil, fmt.Errorf("resolve server clients: %w", err)
 			}
-			return tokens, nil
+			authentication.serverAssociation = &resolved.Association
+			return resolved.Tokens, nil
 		}
 	}
 	if skipUnusable {

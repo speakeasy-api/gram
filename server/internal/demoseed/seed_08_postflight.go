@@ -146,7 +146,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "setup tasks",
 			count: byOrg(s.q.PostflightCountSetupTasks),
-			fail:  postflightMustEqual(11, "expected 11 setup task selections, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 setup task selections, found %d"),
 		},
 		flag("security onboarding", s.q.PostflightSecurityOnboardingInvalid, "expected customized Security onboarding selection"),
 		flag("onboarding stack", s.q.PostflightOnboardingStackInvalid, "expected the recorded onboarding stack"),

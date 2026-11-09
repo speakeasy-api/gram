@@ -17,6 +17,7 @@ import { Route as McpSetupRouteImport } from './routes/mcp-setup'
 import { Route as OnboardingPlaybooksRouteImport } from './routes/onboarding-playbooks'
 import { Route as OnboardingStepsRouteImport } from './routes/onboarding-steps'
 import { Route as OrganizationsRouteImport } from './routes/organizations'
+import { Route as PlatformMcpFeedbackRouteImport } from './routes/platform-mcp-feedback'
 import { Route as ProjectsRouteImport } from './routes/projects'
 import { Route as RegistryRouteImport } from './routes/registry'
 import { Route as RemoteSessionIssuersRouteImport } from './routes/remote-session-issuers'
@@ -88,6 +89,11 @@ const OnboardingStepsRoute = OnboardingStepsRouteImport.update({
 const OrganizationsRoute = OrganizationsRouteImport.update({
   id: '/organizations',
   path: '/organizations',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformMcpFeedbackRoute = PlatformMcpFeedbackRouteImport.update({
+  id: '/platform-mcp-feedback',
+  path: '/platform-mcp-feedback',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProjectsRoute = ProjectsRouteImport.update({
@@ -277,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -318,6 +325,7 @@ export interface FileRoutesByTo {
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
@@ -354,6 +362,7 @@ export interface FileRoutesById {
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
+  '/platform-mcp-feedback': typeof PlatformMcpFeedbackRoute
   '/projects': typeof ProjectsRouteWithChildren
   '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
@@ -398,6 +407,7 @@ export interface FileRouteTypes {
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
+    | '/platform-mcp-feedback'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -439,6 +449,7 @@ export interface FileRouteTypes {
     | '/mcp-setup'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
+    | '/platform-mcp-feedback'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/upstream-oauth-migration'
@@ -474,6 +485,7 @@ export interface FileRouteTypes {
     | '/onboarding-playbooks'
     | '/onboarding-steps'
     | '/organizations'
+    | '/platform-mcp-feedback'
     | '/projects'
     | '/registry'
     | '/remote-session-issuers'
@@ -517,6 +529,7 @@ export interface RootRouteChildren {
   OnboardingPlaybooksRoute: typeof OnboardingPlaybooksRoute
   OnboardingStepsRoute: typeof OnboardingStepsRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
+  PlatformMcpFeedbackRoute: typeof PlatformMcpFeedbackRoute
   ProjectsRoute: typeof ProjectsRouteWithChildren
   RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
@@ -582,6 +595,13 @@ declare module '@tanstack/react-router' {
       path: '/organizations'
       fullPath: '/organizations'
       preLoaderRoute: typeof OrganizationsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platform-mcp-feedback': {
+      id: '/platform-mcp-feedback'
+      path: '/platform-mcp-feedback'
+      fullPath: '/platform-mcp-feedback'
+      preLoaderRoute: typeof PlatformMcpFeedbackRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/projects': {
@@ -961,6 +981,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingPlaybooksRoute: OnboardingPlaybooksRoute,
   OnboardingStepsRoute: OnboardingStepsRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
+  PlatformMcpFeedbackRoute: PlatformMcpFeedbackRoute,
   ProjectsRoute: ProjectsRouteWithChildren,
   RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,

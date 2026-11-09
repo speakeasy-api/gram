@@ -6,11 +6,14 @@ import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { ResourceLink } from "@/pages/access/ResourceLink";
-import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
+import {
+  useResourceLinkMaps,
+  type ResourceLinkMaps,
+} from "@/pages/access/useResourceLinkMaps";
 import { CONNECT_SCOPE } from "@/pages/agents/agentPolicyEdit";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
-  agentPolicyUnrestrictedLabel,
+  agentPolicyBroadGrantLabel,
   isAgentPolicyConstraint,
   isAgentPolicySelectorUnrestricted,
 } from "@/pages/agents/agent-policy-grants";
@@ -26,6 +29,7 @@ import { useRoutes } from "@/routes";
 import { Text } from "@/components/ui/Text";
 import { IdentityPanel, IdentityPanelEmpty } from "./IdentityPanel";
 import { GrantOnBehalfOf } from "./GrantOnBehalfOf";
+import { useAgentPolicyGrants } from "./useAgentPolicyGrants";
 import {
   authGrantParts,
   authGrantRank,
@@ -47,11 +51,13 @@ import { Link } from "react-router";
  */
 function agentSelectorNarrowing(
   selector: AgentPolicySelector,
-  projectName?: string,
+  project: { id: string; name?: string } | undefined,
 ): string {
   const parts: string[] = [];
-  if (isAgentPolicyConstraint(selector.projectId))
-    parts.push(`Project: ${projectName || selector.projectId}`);
+  // A project the grant stores is shown even unnamed; one read from its
+  // server only when it has a name, so a row never gains a bare id.
+  if (project && (project.name || isAgentPolicyConstraint(selector.projectId)))
+    parts.push(`Project: ${project.name || project.id}`);
   if (isAgentPolicyConstraint(selector.tool))
     parts.push(`Tool: ${selector.tool}`);
   if (isAgentPolicyConstraint(selector.disposition))
@@ -67,14 +73,23 @@ function agentSelectorNarrowing(
 const MCP_SCOPES_THAT_CONNECT = new Set(["mcp:read", "mcp:write"]);
 
 /**
- * What a grant on every resource of its kind reaches. An org grant still
- * narrowed, e.g. to a project, is not the whole organization.
+ * The project a grant's resource is in. A grant on one MCP server may leave
+ * its project out: the setup flow stores the server with its project, the
+ * permission picker stores the server alone, and the gateway enforces both
+ * the same way, since a server lives in exactly one project. Read from the
+ * server itself, every server row names its project, however it was saved.
  */
-function wildcardGrantLabel(selector: AgentPolicySelector): string {
-  if (!isAgentPolicySelectorUnrestricted(selector)) {
-    return agentPolicyUnrestrictedLabel(undefined);
-  }
-  return agentPolicyUnrestrictedLabel(selector.resourceKind);
+function grantProjectId(
+  selector: AgentPolicySelector,
+  maps: ResourceLinkMaps,
+): string | undefined {
+  if (isAgentPolicyConstraint(selector.projectId)) return selector.projectId;
+  if (selector.resourceKind !== "mcp") return undefined;
+  if (!isAgentPolicyConstraint(selector.resourceId)) return undefined;
+  return (
+    maps.toolsetMap.get(selector.resourceId)?.projectId ??
+    maps.mcpServerMap.get(selector.resourceId)?.projectId
+  );
 }
 
 /**
@@ -309,7 +324,7 @@ function ScopeGrants({
   agentId: string;
   scope: string;
   grants: AgentPolicyGrant[];
-  maps: ReturnType<typeof useResourceLinkMaps>;
+  maps: ResourceLinkMaps;
   authNames: AuthGrantNames;
 }): JSX.Element {
   const { orgSlug } = useSlugs();
@@ -336,19 +351,23 @@ function ScopeGrants({
       <ul className="marker:text-muted-foreground list-disc space-y-1 pt-1 pl-5">
         {orderGrants(scope, grants, authNames).map((grant) => {
           const { selector } = grant;
+          const projectId = grantProjectId(selector, maps);
+          // The same words the permission editor's list of changes uses.
+          const broad = agentPolicyBroadGrantLabel(selector);
           const narrowing = agentSelectorNarrowing(
             selector,
-            selector.projectId
-              ? maps.projectMap.get(selector.projectId)?.name
-              : undefined,
+            // Presence, not truthiness: an empty stored project still narrows.
+            projectId === undefined
+              ? undefined
+              : { id: projectId, name: maps.projectMap.get(projectId)?.name },
           );
           return (
             <li key={grant.id} className="pl-1">
               <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
                 {selector.resourceKind === "mcp_auth_client" ? (
                   <AuthGrantLabel parts={authGrantParts(selector, authNames)} />
-                ) : selector.resourceId === ANY_RESOURCE ? (
-                  <Text small>{wildcardGrantLabel(selector)}</Text>
+                ) : broad !== undefined ? (
+                  <Text small>{broad}</Text>
                 ) : (
                   <ResourceLink
                     challenge={{
@@ -389,21 +408,12 @@ export function AgentIdentityPermissions({
 }: {
   agent: ManagedAgent;
 }): JSX.Element {
-  const organization = useOrganization();
-  const sdk = useSdkClient();
   const routes = useRoutes();
   const [editing, setEditing] = useState(false);
   // The policy endpoint requires setup/write access, independently of agent:read.
   const canRead = agent.permissions.write;
-  const grants = useQuery({
-    // Shared with the editor: saving there invalidates this view immediately.
-    queryKey: ["agent-policy-grants", organization.id, agent.id],
-    queryFn: ({ signal }) =>
-      sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, { signal }),
-    enabled: canRead,
-    retry: false,
-    throwOnError: false,
-  });
+  // Shared with the editor: saving there invalidates this view immediately.
+  const grants = useAgentPolicyGrants(agent);
   const { isError: catalogueError } = useAgentPolicyScopes();
   // Credential restrictions are listed and edited in their own panel.
   const visible = canRead

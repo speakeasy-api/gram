@@ -77,7 +77,7 @@ func TestHandleIDPCallback_SyncsMembershipsBeforeAccessCheck(t *testing.T) {
 	require.Equal(t, http.StatusFound, w.Code)
 
 	require.Equal(t, []string{"CompleteIDPLogin", "IsOrganizationMember"}, mock.calls)
-	require.Equal(t, []identity.IDPLoginOptions{{SkipMembershipSync: false}}, mock.loginOptions)
+	require.Equal(t, []identity.IDPLoginOptions{{SkipMembershipSync: false, Attribution: nil}}, mock.loginOptions)
 	require.Equal(t, []string{mock.upsertResult}, mock.memberChecks, "the gate must judge the user the bootstrap resolved")
 }
 
