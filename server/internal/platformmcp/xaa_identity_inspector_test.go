@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
+	oktarepo "github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
@@ -84,6 +85,14 @@ func seedXAAInspectorFixture(t *testing.T, ctx context.Context, conn *pgxpool.Po
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), stamped)
+	upstreamClient, err := rs.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{
+		OrganizationID: conv.ToPGText(org), ProjectID: conv.ToNullUUID(project.ID), RemoteSessionIssuerID: issuerA, ClientID: "upstream-client",
+		ClientIDIssuedAt: conv.ToPGTimestamptz(time.Now().UTC()), TokenEndpointAuthMethod: conv.ToPGText("none"), Scope: []string{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID: project.ID, OrganizationID: org, McpServerID: server.ID, RemoteSessionClientID: upstreamClient.ID,
+	}))
 	return xaaInspectorFixture{organizationID: org, projectID: project.ID, serverID: server.ID, issuerA: issuerA, issuerB: issuerB, trustedClient: trusted.ID, userIssuer: usi.ID}
 }
 
@@ -138,6 +147,34 @@ func TestXAAIdentityInspectorServedSelectsDirectUpstreamAcrossIssuers(t *testing
 	chaining, _, err = inspector.Inspect(ctx, f.organizationID, f.projectID, f.serverID, f.issuerA, "https://upstream.example.test/mcp")
 	require.NoError(t, err)
 	require.Len(t, chaining.Bindings, 2, "both issuers' bindings are reported so the ambiguity is visible")
+}
+
+func TestXAAIdentityInspectorTunneledUpstreamUsesTheCallersIssuer(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_xaa_inspector_tunneled")
+	require.NoError(t, err)
+	f := seedXAAInspectorFixture(t, ctx, conn, pgtype.Text{})
+	const upstream = "https://tunneled.example.test/mcp"
+	slug := "tunneled-" + uuid.NewString()[:8]
+	backend, err := oktarepo.New(conn).CreateTunneledBackendFixture(ctx, oktarepo.CreateTunneledBackendFixtureParams{
+		ProjectID: f.projectID, Name: slug, KeyHash: "hash-" + slug, KeyPrefix: "gram_tun", Status: "active", ResourceIdentifier: conv.ToPGText(upstream),
+	})
+	require.NoError(t, err)
+	// No issuer is stamped on this server, so only the caller's can reach the request.
+	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID: uuid.New(), ProjectID: f.projectID, Name: conv.ToPGText(slug), Slug: conv.ToPGText(slug),
+		UserSessionIssuerID: uuid.NullUUID{UUID: f.userIssuer, Valid: true}, TunneledMcpServerID: conv.ToNullUUID(backend), Visibility: "private",
+	})
+	require.NoError(t, err)
+
+	governor := &recordingGovernor{issuer: f.issuerA, serves: false}
+	inspector := &postgresXAAIdentityInspector{db: conn, governor: governor, origins: remotesessions.CallbackOrigins{Outbound: nil, Registration: nil}}
+	chaining, _, err := inspector.Inspect(ctx, f.organizationID, f.projectID, server.ID, f.issuerA, upstream)
+	require.NoError(t, err)
+	require.False(t, chaining.Served)
+	require.Len(t, governor.recorded(), 1)
+	require.Equal(t, conv.ToNullUUID(f.issuerA), governor.recorded()[0].RemoteSessionIssuerID)
 }
 
 func TestXAAIdentityInspectorCallbackUsesRecordedOrigin(t *testing.T) {

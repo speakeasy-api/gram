@@ -14,6 +14,7 @@ type SearchCatalogInput struct {
 	Query       string `json:"query,omitempty" jsonschema:"optional search text; only reviewed catalog candidates are returned"`
 	ProviderKey string `json:"provider_key,omitempty" jsonschema:"optional reviewed provider key to filter"`
 	Cursor      string `json:"cursor,omitempty" jsonschema:"opaque continuation cursor returned by search_mcp_catalog"`
+	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"optional project slug; result cards mark the servers this project already has. Defaults to the organization's Default project, the same project register_catalog_mcp adds to. Does not change which servers are returned"`
 }
 
 type SearchCatalogOutput struct {
@@ -62,15 +63,19 @@ type CandidateInspection struct {
 	Actions                     []RepairAction `json:"actions,omitempty"`
 }
 
-func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService) {
+func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudget, cursorCodec *catalogCursorCodec, onboarding *OnboardingService, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "search_mcp_catalog",
 		Title:       "Search the MCP Catalog",
-		Description: "Search the reviewed catalogue — the MCP servers Speakeasy has vetted and made available to add. Searching only lists options: nothing is added to a project and nobody receives anything. Each result's auth_setup says how the server signs users in: present it with the result, and when it is unknown check the setup guide with search_speakeasy_docs before saying how it signs in.",
+		Description: "Search the reviewed catalogue of MCP servers Speakeasy has vetted for adding. This only lists options: nothing is added to a project and nobody receives anything. Present each result's auth_setup (how the server signs users in); when it is unknown, check the setup guide with search_speakeasy_docs before saying how it signs in.",
 		Annotations: readOnlyOpenWorldAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
-		Audiences:     bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
+		// The project only marks which results are already added. Declaring
+		// it defaultable lets the managed assistant inject its own project
+		// and hide the selector, so it cannot read another project's state.
+		Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input SearchCatalogInput) (*mcp.CallToolResult, SearchCatalogOutput, error) {
 		principal, err := principalFromToolContext(ctx)
 		if err != nil {
 			return nil, SearchCatalogOutput{}, err
@@ -121,7 +126,10 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 				return nil, SearchCatalogOutput{}, fmt.Errorf("encode platform mcp catalog cursor: %w", err)
 			}
 		}
-		return nil, output, nil
+		project := registrations.catalogCardProject(ctx, principal, input.ProjectSlug, page)
+		carousel := buildCatalogCarousel(page, project, output.NextCursor != "")
+		carousel.fillLogos(registrations.catalogLogoURIs(ctx, page, carousel.storedLogos()))
+		return catalogCarouselResult(carousel), output, nil
 	})
 }
 
@@ -129,7 +137,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 	addTool(reg, &mcp.Tool{
 		Name:        "inspect_mcp_candidate",
 		Title:       "Preview an MCP Server Before Adding It",
-		Description: "Look at one MCP server before adding it — either a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. Looking changes nothing: the server is not added to a project and nobody receives it. For a reviewed catalog entry, supports_dcr, supports_cimd, and auth_setup report advertised capabilities, not a verified connection; unknown setup is not manual setup. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider can be connected automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
+		Description: "Look at one MCP server before adding it: a reviewed catalogue entry or an HTTPS Streamable HTTP URL the user supplied. This changes nothing: the server is not added to a project and nobody receives it. For a catalogue entry, supports_dcr, supports_cimd and auth_setup report advertised capabilities, not a verified connection; unknown setup is not manual setup. For a URL that requires sign-in, automatic_client_registration says whether its OAuth provider connects automatically (dynamic client registration or a client ID metadata document) or needs a client configured by hand.",
 		Annotations: readOnlyOpenWorldAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeNone}, func(ctx context.Context, _ *mcp.CallToolRequest, input InspectCatalogCandidateInput) (*mcp.CallToolResult, CandidateInspection, error) {
 		principal, err := principalFromToolContext(ctx)

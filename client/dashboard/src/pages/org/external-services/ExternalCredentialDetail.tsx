@@ -8,6 +8,7 @@ import {
   TabsContent,
   PageTabsList,
 } from "@/components/ui/Tabs";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";
@@ -154,7 +155,13 @@ export default function ExternalCredentialDetail(): JSX.Element {
           <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
             <TabsContent value="overview" className="mt-0">
               {credential && <OverviewTab credential={credential} />}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton label="Loading external credential">
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
             <TabsContent value="kms-keys" className="mt-0">
               <KmsKeysTab credentialId={credentialId} />
@@ -173,7 +180,13 @@ export default function ExternalCredentialDetail(): JSX.Element {
                   <SettingsTab key={credential.id} credential={credential} />
                 </RequireScope>
               )}
-              {isLoading && <Text muted>Loading…</Text>}
+              {isLoading && (
+                <Skeleton label="Loading external credential">
+                  <div className="h-5 w-48" />
+                  <div className="h-5 w-96" />
+                  <div className="h-5 w-64" />
+                </Skeleton>
+              )}
             </TabsContent>
           </div>
         </Tabs>

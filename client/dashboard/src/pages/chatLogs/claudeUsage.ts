@@ -1,6 +1,7 @@
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
 import type { ClaudeTurnUsage } from "@gram/client/models/components/claudeturnusage.js";
+import { formatDaysHours } from "@/lib/format-duration";
 
 export type ClaudeUsageMatch = {
   turn: ClaudeTurnUsage;
@@ -76,6 +77,9 @@ export function formatDurationFromNanos(
     if (millis < 10_000) return `${(millis / 1000).toFixed(1)}s`;
     const roundedSeconds = Math.round(millis / 1000);
     if (roundedSeconds < 60) return `${roundedSeconds}s`;
+    // Days use whole elapsed seconds, so 23:59:59.6 is not rounded up to 1d.
+    const daysHours = formatDaysHours(Math.floor(millis / 1000));
+    if (daysHours) return daysHours;
     const minutes = Math.floor(roundedSeconds / 60);
     const remainder = roundedSeconds % 60;
     return `${minutes}m ${remainder}s`;

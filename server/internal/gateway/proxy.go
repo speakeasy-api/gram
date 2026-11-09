@@ -32,12 +32,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/serialization"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 type ToolCallSource string
@@ -139,6 +139,7 @@ type ToolProxy struct {
 	policy        *guardian.Policy
 	functions     functions.ToolCaller
 	platformTools PlatformExecutor
+	drain         *shutdowndrain.Drain
 }
 
 func NewToolProxy(
@@ -151,6 +152,7 @@ func NewToolProxy(
 	policy *guardian.Policy,
 	funcCaller functions.ToolCaller,
 	platformTools PlatformExecutor,
+	drain *shutdowndrain.Drain,
 ) *ToolProxy {
 	tracer := tracerProivder.Tracer("github.com/speakeasy-api/gram/server/internal/gateway")
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/gateway")
@@ -165,6 +167,7 @@ func NewToolProxy(
 		policy:        policy,
 		functions:     funcCaller,
 		platformTools: platformTools,
+		drain:         drain,
 	}
 }
 
@@ -184,11 +187,19 @@ func (tp *ToolProxy) Do(
 		attr.ToolCallSource(string(tp.source)),
 	))
 	defer func() {
-		if err != nil && !oops.IsClientFault(err) {
+		// A call abandoned for shutdown is a deploy, not a tool failure.
+		if err != nil && !oops.IsClientFault(err) && !errors.Is(err, shutdowndrain.ErrInterrupted) {
 			span.SetStatus(codes.Error, err.Error())
 		}
 		span.End()
 	}()
+
+	// Every call is cancelled at the shutdown interrupt deadline, so the caller
+	// can answer before the server stops waiting for in-flight requests. A call
+	// that finishes regardless, such as a prompt render, keeps its result.
+	ctx, release := tp.drain.Interruptible(ctx)
+	defer release()
+	defer func() { err = shutdownInterruptedError(ctx, err) }()
 
 	// Capture the trace/span context onto the shared log attributes now, while the
 	// gateway.toolCall span is active. The callers (mcp tool-call handler, instances
@@ -217,11 +228,29 @@ func (tp *ToolProxy) Do(
 		return tp.doPrompt(ctx, logger.With(attr.SlogComponent("gateway-prompt-caller")), w, requestBody, env, plan.Descriptor, plan.Prompt)
 	case ToolKindPlatform:
 		return tp.doPlatform(ctx, logger.With(attr.SlogComponent("gateway-platform-caller")), w, requestBody, env, plan, attrs)
-	case ToolKindExternalMCP:
-		return tp.doExternalMCP(ctx, logger.With(attr.SlogComponent("gateway-externalmcp-caller")), w, requestBody, env, plan.Descriptor, plan.ExternalMCP)
 	default:
 		return fmt.Errorf("tool type not supported: %s", plan.Kind)
 	}
+}
+
+// shutdownInterruptedError returns err marked with
+// [shutdowndrain.ErrInterrupted] when the shutdown drain abandoned the call
+// running under ctx, and err unchanged otherwise. Steps that wait on another
+// server mark their own errors with [shutdownInterrupt]; this is the fallback
+// for the rest, so it only marks an error the cancellation itself caused. A
+// call that completed, or failed for its own reason, before the interrupt took
+// effect keeps its result even when ctx was cancelled after the fact.
+func shutdownInterruptedError(ctx context.Context, err error) error {
+	if err == nil || errors.Is(err, shutdowndrain.ErrInterrupted) || !errors.Is(err, context.Canceled) || !shutdowndrain.Interrupted(ctx) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", shutdowndrain.ErrInterrupted, err)
+}
+
+// shutdownInterrupt marks err, returned by step while the shutdown drain had
+// interrupted the call, with [shutdowndrain.ErrInterrupted].
+func shutdownInterrupt(step string, err error) error {
+	return fmt.Errorf("%w: %s: %w", shutdowndrain.ErrInterrupted, step, err)
 }
 
 func (tp *ToolProxy) doPlatform(
@@ -908,198 +937,6 @@ func (tp *ToolProxy) doPrompt(ctx context.Context, logger *slog.Logger, w http.R
 	return nil
 }
 
-// externalMCPErrorSummaryLimit bounds how much of an errored tool result is
-// recorded. Provider error codes lead the payload, so the head is the part
-// worth keeping; the tail can be an arbitrarily large upstream response.
-const externalMCPErrorSummaryLimit = 512
-
-// externalMCPErrorSummary renders the content of an errored tool result for
-// logging. The content is upstream-controlled, so each part is written only up
-// to the remaining budget — the limit bounds what is built, not just what is
-// returned, so one multi-megabyte part cannot be copied whole on its way to a
-// 512-byte log field. Slicing to a byte offset can split a multi-byte rune, so
-// invalid UTF-8 is stripped before the summary reaches the log.
-func externalMCPErrorSummary(content []json.RawMessage) string {
-	if len(content) == 0 {
-		return "external MCP server reported an error with no content"
-	}
-
-	var summary strings.Builder
-	truncated := false
-	for _, part := range content {
-		remaining := externalMCPErrorSummaryLimit - summary.Len()
-		if remaining <= 0 {
-			// Budget spent with parts still to go: the tail is being dropped.
-			truncated = true
-			break
-		}
-		if len(part) > remaining {
-			summary.Write(part[:remaining])
-			truncated = true
-			break
-		}
-		summary.Write(part)
-	}
-
-	rendered := strings.ToValidUTF8(summary.String(), "")
-	if truncated {
-		return rendered + "…(truncated)"
-	}
-
-	return rendered
-}
-
-func (tp *ToolProxy) doExternalMCP(
-	ctx context.Context,
-	logger *slog.Logger,
-	w http.ResponseWriter,
-	requestBody io.Reader,
-	env toolconfig.ToolCallEnv,
-	descriptor *ToolDescriptor,
-	plan *ExternalMCPToolCallPlan,
-) error {
-	span := trace.SpanFromContext(ctx)
-
-	// Use the tool name from the plan (resolved by the proxy tool executor for
-	// proxy tools, or set directly for materialized tools)
-	toolName := plan.ToolName
-
-	// A proxy tool's name is whatever the caller sent after the server slug:
-	// nothing validates it against the upstream's tool list. Only a name the
-	// upstream answered successfully reaches the metric dimension, so a bogus
-	// name cannot mint a timeseries per call, including against an upstream
-	// that rejects an unknown tool in-band as an errored result rather than as
-	// a protocol error. Every other call is attributed to the URN name.
-	recordedToolName := descriptor.URN.Name
-
-	var responseStatusCode int
-	// An in-band failure is still answered with a 200, so the status code alone
-	// would record the call as a success.
-	var upstreamReportedError bool
-	defer func() {
-		outcome := toolCallOutcomeForStatus(responseStatusCode)
-		if upstreamReportedError {
-			outcome = toolCallOutcomeToolError
-		}
-
-		tp.metrics.RecordToolCall(ctx, toolCallRecord{
-			OrganizationID: descriptor.OrganizationID,
-			URN:            descriptor.URN,
-			ToolName:       recordedToolName,
-			StatusCode:     responseStatusCode,
-			Outcome:        outcome,
-		})
-
-		span.SetAttributes(attr.HTTPResponseStatusCode(responseStatusCode))
-	}()
-
-	arguments, err := io.ReadAll(requestBody)
-	if err != nil {
-		return oops.E(oops.CodeBadRequest, err, "failed to read tool arguments").LogError(ctx, logger)
-	}
-
-	// Only pass OAuth token if this plan requires it
-	var oauthToken string
-	if plan.RequiresOAuth {
-		oauthToken = env.OAuthToken
-	}
-
-	// Build headers from environment variables
-	headers := externalmcp.BuildHeaders(env.SystemEnv, env.UserConfig, plan.HeaderDefinitions, oauthToken)
-	opts := &externalmcp.ClientOptions{
-		Metrics:          nil,
-		Authorization:    "",
-		Headers:          headers,
-		DisableRetries:   false,
-		MaxResponseBytes: 0,
-		MaxMessageBytes:  0,
-	}
-
-	// Connect to the external MCP server
-	client, err := externalmcp.NewClient(ctx, logger, tp.policy, plan.RemoteURL, plan.TransportType, opts)
-	if err != nil {
-		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			upstreamReportedError = true
-			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
-			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to connect to external MCP server").LogError(ctx, logger)
-	}
-	defer o11y.LogDefer(ctx, logger, "failed to close external mcp client", client.Close)
-
-	// Call the tool on the external MCP server
-	callResult, err := client.CallTool(ctx, toolName, arguments, plan.InputSchema)
-	if err != nil {
-		if authErr, ok := errors.AsType[*externalmcp.AuthRejectedError](err); ok {
-			upstreamReportedError = true
-			responseStatusCode = http.StatusOK
-			logger.WarnContext(ctx, "external MCP authentication rejected", attr.SlogHTTPResponseStatusCode(authErr.StatusCode))
-			return writeExternalMCPAuthRejection(w, plan.RequiresOAuth)
-		}
-		return oops.E(oops.CodeUnexpected, err, "failed to call external MCP tool").LogError(ctx, logger)
-	}
-
-	// An upstream that reports failure in-band — a result carrying isError
-	// rather than a transport or protocol error — reaches none of the error
-	// paths above, and the result is forwarded to the caller as a successful
-	// response, so this is the only place the failure can be detected.
-	// Providers that surface a rejected or expired bearer as a tool result
-	// rather than a 401 are the motivating case, since the failure is
-	// otherwise visible to the end user and to no one operating the service.
-	if callResult.IsError {
-		upstreamReportedError = true
-		logger.ErrorContext(ctx, "external MCP tool returned an error result",
-			attr.SlogToolName(toolName),
-			attr.SlogURL(plan.RemoteURL),
-			attr.SlogErrorMessage(externalMCPErrorSummary(callResult.Content)),
-		)
-	} else {
-		recordedToolName = toolName
-	}
-
-	responseStatusCode = http.StatusOK
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(responseStatusCode)
-
-	response := struct {
-		Content []json.RawMessage `json:"content"`
-		IsError bool              `json:"isError,omitzero"`
-	}{
-		Content: callResult.Content,
-		IsError: callResult.IsError,
-	}
-
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result").LogError(ctx, logger)
-	}
-
-	return nil
-}
-
-// An upstream rejection is a tool error, not a rejection of the caller's Speakeasy
-// bearer. Never relay its WWW-Authenticate challenge: it names a different
-// audience and may contain sensitive, upstream-controlled values.
-func writeExternalMCPAuthRejection(w http.ResponseWriter, requiresOAuth bool) error {
-	message := "The upstream MCP server rejected authentication. Ask the MCP server administrator to check its configured credentials and permissions."
-	if requiresOAuth {
-		message = "The upstream MCP server rejected authentication. Reauthorize this MCP server to reconnect your upstream account. If the problem persists, check that your account has the required permissions."
-	}
-	response := struct {
-		Content []map[string]string `json:"content"`
-		IsError bool                `json:"isError"`
-	}{
-		Content: []map[string]string{{"type": "text", "text": message}},
-		IsError: true,
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "failed to write external MCP tool result")
-	}
-	return nil
-}
-
 type ReverseProxyOptions struct {
 	Logger                    *slog.Logger
 	Tracer                    trace.Tracer
@@ -1204,6 +1041,14 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	}
 	resp, err := retryWithBackoff(ctx, opts.RetryConfig, executeRequest)
 	if err != nil {
+		// The caller answers a call abandoned for shutdown itself, so it is
+		// not logged as a gateway failure here. The proxied request did fail,
+		// so its span still records the interrupt.
+		if shutdowndrain.Interrupted(ctx) {
+			span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
+			captureResponseStatusCode(opts, http.StatusServiceUnavailable)
+			return shutdownInterrupt("execute request", err)
+		}
 		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "failed to execute request").LogError(ctx, opts.Logger)
 	}
@@ -1260,6 +1105,7 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		buf := make([]byte, 32*1024)
 		flusher, canFlush := opts.Writer.(http.Flusher)
 		var streamedBytes int64
+		var streamErr error
 
 		for {
 			n, err := resp.Body.Read(buf)
@@ -1275,18 +1121,36 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 			}
 			if err != nil {
 				if err != io.EOF {
-					span.SetStatus(codes.Error, err.Error())
-					opts.Logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(err))
+					streamErr = err
 				}
 				break
 			}
 		}
 
 		attrRecorder.RecordResponseBody(streamedBytes)
+		if streamErr != nil {
+			// A stream cut short by the shutdown drain is an incomplete
+			// response, not a result, so the caller must not relay it.
+			if shutdowndrain.Interrupted(ctx) {
+				span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
+				captureResponseStatusCode(opts, http.StatusServiceUnavailable)
+				return shutdownInterrupt("read upstream stream", streamErr)
+			}
+			span.SetStatus(codes.Error, streamErr.Error())
+			opts.Logger.ErrorContext(ctx, "upstream read failed", attr.SlogError(streamErr))
+		}
 	} else {
 		var body io.Reader = resp.Body
 
 		result := handleResponseFiltering(ctx, opts.Logger, opts.FilterConfig, opts.Expression, resp)
+		// The filter reads the whole body and then runs, so a body the
+		// shutdown drain cut short, or a filter it stopped, surfaces here
+		// rather than in the copy below.
+		if result != nil && result.interruptErr != nil {
+			span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
+			captureResponseStatusCode(opts, http.StatusServiceUnavailable)
+			return shutdownInterrupt("filter response", result.interruptErr)
+		}
 		if result != nil {
 			opts.Writer.Header().Set("Content-Type", result.contentType)
 			opts.Writer.Header().Set(constants.HeaderFilteredResponse, "1")
@@ -1299,6 +1163,13 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		written, err := io.Copy(opts.Writer, body)
 		attrRecorder.RecordResponseBody(written)
 		if err != nil {
+			// A body cut short by the shutdown drain is an incomplete
+			// response, not a result, so the caller must not relay it.
+			if shutdowndrain.Interrupted(ctx) {
+				span.SetStatus(codes.Error, shutdowndrain.ErrInterrupted.Error())
+				captureResponseStatusCode(opts, http.StatusServiceUnavailable)
+				return shutdownInterrupt("copy response body", err)
+			}
 			span.SetStatus(codes.Error, err.Error())
 			opts.Logger.ErrorContext(ctx, "failed to copy response body", attr.SlogError(err))
 		}
@@ -1314,11 +1185,17 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 		}
 	}
 
-	if opts.ResponseStatusCodeCapture != nil {
-		*opts.ResponseStatusCodeCapture = finalStatusCode
-	}
+	captureResponseStatusCode(opts, finalStatusCode)
 
 	return nil
+}
+
+// captureResponseStatusCode reports statusCode to the caller when it asked
+// for the response status.
+func captureResponseStatusCode(opts ReverseProxyOptions, statusCode int) {
+	if opts.ResponseStatusCodeCapture != nil {
+		*opts.ResponseStatusCodeCapture = statusCode
+	}
 }
 
 func processServerEnvVars(ctx context.Context, logger *slog.Logger, tool *HTTPToolCallPlan, env toolconfig.ToolCallEnv) string {

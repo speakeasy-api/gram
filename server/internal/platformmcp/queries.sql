@@ -851,6 +851,46 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetPlatformMCPRegistrationAwaitingSignIn :one
+-- The live registration behind an MCP server whose sign-in provider is not
+-- connected yet, so the consent page can connect it before it lists sign-in
+-- options. No row once the server has a sign-in provider.
+SELECT registration.id, registration.catalog_provider, project.slug AS project_slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+WHERE registration.mcp_server_id = @mcp_server_id
+  AND registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+  AND server.remote_session_issuer_id IS NULL
+ORDER BY registration.id
+LIMIT 1;
+
+-- name: GetPlatformMCPRegistrationConnectSlug :one
+-- The platform endpoint slug a live registration's consent page is served at.
+-- Custom-domain endpoints have no platform consent page, so they return no row.
+SELECT endpoint.slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_endpoints AS endpoint
+  ON endpoint.id = registration.mcp_endpoint_id
+ AND endpoint.project_id = registration.project_id
+ AND endpoint.mcp_server_id = registration.mcp_server_id
+ AND endpoint.custom_domain_id IS NULL
+ AND endpoint.deleted IS FALSE
+WHERE registration.id = @registration_id
+  AND registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE;
+
 -- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
 SELECT id, user_session_issuer_id
 FROM platform_mcp_catalog_registrations
@@ -936,6 +976,7 @@ SELECT
     m.toolset_id,
     m.unproxied_mcp_server_id,
     m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -4176,6 +4217,20 @@ WHERE r.id = @registration_id
   AND a.kind = 'image'
   AND a.deleted IS FALSE;
 
+-- name: ListPlatformMCPProjectCatalogServers :many
+-- The catalog servers a project already has, so catalog result cards can say
+-- which are added and link to each one. Every join is pinned to the
+-- registration's organization and project.
+SELECT r.id AS registration_id, r.catalog_provider, r.catalog_reference, s.id AS mcp_server_id, s.slug AS mcp_server_slug
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_servers s ON s.id = r.mcp_server_id AND s.project_id = r.project_id AND s.deleted IS FALSE
+WHERE r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.status = 'registered'
+  AND r.deleted IS FALSE
+ORDER BY r.created_at DESC, r.id
+LIMIT 500;
+
 -- name: GetPlatformMCPFeedbackFixture :one
 -- Test fixture: reads stored feedback columns that no production query returns.
 SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
@@ -4189,3 +4244,18 @@ UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 se
 -- name: PingPlatformMCPDatabaseFixture :exec
 -- Test fixture: proves a pooled connection is still healthy.
 SELECT 1;
+
+-- name: ListPlatformMCPServerNamesByResourceIDs :many
+-- Names the MCP servers that authorization checks name by resource ID: a
+-- server's own ID, which its endpoint checks, or the toolset ID the
+-- organization gateway checks for a toolset-backed server. A toolset's
+-- canonical server comes first, then the oldest, so it names the toolset.
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY(@resource_ids::uuid[]) OR m.toolset_id = ANY(@resource_ids::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id;

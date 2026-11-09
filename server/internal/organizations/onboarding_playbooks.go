@@ -471,32 +471,44 @@ func CloneOnboardingPlaybook(ctx context.Context, db *pgxpool.Pool, organization
 	})
 }
 
-// stepApplicability says, for each top-level step, whether the organization's
-// recorded stack supports it. A card applies when it has no methods, or when
-// one of its methods belongs to a vendor in the stack (or to no vendor in
-// particular) and the support matrix does not mark it not applicable on every
-// platform of the stack. A group applies when any of its cards does.
-func stepApplicability(ctx context.Context, queries *repo.Queries, organizationID string, topLevel []string) ([]*admingen.AdminOnboardingStepApplicability, error) {
+// cardVerdict says whether an organization's recorded stack supports a card,
+// and why not when it does not.
+type cardVerdict struct {
+	applies bool
+	reason  string
+}
+
+// cardApplicability judges each card against the organization's recorded
+// stack. A card applies when it has no methods, or when one of its methods
+// belongs to a vendor in the stack (or to no vendor in particular) and the
+// support matrix does not mark it not applicable on every platform of the
+// stack. A card that names plans also needs one of them in the stack. The
+// wizard and the playbook check share it, so they never disagree.
+//
+// stackRecorded reports whether the stack names any vendor. Without one, a
+// card that needs a particular vendor does not apply: the playbook check
+// refuses it until staff record the stack, while the wizard reads it as
+// unknown and keeps showing the card.
+func cardApplicability(ctx context.Context, queries *repo.Queries, organizationID string, cards []string) (verdicts map[string]cardVerdict, stackRecorded bool, err error) {
 	rows, err := queries.ListOrganizationOnboardingVendors(ctx, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("list onboarding stack vendors: %w", err)
+		return nil, false, fmt.Errorf("list onboarding stack vendors: %w", err)
 	}
 	vendors := make([]string, 0, len(rows))
+	plans := make([]string, 0, len(rows))
 	for _, row := range rows {
 		vendors = append(vendors, row.Vendor)
+		if row.PlanSlug.Valid {
+			plans = append(plans, row.PlanSlug.String)
+		}
 	}
-	cards := playbookCards(topLevel)
 	methods, err := queries.ListOnboardingStepMethodApplicability(ctx, repo.ListOnboardingStepMethodApplicabilityParams{Vendors: vendors, StepSlugs: cards})
 	if err != nil {
-		return nil, fmt.Errorf("list onboarding step applicability: %w", err)
+		return nil, false, fmt.Errorf("list onboarding step applicability: %w", err)
 	}
-	type verdict struct {
-		applies bool
-		reason  string
-	}
-	cardVerdicts := make(map[string]verdict, len(cards))
+	cardVerdicts := make(map[string]cardVerdict, len(cards))
 	for _, card := range cards {
-		cardVerdicts[card] = verdict{applies: true, reason: ""}
+		cardVerdicts[card] = cardVerdict{applies: true, reason: ""}
 	}
 	needs := make(map[string][]string, len(cards))
 	// Every method is weighed: one that matches settles the card, and the
@@ -504,12 +516,12 @@ func stepApplicability(ctx context.Context, queries *repo.Queries, organizationI
 	for _, method := range methods {
 		if _, first := needs[method.StepSlug]; !first {
 			// The first method seen makes the card conditional.
-			cardVerdicts[method.StepSlug] = verdict{applies: false, reason: ""}
+			cardVerdicts[method.StepSlug] = cardVerdict{applies: false, reason: ""}
 			needs[method.StepSlug] = nil
 		}
 		anyVendor := method.MethodVendor == "Cross-platform" || method.MethodVendor == "Others"
 		if (anyVendor || slices.Contains(vendors, method.MethodVendor)) && !method.NotApplicableEverywhere {
-			cardVerdicts[method.StepSlug] = verdict{applies: true, reason: ""}
+			cardVerdicts[method.StepSlug] = cardVerdict{applies: true, reason: ""}
 			continue
 		}
 		if !anyVendor && !slices.Contains(needs[method.StepSlug], method.MethodVendor) {
@@ -529,6 +541,28 @@ func stepApplicability(ctx context.Context, queries *repo.Queries, organizationI
 			v.reason = "the support matrix marks its methods not applicable to this stack"
 		}
 		cardVerdicts[card] = v
+	}
+	// A card that names plans applies only when the stack records one of them,
+	// for example a card that only Claude Team needs.
+	for card, v := range cardVerdicts {
+		definition := setupTaskDefinitionForKey(card)
+		if !v.applies || definition == nil || len(definition.Plans) == 0 {
+			continue
+		}
+		if !slices.ContainsFunc(definition.Plans, func(plan string) bool { return slices.Contains(plans, plan) }) {
+			cardVerdicts[card] = cardVerdict{applies: false, reason: "needs the " + strings.Join(definition.Plans, " or ") + " plan in the stack"}
+		}
+	}
+	return cardVerdicts, len(vendors) > 0, nil
+}
+
+// stepApplicability says, for each top-level step, whether the organization's
+// recorded stack supports it, judging cards as cardApplicability does. A group
+// applies when any of its cards does.
+func stepApplicability(ctx context.Context, queries *repo.Queries, organizationID string, topLevel []string) ([]*admingen.AdminOnboardingStepApplicability, error) {
+	cardVerdicts, _, err := cardApplicability(ctx, queries, organizationID, playbookCards(topLevel))
+	if err != nil {
+		return nil, err
 	}
 	result := make([]*admingen.AdminOnboardingStepApplicability, 0, len(topLevel))
 	for _, slug := range topLevel {

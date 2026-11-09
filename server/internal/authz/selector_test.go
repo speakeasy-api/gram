@@ -79,6 +79,30 @@ func TestSelector_ResourceID_absent(t *testing.T) {
 	require.Equal(t, "*", Selector(nil).ResourceID())
 }
 
+func TestSelector_CoversEveryResource(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		selector Selector
+		covers   bool
+	}{
+		{name: "nil", selector: nil, covers: true},
+		{name: "pure wildcard", selector: Selector{"resource_kind": "*", "resource_id": "*"}, covers: true},
+		{name: "stored unrestricted grant", selector: NewSelector(ScopeLogRead, WildcardResource), covers: true},
+		{name: "one resource", selector: NewSelector(ScopeLogRead, "project-1"), covers: false},
+		{name: "one project of a kind", selector: Selector{"resource_kind": "mcp", "resource_id": "*", "project_id": "p1"}, covers: false},
+		{name: "one tool", selector: Selector{"resource_kind": "mcp", "resource_id": "*", "tool": "search"}, covers: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.covers, tt.selector.CoversEveryResource())
+		})
+	}
+}
+
 func TestSelector_IsRestricted(t *testing.T) {
 	t.Parallel()
 

@@ -178,6 +178,7 @@ describe("useAgentIdentityCandidates", () => {
     expect(queryEnabled()).toBe(true);
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:agent-one",
+      "agent-sign-in:agent-one",
     ]);
     expect(mocks.queryOptions?.queryKey).toContain("rbac-override:none");
   });
@@ -228,7 +229,9 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(result.current.map((candidate) => candidate.title)).toEqual([
       "Build Agent",
+      "Build Agent · Agent sign-in",
       "Release Agent",
+      "Release Agent · Agent sign-in",
     ]);
     expect(mocks.fetchNextPage).toHaveBeenCalledTimes(1);
     await act(async () => {
@@ -260,6 +263,7 @@ describe("useAgentIdentityCandidates", () => {
     );
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:editable",
+      "agent-sign-in:editable",
     ]);
     mocks.routeProjectSlug = "project-one";
     mocks.projectSlug = "project-one";

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/Badge";
 import { TableRowContextMenu } from "@/components/table-row-context-menu";
 import type { Action } from "@/components/ui/MoreActions";
 import { Text } from "@/components/ui/Text";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Switch } from "@/components/ui/Switch";
 import { Button } from "@/components/ui/Button";
 import {
@@ -183,7 +184,7 @@ export function ExclusionsTab({
 
   let body: ReactNode;
   if (isLoading) {
-    body = <Text className="text-muted-foreground">Loading exclusions…</Text>;
+    body = <SkeletonTable label="Loading exclusions" />;
   } else if (exclusions.length === 0) {
     body = (
       <ExclusionsEmptyState

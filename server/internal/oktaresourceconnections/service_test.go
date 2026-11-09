@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oktaresourceconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 func TestList_DerivesStatesAndValues(t *testing.T) {
@@ -96,7 +97,8 @@ func TestList_ClientBindingStates(t *testing.T) {
 	recordAgent(t, ctx, si, "wlp1")
 
 	projectID := createProject(t, ctx, si, si.orgID, "proj")
-	missing := createServer(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), "Missing")
+	// The associated client is not linked to the server's user session issuer.
+	missing, _ := createServerWithBackend(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, si), Valid: true}, "Missing")
 	ambiguousIssuer := createResourceIssuer(t, ctx, si, si.orgID, projectID, true)
 	addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaone")
 	addClient(t, ctx, si, ambiguousIssuer, uuid.NullUUID{}, "0oatwo")
@@ -250,7 +252,8 @@ func TestConfirm_RejectsServersWithoutOneClient(t *testing.T) {
 	recordAgent(t, ctx, si, "wlp1")
 	projectID := createProject(t, ctx, si, si.orgID, "proj-"+uuid.NewString()[:8])
 
-	missing := createServer(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), "Missing")
+	// The associated client is not linked to the server's user session issuer.
+	missing, _ := createServerWithBackend(t, ctx, si, projectID, createResourceIssuer(t, ctx, si, si.orgID, projectID, true), uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, si), Valid: true}, "Missing")
 	_, err := confirm(t, ctx, si, audience, nil, missing)
 	requireOopsCode(t, err, oops.CodeFailedPrecondition)
 
@@ -323,6 +326,7 @@ func TestSharedUpstream_OneRowManyServers(t *testing.T) {
 	require.NoError(t, err)
 	twin, err := si.q.CreateEligibleMCPServerFixture(ctx, repo.CreateEligibleMCPServerFixtureParams{ProjectID: a.projectID, Name: conv.ToPGText("Twin"), Slug: conv.ToPGText(slug), RemoteMcpServerID: uuid.NullUUID{UUID: backendID, Valid: true}, RemoteSessionIssuerID: uuid.NullUUID{UUID: a.issuerID, Valid: true}, UserSessionIssuerID: uuid.NullUUID{}, Visibility: "private"})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, a.projectID, twin, a.issuerID)
 
 	confirmed, err := confirm(t, ctx, si, audience, nil, a.serverID)
 	require.NoError(t, err)
@@ -348,6 +352,8 @@ func TestSharedUpstream_OneRowManyServers(t *testing.T) {
 	other := createResourceIssuer(t, ctx, si, si.orgID, a.projectID, true)
 	_, err = si.q.SetMCPServerIssuerFixture(ctx, repo.SetMCPServerIssuerFixtureParams{RemoteSessionIssuerID: uuid.NullUUID{UUID: other, Valid: true}, ID: twin, ProjectID: a.projectID})
 	require.NoError(t, err)
+	require.NoError(t, testrepo.New(si.conn).ClearMCPServerRemoteSessionClientsFixture(ctx, twin))
+	associateServerIssuer(t, ctx, si, a.projectID, twin, other)
 	res = list(t, ctx, si, true)
 	require.Equal(t, "needs_connection", rowFor(t, res, twin).State)
 	require.Equal(t, "connected", rowFor(t, res, a.serverID).State)
@@ -412,6 +418,7 @@ func TestList_SkipsRevokedTunnels(t *testing.T) {
 			RemoteSessionIssuerID: uuid.NullUUID{UUID: f.issuerID, Valid: true},
 		})
 		require.NoError(t, err)
+		associateServerIssuer(t, ctx, si, f.projectID, id, f.issuerID)
 		return id
 	}
 	live := tunneled("Live", "active")
@@ -622,6 +629,7 @@ func TestEligibleServersFollowTypedOffersUnderEnforcement(t *testing.T) {
 		UnproxiedMcpServerID: conv.ToNullUUID(backend.ID), RemoteSessionIssuerID: conv.ToNullUUID(derived), Visibility: "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, unproxied, derived)
 
 	issuerOf := func(serverID uuid.UUID, enforced bool) (uuid.UUID, bool) {
 		rows, err := si.q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: si.orgID, TypedAuthEnforced: enforced})

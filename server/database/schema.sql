@@ -2706,6 +2706,20 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   unhealthy_since timestamptz,
   certificate_expires_at timestamptz,
   consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
+  -- Random, immutable DNS label forming this domain's per-domain CNAME target
+  -- (<token>.<suffix>). Cleared on soft delete.
+  dns_target_token TEXT CONSTRAINT custom_domains_dns_target_token_check CHECK (
+    dns_target_token IS NULL
+    OR (
+      dns_target_token <> ''
+      AND char_length(dns_target_token) <= 63
+    )
+  ),
+  -- Routing method the health checks last observed (for example per-domain
+  -- CNAME, shared CNAME or A record). Allowed values are enforced in code.
+  dns_routing_method TEXT,
+  dns_configuration_status TEXT,
+  dns_checked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2731,6 +2745,12 @@ COMMENT ON COLUMN custom_domains.health_checked_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.unhealthy_since IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.certificate_expires_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_target_token IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_routing_method IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_configuration_status IS 'Advisory DNS configuration observation, independent of ownership and infrastructure health.
+@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_checked_at IS 'Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+@access: confidential';
 COMMENT ON COLUMN custom_domains.created_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.updated_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.deleted_at IS '@access: confidential';
@@ -2742,6 +2762,10 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_dns_target_token_key
+ON custom_domains (dns_target_token)
 WHERE deleted IS FALSE;
 
 -- Tenant-qualified target for resources that pin a custom domain by id. Hard
@@ -6721,6 +6745,13 @@ WHERE external_message_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS chat_messages_inference_identity_idx
 ON chat_messages (project_id, external_message_id)
 WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
+
+-- Whether a project has stored any message from a Claude transcript upload
+-- (Claude Cowork sessions shipped on Stop). The setup wizard reads it to mark
+-- the Claude organization instructions card done once capture works.
+CREATE INDEX IF NOT EXISTS chat_messages_claude_transcript_project_idx
+ON chat_messages (project_id)
+WHERE origin = 'claude-transcript';
 
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
@@ -14130,7 +14161,8 @@ CREATE INDEX IF NOT EXISTS admin_mcp_write_proposals_connection_idx
 ON admin_mcp_write_proposals (connection_id);
 
 -- Staff-only lifecycle and refusal trail. Survives rolled-back writes. Stores
--- bounded reason codes only: no prompts, arguments, results or credentials.
+-- the operation, its target and bounded reason codes: no prompts, arguments,
+-- results or credentials.
 CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   proposal_id uuid,
@@ -14139,6 +14171,11 @@ CREATE TABLE IF NOT EXISTS admin_mcp_write_events (
   event TEXT NOT NULL,
   reason_code TEXT,
   request_id TEXT,
+  operation TEXT,
+  -- Null for platform-global operations and rows written before this column.
+  organization_id TEXT,
+  resource_kind TEXT,
+  resource_id TEXT,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
@@ -14160,6 +14197,10 @@ COMMENT ON COLUMN admin_mcp_write_events.oauth_client_id IS '@access: confidenti
 COMMENT ON COLUMN admin_mcp_write_events.event IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.reason_code IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.request_id IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_write_events.operation IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_write_events.organization_id IS '@access: confidential';
+COMMENT ON COLUMN admin_mcp_write_events.resource_kind IS '@access: restricted';
+COMMENT ON COLUMN admin_mcp_write_events.resource_id IS '@access: restricted';
 COMMENT ON COLUMN admin_mcp_write_events.created_at IS '@access: confidential';
 COMMENT ON COLUMN admin_mcp_write_events.updated_at IS '@access: confidential';
 

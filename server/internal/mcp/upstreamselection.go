@@ -444,9 +444,11 @@ type agentKeyClient struct {
 // authorizeDirectAgentKey applies the agent gateway's checks for a key
 // without a credential choice to the server's own endpoint: every OAuth
 // registration the server offers through an auth client must be one the agent
-// may use. The request is then served only by those registrations, each
-// through the connection its permit was decided for, as the gateway serves
-// the same server. It returns the routing identity of a sole registration.
+// may use, and a refused one refuses the request. A registration the agent
+// holds no connection for is left out while another serves. The request is
+// then served only by the rest, each through the connection its permit was
+// decided for, as the gateway serves the same server. It returns the routing
+// identity of a sole served registration.
 func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *issuerGateAuthentication, agentID uuid.UUID) (upstreamChoice, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
@@ -464,18 +466,33 @@ func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *i
 		return none, nil
 	}
 	authorized := make([]agentKeyClient, 0, len(clients))
+	served := make([]remotesessions.Client, 0, len(clients))
+	var skipped error
 	for _, client := range clients {
 		connection, _, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, agentClientType(client))
+		// As on the agent gateway (agentMemberTokens), a client the agent
+		// holds no connection for is left out while another serves; a
+		// refused use refuses the server.
+		if agentConnectionMissing(err) {
+			if skipped == nil {
+				skipped = err
+			}
+			continue
+		}
 		if err != nil {
 			return none, s.directAgentKeyError(ctx, authentication, err)
 		}
 		authorized = append(authorized, agentKeyClient{id: client.ID, connection: connection})
+		served = append(served, client)
+	}
+	if len(authorized) == 0 {
+		return none, s.directAgentKeyError(ctx, authentication, skipped)
 	}
 	authentication.agentKeyClients = authorized
-	if len(clients) != 1 {
+	if len(served) != 1 {
 		return none, nil
 	}
-	return upstreamChoice{clientID: uuid.NullUUID{UUID: clients[0].ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: clients[0].RemoteSessionIssuerID, Valid: true}}, nil
+	return upstreamChoice{clientID: uuid.NullUUID{UUID: served[0].ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: served[0].RemoteSessionIssuerID, Valid: true}}, nil
 }
 
 // resolveAgentKeyClientTokens reads each authorized registration's credential
@@ -575,6 +592,16 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 			return nil, fmt.Errorf("resolve chosen client: %w", err)
 		}
 		return tokens, nil
+	}
+	if authentication.ownClientsOnly {
+		if serverID := endpoint.proxiedServerID(); serverID.Valid {
+			resolved, err := s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject, serverID.UUID, skipUnusable)
+			if err != nil {
+				return nil, fmt.Errorf("resolve server clients: %w", err)
+			}
+			authentication.serverAssociation = &resolved.Association
+			return resolved.Tokens, nil
+		}
 	}
 	if skipUnusable {
 		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, authentication.refreshAttribution(ctx), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, authentication.subject)
@@ -949,8 +976,8 @@ func (c *memberChoices) resolveUnchosenMembers(ctx context.Context, ids []uuid.U
 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
-	if reason, stale := staleNoAuthReason(res, err); stale {
-		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason}
+	if reason, stale, saved := staleNoAuthReason(res, err); stale {
+		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason, saved}
 		return
 	}
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
@@ -975,42 +1002,56 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 	member.upstreamNoAuth = res.outcome == authClientNoAuth || res.headersOnly() || (res.outcome == authClientLegacy && res.choice.noAuth())
 }
 
-// staleNoAuthReason names why a member's no-auth choice is stale, if it is.
-func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
+// staleNoAuthReason names why a member's no-auth choice is stale, if it is, and whether the choice was saved.
+func staleNoAuthReason(res authClientResolution, err error) (string, bool, bool) {
 	switch {
 	case errors.Is(err, errUpstreamSelectionStaleNoAuth):
-		return authClientReasonNoAuthStale, true
+		return authClientReasonNoAuthStale, true, true
 	case err == nil && res.staleNoAuth():
-		return res.reason, true
+		return res.reason, true, res.saved
 	}
-	return "", false
+	return "", false, false
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
 const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
+// staleChoiceRemedy is who a stale choice's message tells to act first.
+type staleChoiceRemedy string
+
+const (
+	// staleChoiceReconnect: a new consent replaces the choice.
+	staleChoiceReconnect staleChoiceRemedy = "reconnect"
+	// staleChoiceReconnectThenAdmin: the person reconnects first, and asks an administrator if that fails.
+	staleChoiceReconnectThenAdmin staleChoiceRemedy = "reconnect_then_admin"
+	// staleChoiceAskAdmin: reconnecting can't help, so the person asks an administrator or owner.
+	staleChoiceAskAdmin staleChoiceRemedy = "ask_admin"
+	// staleChoiceUnchecked: whether consent can replace the choice could not be checked.
+	staleChoiceUnchecked staleChoiceRemedy = "unchecked"
+)
+
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 // Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
-func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
+func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, staleChoiceRemedy) {
 	authentication := gate.authentication
 	choices := gate.memberChoices
 	person := authentication != nil && authentication.subject.Kind == urn.SessionSubjectKindUser &&
 		choices != nil && choices.selector != nil && !choices.profile && !choices.onlyChosen
 	if !person {
-		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", false
+		return "This server's sign-in setup changed. Ask whoever set this up to update this connection.", staleChoiceAskAdmin
 	}
 	if !authentication.refreshableUserSession {
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", false
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", staleChoiceReconnectThenAdmin
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return connectionNotCheckedMessage, false
+		return connectionNotCheckedMessage, staleChoiceUnchecked
 	case fixable:
-		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
+		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", staleChoiceReconnect
 	}
-	return "This server needs your administrator to finish setup or give you access.", false
+	return "This server needs your administrator to finish setup or give you access.", staleChoiceAskAdmin
 }
 
 // consentCanReplaceChoice caches decideConsentCanReplaceChoice, since a retrying model repeats it.
@@ -1099,7 +1140,26 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 	return res.outcome != authClientGap && res.outcome != authClientNoAccess, nil
 }
 
-// memberFailureMessage is what a call to a failed member reads.
+// refuseStaleChoiceCall counts, records and words a call refused for a stale choice.
+func (s *Service) refuseStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) (string, staleChoiceRemedy) {
+	s.noteStaleChoiceCall(ctx, logger, gate, member, stale)
+	message, remedy := s.staleChoiceMessage(ctx, logger, gate, member)
+	if stale.saved {
+		s.recordMemberFailure(ctx, gate, member, staleChoiceHappened(remedy), mcpconnectionattempts.Detail(memberSetupChangedDetail))
+	}
+	return message, remedy
+}
+
+// callFailureMessage is what a refused call to a failed member reads.
+func (s *Service) callFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
+	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok {
+		message, _ := s.refuseStaleChoiceCall(ctx, logger, gate, member, stale)
+		return message
+	}
+	return memberErrorMessage(err)
+}
+
+// memberFailureMessage is what a describe of a failed member reads.
 func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, err error) string {
 	stale, ok := errors.AsType[memberStaleChoiceError](err)
 	if !ok {
@@ -1254,11 +1314,13 @@ func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, cli
 // derived authorization server. A member with no associated client that
 // still derives an authorization server signs in through a client nobody has
 // configured for it, so it needs setup rather than reading as needing none.
+// A member whose clients are its typed registrations signs in only through
+// those.
 func memberNeedsSignIn(member metaMember) bool {
 	if len(member.associatedClients) > 0 {
 		return true
 	}
-	return member.remoteSessionIssuerID.Valid
+	return !member.typedRegistrations && member.remoteSessionIssuerID.Valid
 }
 
 // agentKeyMemberChoices serves the agent gateway members an agent key was set

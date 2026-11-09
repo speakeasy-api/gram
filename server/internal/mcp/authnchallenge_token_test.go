@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +26,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -391,4 +395,85 @@ func TestHandleTokenCode_AgentRequiresConnectionsAtExchange(t *testing.T) {
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), "required agent connections are no longer available")
 
+}
+
+// postAgentCode redeems a fresh agent authorization code for agentID, rendering any error as the client sees it.
+func postAgentCode(t *testing.T, ctx context.Context, ti *testInstance, fx agentConsentFixture, agentID uuid.UUID) *httptest.ResponseRecorder {
+	t.Helper()
+
+	verifier := "verifier-" + uuid.NewString()
+	sum := sha256.Sum256([]byte(verifier))
+	code := "agent-v1." + uuid.NewString()
+	grantCache := cache.NewTypedObjectCache[mcp.UserSessionGrant](ti.logger, ti.cacheAdapter, cache.SuffixNone)
+	require.NoError(t, grantCache.Store(ctx, mcp.UserSessionGrant{
+		Code:                        code,
+		UserSessionIssuerID:         fx.target.UserSessionIssuerID,
+		UserSessionClientID:         fx.client.ID,
+		ClientID:                    fx.client.ClientID,
+		RedirectURI:                 fx.client.RedirectUris[0],
+		CodeChallenge:               base64.RawURLEncoding.EncodeToString(sum[:]),
+		CodeChallengeMethod:         "S256",
+		Subject:                     urn.NewUserSubject(fx.userID),
+		AgentAuthorization:          &mcp.AgentAuthorizationResult{AgentID: agentID, AuthorizerUserID: fx.userID, Target: fx.target},
+		DesiredSessionDurationHours: 0,
+		CreatedAt:                   time.Now(),
+	}))
+	form := url.Values{}
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", fx.client.RedirectUris[0])
+	form.Set("client_id", fx.client.ClientID)
+	form.Set("code_verifier", verifier)
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", fx.toolset.McpSlug.String)
+	w := httptest.NewRecorder()
+	oops.OAuthErrHandle(ti.logger, ti.service.HandleToken).ServeHTTP(w, req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, routeCtx)))
+	return w
+}
+
+// A cooldown whose outage record Redis lost is still the provider's outage on the token row.
+func TestHandleTokenCode_AgentCooldownWithoutOutageRecord(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	var calls atomic.Int32
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, session := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+	require.NoError(t, ti.cacheAdapter.Set(ctx, remotesessions.RefreshCooldownKey(session), time.Now().Add(time.Minute), time.Minute))
+
+	w := postAgentCode(t, ctx, ti, fx, agentID)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+	require.Zero(t, calls.Load(), "the cooldown holds the refresh")
+	require.Equal(t, []string{mcpconnectionattempts.CodeRemoteSessionUnavailable.String()}, stepReasons(rec, mcpconnectionattempts.StepInboundToken))
+}
+
+// Another request's refresh holds the lock: its row covers it, so /token writes none.
+func TestHandleTokenCode_AgentRefreshLockHeldRecordsNoRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newAgentConsentFixture(t, ctx, ti)
+	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(provider.Close)
+	agentID, session := seedAgentOutageConnection(t, ctx, ti, fx, provider.URL)
+	held, err := ti.cacheAdapter.Add(ctx, remotesessions.RefreshLockKey(session.SubjectUrn, session.RemoteSessionClientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	w := postAgentCode(t, ctx, ti, fx, agentID)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+	require.Empty(t, stepReasons(rec, mcpconnectionattempts.StepInboundToken))
 }

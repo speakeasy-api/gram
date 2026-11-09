@@ -447,7 +447,9 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 //
 // Where typed auth client resolution is enforced, the registrations its
 // servers offer through typed auth clients are listed whether or not the
-// sign-in links them. Direct proxied servers offer only these registrations.
+// sign-in links them. Direct proxied servers and a gateway's proxied members
+// offer only these registrations; a gateway keeps its sign-in's clients for
+// the hosted members that use them.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	return clients, err
@@ -659,9 +661,14 @@ func (s *Service) clientTokenProjectIDs(ctx context.Context, endpoint *ResolvedM
 		}
 		return []uuid.UUID{client.ProjectID.UUID}, nil
 	}
+	typedOffers, err := s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := metamcprepo.New(s.db).ListOrganizationMCPServersForRemoteSessionClient(ctx, metamcprepo.ListOrganizationMCPServersForRemoteSessionClientParams{
 		OrganizationID:        endpoint.OrganizationID,
 		ProjectID:             uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil},
+		TypedOffers:           typedOffers,
 		RemoteSessionClientID: client.ID,
 	})
 	if err != nil {

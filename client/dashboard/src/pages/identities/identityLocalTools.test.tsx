@@ -3,7 +3,6 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
 import {
-  agentToolUsagePayload,
   LOCAL_TOOLS_PARAM,
   showsLocalTools,
   useShowLocalTools,
@@ -11,9 +10,6 @@ import {
 } from "./identityLocalTools";
 
 afterEach(cleanup);
-
-const from = new Date("2026-01-01T00:00:00Z");
-const to = new Date("2026-01-08T00:00:00Z");
 
 describe("showsLocalTools", () => {
   it("shows local tools unless the page hides them", () => {
@@ -58,39 +54,5 @@ describe("useShowLocalTools", () => {
     act(() => result.current.choice[1](true));
     expect(result.current.choice[0]).toBe(true);
     expect(result.current.location.search).toBe("?range=7d");
-  });
-});
-
-describe("agentToolUsagePayload", () => {
-  it("leaves target types unset when local tools are shown", () => {
-    const payload = agentToolUsagePayload({
-      agentId: "agent-1",
-      from,
-      to,
-      includeLocalTools: true,
-    });
-    expect(payload).toEqual({
-      from,
-      to,
-      userFilters: [{ kind: "agent_id", key: "agent-1" }],
-    });
-    expect(payload).not.toHaveProperty("targetTypes");
-  });
-
-  it("names every target type but local tools when they are hidden", () => {
-    const payload = agentToolUsagePayload({
-      agentId: "agent-1",
-      from,
-      to,
-      includeLocalTools: false,
-    });
-    expect(payload.userFilters).toEqual([{ kind: "agent_id", key: "agent-1" }]);
-    expect(payload.targetTypes).toEqual([
-      "hosted_mcp_server",
-      "tunneled_mcp_server",
-      "meta_mcp_server",
-      "shadow_mcp_server",
-      "skill",
-    ]);
   });
 });

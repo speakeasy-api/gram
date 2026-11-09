@@ -43,12 +43,25 @@ export function scopeCovers(
   return catalogue.get(grantScope)?.subScopes.includes(scope) ?? false;
 }
 
-/** The scope and everything a grant of it carries along. */
+/**
+ * The scope and everything a grant of it carries along, however many steps
+ * down the server's inclusion graph: mcp:write includes mcp:read, which
+ * includes mcp:connect.
+ */
 export function scopeClosure(
   catalogue: ScopeCatalogue,
   scope: string,
 ): string[] {
-  return [scope, ...(catalogue.get(scope)?.subScopes ?? [])];
+  const seen = new Set<string>([scope]);
+  const queue = [scope];
+  for (let next = queue.shift(); next !== undefined; next = queue.shift()) {
+    for (const sub of catalogue.get(next)?.subScopes ?? []) {
+      if (seen.has(sub)) continue;
+      seen.add(sub);
+      queue.push(sub);
+    }
+  }
+  return [...seen];
 }
 
 /** Exception scopes and provisioned auth-client scopes are not permissions a

@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -142,11 +144,18 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		WorkloadReconnect:       reconnect,
 		CodeReconnect:           codeReconnect,
 		// Auto-connect has not run for a challenge this new.
-		AutoConnectDone: false,
-		FocusServer:     focusServer,
+		AutoConnectDone:      false,
+		FocusServer:          focusServer,
+		ConnectPendingSignIn: query.Get("setup") == pendingSignInSetupStep,
 	}
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)
+	// A federated login replaces this binding with its own before any cookie is sent.
+	browserCookie, err := s.bindFirstPartyBrowser(endpoint, &challengeState, time.Now())
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnexpected, err, "bind consent browser").LogError(ctx, logger)
+	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
@@ -172,26 +181,25 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 	idpURL := federatedURL
 	if idpURL == nil {
-		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
-		if err != nil {
-			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
+		http.SetCookie(w, browserCookie)
+		// A browser whose consent and IdP callback hosts differ proves both
+		// cookies through the handoff before it signs in.
+		if challengeState.Browser.Handoff == browserHandoffBootstrap {
+			var handoff string
+			handoff, err = firstPartyBrowserHandoffURL(endpoint, challengeState)
+			if err == nil {
+				idpURL, err = url.Parse(handoff)
+			}
+		} else {
+			idpURL, err = s.firstPartyIDPAuthorizationURL(ctx, endpoint, challengeState)
 		}
-		idpURL, err = s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
-			CallbackURL:     callbackURL,
-			Scope:           "",
-			State:           challengeID,
-			ScopesSupported: nil,
-			LoginHint:       "",
-			ScreenHint:      "",
-			Prompt:          "",
-		})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
 	}
 	// Claim only after all validation and login setup succeeded, so a failed
 	// preparation does not consume the dashboard's one-time decision.
@@ -224,6 +232,32 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	t.Continue()
 	http.Redirect(w, r, idpURL.String(), http.StatusFound)
 	return nil
+}
+
+// firstPartyIDPAuthorizationURL sends a first-party challenge's browser to sign
+// in, forcing a fresh login once a revoked sign-in restarted it.
+func (s *Service) firstPartyIDPAuthorizationURL(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (*url.URL, error) {
+	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
+	if err != nil {
+		return nil, err
+	}
+	prompt := ""
+	if state.FreshLoginForced {
+		prompt = "login"
+	}
+	idpURL, err := s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
+		CallbackURL:     callbackURL,
+		Scope:           "",
+		State:           state.ID,
+		ScopesSupported: nil,
+		LoginHint:       "",
+		ScreenHint:      "",
+		Prompt:          prompt,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("identity resolver: %w", err)
+	}
+	return idpURL, nil
 }
 
 func (s *Service) SetBindingRefreshAttempts(attempts *remotesessions.BindingRefreshAttempts) {

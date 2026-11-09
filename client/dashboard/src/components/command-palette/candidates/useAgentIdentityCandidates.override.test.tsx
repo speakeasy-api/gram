@@ -50,7 +50,7 @@ it("never reuses unrestricted action candidates while loading an override invent
       ),
     },
   );
-  await waitFor(() => expect(result.current).toHaveLength(2));
+  await waitFor(() => expect(result.current).toHaveLength(3));
 
   act(() => {
     saveState({
@@ -65,6 +65,7 @@ it("never reuses unrestricted action candidates while loading an override invent
   await waitFor(() =>
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:agent-example",
+      "agent-sign-in:agent-example",
     ]),
   );
 });

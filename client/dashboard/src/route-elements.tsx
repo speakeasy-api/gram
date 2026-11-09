@@ -59,9 +59,7 @@ export const routesWithSubroutes = (routes: PagedRoute[]): JSX.Element[] => {
         path={item.url}
         element={
           item.component ? (
-            <AppRouteContentErrorBoundary
-              fallback={<div className="p-8 text-sm">Loading…</div>}
-            >
+            <AppRouteContentErrorBoundary>
               <item.component />
             </AppRouteContentErrorBoundary>
           ) : null
@@ -71,9 +69,7 @@ export const routesWithSubroutes = (routes: PagedRoute[]): JSX.Element[] => {
           <Route
             index
             element={
-              <AppRouteContentErrorBoundary
-                fallback={<div className="p-8 text-sm">Loading…</div>}
-              >
+              <AppRouteContentErrorBoundary>
                 <item.indexComponent />
               </AppRouteContentErrorBoundary>
             }

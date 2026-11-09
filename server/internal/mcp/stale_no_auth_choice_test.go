@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -367,9 +369,11 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
 		registration := g.attachTypedOnly(t, ctx, []uuid.UUID{g.issuer})
+		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
-		_, err := g.postConnect(t, ctx, registration)
-		require.ErrorContains(t, err, "not configured for any server this gateway serves")
+		w, err := g.postConnect(t, ctx, registration)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
 	})
 	t.Run("not bound to the issuer", func(t *testing.T) {
 		t.Parallel()
@@ -506,11 +510,54 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					}
 					return &codemode.ExecutionResult{}, nil
 				}})
+				rec := recordConnections(t, g.ti)
 				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
 				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 				require.True(t, ran, w.Body.String())
+				requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
 			})
 		}
+	}
+}
+
+// requireSetupChangedRow finds the one refused call recorded for a stale choice.
+func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) {
+	t.Helper()
+	var rows []mcpconnectionattempts.Row
+	for _, row := range rec.Rows() {
+		if row.Step == mcpconnectionattempts.StepMCPRequest.String() && row.MemberID == serverID.String() {
+			rows = append(rows, row)
+		}
+	}
+	require.Len(t, rows, 1)
+	require.Equal(t, "setup_changed", rows[0].SubReason)
+	want, who := mcpconnectionattempts.CodeUpstreamSignInNotSetUp, mcpconnectionattempts.WhoAdmin
+	if fixable {
+		want, who = mcpconnectionattempts.CodeNeedsSignIn, mcpconnectionattempts.WhoPerson
+	}
+	require.Equal(t, want.String(), rows[0].Reason)
+	require.Equal(t, string(who), rows[0].WhoFixes)
+}
+
+// An approved catalog refuses the call before dialing, and that refusal is recorded.
+func TestStaleNoAuthCatalogRefusalRecordsSetupChanged(t *testing.T) {
+	t.Parallel()
+	for _, fixable := range []bool{true, false} {
+		t.Run(fmt.Sprintf("fixable=%t", fixable), func(t *testing.T) {
+			t.Parallel()
+			ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
+			connection := g.approve(t, ctx)
+			if fixable {
+				g.attachSignIn(t, ctx, true)
+			} else {
+				registration := createConsentRemoteClient(t, ctx, g.ti.conn, g.project, g.org, "unbound-"+uuid.NewString()[:8], "", nil)
+				_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
+				require.NoError(t, err)
+			}
+			rec := recordConnections(t, g.ti)
+			requireStaleError(t, g.call(t, connection.token, "source--tool_000"), map[bool]string{true: staleReconnectCopy, false: staleAdminCopy}[fixable])
+			requireSetupChangedRow(t, rec, g.serverID, fixable)
+		})
 	}
 }
 

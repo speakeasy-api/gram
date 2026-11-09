@@ -149,6 +149,22 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		}
 	}
 
+	// A first-party browser proves its cookie before the callback can spend the
+	// state, so a copied callback URL cannot end the owner's sign-in.
+	if browser := challengeState.Browser; challengeState.FirstParty && challengeState.Federation == nil && browser != nil {
+		if browserBindingExpired(challengeState, time.Now()) {
+			s.endAttemptOnce(ctx, logger, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeExpired, mcpconnectionattempts.FromRequest(r))
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, errChallengeBrowserExpired, "sign-in took too long").LogWarn(ctx, logger), oauthui.ReasonExpired))
+		}
+		if q.Get("federated_start") == "1" && q.Get("code") == "" && q.Get("error") == "" {
+			return s.continueFirstPartyBrowserHandoff(w, r, endpoint, challengeState)
+		}
+		if (browser.Handoff != "" && browser.Handoff != browserHandoffLogin) || !browserCookieMatches(r, browser.CookieID, browser.CallbackHash) {
+			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
+			return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "sign-in browser binding is invalid").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
+		}
+	}
+
 	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
 	if err != nil {
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
@@ -280,10 +296,18 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
 			}
-			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
+			label := oautherr.RegisteredCodeLabel(idpErr)
+			failure := firstPartyIDPFailureOf(label)
+			t.Refuse(ctx, failure.what, mcpconnectionattempts.Detail(label))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
+			refusal := oops.E(failure.code, nil, "sign-in provider returned an error: %s", label)
+			if failure.code == oops.CodeUnexpected {
+				refusal = refusal.LogError(ctx, logger)
+			} else {
+				refusal = refusal.LogWarn(ctx, logger)
+			}
+			return fmt.Errorf("finish sign-in: %w", oops.WithBrowserReason(refusal, failure.page))
 		}
 		issuer, err := s.issuerURL(endpoint, baseURL)
 		if err != nil {
@@ -377,7 +401,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
-		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
+		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false, Attribution: nil})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
@@ -599,9 +623,26 @@ func (s *Service) restartRevokedSignIn(w http.ResponseWriter, r *http.Request, l
 	cancel()
 	challengeState.ID = uuid.NewString()
 	challengeState.FreshLoginForced = true
+	// The person's browser is here: its binding starts over, so the restart
+	// does not inherit the time already spent.
+	handoff := ""
+	if challengeState.FirstParty && challengeState.Federation == nil && challengeState.Browser != nil {
+		var err error
+		if handoff, err = s.rebindFirstPartyBrowser(w, endpoint, &challengeState, time.Now()); err != nil {
+			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			return oops.E(oops.CodeUnexpected, err, "rebind sign-in browser").LogError(ctx, logger)
+		}
+	}
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
+	}
+	if handoff != "" {
+		logger.InfoContext(ctx, "sign-in was revoked; requiring a fresh login")
+		w.Header().Set("Cache-Control", "no-store")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		http.Redirect(w, r, handoff, http.StatusFound)
+		return nil
 	}
 	callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 	if err != nil {
@@ -644,4 +685,39 @@ func (s *Service) federatedCallbackRejectReason(r *http.Request, state *AuthnCha
 		return "expired"
 	}
 	return ""
+}
+
+// firstPartyIDPFailure is what a sign-in service's error means on a first-party
+// sign-in: its row and its page, decided together.
+type firstPartyIDPFailure struct {
+	// what is the row's reason.
+	what mcpconnectionattempts.Code
+
+	// code sets the page's status.
+	code oops.Code
+
+	// page explains it.
+	page oauthui.Reason
+}
+
+// firstPartyIDPFailureOf classifies a sign-in service's error code (RFC 6749 §4.1.2.1,
+// OpenID Connect Core §3.1.2.6). Speakeasy sends the request, so a request the
+// service calls malformed is ours to fix.
+func firstPartyIDPFailureOf(label string) firstPartyIDPFailure {
+	switch label {
+	case oautherr.CodeTemporarilyUnavailable:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeIDPTransientFailure, code: oops.CodeUnavailable, page: oauthui.ReasonSignInUnavailable}
+	case oautherr.CodeServerError:
+		// WorkOS sends this when "the SSO authentication failed for the user", an outage or a broken SSO setup:
+		// https://workos.com/docs/reference/user-management/authentication/get-authorization-url
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeSignInProviderError, code: oops.CodeBadRequest, page: oauthui.ReasonSignInFailed}
+	case oautherr.CodeInvalidRequest, oautherr.CodeUnauthorizedClient, oautherr.CodeUnsupportedResponseType, oautherr.CodeInvalidScope,
+		oautherr.OIDCCodeRequestNotSupported, oautherr.OIDCCodeRequestURINotSupported, oautherr.OIDCCodeInvalidRequestURI,
+		oautherr.OIDCCodeInvalidRequestObject, oautherr.OIDCCodeRegistrationNotSupported:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeInternalError, code: oops.CodeUnexpected, page: oauthui.ReasonInternal}
+	case oautherr.OIDCCodeLoginRequired, oautherr.OIDCCodeConsentRequired, oautherr.OIDCCodeInteractionRequired, oautherr.OIDCCodeAccountSelectionRequired:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeReauthenticationRequired, code: oops.CodeBadRequest, page: oauthui.ReasonSignInRequired}
+	default:
+		return firstPartyIDPFailure{what: mcpconnectionattempts.CodeSignInProviderError, code: oops.CodeBadRequest, page: oauthui.ReasonDefault}
+	}
 }

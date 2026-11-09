@@ -643,10 +643,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     [agentsQuery.data],
   );
 
+  // The agents roster lists agents only; the people reads below would be
+  // requests whose every row it discards. Members stay: they name owners.
+  const peopleShown = kind === "person";
   const membersQuery = useMembers(undefined, undefined, {
     throwOnError: false,
   });
-  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
+  const rolesQuery = useRoles(undefined, undefined, {
+    enabled: peopleShown,
+    throwOnError: false,
+  });
   // Usage is the only project-scoped read here, and it is what surfaces the
   // identities the directory has never heard of.
   //
@@ -657,6 +663,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const usageQuery = useQuery({
     queryKey: identityRosterQueryKey(organization.id, projectSlug),
     queryFn: () => fetchIdentityRoster(client, projectSlug),
+    enabled: peopleShown,
     throwOnError: false,
   });
   // The MDM fleet, read once and folded to a bucket per identity. It is not
@@ -666,7 +673,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const deviceCoverageQuery = useQuery({
     queryKey: deviceCoverageQueryKey(organization.id),
     queryFn: () => fetchDeviceCoverage(client),
-    enabled: canReadOrganization,
+    enabled: peopleShown && canReadOrganization,
     throwOnError: false,
   });
   const deviceCoverage = canReadOrganization
@@ -679,7 +686,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const directoryPeopleQuery = useQuery({
     queryKey: directoryPeopleQueryKey(organization.id),
     queryFn: () => fetchDirectoryPeople(client),
-    enabled: canAdminOrganization,
+    enabled: peopleShown && canAdminOrganization,
     throwOnError: false,
   });
   const directoryPeople = canAdminOrganization
@@ -692,19 +699,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // in flight or one that never came back.
   const rosterLoading =
     membersQuery.isLoading ||
-    rolesQuery.isLoading ||
-    usageQuery.isLoading ||
-    (canReadOrganization && directoryPeopleQuery.isLoading) ||
+    (peopleShown &&
+      (rolesQuery.isLoading ||
+        usageQuery.isLoading ||
+        (canReadOrganization && directoryPeopleQuery.isLoading))) ||
     (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
     membersQuery.isError ||
-    rolesQuery.isError ||
-    usageQuery.isError ||
+    (peopleShown && (rolesQuery.isError || usageQuery.isError)) ||
     (agentsEnabled && agentsQuery.isError);
   const retryRoster = () => {
     if (membersQuery.isError) void membersQuery.refetch();
-    if (rolesQuery.isError) void rolesQuery.refetch();
-    if (usageQuery.isError) void usageQuery.refetch();
+    if (peopleShown && rolesQuery.isError) void rolesQuery.refetch();
+    if (peopleShown && usageQuery.isError) void usageQuery.refetch();
     if (agentsEnabled && agentsQuery.isError) void agentsQuery.refetch();
   };
 

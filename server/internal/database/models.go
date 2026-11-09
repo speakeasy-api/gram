@@ -154,6 +154,14 @@ type AdminMcpWriteEvent struct {
 	// @access: restricted
 	RequestID pgtype.Text
 	// @access: confidential
+	Operation pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	ResourceKind pgtype.Text
+	// @access: restricted
+	ResourceID pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -1517,6 +1525,16 @@ type CustomDomain struct {
 	CertificateExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	ConsecutiveFailures pgtype.Int4
+	// @access: confidential
+	DnsTargetToken pgtype.Text
+	// @access: confidential
+	DnsRoutingMethod pgtype.Text
+	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
+	// @access: confidential
+	DnsConfigurationStatus pgtype.Text
+	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// @access: confidential
+	DnsCheckedAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
