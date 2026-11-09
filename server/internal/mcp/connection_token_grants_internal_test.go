@@ -35,6 +35,8 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		detail string
 	}{
 		{name: "subject invalid", err: refuseWorkloadGrant("assertion_subject_invalid", cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "assertion_subject_invalid"},
+		{name: "issuer trust removed", err: refuseWorkloadGrant("issuer_untrusted", cause), want: mcpconnectionattempts.CodeIssuerNotTrusted, detail: "issuer_untrusted"},
+		{name: "expired after signature", err: refuseWorkloadGrant("assertion_expired", cause), want: mcpconnectionattempts.CodeAssertionInvalid, detail: "assertion_expired"},
 		{name: "subject not admitted", err: refuseWorkloadGrant("subject_not_admitted", cause), want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "subject_not_admitted"},
 		{name: "endpoint not agent addressable", err: refuseWorkloadGrant("endpoint_not_agent_addressable", cause), want: mcpconnectionattempts.CodeEndpointNotAgentAddressable, detail: "endpoint_not_agent_addressable"},
 		{name: "agent admission denied", err: refuseWorkloadGrant("agent_admission_denied", cause), want: mcpconnectionattempts.CodeNoServerAccess, detail: "agent_admission_denied"},
@@ -43,9 +45,9 @@ func TestWorkloadGrantHappened(t *testing.T) {
 		{name: "stage unavailable", err: workloadGrantStageUnavailable("session_persist_unavailable", cause), want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
 		{name: "rate limited", err: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: cause}, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
 		{name: "choices not accepted", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceNotAccepted), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_not_accepted"},
-		{name: "server not reached", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceServerNotReached), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "choice_server_not_reached"},
-		{name: "credential not needed", err: setupRequired("no", errChoiceTakesNoCredential), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "credential_not_needed"},
-		{name: "credential needed", err: setupRequired("no", errChoiceNeedsCredential), want: mcpconnectionattempts.CodeUpstreamCredentialChoice, detail: "credential_needed"},
+		{name: "server not reached", err: oops.NewOAuthError(http.StatusBadRequest, "invalid_request", "no", errChoiceServerNotReached), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "choice_server_not_reached"},
+		{name: "credential not needed", err: setupRequired("no", errChoiceTakesNoCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_not_needed"},
+		{name: "credential needed", err: setupRequired("no", errChoiceNeedsCredential), want: mcpconnectionattempts.CodeCredentialChoiceInvalid, detail: "credential_needed"},
 		{name: "sign-in not set up", err: setupRequired("no", errChoiceNotSetUp), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "sign_in_not_set_up"},
 		{name: "credential not ready", err: setupRequired("no", errChoiceNotReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "credential_not_ready"},
 		{name: "no credential ready", err: setupRequired("no", errChoiceNoneReady), want: mcpconnectionattempts.CodeUpstreamSignInNotSetUp, detail: "no_credential_ready"},
@@ -126,6 +128,7 @@ func TestAssistantClientCredentialsRecordsFailures(t *testing.T) {
 		form     url.Values
 		public   bool
 		issueErr error
+		resolved bool
 		status   int
 		want     mcpconnectionattempts.Code
 		detail   string
@@ -135,20 +138,21 @@ func TestAssistantClientCredentialsRecordsFailures(t *testing.T) {
 		{name: "unsupported scope", form: url.Values{"resource": {"https://gram.example/mcp/test"}, "scope": {"tools:read"}}, status: http.StatusBadRequest, want: mcpconnectionattempts.CodeInvalidRequest, detail: "invalid_scope"},
 		{name: "no assistant", form: assistantGrantForm, issueErr: pgx.ErrNoRows, status: http.StatusBadRequest, want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "assistant_not_found"},
 		{name: "invalid identity", form: assistantGrantForm, issueErr: assistantidentity.ErrInvalidIdentity, status: http.StatusBadRequest, want: mcpconnectionattempts.CodeSubjectNotAdmitted, detail: "assistant_identity_invalid"},
-		{name: "refused", form: assistantGrantForm, issueErr: refuseWorkloadGrant("agent_admission_denied", errors.New("denied")), status: http.StatusBadRequest, want: mcpconnectionattempts.CodeNoServerAccess, detail: "agent_admission_denied"},
-		{name: "rate limited", form: assistantGrantForm, issueErr: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: errors.New("busy")}, status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
-		{name: "stage unavailable", form: assistantGrantForm, issueErr: workloadGrantStageUnavailable("session_persist_unavailable", errors.New("down")), status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
-		{name: "issuance unavailable", form: assistantGrantForm, issueErr: errors.New("database unavailable"), status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuance_unavailable"},
+		{name: "refused", form: assistantGrantForm, issueErr: refuseWorkloadGrant("agent_admission_denied", errors.New("denied")), resolved: true, status: http.StatusBadRequest, want: mcpconnectionattempts.CodeNoServerAccess, detail: "agent_admission_denied"},
+		{name: "rate limited", form: assistantGrantForm, issueErr: &workloadGrantError{reason: "issuer_lookup_rate_limited", outcome: workloadGrantRateLimited, retryAfter: time.Second, err: errors.New("busy")}, resolved: true, status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuer_lookup_rate_limited"},
+		{name: "stage unavailable", form: assistantGrantForm, issueErr: workloadGrantStageUnavailable("session_persist_unavailable", errors.New("down")), resolved: true, status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "session_persist_unavailable"},
+		{name: "issuance unavailable", form: assistantGrantForm, issueErr: errors.New("database unavailable"), resolved: true, status: http.StatusServiceUnavailable, want: mcpconnectionattempts.CodeAssertionCheckUnavailable, detail: "issuance_unavailable"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			rec := mcpconnectionattemptstest.New(t)
+			agentID := uuid.New()
 			c := newAssistantGrantCase(t, rec.Recorder, func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
-				if tc.issueErr != nil {
-					return AssistantWorkloadToken{}, tc.issueErr
+				if tc.resolved {
+					return AssistantWorkloadToken{AssistantID: uuid.New(), AgentID: agentID}, tc.issueErr
 				}
-				return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+				return AssistantWorkloadToken{}, tc.issueErr
 			})
 			c.client.ClientSecretHash.Valid = !tc.public
 
@@ -158,7 +162,11 @@ func TestAssistantClientCredentialsRecordsFailures(t *testing.T) {
 			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.want)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, oauthwire.GrantTypeClientCredentials, row.GrantType)
-			require.Empty(t, row.SubjectURN)
+			if tc.resolved {
+				require.Equal(t, urn.NewAgentSubject(agentID).String(), row.SubjectURN)
+			} else {
+				require.Empty(t, row.SubjectURN, "nothing resolved the agent")
+			}
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
@@ -204,4 +212,38 @@ func TestAssistantClientCredentialsOrganizationGatewayRecordsUnacceptedMethod(t 
 
 	require.Equal(t, http.StatusBadRequest, c.post(t, assistantGrantForm).Code)
 	require.Equal(t, "organization_gateway", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted).SubReason)
+}
+
+func TestAssistantClientCredentialsTokenWithoutAgentRecordsOurError(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	c := newAssistantGrantCase(t, rec.Recorder, func(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error) {
+		return AssistantWorkloadToken{AssistantID: uuid.New(), AccessToken: "opaque-token", ExpiresAt: time.Now().Add(time.Minute)}, nil
+	})
+
+	require.Equal(t, http.StatusOK, c.post(t, assistantGrantForm).Code, "the response is unchanged")
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError)
+	require.Equal(t, "agent_missing", row.SubReason)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// Trust removed after verification reaches the issuance transaction as an untrusted issuer, which an admin fixes.
+func TestWorkloadIssuerTrustRemovedBeforeIssuance(t *testing.T) {
+	t.Parallel()
+
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_workload_trust_removed")
+	require.NoError(t, err)
+	tx, err := pool.Begin(t.Context()) //nolint:glint // notestingrawsql: transaction boundary for the SQLc issuer lock under test
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = tx.Rollback(context.Background()) })
+
+	presented := presentedWorkload{issuerURL: "https://issuer.example", subject: "repo:acme/app", issuerID: uuid.New(), assertionPolicyChecked: true, signatureVerified: true}
+	err = lockWorkloadAssertionPolicy(t.Context(), tx, "org-test", nil, presented)
+
+	rec := mcpconnectionattemptstest.New(t)
+	refuseWorkloadGrantRow(t.Context(), rec.Recorder.Track(directScope(), mcpconnectionattempts.StepInboundToken), err)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeIssuerNotTrusted)
+	require.Equal(t, "issuer_untrusted", row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
 }

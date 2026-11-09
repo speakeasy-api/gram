@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	assertioncore "github.com/speakeasy-api/gram/server/internal/usersessions/assertion"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
@@ -86,6 +87,18 @@ var (
 	ErrWorkloadIssuerUntrusted = errWorkloadIssuerUntrusted
 	ErrWorkloadNotAdmitted     = errWorkloadNotAdmitted
 )
+
+// SetWorkloadReplayGuard swaps the workload grant's replay guard, keeping its keys.
+func (s *Service) SetWorkloadReplayGuard(guard assertioncore.ReplayGuard) error {
+	verifier, err := s.workloadGrant.verifier.WithReplayGuard(guard)
+	if err != nil {
+		return fmt.Errorf("swap workload replay guard: %w", err)
+	}
+	grant := *s.workloadGrant
+	grant.verifier = verifier
+	s.workloadGrant = &grant
+	return nil
+}
 
 // AdmitWorkloadAssertion runs the workload grant's verification stages
 // against real rows with the given verifier and an unlimited issuer lookup

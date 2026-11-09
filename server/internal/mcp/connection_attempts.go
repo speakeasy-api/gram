@@ -774,13 +774,13 @@ func refuseWorkloadGrantRow(ctx context.Context, t *mcpconnectionattempts.Tracke
 }
 
 // workloadGrantHappened names a refused workload or assistant token grant; the detail is the logged reason.
-// Workload refusals before the assertion's signature is verified never reach it: they are a metric.
+// Workload refusals before the assertion's signature verifies never reach it: they are a metric.
 func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option) {
 	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
 		detail := mcpconnectionattempts.Detail(refusal.reason)
 		switch refusal.reason {
-		case "assertion_subject_invalid":
-			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		case "issuer_untrusted":
+			return mcpconnectionattempts.CodeIssuerNotTrusted, detail
 		case "subject_not_admitted":
 			return mcpconnectionattempts.CodeSubjectNotAdmitted, detail
 		case "endpoint_not_agent_addressable":
@@ -795,6 +795,9 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 			return mcpconnectionattempts.CodeAssertionCheckUnavailable, detail
 		case workloadGrantRefused:
 		}
+		if strings.HasPrefix(refusal.reason, "assertion_") {
+			return mcpconnectionattempts.CodeAssertionInvalid, detail
+		}
 		return mcpconnectionattempts.CodeAssertionOther, detail
 	}
 	if problem, ok := errors.AsType[headlessChoiceError](err); ok {
@@ -806,8 +809,10 @@ func workloadGrantHappened(err error) (mcpconnectionattempts.Code, mcpconnection
 			return mcpconnectionattempts.CodeUpstreamCredentialDenied, detail
 		case errChoiceNotNamed:
 			return mcpconnectionattempts.CodeUpstreamCredentialNotChosen, detail
-		case errChoiceNotAccepted, errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
+		case errChoiceNotAccepted:
 			return mcpconnectionattempts.CodeUpstreamCredentialChoice, detail
+		case errChoiceServerNotReached, errChoiceTakesNoCredential, errChoiceNeedsCredential:
+			return mcpconnectionattempts.CodeCredentialChoiceInvalid, detail
 		}
 	}
 	return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("")

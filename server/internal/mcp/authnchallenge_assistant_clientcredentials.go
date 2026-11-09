@@ -68,6 +68,8 @@ type AssistantWorkloadToken struct {
 // need explicit policy mapping: existing session JWTs do not persist scopes.
 // Credential provisioning may use secrets or private_key_jwt; this boundary does
 // not choose one. Both use the existing exact-method client authentication path.
+// A refusal after the binding resolves returns the token with AssistantID and
+// AgentID set and no AccessToken, so the refusal names the agent.
 type AssistantWorkloadTokenIssuer interface {
 	IssueAssistantWorkloadToken(context.Context, AssistantWorkloadTokenRequest) (AssistantWorkloadToken, error)
 }
@@ -113,6 +115,10 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		IssuerID: endpoint.UserSessionIssuerID, OrganizationID: endpoint.OrganizationID,
 		ProjectID: endpoint.ProjectID, Resource: resource, Scopes: scopes,
 	})
+	if result.AgentID != uuid.Nil {
+		subject := urn.NewAgentSubject(result.AgentID)
+		t.With(mcpconnectionattempts.Subject(&subject))
+	}
 	if err != nil {
 		what, detail := mcpconnectionattempts.CodeAssertionCheckUnavailable, mcpconnectionattempts.Detail("issuance_unavailable")
 		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
@@ -140,10 +146,6 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("issued_token_invalid"))
 		return writeTokenError(ctx, w, logger, http.StatusInternalServerError, "server_error", "workload token issuance unavailable")
 	}
-	if result.AgentID != uuid.Nil {
-		subject := urn.NewAgentSubject(result.AgentID)
-		t.With(mcpconnectionattempts.Subject(&subject))
-	}
 	body, err := json.Marshal(struct {
 		AccessToken string `json:"access_token"`
 		TokenType   string `json:"token_type"`
@@ -158,6 +160,11 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 	if err := writeTokenSuccess(ctx, w, logger, body); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("response_not_written"))
 		return err
+	}
+	// A token naming no agent is our issuer's fault; the response stays as issued.
+	if result.AgentID == uuid.Nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("agent_missing"))
+		return nil
 	}
 	t.Succeed(ctx, mcpconnectionattempts.ResultSignedIn)
 	return nil

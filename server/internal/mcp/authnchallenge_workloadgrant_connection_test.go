@@ -2,11 +2,13 @@ package mcp_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4/jwt"
@@ -20,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
 
 func TestWorkloadAssertionGrant_RecordsSignIn(t *testing.T) {
@@ -151,4 +154,70 @@ func TestWorkloadAssertionGrant_LogsOffRecordsNothing(t *testing.T) {
 	claims := oauthtest.WorkloadClaims(f.issuer, "repo:someone-else/app:ref:refs/heads/main", f.advertisedIssuer)
 	requireWorkloadGrantRefused(t, f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims), f.resource))
 	rec.RequireNothing()
+}
+
+// Refusals after the signature verifies are the workload's own: each writes exactly one row naming it.
+func TestWorkloadAssertionGrant_RecordsRefusalsAfterSignature(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+
+	expired := oauthtest.WorkloadClaims(f.issuer, f.subject, f.advertisedIssuer)
+	past := time.Now().Add(-30 * time.Minute)
+	expired.Expiry, expired.NotBefore, expired.IssuedAt = jwt.NewNumericDate(past.Add(5*time.Minute)), jwt.NewNumericDate(past), jwt.NewNumericDate(past)
+	requireWorkloadGrantRefused(t, f.exchange(t, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", expired), f.resource))
+
+	requireWorkloadGrantRefused(t, f.exchange(t, f.assertion(t, f.advertisedIssuer+"/revoke"), f.resource))
+
+	replayed := f.assertion(t, f.advertisedIssuer)
+	require.Equal(t, http.StatusOK, f.exchange(t, replayed, f.resource).Code)
+	requireWorkloadGrantRefused(t, f.exchange(t, replayed, f.resource))
+
+	subject := urn.NewWorkloadSubject(f.issuerID, f.subject).String()
+	for _, reason := range []string{"assertion_expired", "assertion_audience_mismatch", "assertion_replayed"} {
+		var matched []mcpconnectionattempts.Row
+		for _, row := range rec.Rows() {
+			if row.SubReason == reason {
+				matched = append(matched, row)
+			}
+		}
+		require.Len(t, matched, 1, reason)
+		require.Equal(t, mcpconnectionattempts.CodeAssertionInvalid.String(), matched[0].Reason, reason)
+		require.Equal(t, subject, matched[0].SubjectURN, reason)
+	}
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn)
+	require.Len(t, rec.Rows(), 4)
+}
+
+// failingReplayGuard is a replay store that cannot be reached.
+type failingReplayGuard struct{}
+
+func (failingReplayGuard) MaxHold() time.Duration { return 24 * time.Hour }
+
+func (failingReplayGuard) Reserve(context.Context, replay.Key, time.Time) (bool, error) {
+	return false, errors.New("replay store unreachable")
+}
+
+// A replay store outage on a validly signed assertion is our failure, and is recorded.
+func TestWorkloadAssertionGrant_RecordsReplayStoreOutage(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	require.NoError(t, f.ti.service.SetWorkloadReplayGuard(failingReplayGuard{}))
+
+	w := f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAssertionCheckUnavailable)
+	require.Equal(t, "assertion_replay_store_unavailable", row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
+	require.Equal(t, urn.NewWorkloadSubject(f.issuerID, f.subject).String(), row.SubjectURN)
+	require.Len(t, rec.Rows(), 1)
+
+	requireWorkloadGrantRefused(t, f.exchange(t, forgeSignature(t, f.assertion(t, f.advertisedIssuer)), f.resource))
+	require.Len(t, rec.Rows(), 1, "a forged signature writes no row")
 }

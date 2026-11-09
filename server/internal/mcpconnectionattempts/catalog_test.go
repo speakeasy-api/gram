@@ -127,6 +127,7 @@ var frozenCodes = []string{
 	"upstream_credential_denied",
 	"upstream_credential_not_chosen",
 	"sign_in_method_not_accepted",
+	"credential_choice_invalid",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -292,6 +293,7 @@ func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
 		{CodeSignInRevokedByAdmin, WhoAdmin, []string{"your admin", "still need access"}, []string{"connect again"}},
 		{CodeUpstreamCredentialDenied, WhoAdmin, []string{"not allowed", "ask for access"}, []string{"this server.", "account"}},
 		{CodeUpstreamCredentialNotChosen, WhoAdmin, []string{"more than one", "choose"}, []string{"the app", "not set up"}},
+		{CodeCredentialChoiceInvalid, WhoApp, []string{"the app picked", "does not fit"}, []string{"does not accept"}},
 		{CodeSignInMethodNotAccepted, WhoApp, []string{"does not accept"}, []string{"ask for it to be allowed", "not allowed"}},
 	}
 	for _, tc := range cases {

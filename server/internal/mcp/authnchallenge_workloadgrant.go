@@ -221,6 +221,10 @@ type presentedWorkload struct {
 	jwksURI                string
 	assertionPolicyChecked bool
 	allowAssertionReuse    bool
+
+	// signatureVerified reports the assertion's signature verified, so issuer
+	// and subject are proven even when a later check refused it.
+	signatureVerified bool
 }
 
 // admitWorkloadAssertion runs the grant's verification stages in order:
@@ -240,7 +244,7 @@ func admitWorkloadAssertion(
 ) (presentedWorkload, error) {
 	presented := presentedWorkload{
 		issuerURL: "", subject: "", issuerID: uuid.Nil, jwksURI: "",
-		assertionPolicyChecked: false, allowAssertionReuse: false,
+		assertionPolicyChecked: false, allowAssertionReuse: false, signatureVerified: false,
 	}
 
 	token, err := assertioncore.ParseSigned(raw, workloadAssertionMaxBytes)
@@ -300,6 +304,10 @@ func admitWorkloadAssertion(
 		MaxLifetime:         workloadAssertionMaxLifetime,
 		AllowAssertionReuse: presented.allowAssertionReuse,
 	}); err != nil {
+		if rejected, ok := errors.AsType[*workload.Error](err); ok && rejected.SignatureVerified {
+			presented.signatureVerified = true
+			presented.subject = rejected.Subject
+		}
 		reason := workload.ReasonOf(err)
 		switch {
 		case errors.Is(err, jwks.ErrRefreshRateLimited), errors.Is(err, jwks.ErrFetchRateLimited):
@@ -316,6 +324,8 @@ func admitWorkloadAssertion(
 			return presented, refuseWorkloadGrant(string(reason), err)
 		}
 	}
+
+	presented.signatureVerified = true
 
 	err = admitWorkloadIdentity(ctx, grant.identities, tenancy, issuer.ID, claims.Subject)
 	switch {
@@ -436,10 +446,9 @@ func (s *Service) handleWorkloadAssertionGrant(
 		return oops.E(oops.CodeUnexpected, err, "build workload assertion audiences").LogError(ctx, logger)
 	}
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
-	refusal, refused := errors.AsType[*workloadGrantError](err)
-	if err != nil && (!refused || !workloadSignatureVerified(refusal)) {
+	if err != nil && !presented.signatureVerified {
 		reason := "workload_grant_failed"
-		if refused {
+		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
 			reason = refusal.reason
 		}
 		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+reason)
@@ -527,12 +536,6 @@ func (s *Service) refuseUnservedWorkloadGrant(
 		return true, refuseClientlessTokenGrant(ctx, w, r, creds, logger)
 	}
 	return false, nil
-}
-
-// workloadSignatureVerified reports a refusal from admission, the only stage
-// that runs after the assertion's signature verified.
-func workloadSignatureVerified(refusal *workloadGrantError) bool {
-	return refusal.reason == "subject_not_admitted" || refusal.reason == "subject_admission_unavailable"
 }
 
 // workloadGrantIssuance is a workload grant whose assertion verified, ready
