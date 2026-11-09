@@ -145,12 +145,12 @@ func TestProviderHealth_CountsReconnectLoopsAndAbandons(t *testing.T) {
 
 	f := newProviderFixture(t, "mcp.canva.com")
 	org := "org-" + uuid.NewString()
-	f.write(f.attempt(org, 2*time.Hour),
+	f.write(f.attempt(org, 3*time.Hour),
 		f.step(StepProviderSignIn, ResultSignedIn, false),
 		f.step(StepDiscoveryMember, CodeRejectedByMember, false))
-	f.write(f.attempt(org, 2*time.Hour), f.step(StepProviderSignIn, ResultAccepted, false))
+	f.write(f.attempt(org, 3*time.Hour), f.step(StepProviderSignIn, ResultAccepted, false))
 	f.write(f.attempt(org, 10*time.Minute), f.step(StepProviderSignIn, ResultAccepted, false))
-	f.write(f.attempt(org, 2*time.Hour),
+	f.write(f.attempt(org, 3*time.Hour),
 		f.step(StepDiscoveryMember, CodeNeedsSignIn, false),
 		f.step(StepProviderSignIn, ResultSignedIn, true))
 
@@ -214,4 +214,36 @@ func TestProviderHealth_LeavesOutTheDemoOrganization(t *testing.T) {
 	reports, err := health.Read(t.Context(), ProviderHealthQuery{Provider: f.provider, Window: time.Hour, TrendDays: 0})
 	require.NoError(t, err)
 	require.Empty(t, reports)
+}
+
+func TestProviderHealth_StoppedAttemptCountsOnceItsLiveWindowEnds(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.monday.com")
+	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
+	for i := range 6 {
+		f.write(f.attempt(orgs[i%len(orgs)], 30*time.Minute), f.step(StepProviderRefresh, CodeProviderUnavailable, false))
+	}
+
+	before := f.read(time.Hour, 0)
+	require.Equal(t, ProviderQuiet, before.Status, "still live, so still recoverable")
+
+	f.now = f.now.Add(45 * time.Minute)
+	after := f.read(time.Hour, 0)
+	require.Equal(t, ProviderOutage, after.Status)
+	require.Equal(t, ProviderCounts{Attempts: 6, Failures: 6, Organizations: 3, BaselineAttempts: 0, BaselineFailures: 0}, after.Counts, "counted once, when its live window ended")
+}
+
+func TestProviderHealth_AttemptEndingInTheWindowCounts(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "auth.monday.com")
+	attempt := f.attempt("org-"+uuid.NewString(), 90*time.Minute)
+	f.write(attempt, f.step(StepProviderSignIn, ResultSignedIn, false), func(a Attempt, _ time.Time) (Row, error) {
+		return RowAt(a, StepProviderToken, CodeProviderUnavailable, true, a.StartedAt().Add(80*time.Minute), Provider("https://"+f.provider+"/oauth"))
+	})
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, uint64(1), report.Counts.Attempts, "it started before the window but ended inside it")
+	require.Equal(t, uint64(1), report.Counts.Failures)
 }

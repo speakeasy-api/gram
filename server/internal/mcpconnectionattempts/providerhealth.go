@@ -291,8 +291,14 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		"max_memory_usage":   providerHealthReadMemoryBytes,
 	}))
 
+	// Attempts fall in a window by when they ended, so the scan reaches back one
+	// live window further for attempts that started earlier and ended inside it.
 	statusFrom := now.Add(-OutageWindow)
-	detailFrom := min(statusFrom.UnixNano(), now.Add(-query.Window).UnixNano())
+	detailFrom := now.Add(-query.Window)
+	if statusFrom.Before(detailFrom) {
+		detailFrom = statusFrom
+	}
+	scanFrom := detailFrom.Add(-AttemptLiveWindow).UnixNano()
 	tallies := map[string]*providerTally{}
 	tally := func(provider string) *providerTally {
 		t, ok := tallies[provider]
@@ -303,7 +309,7 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		return t
 	}
 
-	providerFilter, args := "", []any{detailFrom, now.UnixNano(), ExcludedOrganizations()}
+	providerFilter, args := "", []any{scanFrom, now.UnixNano(), ExcludedOrganizations()}
 	// other is every unlisted host, so only a known host is pushed down.
 	if query.Provider != "" && query.Provider != LabelOther {
 		providerFilter, args = " AND provider = ?", append(args, query.Provider)
@@ -326,7 +332,7 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		if query.Provider != "" && provider != query.Provider {
 			continue
 		}
-		tally(provider).add(a, now, statusFrom)
+		tally(provider).add(a, now, statusFrom, detailFrom)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read provider attempts: %w", err)
@@ -356,14 +362,26 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 	return reports, nil
 }
 
-// add counts one ended attempt. A live attempt can still recover, so it is left out.
-func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
-	if !a.HasFinal && now.Before(a.StartedAt.Add(AttemptLiveWindow)) {
+// endedAt is when an attempt ended: its final row, or the end of its live window.
+// The daily baseline counts attempts by the day they started, so an attempt that
+// starts just before midnight UTC can land on a different day there than here.
+func (a providerAttempt) endedAt() time.Time {
+	if a.HasFinal {
+		return a.FinalAt
+	}
+	return a.StartedAt.Add(AttemptLiveWindow)
+}
+
+// add counts one attempt that ended in the detail window. A live attempt can
+// still recover, so it is left out until it ends.
+func (t *providerTally) add(a providerAttempt, now, statusFrom, detailFrom time.Time) {
+	ended := a.endedAt()
+	if ended.After(now) || ended.Before(detailFrom) {
 		return
 	}
 	weight := max(a.Weight, 1)
 	ending := a.End(now)
-	if !a.StartedAt.Before(statusFrom) {
+	if !ended.Before(statusFrom) {
 		t.counts.Attempts += weight
 		if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
 			t.counts.Failures += weight
