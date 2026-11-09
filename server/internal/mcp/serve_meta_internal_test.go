@@ -2,14 +2,17 @@ package mcp
 
 import (
 	"encoding/json"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -109,4 +112,31 @@ func TestWithOwnTrace_FreshTraceWhenTheTracerKeptTheParent(t *testing.T) {
 
 	untraced := trace.SpanContextFromContext(withOwnTrace(t.Context(), trace.SpanContext{}))
 	require.True(t, untraced.IsValid(), "a request without a trace still gets one of its own")
+}
+
+// A member's discovery failure row is the gateway's call: it carries no
+// gateway stamp, is named gateway_<tool>, and keeps the member's URN kind. A
+// hosted member, whose URN cannot carry a source, gets its server slug as the
+// source, which Tool logs needs to list the row.
+func TestMetaToolCallFailureLogParams_DiscoveryRowOnAHostedMember(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "billing", serverID: uuid.New(), projectID: uuid.New(), backend: metaMemberBackendHosted}
+	gate := &metaGateContext{metaServerID: uuid.New(), organizationID: "org-1", projectID: uuid.New()}
+	attempt := newMetaToolCallAttempt(time.Now())
+	attempt.member = &member
+	attempt.fail(http.StatusServiceUnavailable, "server \"billing\" is unavailable")
+
+	qualified := metamcp.QualifyName(member.slug, gatewayDiscoveryToolPrefix+"describe_server")
+	params := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: true, source: member.slug})
+	require.NotNil(t, params)
+	require.Equal(t, "gateway_describe_server", params.ToolInfo.Name)
+	require.True(t, strings.HasSuffix(params.ToolInfo.URN, ":gateway_describe_server"), params.ToolInfo.URN)
+	require.NotContains(t, params.Attributes, attr.MetaMcpServerIDKey)
+	require.Equal(t, member.slug, params.Attributes[attr.ToolCallSourceKey])
+
+	stamped := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: false, source: ""})
+	require.NotNil(t, stamped)
+	require.Equal(t, gate.metaServerID.String(), stamped.Attributes[attr.MetaMcpServerIDKey])
+	require.NotContains(t, stamped.Attributes, attr.ToolCallSourceKey)
 }

@@ -284,8 +284,10 @@ func TestServePublic_MetaEndpoint_DescribeServerMemberFailureLogsFailedRow(t *te
 		1, f.project.String(), text)
 	requireTelemetryRowCount(t, `gram_project_id = ?
 		   AND event_source = 'tool_call'
-		   AND tool_name = 'gateway describe_server'
-		   AND startsWith(gram_urn, 'tools:gatewaydiscovery:')
+		   AND tool_name = 'gateway_describe_server'
+		   AND startsWith(gram_urn, 'tools:externalmcp:')
+		   AND endsWith(gram_urn, ':gateway_describe_server')
+		   AND tool_source != ''
 		   AND mcp_server_id = ?
 		   AND meta_mcp_server_id = ''
 		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
@@ -315,8 +317,10 @@ func TestServePublic_MetaEndpoint_DescribeToolsMemberFailureLogsFailedRow(t *tes
 
 	requireTelemetryRowCount(t, `gram_project_id = ?
 		   AND event_source = 'tool_call'
-		   AND tool_name = 'gateway describe_tools'
-		   AND startsWith(gram_urn, 'tools:gatewaydiscovery:')
+		   AND tool_name = 'gateway_describe_tools'
+		   AND startsWith(gram_urn, 'tools:externalmcp:')
+		   AND endsWith(gram_urn, ':gateway_describe_tools')
+		   AND tool_source != ''
 		   AND mcp_server_id = ?
 		   AND meta_mcp_server_id = ''
 		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400

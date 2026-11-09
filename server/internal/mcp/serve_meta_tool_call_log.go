@@ -26,16 +26,22 @@ import (
 // tool may not have.
 const unresolvedToolKind = "unresolved"
 
-// gatewayDiscoveryToolKind is the URN kind of a member's row for a gateway
-// discovery call that could not describe it. Discovery tools belong to the
-// gateway, not the member, so the row must not share a URN, or its stats, with
-// a member tool of the same name.
-const gatewayDiscoveryToolKind = "gatewaydiscovery"
+// gatewayDiscoveryToolPrefix starts the tool name of a member's row for a
+// gateway discovery call that could not describe it. Discovery tools belong to
+// the gateway, not the member, so the row must not share a name, URN or stats
+// with a member tool of the same name. The URN keeps the member's own kind and
+// source, which Tool logs needs to list the row.
+const gatewayDiscoveryToolPrefix = "gateway_"
 
-// gatewayDiscoveryToolName names a member's discovery failure row, so the
-// member's tool lists read it as the gateway's call rather than a member tool.
-func gatewayDiscoveryToolName(toolName string) string {
-	return "gateway " + toolName
+// metaFailureRow is how a failed gateway tool_call row is attributed.
+type metaFailureRow struct {
+	// unstamped leaves out the gateway's stamp, for a call the gateway
+	// counts from another row.
+	unstamped bool
+
+	// source names the tool's source when its URN cannot carry one, as for a
+	// hosted member's tool that failed before it resolved.
+	source string
 }
 
 // metaToolCallAttemptKey carries a gateway member tool call's attempt into
@@ -129,7 +135,7 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
-	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr)
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false, source: ""})
 	if params == nil {
 		return
 	}
@@ -138,7 +144,7 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 
 // metaToolCallFailureLogParams builds the failed tool_call row for a gateway
 // call, or nil when it has no project to be logged under.
-func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) *tm.LogParams {
+func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error, row metaFailureRow) *tm.LogParams {
 	status, message := attempt.status, attempt.message
 	if status == 0 {
 		status, message = http.StatusInternalServerError, "unexpected error"
@@ -162,9 +168,15 @@ func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qu
 		toolInfo.ProjectID = gate.projectID.String()
 	}
 	logAttrs := tm.HTTPLogAttributes{
-		attr.EventSourceKey:     string(tm.EventSourceToolCall),
-		attr.ToolCallIDKey:      uuid.NewString(),
-		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
+		attr.EventSourceKey: string(tm.EventSourceToolCall),
+		attr.ToolCallIDKey:  uuid.NewString(),
+	}
+	if !row.unstamped {
+		logAttrs[attr.MetaMcpServerIDKey] = gate.metaServerID.String()
+	}
+	// ToolInfo sets the source from a URN it can parse, which wins over this.
+	if row.source != "" {
+		logAttrs[attr.ToolCallSourceKey] = row.source
 	}
 	if member := attempt.member; member != nil {
 		toolInfo.ProjectID = member.projectID.String()
@@ -245,7 +257,7 @@ func newMetaMemberFailure(member metaMember, err error, message string, argument
 // logMetaMemberDiscoveryFailure writes a failed tool_call row on a member that
 // a gateway discovery call named and could not describe, so the member's
 // failure counts include the call. It is shaped like a gateway tool call that
-// failed before dispatch, with two differences:
+// failed before dispatch, with three differences:
 //
 //   - It is not stamped with the gateway. Gateway usage counts discovery calls
 //     from their meta_discovery rows and executions from the tool_call rows
@@ -255,8 +267,11 @@ func newMetaMemberFailure(member metaMember, err error, message string, argument
 //     meta_discovery row would otherwise hide this one from tool logs. The
 //     tracer that runs when OTel tracing is off ignores trace.WithNewRoot, so
 //     the row then gets a fresh trace of its own.
-//   - It is named and keyed as the gateway's discovery tool, not a tool of the
-//     member, so it never shares a URN or stats with a member tool.
+//   - It is named as the gateway's discovery tool (gateway_describe_server),
+//     not a tool of the member, so it never shares a URN or stats with a
+//     member tool. Its URN keeps the member's kind and source, and a hosted
+//     member, whose URN cannot carry one, gets its server slug as the source,
+//     so Tool logs lists the row.
 func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, failure metaMemberFailure) {
 	parent := trace.SpanContextFromContext(ctx)
 	ctx, span := s.tracer.Start(ctx, "mcp.meta.member_discovery_failure",
@@ -267,13 +282,15 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 	attempt := newMetaToolCallAttempt(start)
 	attempt.member = &failure.member
 	attempt.fail(failure.status, failure.message)
-	params := metaToolCallFailureLogParams(ctx, gate, metamcp.QualifyName(failure.member.slug, toolName), failure.arguments, attempt, nil)
+	row := metaFailureRow{unstamped: true, source: ""}
+	if failure.member.backend == metaMemberBackendHosted {
+		row.source = failure.member.slug
+	}
+	qualified := metamcp.QualifyName(failure.member.slug, gatewayDiscoveryToolPrefix+toolName)
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, failure.arguments, attempt, nil, row)
 	if params == nil {
 		return
 	}
-	delete(params.Attributes, attr.MetaMcpServerIDKey)
-	params.ToolInfo.Name = gatewayDiscoveryToolName(toolName)
-	params.ToolInfo.URN = "tools:" + gatewayDiscoveryToolKind + ":" + failure.member.serverID.String() + ":" + toolName
 	s.telemLogger.Log(ctx, *params)
 }
 

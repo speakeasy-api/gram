@@ -128,8 +128,9 @@ func TestToolCallRecordCarriesTheGatewaysOwnFailure(t *testing.T) {
 	require.Equal(t, "blocked by policy", recordStringAttribute(record, "error.message"), "the client's message, never the cause")
 }
 
-// A wrapped failure records its most specific client-safe message, the same
-// text the call's Tool logs row records, never the generic wrapper.
+// A wrapped failure records its most specific client-safe message, never the
+// generic wrapper. The Tool logs row pins the same literal in
+// TestServePublic_MetaEndpoint_ExecuteDispatchFailureRowCarriesError.
 func TestToolCallRecordCarriesTheInnermostClientSafeMessage(t *testing.T) {
 	t.Parallel()
 
@@ -139,7 +140,6 @@ func TestToolCallRecordCarriesTheInnermostClientSafeMessage(t *testing.T) {
 
 	record, _ := publishedToolCallRecord(t, gcp.NewSuccessPublishResult(), call, call.record(call.start, http.StatusBadRequest, false, failure))
 	require.Equal(t, "no server URL provided for tool", recordStringAttribute(record, "error.message"))
-	require.Equal(t, toolCallFailureMessage(failure), recordStringAttribute(record, "error.message"))
 }
 
 func TestToolCallRecordNamesAShutdownInterrupt(t *testing.T) {
