@@ -27,7 +27,6 @@ import (
 const (
 	upstreamIssuerSurfaceDirect         = "direct"
 	upstreamIssuerSurfaceGatewayProxied = "gateway_proxied"
-	upstreamIssuerSurfaceGatewayHosted  = "gateway_hosted"
 	upstreamIssuerSurfaceGatewayState   = "gateway_state"
 	upstreamIssuerSurfaceConsent        = "consent"
 )
@@ -475,35 +474,6 @@ func (s *Service) compareMemberRouting(ctx context.Context, logger *slog.Logger,
 		parity.outcome = member.upstreamIssuer.outcome(sameRoutedUpstream(routed, routeErr, other, otherErr))
 	}
 	s.recordUpstreamIssuerParity(ctx, logger, parity)
-}
-
-// compareHostedMemberTokens narrows a hosted gateway member's resolved tokens
-// with the other upstream issuer source and records how it compares with the
-// narrowing that happened.
-func (s *Service) compareHostedMemberTokens(ctx context.Context, logger *slog.Logger, organizationID string, tokens map[uuid.UUID]remotesessions.UpstreamToken, member metaMember, hosted map[uuid.UUID]remotesessions.UpstreamToken, hostedErr error) {
-	parity := upstreamIssuerParity{
-		organizationID:   organizationID,
-		serverID:         member.serverID,
-		surface:          upstreamIssuerSurfaceGatewayHosted,
-		site:             upstreamIssuerSiteRoute,
-		keys:             member.upstreamIssuer,
-		outcome:          upstreamIssuerChoice,
-		fromAssociations: member.upstreamIssuerFromAssociations,
-	}
-	if !memberChoiceGoverns(member) {
-		other, otherErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
-		parity.outcome = member.upstreamIssuer.outcome(sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(other), otherErr))
-	}
-	s.recordUpstreamIssuerParity(ctx, logger, parity)
-}
-
-// soleToken is the one entry hostedMemberTokens narrows to, or none.
-func soleToken(tokens map[uuid.UUID]remotesessions.UpstreamToken) remotesessions.UpstreamToken {
-	var none remotesessions.UpstreamToken
-	for _, entry := range tokens {
-		return entry
-	}
-	return none
 }
 
 // reuseInventoryFingerprints are an inventory's reuse fingerprints with its

@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -110,9 +109,8 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "gateway-consent-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
-	issues := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Issue tracker", 1, mcpservers.VisibilityPublic, "create_issue", "list_issues")
-	// Hosted members share the project's latest deployment, so the second
-	// source is a remote server.
+	issuesSlug := "issues-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Issue tracker", issuesSlug, 1, newScriptedUpstream(t, scriptedTools("issue", 2), 100).url)
 	docsSlug := "docs-" + uuid.NewString()[:8]
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", docsSlug, 2, newRecordingUpstream(t, "search_docs").url)
 	stateID, csrfToken := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
@@ -129,9 +127,9 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 		sources[tool.Name] = tool.Source
 	}
 	require.Equal(t, map[string]any{
-		issues.slug + "--create_issue": "Issue tracker",
-		issues.slug + "--list_issues":  "Issue tracker",
-		docsSlug + "--search_docs":     "Docs",
+		issuesSlug + "--issue_000": "Issue tracker",
+		issuesSlug + "--issue_001": "Issue tracker",
+		docsSlug + "--search_docs": "Docs",
 	}, sources)
 
 	form := url.Values{}
@@ -140,7 +138,7 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	form.Set("action", "approve")
 	form.Set("tool_inventory_id", attempt)
 	form.Set("tool_filtering", "on")
-	form.Add("tools", issues.slug+"--create_issue")
+	form.Add("tools", issuesSlug+"--issue_000")
 	form.Add("tools", docsSlug+"--search_docs")
 	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -170,9 +168,9 @@ func TestGatewayConsentPicksToolsPerSource(t *testing.T) {
 	selection := policy.Selection
 	require.NotNil(t, selection)
 	require.Equal(t, "meta_mcp_server:"+gateway.ID.String(), selection.Resource)
-	require.True(t, selection.AllowsName(issues.slug+"--create_issue"))
+	require.True(t, selection.AllowsName(issuesSlug+"--issue_000"))
 	require.True(t, selection.AllowsName(docsSlug+"--search_docs"))
-	require.False(t, selection.AllowsName(issues.slug+"--list_issues"))
+	require.False(t, selection.AllowsName(issuesSlug+"--issue_001"))
 	require.NotNil(t, policy.Catalog)
 }
 
@@ -231,11 +229,12 @@ func TestGatewayToolSelectionSurvivesRefresh(t *testing.T) {
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	slug := "gateway-refresh-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Issue tracker", 1, mcpservers.VisibilityPublic, "create_issue", "list_issues")
+	memberSlug := "issues-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Issue tracker", memberSlug, 1, newRecordingUpstream(t, "create_issue").url)
 
 	resource := "meta_mcp_server:" + gateway.ID.String()
 	selection, err := toolfilter.NewSessionSelection(resource, uuid.New(), []toolfilter.AllowEntry{
-		{Type: toolfilter.AllowTypeTool, Name: member.slug + "--create_issue", Mode: nil, Tools: nil},
+		{Type: toolfilter.AllowTypeTool, Name: memberSlug + "--create_issue", Mode: nil, Tools: nil},
 	})
 	require.NoError(t, err)
 	original, err := json.Marshal(&toolfilter.SessionPolicy{Resource: resource, Selection: selection, Gateway: &toolfilter.GatewayOptions{DiscoveryMode: nil}, Catalog: &toolfilter.CatalogReference{ID: uuid.New(), Mode: toolfilter.CatalogModeCached, AllTools: false}})

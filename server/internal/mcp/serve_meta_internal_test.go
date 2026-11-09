@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestMetaServerDiscover_InstructionsAndCacheScope(t *testing.T) {
@@ -115,28 +116,24 @@ func TestWithOwnTrace_FreshTraceWhenTheTracerKeptTheParent(t *testing.T) {
 }
 
 // A member's discovery failure row is the gateway's call: it carries no
-// gateway stamp, is named gateway_<tool>, and keeps the member's URN kind. A
-// hosted member, whose URN cannot carry a source, gets its server slug as the
-// source, which Tool logs needs to list the row.
-func TestMetaToolCallFailureLogParams_DiscoveryRowOnAHostedMember(t *testing.T) {
+// gateway stamp, is named gateway_<tool>, and keeps the member's URN kind.
+func TestMetaToolCallFailureLogParams_DiscoveryRowIsUnstamped(t *testing.T) {
 	t.Parallel()
 
-	member := metaMember{slug: "billing", serverID: uuid.New(), projectID: uuid.New(), backend: metaMemberBackendHosted}
+	member := metaMember{slug: "billing", serverID: uuid.New(), projectID: uuid.New(), remoteServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	gate := &metaGateContext{metaServerID: uuid.New(), organizationID: "org-1", projectID: uuid.New()}
 	attempt := newMetaToolCallAttempt(time.Now())
 	attempt.member = &member
 	attempt.fail(http.StatusServiceUnavailable, "server \"billing\" is unavailable")
 
 	qualified := metamcp.QualifyName(member.slug, gatewayDiscoveryToolPrefix+"describe_server")
-	params := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: true, source: member.slug})
+	params := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: true})
 	require.NotNil(t, params)
 	require.Equal(t, "gateway_describe_server", params.ToolInfo.Name)
-	require.Equal(t, "tools:"+unresolvedToolKind+":"+member.serverID.String()+":gateway_describe_server", params.ToolInfo.URN)
+	require.Equal(t, "tools:"+string(urn.ToolKindExternalMCP)+":"+member.remoteServerID.UUID.String()+":gateway_describe_server", params.ToolInfo.URN)
 	require.NotContains(t, params.Attributes, attr.MetaMcpServerIDKey)
-	require.Equal(t, member.slug, params.Attributes[attr.ToolCallSourceKey])
 
-	stamped := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: false, source: ""})
+	stamped := metaToolCallFailureLogParams(t.Context(), gate, qualified, nil, attempt, nil, metaFailureRow{unstamped: false})
 	require.NotNil(t, stamped)
 	require.Equal(t, gate.metaServerID.String(), stamped.Attributes[attr.MetaMcpServerIDKey])
-	require.NotContains(t, stamped.Attributes, attr.ToolCallSourceKey)
 }

@@ -73,12 +73,6 @@ func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 	require.True(t, ok)
 	granted := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted).String()
 	denied := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.denied).String()
-	// A public server whose own toolset is private, which the agent holds no
-	// grant on: admission keeps it among the denied members, so naming it
-	// records its toolset's denial.
-	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
-	closed := seedHostedMetaMember(t, ctx, ti, decoy.ID, "closed hosted", 3, mcpservers.VisibilityPublic, "closed_tool")
-	setToolsetMcpPrivate(t, ctx, ti, closed.toolsetID, *authCtx.ProjectID)
 	seen := map[int64]bool{}
 
 	call := func(name string, arguments map[string]any) string {
@@ -109,23 +103,25 @@ func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 	// check for each.
 	call("describe_tools", map[string]any{"tools": []string{fx.granted + "--a", fx.granted + "--b", fx.denied + "--c"}})
 	require.ElementsMatch(t, []recordedCheck{{resourceID: granted, outcome: "allow"}, {resourceID: denied, outcome: "deny"}}, takeRecordedMCPConnectChecks(t, ti, seen))
-
-	// Naming the public server records the denial of its private toolset.
-	require.Contains(t, call("describe_server", map[string]any{"server": closed.slug}), "unknown server")
-	require.Equal(t, []recordedCheck{{resourceID: closed.toolsetID.String(), outcome: "deny"}}, takeRecordedMCPConnectChecks(t, ti, seen))
 }
 
-// A public server whose own toolset is private needs a grant on that toolset,
-// which the caller here lacks. On every gateway mode a listing records nothing
-// for it, and a call that names it records the toolset's denial once.
-func TestGateways_RecordPrivateToolsetDenialOnlyWhenNamed(t *testing.T) {
+// closedMember is a private remote member the caller holds no grant on.
+type closedMember struct {
+	slug     string
+	serverID uuid.UUID
+}
+
+// A private member needs a grant the caller here lacks. On every gateway mode
+// a listing records nothing for it, and a call that names it records its
+// denial once.
+func TestGateways_RecordPrivateMemberDenialOnlyWhenNamed(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name string
 		// serve seeds the gateway with member as a member and returns a
 		// function that calls one of its meta tools and returns the body.
-		serve func(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) hostedMemberFixture) func(tool string, arguments map[string]any) string
+		serve func(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) closedMember) func(tool string, arguments map[string]any) string
 	}{
 		{name: "stored project gateway", serve: serveStoredGatewayWithoutGrants},
 		{name: "organization gateway", serve: serveOrganizationGatewayAsMember},
@@ -137,13 +133,13 @@ func TestGateways_RecordPrivateToolsetDenialOnlyWhenNamed(t *testing.T) {
 			recordChallenges(t, ti)
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
-			var closed hostedMemberFixture
-			call := tc.serve(t, ctx, ti, func(metaID uuid.UUID) hostedMemberFixture {
-				closed = seedHostedMetaMember(t, ctx, ti, metaID, "closed hosted", 9, mcpservers.VisibilityPublic, "closed_tool")
-				setToolsetMcpPrivate(t, ctx, ti, closed.toolsetID, *authCtx.ProjectID)
+			var closed closedMember
+			call := tc.serve(t, ctx, ti, func(metaID uuid.UUID) closedMember {
+				closed.slug = "closed-" + uuid.NewString()[:8]
+				closed.serverID = seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, metaID, "closed remote", closed.slug, 9, mcpservers.VisibilityPrivate)
 				return closed
 			})
-			denial := []recordedCheck{{resourceID: closed.toolsetID.String(), outcome: "deny"}}
+			denial := []recordedCheck{{resourceID: closed.serverID.String(), outcome: "deny"}}
 			seen := map[int64]bool{}
 
 			call("list_servers", map[string]any{})
@@ -158,7 +154,7 @@ func TestGateways_RecordPrivateToolsetDenialOnlyWhenNamed(t *testing.T) {
 	}
 }
 
-func serveStoredGatewayWithoutGrants(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) hostedMemberFixture) func(string, map[string]any) string {
+func serveStoredGatewayWithoutGrants(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) closedMember) func(string, map[string]any) string {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -174,7 +170,7 @@ func serveStoredGatewayWithoutGrants(t *testing.T, ctx context.Context, ti *test
 	}
 }
 
-func serveOrganizationGatewayAsMember(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) hostedMemberFixture) func(string, map[string]any) string {
+func serveOrganizationGatewayAsMember(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) closedMember) func(string, map[string]any) string {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -189,7 +185,7 @@ func serveOrganizationGatewayAsMember(t *testing.T, ctx context.Context, ti *tes
 	}
 }
 
-func serveAgentGatewayAsAgent(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) hostedMemberFixture) func(string, map[string]any) string {
+func serveAgentGatewayAsAgent(t *testing.T, ctx context.Context, ti *testInstance, member func(metaID uuid.UUID) closedMember) func(string, map[string]any) string {
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)

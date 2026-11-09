@@ -402,8 +402,8 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
 // so a member whose provider is not connected degrades on its own. A stored
-// gateway uses it too, for its hosted members, so the issuer's clients
-// resolve only when one needs them.
+// gateway uses it too, for members its credential's choices do not serve,
+// so the issuer's clients resolve only when one needs them.
 func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
@@ -423,7 +423,7 @@ func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *Resolv
 // members alone, as any other member failure does; the cache has already
 // logged the cause.
 func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	if g.memberChoices != nil && member.backend == metaMemberBackendProxied && g.memberChoices.serves(member) {
+	if g.memberChoices != nil && g.memberChoices.serves(member) {
 		return g.memberChoices.tokens(ctx, member)
 	}
 	if g.projectTokens == nil {
@@ -447,9 +447,8 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 //
 // Where typed auth client resolution is enforced, the registrations its
 // servers offer through typed auth clients are listed whether or not the
-// sign-in links them. Direct proxied servers and a gateway's proxied members
-// offer only these registrations; a gateway keeps its sign-in's clients for
-// the hosted members that use them.
+// sign-in links them. Direct proxied servers offer only these registrations;
+// a gateway also keeps the sign-in's clients its members are associated with.
 func (s *Service) listEndpointClients(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) ([]remotesessions.Client, error) {
 	clients, _, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	return clients, err
@@ -546,8 +545,8 @@ func (s *Service) listSignInClients(ctx context.Context, endpoint *ResolvedMcpEn
 	}
 	// The issuer may bind clients for other servers sharing it. Consent offers
 	// a proxied server only the clients configured for it, and a gateway only
-	// those of the members the subject reaches. A hosted server keeps serving
-	// from every client its issuer binds.
+	// those of the members the subject reaches. A direct hosted server keeps
+	// serving from every client its issuer binds.
 	switch {
 	case endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid:
 		associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{endpoint.McpServerID.UUID})

@@ -46,7 +46,7 @@ func TestRecordNewMemberChoices(t *testing.T) {
 		return id
 	}
 	member := func(serverID uuid.UUID) metaMember {
-		return metaMember{serverID: serverID, projectID: f.projectID, slug: "s-" + serverID.String()[:8], backend: metaMemberBackendProxied}
+		return metaMember{serverID: serverID, projectID: f.projectID, slug: "s-" + serverID.String()[:8]}
 	}
 
 	// Present before the credential was issued: considered then.

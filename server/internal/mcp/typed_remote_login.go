@@ -95,21 +95,14 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 	}
 	if !serverID.Valid && (endpoint.MetaMcpServerID.Valid || endpoint.IsOrganizationGateway()) {
 		// Without a resource-qualified member, require exactly one authorized
-		// typed member rather than choosing arbitrary server provenance. Only
-		// proxied members offer typed registrations; hosted members retain their
-		// existing issuer-bound flow.
+		// typed member rather than choosing arbitrary server provenance.
 		members, err := s.consentSubjectMembers(ctx, endpoint, challenge)
 		if err != nil {
 			return nil, fmt.Errorf("load typed login members: %w", err)
 		}
 		var selected *remotesessions.TypedAuthorization
 		var denied error
-		hosted := false
 		for _, candidate := range members {
-			if candidate.backend != metaMemberBackendProxied {
-				hosted = hosted || memberUsesClient(candidate, client.ID, client.RemoteSessionIssuerID, client.ProjectID)
-				continue
-			}
 			a, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challenge, client, chosenMetaMember{serverID: uuid.NullUUID{UUID: candidate.serverID, Valid: true}, projectID: candidate.projectID})
 			if errors.Is(err, errTypedLoginNotOffered) {
 				continue
@@ -131,9 +124,8 @@ func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *R
 		if selected != nil {
 			return selected, nil
 		}
-		if denied == nil && !hosted {
-			// No member offers the registration, and no hosted member signs
-			// in through it.
+		if denied == nil {
+			// No member offers the registration.
 			return nil, errTypedLoginNotOffered
 		}
 		return nil, denied

@@ -574,7 +574,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
 				}
-				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member"}}
 				choices.apply(ctx, testenv.NewLogger(t), members, true)
 				member := members[0]
 				require.NoError(t, member.upstreamUnavailable)

@@ -155,7 +155,7 @@ func TestAgentKeyStaleChoiceGetsOwnerCopy(t *testing.T) {
 	f.service.staleNoAuthLog = newOnceLog()
 	agent := urn.NewAgentSubject(uuid.New())
 	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, credentialKind: upstreamclients.CredentialKindAPIKey, credentialID: keyID}, enforced: true, profile: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
-	members := []metaMember{{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
+	members := []metaMember{{slug: "db", serverID: f.serverID, projectID: f.projectID}}
 	choices.apply(t.Context(), f.service.logger, members, true)
 	require.Empty(t, buf.String(), "nothing is logged until the member is called")
 	gate := &metaGateContext{organizationID: f.orgID, memberChoices: choices, authentication: &issuerGateAuthentication{subject: agent}}
@@ -187,7 +187,7 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 			if tc.bound {
 				require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: issuerID}))
 			}
-			member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
+			member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 			member.authClient = new(gapWithChoice(authClientReasonNoAuthForbidden))
 			gate := &metaGateContext{
 				organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: issuerID,
@@ -243,7 +243,7 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	f.service.staleChoiceConsent = expirable.NewLRU[string, bool](10, nil, time.Minute)
 	pool.Close()
 	const want = `This server's connection could not be checked. Try again in a few minutes.`
-	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
+	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
 	gate := &metaGateContext{
 		organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: uuid.New(),
 		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewUserSubject("user_1")},
@@ -376,7 +376,6 @@ func callApprovedMember(t *testing.T, s *Service, gate *metaGateContext, member 
 	gate.execute = true
 	gate.catalogRef = &toolfilter.CatalogReference{ID: uuid.New(), Mode: toolfilter.CatalogModeLive}
 	gate.catalog = &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{member.slug: {ServerID: member.serverID, ProjectID: member.projectID}}}
-	member.backend = metaMemberBackendProxied
 	body, err := s.executeMetaMemberTool(t.Context(), testenv.NewLogger(t), gate, []metaMember{member}, &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID("1"), Method: "tools/call"}, member.slug+"--tool", json.RawMessage(`{}`), nil)
 	require.NoError(t, err)
 	return string(body)

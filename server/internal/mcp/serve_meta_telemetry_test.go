@@ -8,10 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // A gateway discovery call writes one meta_discovery row attributed to the gateway.
@@ -24,7 +21,7 @@ func TestServePublic_MetaEndpoint_DiscoveryEmitsTelemetryRow(t *testing.T) {
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	seedListedMember(t, ctx, ti, meta.ID, "remote member", 1, "alpha_tool")
 
 	envelope := callMetaTool(t, ctx, ti, slug, "list_servers", map[string]any{})
 	require.NotNil(t, envelope["result"])
@@ -53,10 +50,11 @@ func TestServePublic_MetaEndpoint_ExecuteStampsGatewayOnMemberRow(t *testing.T) 
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	memberSlug := "remote-" + uuid.NewString()[:8]
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", memberSlug, 1, newRecordingUpstream(t, "alpha_tool").url)
 
 	callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--alpha_tool",
+		"name":      memberSlug + "--alpha_tool",
 		"arguments": map[string]any{},
 	})
 
@@ -65,15 +63,15 @@ func TestServePublic_MetaEndpoint_ExecuteStampsGatewayOnMemberRow(t *testing.T) 
 		   AND tool_name = 'alpha_tool'
 		   AND meta_mcp_server_id = ?
 		   AND mcp_server_id = ?`,
-		1, authCtx.ProjectID.String(), meta.ID.String(), member.serverID.String())
+		1, authCtx.ProjectID.String(), meta.ID.String(), memberID.String())
 
 	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'`,
 		1, authCtx.ProjectID.String())
 }
 
-// A gateway execute_tool naming a tool its member does not serve fails before
-// the member dispatch resolves a tool, and still leaves one failed tool_call
-// row in the member's project, stamped with the gateway and the member.
+// A gateway execute_tool naming a tool its member does not serve leaves one
+// failed tool_call row in the member's project, stamped with the gateway and
+// the member.
 func TestServePublic_MetaEndpoint_ExecuteUnknownToolLogsFailedRow(t *testing.T) {
 	t.Parallel()
 
@@ -83,10 +81,11 @@ func TestServePublic_MetaEndpoint_ExecuteUnknownToolLogsFailedRow(t *testing.T) 
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	memberSlug := "remote-" + uuid.NewString()[:8]
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", memberSlug, 1, newRecordingUpstream(t, "alpha_tool").url)
 
 	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--missing_tool",
+		"name":      memberSlug + "--missing_tool",
 		"arguments": map[string]any{},
 	})
 	_, isError := metaToolResultText(t, envelope)
@@ -98,53 +97,8 @@ func TestServePublic_MetaEndpoint_ExecuteUnknownToolLogsFailedRow(t *testing.T) 
 		   AND startsWith(gram_urn, 'tools:')
 		   AND meta_mcp_server_id = ?
 		   AND mcp_server_id = ?
-		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 404`,
-		1, authCtx.ProjectID.String(), meta.ID.String(), member.serverID.String())
-}
-
-// A gateway execute_tool whose member is configured with an environment that
-// no longer exists fails after the tool resolves but before it runs, and
-// leaves one failed tool_call row under the resolved tool.
-func TestServePublic_MetaEndpoint_ExecuteMissingEnvironmentLogsFailedRow(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
-	toolsets := toolsets_repo.New(ti.conn)
-	toolset, err := toolsets.GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: member.toolsetID, ProjectID: *authCtx.ProjectID})
-	require.NoError(t, err)
-	_, err = toolsets.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: conv.ToPGText("missing-environment"),
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              *authCtx.ProjectID,
-	})
-	require.NoError(t, err)
-
-	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--alpha_tool",
-		"arguments": map[string]any{},
-	})
-	text, isError := metaToolResultText(t, envelope)
-	require.True(t, isError)
-	require.Contains(t, text, "environment not found")
-
-	requireTelemetryRowCount(t, `gram_project_id = ?
-		   AND event_source = 'tool_call'
-		   AND tool_name = 'alpha_tool'
-		   AND gram_urn = ?
-		   AND meta_mcp_server_id = ?
-		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 400`,
-		1, authCtx.ProjectID.String(), member.toolURNs["alpha_tool"].String(), meta.ID.String())
-	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'`,
-		1, authCtx.ProjectID.String())
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) = 500`,
+		1, authCtx.ProjectID.String(), meta.ID.String(), memberID.String())
 }
 
 // A gateway client that sends no Mcp-Session-Id is handed the one the
@@ -163,7 +117,8 @@ func TestServePublic_MetaEndpoint_InitializeSessionCarriesClientToToolCalls(t *t
 
 	slug := "meta-" + uuid.NewString()
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
+	memberSlug := "remote-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", memberSlug, 1, newRecordingUpstream(t, "alpha_tool").url)
 
 	initialize, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "initialize", map[string]any{
 		"protocolVersion": "2025-06-18",
@@ -178,7 +133,7 @@ func TestServePublic_MetaEndpoint_InitializeSessionCarriesClientToToolCalls(t *t
 
 	execute, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{
 		"name":      "execute_tool",
-		"arguments": map[string]any{"name": member.slug + "--alpha_tool", "arguments": map[string]any{}},
+		"arguments": map[string]any{"name": memberSlug + "--alpha_tool", "arguments": map[string]any{}},
 	}), "", map[string]string{"Mcp-Session-Id": sessionID})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, execute.Code, "body=%s", execute.Body.String())
@@ -190,68 +145,6 @@ func TestServePublic_MetaEndpoint_InitializeSessionCarriesClientToToolCalls(t *t
 		   AND mcp_client_name = 'Claude Code'
 		   AND mcp_client_version = '2.4.1'`,
 		1, authCtx.ProjectID.String(), meta.ID.String())
-}
-
-// Pins the member stamp the diagnostics reads rely on to keep these calls off the canonical row.
-func TestServePublic_MetaEndpoint_HostedMemberCallStampsMemberBesideCanonical(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
-	canonical := exposeCanonicalWrapper(t, ctx, ti, *authCtx.ProjectID, member.toolsetID, slug+"-canonical", "public")
-
-	callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--alpha_tool",
-		"arguments": map[string]any{},
-	})
-
-	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'
-		   AND meta_mcp_server_id = ? AND mcp_server_id = ?`,
-		1, authCtx.ProjectID.String(), meta.ID.String(), member.serverID.String())
-	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND mcp_server_id = ?`,
-		0, authCtx.ProjectID.String(), canonical.ID.String())
-}
-
-// A gateway execute_tool whose member dispatch fails after it has committed to
-// writing the member's row leaves that row carrying the error the caller was
-// told, so the failure reads with its cause on the member.
-func TestServePublic_MetaEndpoint_ExecuteDispatchFailureRowCarriesError(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-
-	slug := "meta-" + uuid.NewString()
-	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "hosted member", 1, mcpservers.VisibilityPublic, "alpha_tool")
-
-	// The seeded HTTP tool has no server URL configured, so the proxy refuses
-	// it after the member dispatch has registered its row.
-	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{
-		"name":      member.slug + "--alpha_tool",
-		"arguments": map[string]any{},
-	})
-	text, isError := metaToolResultText(t, envelope)
-	require.True(t, isError)
-	require.Contains(t, text, "no server URL provided for tool")
-
-	requireTelemetryRowCount(t, `gram_project_id = ?
-		   AND event_source = 'tool_call'
-		   AND tool_name = 'alpha_tool'
-		   AND gram_urn = ?
-		   AND meta_mcp_server_id = ?
-		   AND mcp_server_id = ?
-		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400
-		   AND toString(attributes.error.message) = 'no server URL provided for tool'`,
-		1, authCtx.ProjectID.String(), member.toolURNs["alpha_tool"].String(), meta.ID.String(), member.serverID.String())
-	requireTelemetryRowCount(t, `gram_project_id = ? AND event_source = 'tool_call' AND tool_name = 'alpha_tool'`,
-		1, authCtx.ProjectID.String())
 }
 
 // A describe_server whose member cannot be reached is answered as an isError

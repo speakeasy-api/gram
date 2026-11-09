@@ -1508,12 +1508,26 @@ func verifyMetaMcpBackendUniqueness(
 		return nil
 	}
 
+	// Gateways never hold a hosted server, so a member cannot become one.
+	if ids.ToolsetID.Valid {
+		metaName, err := metamcprepo.New(dbtx).FindMetaMCPServerHoldingMember(ctx, metamcprepo.FindMetaMCPServerHoldingMemberParams{
+			McpServerID: serverID,
+			ProjectID:   projectID,
+		})
+		switch {
+		case errors.Is(err, pgx.ErrNoRows):
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "check gateways holding the server").LogError(ctx, logger)
+		default:
+			return oops.E(oops.CodeConflict, nil, "this server is a member of gateway %q, and hosted servers can't be gateway members; remove it from the gateway first", metaName).LogWarn(ctx, logger)
+		}
+	}
+
 	metaName, err := metamcprepo.New(dbtx).FindMetaMCPSiblingSharingBackend(ctx, metamcprepo.FindMetaMCPSiblingSharingBackendParams{
 		McpServerID:          serverID,
 		ProjectID:            projectID,
 		RemoteMcpServerID:    ids.RemoteMcpServerID,
 		TunneledMcpServerID:  ids.TunneledMcpServerID,
-		ToolsetID:            ids.ToolsetID,
 		UnproxiedMcpServerID: ids.UnproxiedMcpServerID,
 	})
 	switch {

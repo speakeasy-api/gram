@@ -1,12 +1,11 @@
 // Member snapshot resolution for the meta-server MCP surface: one
-// project-scoped query per request, classified by backend and RBAC-filtered
-// before anything is exposed.
+// project-scoped query per request, RBAC-filtered before anything is
+// exposed.
 
 package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -20,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
+	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -31,17 +31,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-// metaMemberBackend classifies how the meta MCP reaches one member.
-type metaMemberBackend int
-
-const (
-	// Toolset-backed: executes in-process.
-	metaMemberBackendHosted metaMemberBackend = iota
-	// Remote/tunneled: dispatched through the member's own upstream (AIM-87).
-	metaMemberBackendProxied
-)
-
 // metaMember is one servable, authorized member in a request's snapshot.
+// Every member is a remote or tunneled server dispatched through its own
+// upstream; hosted servers are never gateway members.
 type metaMember struct {
 	serverID uuid.UUID
 	// configuration is loaded with the request's approved member set.
@@ -53,18 +45,14 @@ type metaMember struct {
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
-	projectID             uuid.UUID
-	projectSlug           string
-	slug                  string
-	name                  string
-	sortOrder             int32
-	backend               metaMemberBackend
-	toolsetID             uuid.NullUUID
-	remoteServerID        uuid.NullUUID
-	tunneledServerID      uuid.NullUUID
-	visibility            string
-	environmentID         uuid.NullUUID
-	toolVariationsGroupID uuid.NullUUID
+	projectID        uuid.UUID
+	projectSlug      string
+	slug             string
+	name             string
+	sortOrder        int32
+	remoteServerID   uuid.NullUUID
+	tunneledServerID uuid.NullUUID
+	visibility       string
 	// The member server's own derived provider issuer (see
 	// mcpserverissuersync.go). Token routing for tunneled members keys on it,
 	// so NULL or stale degrades to an anonymous call, never a wrong bearer.
@@ -105,9 +93,9 @@ type metaMember struct {
 	upstreamUnavailable error
 	authClient          *authClientResolution
 
-	// associatedClients is a proxied member's associated upstream clients;
-	// nil for a hosted member, which matches clients by authorization server
-	// instead.
+	// associatedClients is the member's associated upstream clients; nil when
+	// the caller does not read associations, in which case the member matches
+	// clients by authorization server.
 	associatedClients map[uuid.UUID]bool
 
 	// typedRegistrations reports that associatedClients is exactly the
@@ -116,14 +104,11 @@ type metaMember struct {
 	typedRegistrations bool
 }
 
-// memberStatus is the list_servers connection state. Hosted members execute
-// in-process, so they are always available. A tunneled member's liveness is
-// one route-store read; a remote member's would be a credentialed network
-// probe per listing, so it stays unknown until cached health exists.
+// memberStatus is the list_servers connection state. A tunneled member's
+// liveness is one route-store read; a remote member's would be a credentialed
+// network probe per listing, so it stays unknown until cached health exists.
 func (s *Service) memberStatus(ctx context.Context, member metaMember) string {
 	switch {
-	case member.backend == metaMemberBackendHosted:
-		return metamcp.StatusAvailable
 	case member.tunneledServerID.Valid:
 		if s.tunnelManager == nil || s.tunnelManager.routes == nil {
 			return metamcp.StatusUnknown
@@ -154,11 +139,8 @@ type metaMemberCandidate struct {
 	name                       string
 	sortOrder                  int32
 	visibility                 string
-	toolsetID                  uuid.NullUUID
 	remoteServerID             uuid.NullUUID
 	tunneledServerID           uuid.NullUUID
-	environmentID              uuid.NullUUID
-	toolVariationsGroupID      uuid.NullUUID
 	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
 }
@@ -175,9 +157,15 @@ func memberUpstreamIssuer(column uuid.NullUUID, associationProviderIDs []uuid.UU
 }
 
 // resolveMetaMemberSnapshot loads a stored meta server's servable members and
-// applies the per-member RBAC filter. Only hosted, remote, and tunneled backends
-// have a gateway dispatch path; all other members are excluded, so pre-validation
+// applies the per-member RBAC filter. Only remote and tunneled backends have a
+// gateway dispatch path; all other members are excluded, so pre-validation
 // memberships degrade to invisibility.
+//
+// It also returns the private members the caller may not connect to, and the
+// slugs of hosted members. Hosted servers are never served through a gateway.
+// Membership writes refuse them, but rows written before that rule remain, so
+// each is refused here too and its slug returned so a call naming it gets a
+// tool error saying why.
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -185,13 +173,12 @@ func (s *Service) resolveMetaMemberSnapshot(
 	organizationID string,
 	metaServerID uuid.UUID,
 	projectID uuid.UUID,
-) (context.Context, []metaMember, []metaMember, error) {
-	// Unconditional so later per-tool checks (member dispatch on a private
-	// toolset) never hit an unprepared context; no-op for callers RBAC never
-	// enforces (AGE-2672).
+) (context.Context, []metaMember, []metaMember, []string, error) {
+	// Unconditional so later per-tool checks never hit an unprepared context;
+	// no-op for callers RBAC never enforces (AGE-2672).
 	ctx, err := s.authz.PrepareContext(ctx)
 	if err != nil {
-		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
+		return ctx, nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load access grants").LogError(ctx, logger)
 	}
 
 	rows, err := metamcprepo.New(s.db).ListServableMetaMCPMembers(ctx, metamcprepo.ListServableMetaMCPMembersParams{
@@ -199,11 +186,18 @@ func (s *Service) resolveMetaMemberSnapshot(
 		ProjectID:       projectID,
 	})
 	if err != nil {
-		return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, logger)
+		return ctx, nil, nil, nil, oops.E(oops.CodeUnexpected, err, "list meta mcp members").LogError(ctx, logger)
 	}
 
 	candidates := make([]metaMemberCandidate, 0, len(rows))
+	var hostedSlugs []string
 	for _, row := range rows {
+		slug := conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), "")
+		if err := inv.Check("gateway member", "member is not a hosted server", !row.McpServerToolsetID.Valid); err != nil {
+			logger.WarnContext(ctx, "refuse hosted gateway member", attr.SlogMcpServerID(row.McpServerID.String()), attr.SlogError(err))
+			hostedSlugs = append(hostedSlugs, slug)
+			continue
+		}
 		candidates = append(candidates, metaMemberCandidate{
 			serverID: row.McpServerID,
 			// A stored gateway's members are all in its own project, which the
@@ -211,21 +205,19 @@ func (s *Service) resolveMetaMemberSnapshot(
 			// that project, so they need no qualifying prefix.
 			projectID:                  projectID,
 			projectSlug:                "",
-			slug:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerSlug), ""),
+			slug:                       slug,
 			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
 			sortOrder:                  row.SortOrder,
 			visibility:                 row.McpServerVisibility,
-			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
-			environmentID:              row.McpServerEnvironmentID,
-			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
 
-	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
+	ctx, members, denied, err := s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
+	return ctx, members, denied, hostedSlugs, err
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
@@ -233,10 +225,10 @@ func (s *Service) resolveMetaMemberSnapshot(
 // an organization gateway's derived members.
 func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, true, endpoint.UserSessionIssuerID, endpoint.ProjectID)
+		ctx, members, _, err := s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.ProjectID)
 		return ctx, members, err
 	}
-	ctx, members, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	ctx, members, _, _, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -260,7 +252,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		err     error
 	)
 	if gate.agentID == uuid.Nil && !gate.organizationGateway {
-		ctx, members, gate.deniedMembers, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
+		ctx, members, gate.deniedMembers, gate.hostedMemberSlugs, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
 		scopeProjectID := uuid.Nil
@@ -268,7 +260,7 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			issuer = gate.userSessionIssuerID
 			scopeProjectID = gate.projectID
 		}
-		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, gate.organizationGateway, issuer, scopeProjectID)
+		ctx, members, gate.deniedMembers, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
 	}
 	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
 		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
@@ -312,21 +304,15 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID limits legacy sign-in eligibility to the gateway's clients;
 // uuid.Nil skips issuer matching for the agent gateway and Platform MCP.
-// Enforced typed offers replace this check for proxied members; pending setup
-// retains it. A nonzero scopeProjectID restricts candidates before admission
-// and credential association for project gateways.
-//
-// organizationGateway drops servers backed by a toolset with Platform tools,
-// mirroring automatic plugin delivery: those toolsets serve assistants and
-// explicit MCP consumers, never a broad distribution surface. The agent
-// gateway keeps them: its members are what an agent key was explicitly
-// granted.
+// Enforced typed offers replace this check for members; pending setup retains
+// it. A nonzero scopeProjectID restricts candidates before admission and
+// credential association for project gateways. The query returns no hosted
+// servers, which are never gateway members.
 func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
 	authzSurface string,
 	organizationID string,
-	organizationGateway bool,
 	userSessionIssuerID uuid.UUID,
 	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, []metaMember, error) {
@@ -357,9 +343,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
-		if organizationGateway && row.HasPlatformTool {
-			continue
-		}
 		candidates = append(candidates, metaMemberCandidate{
 			serverID:    row.McpServerID,
 			projectID:   row.McpServerProjectID,
@@ -371,11 +354,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			// requests.
 			sortOrder:                  0,
 			visibility:                 row.McpServerVisibility,
-			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
-			environmentID:              row.McpServerEnvironmentID,
-			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
@@ -386,7 +366,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		return ctx, nil, nil, err
 	}
 	// Only the signed-in organization gateway uses typed capability here.
-	// Hosted members and issuerless agent gateways retain their legacy rules.
+	// Issuerless agent gateways retain their legacy rules.
 	var offers map[uuid.UUID]configuredAuthOffer
 	var offerMetadata gatewayOfferMetadata
 	if userSessionIssuerID != uuid.Nil {
@@ -397,9 +377,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		if enforced {
 			ids := make([]uuid.UUID, 0, len(members))
 			for _, member := range members {
-				if member.backend == metaMemberBackendProxied {
-					ids = append(ids, member.serverID)
-				}
+				ids = append(ids, member.serverID)
 			}
 			offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
 			if err != nil {
@@ -426,11 +404,10 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
 		}
 	}
-	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		offer, known := offers[member.serverID]
-		if offers != nil && member.backend == metaMemberBackendProxied {
+		if offers != nil {
 			if !known {
 				continue
 			}
@@ -445,16 +422,11 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			}
 		}
 		var supported, needsOAuth bool
-		if known && !offer.pending && member.backend == metaMemberBackendProxied {
+		if known && !offer.pending {
 			// Check detached offers against legacy source headers without decrypting credentials.
 			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
 		} else {
-			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
-			if errors.Is(err, errMemberToolsetDenied) {
-				// Keep denied toolsets aside so a named call records their denial.
-				denied = append(denied, member)
-				continue
-			}
+			supported, needsOAuth, err = s.derivedMemberAuth(ctx, member)
 			if err != nil {
 				return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
 			}
@@ -527,30 +499,22 @@ func (s *Service) admitMetaMembers(
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
-		// Only hosted, remote, and tunneled backends have a gateway dispatch path.
-		var backend metaMemberBackend
-		switch {
-		case candidate.toolsetID.Valid:
-			backend = metaMemberBackendHosted
-		case candidate.remoteServerID.Valid || candidate.tunneledServerID.Valid:
-			backend = metaMemberBackendProxied
-		default:
+		// Only remote and tunneled backends have a gateway dispatch path.
+		if !candidate.remoteServerID.Valid && !candidate.tunneledServerID.Valid {
 			continue
 		}
 
 		// Visibility gates exposure and fails closed: public members are open,
-		// private members require mcp:connect (as authorizeProxyBackendAccess)
-		// with denied members filtered so unauthorized reads as nonexistent,
-		// and any other value (malformed or future) is filtered the same way.
-		// This gates on the member server's own visibility only: a hosted
-		// member whose toolset is private still lists here (its endpoint is
-		// public), then reads as nonexistent on drill-down (loadMemberToolset).
+		// private members require mcp:connect on the member server (as
+		// authorizeProxyBackendAccess) with denied members filtered so
+		// unauthorized reads as nonexistent, and any other value (malformed or
+		// future) is filtered the same way.
 		//
 		// Admission records no authorization check: it filters every server
 		// the caller could reach, not one it asked for. The check is recorded
 		// when a call names the member (findNamedMember), so denied members
 		// are kept aside for that.
-		connect := memberConnectCheck(candidate.serverID, candidate.toolsetID, candidate.projectID)
+		connect := memberConnectCheck(candidate.serverID, candidate.projectID)
 		refusal, err := s.memberConnectDecision(authz.WithoutChallenges(ctx), shadow, surface, candidate.visibility, connect)
 		if err != nil {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
@@ -566,13 +530,9 @@ func (s *Service) admitMetaMembers(
 			slug:                           candidate.slug,
 			name:                           candidate.name,
 			sortOrder:                      candidate.sortOrder,
-			backend:                        backend,
-			toolsetID:                      candidate.toolsetID,
 			remoteServerID:                 candidate.remoteServerID,
 			tunneledServerID:               candidate.tunneledServerID,
 			visibility:                     candidate.visibility,
-			environmentID:                  candidate.environmentID,
-			toolVariationsGroupID:          candidate.toolVariationsGroupID,
 			remoteSessionIssuerID:          candidate.upstreamIssuer.authoritative(fromAssociations),
 			upstreamIssuer:                 candidate.upstreamIssuer,
 			upstreamIssuerFromAssociations: fromAssociations,
@@ -599,8 +559,8 @@ func (s *Service) admitMetaMembers(
 }
 
 // memberConnectDecision is the one connect decision for a server a caller
-// reaches through another surface: a gateway member, a member's own toolset,
-// a consent candidate, or a proxied backend. A public server is open. A
+// reaches through another surface: a gateway member, a consent candidate, or a
+// proxied backend. A public server is open. A
 // private one needs connect. Any other visibility fails closed without a
 // check. The decision is recorded in the mandatory shadow under surface.
 //
@@ -627,34 +587,25 @@ func (s *Service) memberConnectDecision(ctx context.Context, shadow *mandatorySh
 	return requireErr, nil
 }
 
-// memberConnectCheck is the mcp:connect check a member's grants answer.
-// Grants are keyed on the toolset id for toolset-backed servers and the
-// mcp_servers id for proxy backends. Checking the wrong one silently hides the
-// member from every resource-scoped grant the dashboard writes (see
-// grantResourceIdForMcpServer).
-func memberConnectCheck(serverID uuid.UUID, toolsetID uuid.NullUUID, projectID uuid.UUID) authz.Check {
-	resourceID := serverID
-	if toolsetID.Valid {
-		resourceID = toolsetID.UUID
-	}
-	return authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String())
+// memberConnectCheck is the mcp:connect check a member's grants answer,
+// keyed on the member's mcp_servers id as the dashboard writes it for proxy
+// backends (grantResourceIdForMcpServer).
+func memberConnectCheck(serverID uuid.UUID, projectID uuid.UUID) authz.Check {
+	return authz.MCPCheck(authz.ScopeMCPConnect, serverID.String(), projectID.String())
 }
 
 // findNamedMember resolves the server a call names and records the one
 // authorization check the request makes for it: allowed for an admitted or
 // hidden private member, denied for a member admission turned away. Admitted
-// public members need no grant and record nothing here; a private toolset
-// behind one records when the call loads it (loadMemberToolset). A slug that
-// names no server records nothing.
+// public members need no grant and record nothing here. A slug that names no
+// server records nothing.
 func (s *Service) findNamedMember(ctx context.Context, gate *metaGateContext, members []metaMember, slug string) (metaMember, bool) {
 	member, ok := findMetaMember(members, slug)
 	if ok {
 		s.recordNamedPrivateMemberCheck(ctx, member)
 		return member, true
 	}
-	// A turned-away member was refused either its own connect or, behind a
-	// public server on a derived gateway, its private toolset's. Both are
-	// keyed on the same resource (memberConnectCheck), so this records the
+	// A turned-away member was refused its own connect, so this records the
 	// refusal that kept it out.
 	if denied, found := findDeniedMember(gate.deniedMembers, slug); found {
 		s.recordNamedMemberCheck(ctx, denied)
@@ -679,7 +630,7 @@ func (s *Service) recordNamedPrivateMemberCheck(ctx context.Context, member meta
 // recordNamedMemberCheck records member's mcp:connect check. Admission
 // already decided it without recording, so the outcome here only names it.
 func (s *Service) recordNamedMemberCheck(ctx context.Context, member metaMember) {
-	_ = s.authz.Require(ctx, memberConnectCheck(member.serverID, member.toolsetID, member.projectID))
+	_ = s.authz.Require(ctx, memberConnectCheck(member.serverID, member.projectID))
 }
 
 // findDeniedMember matches a slug against members admission turned away.

@@ -458,9 +458,9 @@ type metaCodeInvocationKey struct{}
 type metaCodeInvocation struct {
 	dispatched bool
 	// rejected marks a call refused unexecuted: the member's own unknown-tool
-	// or invalid-params error, a hosted lookup refusal before dispatch, hosted
-	// input-schema validation, or a stale no-auth choice. A program can fix
-	// all but the stale choice.
+	// or invalid-params error, a call naming a hosted server the gateway
+	// refuses, or a stale no-auth choice. A program can fix all but the stale
+	// choice.
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string
@@ -491,13 +491,9 @@ func codeMemberDestination(member metaMember) string {
 	destination, _ := json.Marshal([]any{
 		member.serverID,
 		member.projectID,
-		int(member.backend),
-		member.toolsetID,
 		member.remoteServerID,
 		member.tunneledServerID,
 		member.tunneledResourceIdentifier,
-		member.environmentID,
-		member.toolVariationsGroupID,
 	})
 	return string(destination)
 }

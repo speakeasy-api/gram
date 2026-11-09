@@ -206,7 +206,6 @@ func TestCodeModeEndToEndDiscoveryRemoteAndTunnel(t *testing.T) {
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
 	setGatewayMode(t, ctx, ti, gateway.ID, "code_mode")
 	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
-	hosted := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 0, "public", "list")
 	remote := newRecordingUpstream(t, "ping")
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote tools", "remote", 1, remote.url)
 	tunnel := &fakeTunnelGateway{t: t, agentSessionID: "code-agent", backendSessionID: "code-backend", toolNames: []string{"ping"}}
@@ -228,7 +227,7 @@ func TestCodeModeEndToEndDiscoveryRemoteAndTunnel(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &catalog))
 	require.Len(t, catalog.Result.Tools, 1)
 	require.Equal(t, "execute", catalog.Result.Tools[0].Name)
-	require.Contains(t, catalog.Result.Tools[0].Description, hosted.slug+"--")
+	require.Contains(t, catalog.Result.Tools[0].Description, "remote--")
 	require.Contains(t, catalog.Result.Tools[0].Description, "tunnel--")
 	code := `import asyncio
 page = await tools.search("")
@@ -249,7 +248,7 @@ remote, tunnel = await asyncio.gather(tools.call("remote--ping", {}), tools.call
 	require.Empty(t, response.Error, "%s", w.Body.String())
 	require.False(t, response.Result.IsError, "%s", w.Body.String())
 	require.Nil(t, response.Result.StructuredContent.Error, "%s", w.Body.String())
-	require.Contains(t, string(response.Result.StructuredContent.Value), hosted.slug+"--list")
+	require.Contains(t, string(response.Result.StructuredContent.Value), "remote--ping")
 	require.Contains(t, string(response.Result.StructuredContent.Value), `"tunnel":true`)
 	require.Len(t, response.Result.StructuredContent.ToolCalls, 2)
 }

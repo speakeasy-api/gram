@@ -108,11 +108,14 @@ type metaGateContext struct {
 	unapprovedMembers []metaMember
 	// hiddenMembers are members the caller hid, reported but never served.
 	hiddenMembers []metaMember
-	// deniedMembers are members admission turned away: private members refused
-	// their own connect and, on derived gateways, public members refused their
-	// private toolset's. They are never listed or served; a call that names one
-	// records its denied check.
+	// deniedMembers are private members admission turned away because the
+	// caller may not connect to them. They are never listed or served; a call
+	// that names one records its denied check.
 	deniedMembers []metaMember
+
+	// hostedMemberSlugs are a stored gateway's hosted members, which gateways
+	// never serve; a call naming one gets a tool error saying so.
+	hostedMemberSlugs []string
 	// execute permits live credential resolution for a cached tool call.
 	execute         bool
 	discoveryMode   metamcp.DiscoveryMode
@@ -860,9 +863,9 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 			}
 		}
 		if gateMemberChoices != nil || (toolSelection != nil && toolSelection.Catalog != nil) {
-			// Proxied members resolve only their chosen clients, so the
-			// issuer's other clients resolve lazily, for hosted members that
-			// need them, and an unrelated broken one blocks nothing else.
+			// Members resolve only their chosen clients, so the issuer's other
+			// clients resolve lazily, for members the choices do not serve,
+			// and an unrelated broken one blocks nothing else.
 			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, skipped)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
@@ -919,6 +922,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
 		deniedMembers:       nil,
+		hostedMemberSlugs:   nil,
 		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
@@ -947,15 +951,14 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		gate.discoveryMode = metamcp.DiscoveryModeProgressive
 	}
 	// Identity comes from the issuer gate alone: this surface runs no
-	// identity-auth ladder, so ungated meta endpoints serve anonymously —
-	// private-toolset members stay invisible and gram environments never
-	// load, regardless of Authorization header.
+	// identity-auth ladder, so ungated meta endpoints serve anonymously,
+	// regardless of Authorization header.
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
 		gate.userID = authCtx.UserID
 		gate.externalUserID = authCtx.ExternalUserID
 		gate.apiKeyID = authCtx.APIKeyID
-		// authenticated = the caller's org owns the endpoint's project,
-		// unlocking gram environments for hosted-member execution.
+		// authenticated = the caller's org owns the endpoint's project. Code
+		// sessions and gateway skills read it.
 		//
 		// A derived gateway has no endpoint project to own, and its caller was
 		// already authenticated against this organization before dispatch. It

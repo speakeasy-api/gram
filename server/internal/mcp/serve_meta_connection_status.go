@@ -174,24 +174,6 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 			return signInRow(metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil)
 		}
 	}
-	if member.backend == metaMemberBackendHosted {
-		if !member.remoteSessionIssuerID.Valid {
-			return signInRow(metamcp.SignInNotRequired, "", nil)
-		}
-		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
-		if err != nil {
-			return memberFailureSignIn(*gate, member, err)
-		}
-		tokens, err := hostedMemberTokens(gateTokens, member)
-		if err != nil {
-			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberCallerURL(member)))
-		}
-		if len(tokens) == 0 {
-			return notConnectedRow(gate, true)
-		}
-		return signInRow(metamcp.SignInConnected, "", nil)
-	}
-
 	probe := *gate
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "", false)
@@ -224,24 +206,19 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	return signInRow(metamcp.SignInNotRequired, "", nil)
 }
 
-// memberAuthRequirements reports whether a proxied member offers an enabled
-// auth client, so a call carrying no credential cannot succeed. The first
-// lookup reads every proxied member in one query; later lookups reuse it.
+// memberAuthRequirements reports whether a member offers an enabled auth
+// client, so a call carrying no credential cannot succeed. The first lookup
+// reads every member in one query; later lookups reuse it.
 func (s *Service) memberAuthRequirements(organizationID string, members []metaMember) func(context.Context, metaMember) (bool, error) {
 	var required map[uuid.UUID]bool
 	var loadErr error
 	loaded := false
 	return func(ctx context.Context, member metaMember) (bool, error) {
-		if member.backend != metaMemberBackendProxied {
-			return false, nil
-		}
 		if !loaded {
 			loaded = true
 			ids := make([]uuid.UUID, 0, len(members))
 			for _, m := range members {
-				if m.backend == metaMemberBackendProxied {
-					ids = append(ids, m.serverID)
-				}
+				ids = append(ids, m.serverID)
 			}
 			rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: ids})
 			if err != nil {

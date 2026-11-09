@@ -255,7 +255,7 @@ func TestEnforcedMemberCompatibilityPathNeedsNoSignInLink(t *testing.T) {
 		choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, subject, true, member)
 		}
-		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+		members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member"}}
 		choices.apply(t.Context(), testenv.NewLogger(t), members, true)
 		return choices, members[0]
 	}
@@ -556,7 +556,7 @@ func TestEnforcedGatewayWithoutChoicesDecidesEachMemberByWhatItOffers(t *testing
 	choices := f.service.unchosenMemberChoices(endpoint, subject)
 	members := make([]metaMember, 0, 4)
 	for _, id := range []uuid.UUID{personal, open, shared, ambiguous} {
-		members = append(members, metaMember{serverID: id, projectID: f.projectID, slug: "member-" + id.String()[:8], backend: metaMemberBackendProxied})
+		members = append(members, metaMember{serverID: id, projectID: f.projectID, slug: "member-" + id.String()[:8]})
 	}
 	choices.apply(t.Context(), testenv.NewLogger(t), members, false)
 
@@ -738,7 +738,7 @@ func TestEnforcedAgentKeyOnAStoredGatewayKeepsItsOwnChoice(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, choices)
 		require.True(t, choices.unchosen)
-		return ctx, choices, []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
+		return ctx, choices, []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member"}}
 	}
 	choose := func(t *testing.T, f *enforcedCallerFixture, choices *memberChoices, client uuid.UUID) {
 		t.Helper()
@@ -853,7 +853,7 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		f.adminClient(authClientTypeServiceAccount, validUUID(shared))
 		gate := testAgentGate(t, nil)
 		gate.organizationID = f.orgID
-		member := metaMember{slug: "maps", name: "Maps", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}
+		member := metaMember{slug: "maps", name: "Maps", serverID: f.serverID, projectID: f.projectID}
 		clients := []remotesessions.Client{
 			{ID: f.registration, CredentialOwner: remotesessions.CredentialOwnerSubject},
 			{ID: shared, CredentialOwner: remotesessions.CredentialOwnerSelf},

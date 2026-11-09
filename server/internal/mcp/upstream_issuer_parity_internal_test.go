@@ -225,9 +225,4 @@ func TestMemberUpstreamIssuer_OtherSourceAndGoverningChoice(t *testing.T) {
 	require.Equal(t, upstreamIssuerDiffer, keys.outcome(sameRoutedUpstream(routed, routeErr, other, otherErr)),
 		"a tunneled member keyed by the column dials anonymously where its associations would send their credential")
 
-	hosted, hostedErr := hostedMemberTokens(tokens, member)
-	otherHosted, otherHostedErr := hostedMemberTokens(tokens, memberWithOtherIssuer(member))
-	require.Empty(t, hosted)
-	require.Equal(t, "association-token", soleToken(otherHosted).Token)
-	require.False(t, sameRoutedUpstream(soleToken(hosted), hostedErr, soleToken(otherHosted), otherHostedErr))
 }

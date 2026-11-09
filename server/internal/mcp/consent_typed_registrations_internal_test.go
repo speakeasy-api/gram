@@ -44,7 +44,7 @@ func TestTypedConsentRegistrationsSkipsMembersUnlessEnforced(t *testing.T) {
 	}
 	f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
 	f.enforce()
-	members := []metaMember{{serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}}
+	members := []metaMember{{serverID: f.serverID, projectID: f.projectID}}
 	require.NoError(t, f.service.withTypedMemberRegistrations(t.Context(), f.orgID, members))
 	calls := 0
 	typed, err := f.service.typedConsentRegistrations(t.Context(), endpoint, func() ([]metaMember, error) {
@@ -112,17 +112,14 @@ func TestTypedMemberRegistrationsDecideMemberClients(t *testing.T) {
 				f.adminClient(tc.offer, validUUID(f.registration))
 			}
 			older := uuid.New()
-			hosted := metaMember{serverID: uuid.New(), projectID: f.projectID, backend: metaMemberBackendHosted, remoteSessionIssuerID: validUUID(f.issuerID)}
 			members := []metaMember{
-				{serverID: f.serverID, projectID: f.projectID, slug: "proxied", backend: metaMemberBackendProxied, remoteSessionIssuerID: validUUID(f.issuerID), associatedClients: map[uuid.UUID]bool{older: true}},
-				hosted,
+				{serverID: f.serverID, projectID: f.projectID, slug: "proxied", remoteSessionIssuerID: validUUID(f.issuerID), associatedClients: map[uuid.UUID]bool{older: true}},
 			}
 			require.NoError(t, f.service.withTypedMemberRegistrations(t.Context(), f.orgID, members))
 
 			require.Equal(t, tc.usesTyped, memberUsesClient(members[0], f.registration, f.issuerID, validUUID(f.projectID)))
 			require.Equal(t, tc.usesOlder, memberUsesClient(members[0], older, f.issuerID, validUUID(f.projectID)))
-			require.Equal(t, tc.serverStatus, gatewayServersView(members[:1], nil).Servers[0].Status)
-			require.Equal(t, hosted, members[1], "a hosted member keeps matching clients by its authorization server")
+			require.Equal(t, tc.serverStatus, gatewayServersView(members, nil).Servers[0].Status)
 		})
 	}
 }

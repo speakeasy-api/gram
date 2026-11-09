@@ -58,15 +58,9 @@ func TestCodeReconnectBindingRejectsChangedIdentity(t *testing.T) {
 func TestCodeConnectionAuthenticationMetadata(t *testing.T) {
 	t.Parallel()
 	b := &metaCodeBackend{}
-	for _, backend := range []metaMemberBackend{metaMemberBackendHosted, metaMemberBackendProxied} {
-		state := b.knownConnectionState(t.Context(), &metaGateContext{}, metaMember{backend: backend}, nil)
-		if backend == metaMemberBackendHosted {
-			require.Equal(t, "not_required", state.Authentication)
-		} else {
-			require.Equal(t, "unknown", state.Authentication)
-		}
-		require.Empty(t, state.Instructions)
-	}
+	state := b.knownConnectionState(t.Context(), &metaGateContext{}, metaMember{}, nil)
+	require.Equal(t, "unknown", state.Authentication)
+	require.Empty(t, state.Instructions)
 }
 
 func TestCodeReconnectCatalogPending(t *testing.T) {

@@ -458,8 +458,7 @@ func upstreamTokenRoutes(issuerID uuid.UUID, entry remotesessions.UpstreamToken,
 // identifier passed as want. A grant audience-bound elsewhere, a
 // missing entry, and a backend with no derived issuer all yield the zero
 // UpstreamToken for an anonymous call; a self client whose credential could
-// not be obtained yields its ClientCredentialErr. hostedMemberTokens applies
-// the same identity rule to hosted members.
+// not be obtained yields its ClientCredentialErr.
 func tunneledIssuerToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, issuerID uuid.NullUUID, want string) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	if !issuerID.Valid {

@@ -437,10 +437,10 @@ func TestTokenIDJAGExchangeAuthorizesMetaMCPMembers(t *testing.T) {
 	slug := "id-jag-meta-" + uuid.NewString()
 	projectIssuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, projectIssuerID)
-	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "private ID-JAG member", 1, mcpservers.VisibilityPrivate, "member_tool")
+	memberID := seedMetaMember(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "private ID-JAG member", "id-jag-member-"+uuid.NewString()[:8], 1, mcpservers.VisibilityPrivate)
 	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
 	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
-	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), member.toolsetID)
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), memberID)
 
 	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
 	require.NoError(t, err)

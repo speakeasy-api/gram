@@ -51,7 +51,7 @@ func TestGatewayReviewUnchosenFailureIsMemberLocal(t *testing.T) {
 			for _, ids := range [][]uuid.UUID{{broken, healthy}, {healthy, broken}} {
 				members := make([]metaMember, len(ids))
 				for i, id := range ids {
-					members[i] = metaMember{serverID: id, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}
+					members[i] = metaMember{serverID: id, projectID: f.projectID, slug: "member"}
 				}
 				choices.apply(ctx, testenv.NewLogger(t), members, false)
 				for _, member := range members {

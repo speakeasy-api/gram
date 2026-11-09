@@ -23,8 +23,7 @@ import (
 // Where typed auth client resolution is enforced, a gateway connects the
 // registrations its proxied members offer through typed auth clients, with or
 // without an older association or a link to the gateway's sign-in, and
-// nothing an older association alone names. A hosted member keeps signing in
-// through its authorization server's client.
+// nothing an older association alone names.
 func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	const upstream = "https://typed-member.example.com/mcp"
@@ -36,7 +35,6 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 		typed           bool
 		associated      bool
 		signInLink      bool
-		hosted          bool
 		wantTyped       bool
 		wantErr         string
 	}{
@@ -47,7 +45,6 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 		{name: "typed offer linked to the sign-in", typed: true, signInLink: true, wantTyped: true},
 		{name: "typed offer with an older association", typed: true, associated: true, signInLink: true, wantTyped: true},
 		{name: "older association without a typed offer", associated: true, signInLink: true, wantErr: "unknown remote session client"},
-		{name: "hosted member's sign-in client", hosted: true, signInLink: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -94,10 +91,6 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
 			}
-			if tc.hosted {
-				hosted := seedHostedMetaMember(t, ctx, fx.ti, metaServerID, "Hosted", 1, "public")
-				stampRemoteSessionIssuer(t, ctx, fx.ti.conn, fx.projectID, hosted.serverID, conv.ToNullUUID(clientRemoteIssuerID(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, registration)))
-			}
 
 			if tc.resourceDisplay {
 				registerPageClient(t, ctx, fx)
@@ -140,10 +133,7 @@ func TestEnforcedGatewayConnectFollowsTypedOffers(t *testing.T) {
 
 			loc := postConnectAction(t, fx, registration)
 			state := mintedRemoteLoginState(t, ctx, fx, loc.Query().Get("state"))
-			if !tc.wantTyped {
-				require.Nil(t, state.TypedAuthorization, "a hosted member signs in through its authorization server's client")
-				return
-			}
+			require.True(t, tc.wantTyped, "every case that connects is served through a typed offer")
 			require.Equal(t, upstream, loc.Query().Get("resource"), "the grant is qualified to the member offering the registration")
 			require.NotNil(t, state.TypedAuthorization)
 			require.Equal(t, fx.projectID, state.ProjectID)

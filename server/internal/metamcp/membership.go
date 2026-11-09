@@ -40,7 +40,7 @@ var (
 	ErrMemberServerHasNoSlug         = errors.New("mcp server has no slug; update the server to generate one before attaching it")
 	ErrMemberServerUnproxied         = errors.New("unproxied mcp servers cannot be meta mcp members")
 	ErrMemberServerBuiltin           = errors.New("a server Speakeasy serves itself, such as the approvals server, cannot be a meta mcp member")
-	ErrMemberServerIsHostedToolset   = errors.New("a hosted toolset's own mcp server cannot be a meta mcp member; add a separate server for the toolset")
+	ErrMemberServerIsHosted          = errors.New("hosted MCP servers cannot be gateway members; connect to the server at its own MCP URL instead")
 	ErrMemberSharesBackend           = errors.New("another member of this meta mcp server already fronts the same backend")
 	ErrMemberAlreadyPresent          = errors.New("mcp server is already a member of this meta mcp server")
 	ErrMemberNeedsShadowApproval     = errors.New("gateway member requires Shadow MCP approval")
@@ -190,9 +190,9 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	if server.BuiltinBackend.Valid {
 		return AddedMember{}, ErrMemberServerBuiltin
 	}
-	// A toolset's own hosted server keeps its identity; members are separate servers.
-	if server.ToolsetID.Valid && server.ID == server.ToolsetID.UUID {
-		return AddedMember{}, ErrMemberServerIsHostedToolset
+	// Gateways serve only servers they dispatch to over MCP.
+	if err := inv.Check("gateway member", "member is not a hosted server", !server.ToolsetID.Valid); err != nil {
+		return AddedMember{}, fmt.Errorf("%w: %w", ErrMemberServerIsHosted, err)
 	}
 
 	// The gateway lock serializes concurrent adds, so this sees every
@@ -203,7 +203,6 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 		McpServerID:          mcpServerID,
 		RemoteMcpServerID:    server.RemoteMcpServerID,
 		TunneledMcpServerID:  server.TunneledMcpServerID,
-		ToolsetID:            server.ToolsetID,
 		UnproxiedMcpServerID: server.UnproxiedMcpServerID,
 	})
 	if err != nil {

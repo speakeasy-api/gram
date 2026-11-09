@@ -140,7 +140,7 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberServerHasNoSlug, oops.CodeInvalid},
 	{ErrMemberServerUnproxied, oops.CodeInvalid},
 	{ErrMemberServerBuiltin, oops.CodeInvalid},
-	{ErrMemberServerIsHostedToolset, oops.CodeInvalid},
+	{ErrMemberServerIsHosted, oops.CodeInvalid},
 	{ErrMemberSharesBackend, oops.CodeConflict},
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
 	{ErrMemberNeedsShadowApproval, oops.CodeConflict},

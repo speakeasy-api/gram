@@ -72,7 +72,7 @@ func (e *GatewayError) Unwrap() error { return e.Cause }
 type GatewayMemberRefusal struct {
 	MCPID string `json:"mcp_id"`
 	// Reason is one of not_in_project, no_address, unproxied, built_in,
-	// hosted_toolset_server, duplicate_backend, shadow_review_required, or
+	// hosted_server, duplicate_backend, shadow_review_required, or
 	// approval_check_unavailable.
 	Reason  string `json:"reason"`
 	Message string `json:"message"`
@@ -530,7 +530,7 @@ var gatewayMemberReasons = []struct {
 	{metamcp.ErrMemberServerHasNoSlug, "no_address", "This server has no address yet. Saving its settings once in the dashboard gives it one."},
 	{metamcp.ErrMemberServerUnproxied, "unproxied", "This server is reached directly rather than through Speakeasy, so a gateway cannot serve its tools."},
 	{metamcp.ErrMemberServerBuiltin, "built_in", "This is a server Speakeasy runs itself, such as the approvals server, so a gateway cannot serve its tools."},
-	{metamcp.ErrMemberServerIsHostedToolset, "hosted_toolset_server", "This is a hosted tool list's own server, which cannot sit behind a gateway. Create a separate server for that tool list and add that instead."},
+	{metamcp.ErrMemberServerIsHosted, "hosted_server", "This server is hosted by Speakeasy, and hosted servers can't be used through a gateway. People connect to it directly at its own MCP URL instead."},
 	{metamcp.ErrMemberSharesBackend, "duplicate_backend", "Another server in this request or already on the gateway fronts the same backend."},
 	{metamcp.ErrMemberAlreadyPresent, "duplicate_backend", "This server is already on the gateway."},
 	{metamcp.ErrMemberNeedsShadowApproval, "shadow_review_required", "The gateway is shared with people this server has not been approved for in Shadow MCP. Review the server first."},

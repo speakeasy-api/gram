@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -863,30 +865,37 @@ func seedExpiredCatalogCredential(t *testing.T, ctx context.Context, ti *testIns
 	return &tokenRequests
 }
 
-func TestConnectionCatalogHostedDiscoveryRechecksPermissionsWithoutTokens(t *testing.T) {
+// Cached discovery of a private member applies the caller's current per-tool
+// grants to the stored catalog without resolving any upstream token.
+func TestConnectionCatalogPrivateMemberDiscoveryRechecksPermissionsWithoutTokens(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	slug := "catalog-hosted-" + uuid.NewString()
+	slug := "catalog-private-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
-	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted", 1, mcpservers.VisibilityPublic, "allowed", "denied")
-	setToolsetMcpPrivate(t, ctx, ti, member.toolsetID, *auth.ProjectID)
+	upstream := newScriptedUpstream(t, []any{
+		map[string]any{"name": "allowed", "inputSchema": map[string]any{"type": "object"}},
+		map[string]any{"name": "denied", "inputSchema": map[string]any{"type": "object"}},
+	}, 100)
+	memberSlug := "private-" + uuid.NewString()[:8]
+	memberID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Private", memberSlug, 1, upstream.url)
+	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: memberID, ProjectID: *auth.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
 	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
 	tokens := seedExpiredCatalogCredential(t, ctx, ti, issuer.ID, urn.NewUserSubject(mockidp.MockUserID))
-	selector := authz.NewSelector(authz.ScopeMCPConnect, member.toolsetID.String())
+	selector := authz.NewSelector(authz.ScopeMCPConnect, memberID.String())
 	selector[authz.SelectorKeyTool] = "allowed"
 	grants := []authz.Grant{authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()), authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector)}
 	caller := authztest.WithExactGrants(t, t.Context(), grants...)
 	response, err := servePublicHTTP(t, caller, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 	require.NoError(t, err)
-	require.Contains(t, response.Body.String(), member.slug+"--allowed")
-	require.NotContains(t, response.Body.String(), member.slug+"--denied")
+	require.Contains(t, response.Body.String(), memberSlug+"--allowed")
+	require.NotContains(t, response.Body.String(), memberSlug+"--denied")
 	selector[authz.SelectorKeyTool] = "other"
 	caller = authztest.WithExactGrants(t, t.Context(), authz.NewGrant(authz.ScopeMCPConnect, gateway.ID.String()), authz.NewGrantWithSelector(authz.ScopeMCPConnect, selector))
 	response, err = servePublicHTTP(t, caller, ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), connection.token, nil)
 	require.NoError(t, err)
-	require.NotContains(t, response.Body.String(), member.slug+"--allowed")
+	require.NotContains(t, response.Body.String(), memberSlug+"--allowed")
 	require.Zero(t, tokens.Load())
 }
 

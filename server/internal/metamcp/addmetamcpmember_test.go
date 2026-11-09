@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -197,16 +198,13 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 
 	meta := seedMetaMcpServer(t, ctx, ti, "distinct backend host")
 
-	// One server per backend kind: every member leaves three of the four
+	// Distinct remote and tunneled backends: every member leaves the other
 	// backend columns null, so a null-matching guard would reject these.
 	servers := []uuid.UUID{
 		seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID),
 		seedMcpServer(t, ctx, ti.conn, *authCtx.ProjectID),
 		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
 			TunneledMcpServerID: conv.ToNullUUID(seedTunnelBackend(t, ctx, ti.conn, *authCtx.ProjectID)),
-		}),
-		seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{
-			ToolsetID: conv.ToNullUUID(seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)),
 		}),
 	}
 
@@ -223,7 +221,9 @@ func TestAddMetaMcpMember_AllowsDistinctBackends(t *testing.T) {
 	}
 }
 
-func TestAddMetaMcpMember_RejectsToolsetCanonicalServer(t *testing.T) {
+// Gateways never hold a hosted server: neither a toolset's own server nor a
+// second server fronting the same toolset can be added.
+func TestAddMetaMcpMember_RejectsHostedServers(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -231,26 +231,29 @@ func TestAddMetaMcpMember_RejectsToolsetCanonicalServer(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	meta := seedMetaMcpServer(t, ctx, ti, "canonical member host")
+	meta := seedMetaMcpServer(t, ctx, ti, "hosted member host")
 	toolsetID := seedToolsetBackend(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: toolsetID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted"),
 		Slug: conv.ToPGText("hosted-" + uuid.NewString()[:8]), ToolsetID: conv.ToNullUUID(toolsetID), Visibility: "private",
 	})
 	require.NoError(t, err)
-	member := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(toolsetID)})
+	wrapper := seedMcpServerFronting(t, ctx, ti.conn, *authCtx.ProjectID, mcpserversrepo.CreateMCPServerParams{ToolsetID: conv.ToNullUUID(toolsetID)})
 
-	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		MetaMcpServerID: meta.ID, McpServerID: toolsetID.String(), SortOrder: nil,
-	})
-	requireOopsCode(t, err, oops.CodeInvalid)
+	for _, serverID := range []uuid.UUID{toolsetID, wrapper} {
+		_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+			SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+			MetaMcpServerID: meta.ID, McpServerID: serverID.String(), SortOrder: nil,
+		})
+		requireOopsCode(t, err, oops.CodeInvalid)
+		require.ErrorIs(t, err, metamcp.ErrMemberServerIsHosted)
+	}
 
-	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
-		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
-		MetaMcpServerID: meta.ID, McpServerID: member.String(), SortOrder: nil,
+	members, err := ti.service.ListMetaMcpMembers(ctx, &gen.ListMetaMcpMembersPayload{
+		SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil, MetaMcpServerID: meta.ID,
 	})
 	require.NoError(t, err)
+	require.Empty(t, members.Members, "a refused add leaves no membership behind")
 }
 
 func TestAddMetaMcpMember_RemovedMemberFreesBackend(t *testing.T) {

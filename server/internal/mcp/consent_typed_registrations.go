@@ -39,7 +39,7 @@ func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID 
 	return offered, nil
 }
 
-// withTypedMemberRegistrations makes the registrations each proxied member
+// withTypedMemberRegistrations makes the registrations each member
 // offers through typed auth clients its associated clients, where typed auth
 // client resolution is enforced, so consent matches a service to the members
 // the resolver serves through it. A member offering none is matched to none.
@@ -47,25 +47,21 @@ func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID 
 func (s *Service) withTypedMemberRegistrations(ctx context.Context, organizationID string, members []metaMember) error {
 	ids := make([]uuid.UUID, 0, len(members))
 	for _, member := range members {
-		if member.backend == metaMemberBackendProxied {
-			ids = append(ids, member.serverID)
-		}
+		ids = append(ids, member.serverID)
 	}
 	offered, err := s.typedOfferedRegistrations(ctx, organizationID, ids)
 	if err != nil || offered == nil {
 		return err
 	}
 	for i := range members {
-		if members[i].backend != metaMemberBackendProxied {
-			continue
-		}
-		registrations := offered[members[i].serverID]
+		member := &members[i]
+		registrations := offered[member.serverID]
 		clients := make(map[uuid.UUID]bool, len(registrations))
 		for _, id := range registrations {
 			clients[id] = true
 		}
-		members[i].associatedClients = clients
-		members[i].typedRegistrations = true
+		member.associatedClients = clients
+		member.typedRegistrations = true
 	}
 	return nil
 }

@@ -151,9 +151,10 @@ func TestValidateCatalogMemberComparesTypedFingerprintUnderEnforcement(t *testin
 			if tc.enforced {
 				f.enforce()
 			}
-			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "source", backend: metaMemberBackendHosted, configuration: tc.current}
+			member := metaMember{serverID: f.serverID, projectID: f.projectID, slug: "source", configuration: tc.current}
 			approved := tc.approved
 			approved.ServerID, approved.ProjectID = member.serverID, member.projectID
+			approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID}
 			gate := &metaGateContext{
 				organizationID: f.orgID, discoveryMode: metamcp.DiscoveryModeCode, execute: true,
 				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},

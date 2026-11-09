@@ -160,7 +160,7 @@ func TestCreateGatewayRefusesEveryServerThatCannotJoinAndCreatesNothing(t *testi
 	refused := requireGatewayRefusal(t, err, "members_refused")
 	require.Len(t, refused, 2, "every server that cannot join is named, and only those")
 	require.Equal(t, f.toolsetID.String(), refused[0].MCPID)
-	require.Equal(t, "hosted_toolset_server", refused[0].Reason)
+	require.Equal(t, "hosted_server", refused[0].Reason)
 	require.Equal(t, unknown.String(), refused[1].MCPID)
 	require.Equal(t, "not_in_project", refused[1].Reason)
 
@@ -264,7 +264,7 @@ func TestSetGatewayMembersRefusalLeavesTheGatewayAsItWas(t *testing.T) {
 	_, err = f.set(ctx, created.GatewayID, a, f.toolsetID)
 	refused := requireGatewayRefusal(t, err, "members_refused")
 	require.Len(t, refused, 1)
-	require.Equal(t, "hosted_toolset_server", refused[0].Reason)
+	require.Equal(t, "hosted_server", refused[0].Reason)
 
 	unchanged, err := f.set(ctx, created.GatewayID, a, b)
 	require.NoError(t, err)

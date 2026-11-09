@@ -256,7 +256,9 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
-	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPublic, "alpha")
+	upstream := newCatalogUpstream(t, 1)
+	memberSlug := "listed-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Listed tools", memberSlug, 3, upstream.url)
 	listTools := makeMetaRPCBody(t, "tools/list", map[string]any{})
 
 	// A connection without a choice stays Progressive.
@@ -264,21 +266,60 @@ func TestServeOrganizationGateway_DirectConnectionListsMemberTools(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.Contains(t, w.Body.String(), `"name":"list_servers"`)
-	require.NotContains(t, w.Body.String(), hosted.slug+"--alpha")
+	require.NotContains(t, w.Body.String(), memberSlug+"--tool_000")
 
 	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeDirect)
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, listTools)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), `"name":"`+hosted.slug+`--alpha"`)
+	require.Contains(t, w.Body.String(), `"name":"`+memberSlug+`--tool_000"`)
 	require.NotContains(t, w.Body.String(), `"name":"list_servers"`)
 
 	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{
-		"name": hosted.slug + "--alpha", "arguments": map[string]any{},
+		"name": memberSlug + "--tool_000", "arguments": map[string]any{},
 	}))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	require.NotContains(t, w.Body.String(), "unknown tool")
+}
+
+// Hosted servers are never organization gateway members, even public ones
+// the caller can reach directly.
+func TestServeOrganizationGateway_DoesNotDeriveHostedServers(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "hosted-ts-"+uuid.NewString()[:8])
+	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "alpha")
+	hostedSlug := "hosted-" + uuid.NewString()[:8]
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+		ID:                  serverID,
+		ProjectID:           *authCtx.ProjectID,
+		Name:                conv.ToPGText("Hosted tools"),
+		Slug:                conv.ToPGText(hostedSlug),
+		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:           uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility:          mcpservers.VisibilityPublic,
+	})
+	require.NoError(t, err)
+
+	w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"slug":"`+fx.open+`"`)
+	require.NotContains(t, w.Body.String(), hostedSlug)
+
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeDirect)
+	w, err = serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/list", map[string]any{}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), hostedSlug+"--alpha")
 }
 
 func TestServeOrganizationGateway_SameSlugInTwoProjects(t *testing.T) {
@@ -523,12 +564,13 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
-	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPrivate, "alpha", "beta")
-	setToolsetMcpPrivate(t, ctx, ti, hosted.toolsetID, *authCtx.ProjectID)
+	// Two private members, so the selection is picked per source.
+	picked := newCatalogUpstream(t, 2)
+	pickedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Picked tools", "remote-picked", 3, picked.url)
 	upstream := newCatalogUpstream(t, 2)
 	remoteID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Remote", "remote-counted", 4, upstream.url)
-	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
-	for _, id := range []uuid.UUID{hosted.serverID, hosted.toolsetID, remoteID} {
+	for _, id := range []uuid.UUID{pickedID, remoteID} {
+		require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: id, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
 		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, id.String())
 	}
 	if mode == metamcp.DiscoveryModeCode {
@@ -550,7 +592,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 				names[server.Slug] = server.Name
 				require.NotNil(t, server.Connection)
 			}
-			require.Equal(t, "Hosted tools", names[hosted.slug])
+			require.Equal(t, "Picked tools", names["remote-picked"])
 			require.Equal(t, "Remote", names["remote-counted"])
 			page, err := host.Search(ctx, codemode.SearchArgs{Query: ""})
 			require.NoError(t, err)
@@ -559,13 +601,13 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 			for _, item := range page.Items {
 				paths = append(paths, item.Path)
 			}
-			require.Contains(t, paths, hosted.slug+"--alpha")
+			require.Contains(t, paths, "remote-picked--tool_000")
 			require.Contains(t, paths, "remote-counted--tool_000")
 			if !all {
-				require.NotContains(t, paths, hosted.slug+"--beta")
+				require.NotContains(t, paths, "remote-picked--tool_001")
 				require.NotContains(t, paths, "remote-counted--tool_001")
 			}
-			for _, path := range []string{hosted.slug + "--alpha", "remote-counted--tool_000"} {
+			for _, path := range []string{"remote-picked--tool_000", "remote-counted--tool_000"} {
 				described, err := host.Describe(ctx, path)
 				require.NoError(t, err)
 				require.Contains(t, string(described.Definition), `"inputSchema"`)
@@ -618,8 +660,8 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	for _, tool := range inventory.Tools {
 		names = append(names, tool.Name)
 	}
-	require.Contains(t, names, hosted.slug+"--alpha")
-	require.Contains(t, names, hosted.slug+"--beta")
+	require.Contains(t, names, "remote-picked--tool_000")
+	require.Contains(t, names, "remote-picked--tool_001")
 	require.Contains(t, names, "remote-counted--tool_000")
 
 	form := url.Values{}
@@ -632,7 +674,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	form.Set("tool_filtering", "off")
 	if !all {
 		form.Set("tool_filtering", "on")
-		form.Add("tools", hosted.slug+"--alpha")
+		form.Add("tools", "remote-picked--tool_000")
 		if mode == metamcp.DiscoveryModeCode {
 			form.Add("tools", "remote-counted--tool_000")
 		}
@@ -658,8 +700,8 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	} else {
 		require.NotNil(t, policy.Selection)
 		require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
-		require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
-		require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+		require.True(t, policy.Selection.AllowsName("remote-picked--tool_000"))
+		require.False(t, policy.Selection.AllowsName("remote-picked--tool_001"))
 	}
 	require.NotNil(t, policy.Catalog)
 	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
@@ -673,7 +715,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 	}
 	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
 	tokenCalls := seedExpiredCatalogCredential(t, ctx, ti, fx.issuerID, fx.subject)
-	before := upstream.requests.Load()
+	before, pickedBefore := upstream.requests.Load(), picked.requests.Load()
 	namesToCall := []string{"list_servers", "describe_server", "connection_status"}
 	if mode == metamcp.DiscoveryModeCode {
 		namesToCall = []string{"execute"}
@@ -684,7 +726,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 			arguments["code"] = "discover"
 		}
 		if name == "describe_server" {
-			arguments["server"] = hosted.slug
+			arguments["server"] = "remote-picked"
 		}
 		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": name, "arguments": arguments})
 		listed, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
@@ -693,6 +735,7 @@ func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode,
 		require.NotContains(t, listed.Body.String(), `"isError":true`)
 	}
 	require.Equal(t, before, upstream.requests.Load(), "organization gateway discovery reuses the consent catalog")
+	require.Equal(t, pickedBefore, picked.requests.Load(), "organization gateway discovery reuses the consent catalog")
 	require.Zero(t, tokenCalls.Load(), "organization gateway discovery never refreshes credentials")
 	if mode == metamcp.DiscoveryModeCode {
 		upstream.future.Store(true)

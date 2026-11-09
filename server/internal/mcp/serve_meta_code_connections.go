@@ -44,9 +44,6 @@ func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Serv
 // knownConnectionState reuses approval when the caller already checked it; nil checks here.
 func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember, approval *catalogApproval) *codemode.ConnectionState {
 	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "", CheckedAt: nil}
-	if member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid {
-		state.Authentication = "not_required"
-	}
 	if gate.catalog != nil {
 		state.Consent = "approved"
 		if approval == nil {
@@ -127,8 +124,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		Endpoint: ref, CreatedAt: now, FirstParty: true,
 		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, CatalogCanceled: false, ReviewReady: false},
 	}
-	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached &&
-		member.backend == metaMemberBackendProxied {
+	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
 			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
 			// The browser has not started an attempt yet; a fallback is not a failed sign-in.

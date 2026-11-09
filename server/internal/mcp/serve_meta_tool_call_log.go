@@ -11,7 +11,6 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
@@ -20,10 +19,9 @@ import (
 )
 
 // unresolvedToolKind stands in for the kind of a tool that failed before it
-// resolved to a hosted member's tool. It is deliberately not a urn.ToolKind:
-// the row keeps its "tools:" prefix and its gateway, member, and toolset
-// attribution, and its URN source stays empty rather than naming a kind the
-// tool may not have.
+// resolved to a member. It is deliberately not a urn.ToolKind: the row keeps
+// its "tools:" prefix and its gateway attribution, and its URN source stays
+// empty rather than naming a kind the tool may not have.
 const unresolvedToolKind = "unresolved"
 
 // gatewayDiscoveryToolPrefix starts the tool name of a member's row for a
@@ -38,36 +36,22 @@ type metaFailureRow struct {
 	// unstamped leaves out the gateway's stamp, for a call the gateway
 	// counts from another row.
 	unstamped bool
-
-	// source names the tool's source when its URN cannot carry one. Only a
-	// discovery failure row on a hosted member sets it.
-	source string
 }
 
 // metaToolCallAttemptKey carries a gateway member tool call's attempt into
-// handleToolsCall.
+// the member dispatch.
 type metaToolCallAttemptKey struct{}
 
-// metaToolCallAttempt is one gateway member tool call. A member dispatch
-// writes its own tool_call row once handleToolsCall resolves the tool; a call
-// that fails before that point is logged from the attempt instead, so every
-// failed call leaves exactly one row.
+// metaToolCallAttempt is one gateway member tool call. A member's upstream
+// interceptor writes its own tool_call row once the call is sent; a call that
+// fails before that point is logged from the attempt instead, so every failed
+// call leaves exactly one row.
 type metaToolCallAttempt struct {
 	// start is when the gateway received the call.
 	start time.Time
 
 	// member is the member the call named, once it is found.
 	member *metaMember
-
-	// toolsetSlug is a hosted member's toolset, once its dispatch is built.
-	toolsetSlug string
-
-	// descriptor is the resolved tool, once handleToolsCall knows it.
-	descriptor *gateway.ToolDescriptor
-
-	// logged is set once handleToolsCall has committed to writing the
-	// call's tool_call row.
-	logged bool
 
 	// proxied is set once a proxied member's tools/call is sent upstream,
 	// where the remotemcp interceptor writes the row. A dial or session
@@ -84,14 +68,11 @@ type metaToolCallAttempt struct {
 // newMetaToolCallAttempt starts an attempt for a call received at start.
 func newMetaToolCallAttempt(start time.Time) *metaToolCallAttempt {
 	return &metaToolCallAttempt{
-		start:       start,
-		member:      nil,
-		toolsetSlug: "",
-		descriptor:  nil,
-		logged:      false,
-		proxied:     false,
-		status:      0,
-		message:     "",
+		start:   start,
+		member:  nil,
+		proxied: false,
+		status:  0,
+		message: "",
 	}
 }
 
@@ -135,7 +116,7 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
-	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false, source: ""})
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false})
 	if params == nil {
 		return
 	}
@@ -174,10 +155,6 @@ func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qu
 	if !row.unstamped {
 		logAttrs[attr.MetaMcpServerIDKey] = gate.metaServerID.String()
 	}
-	// ToolInfo sets the source from a URN it can parse, which wins over this.
-	if row.source != "" {
-		logAttrs[attr.ToolCallSourceKey] = row.source
-	}
 	if member := attempt.member; member != nil {
 		toolInfo.ProjectID = member.projectID.String()
 		logAttrs[attr.McpServerIDKey] = member.serverID.String()
@@ -185,17 +162,6 @@ func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qu
 			toolInfo.Name = toolName
 			toolInfo.URN = metaMemberToolURN(*member, toolName)
 		}
-		if attempt.toolsetSlug != "" {
-			logAttrs.RecordToolsetSlug(attempt.toolsetSlug)
-		}
-	}
-	if descriptor := attempt.descriptor; descriptor != nil {
-		toolInfo.ID = descriptor.ID
-		toolInfo.URN = descriptor.URN.String()
-		toolInfo.Name = descriptor.Name
-		toolInfo.ProjectID = descriptor.ProjectID
-		toolInfo.DeploymentID = descriptor.DeploymentID
-		toolInfo.OrganizationID = descriptor.OrganizationID
 	}
 	if toolInfo.ProjectID == "" {
 		return nil
@@ -282,10 +248,7 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 	attempt := newMetaToolCallAttempt(start)
 	attempt.member = &failure.member
 	attempt.fail(failure.status, failure.message)
-	row := metaFailureRow{unstamped: true, source: ""}
-	if failure.member.backend == metaMemberBackendHosted {
-		row.source = failure.member.slug
-	}
+	row := metaFailureRow{unstamped: true}
 	qualified := metamcp.QualifyName(failure.member.slug, gatewayDiscoveryToolPrefix+toolName)
 	params := metaToolCallFailureLogParams(ctx, gate, qualified, failure.arguments, attempt, nil, row)
 	if params == nil {
@@ -317,12 +280,10 @@ func withOwnTrace(ctx context.Context, parent trace.SpanContext) context.Context
 }
 
 // metaMemberToolURN is the synthetic URN of a member tool that failed before
-// it resolved. Proxied members follow their upstream dispatch's URN, keyed on
-// the stable backend id rather than the mutable slug.
+// it was sent. It follows the member's upstream dispatch URN, keyed on the
+// stable backend id rather than the mutable slug.
 func metaMemberToolURN(member metaMember, toolName string) string {
 	switch {
-	case member.backend == metaMemberBackendHosted:
-		return "tools:" + unresolvedToolKind + ":" + member.serverID.String() + ":" + toolName
 	case member.remoteServerID.Valid:
 		return "tools:" + string(urn.ToolKindExternalMCP) + ":" + member.remoteServerID.UUID.String() + ":" + toolName
 	default:

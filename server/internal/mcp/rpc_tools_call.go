@@ -240,13 +240,6 @@ func handleToolsCall(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed get tool call plan").LogError(ctx, logger)
 	}
 
-	// A gateway dispatch that fails before the telemetry row below is
-	// registered is logged by the gateway, under this resolved tool.
-	metaAttempt, _ := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt)
-	if metaAttempt != nil {
-		metaAttempt.descriptor = plan.Descriptor
-	}
-
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
@@ -387,7 +380,7 @@ func handleToolsCall(
 		toolURN:         toolURN.String(),
 		toolsetSlug:     payload.toolset,
 		mcpServerID:     serverID,
-		metaMCPServerID: payload.metaMcpServerID,
+		metaMCPServerID: "",
 		mcpURL:          mcpURL,
 		clientName:      clientIdentity.Name,
 		clientVersion:   clientIdentity.Version,
@@ -415,7 +408,7 @@ func handleToolsCall(
 			ChatID:                conv.PtrEmpty(toolCallEnv.GramChatID),
 			MCPServerID:           optionalUUIDString(attributedMCPServerID),
 			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
-			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
+			MetaMCPServerID:       nil,
 			Type:                  plan.BillingType,
 			ResourceURI:           "",
 			FunctionCPUUsage:      functionCPU,
@@ -456,9 +449,6 @@ func handleToolsCall(
 		}
 		logAttrs.RecordToolsetSlug(payload.toolset)
 		recordServingLogAttrs(logAttrs, attributedMCPServerID, payload.mcpEndpointID)
-		if payload.metaMcpServerID != "" {
-			logAttrs[attr.MetaMcpServerIDKey] = payload.metaMcpServerID
-		}
 		logAttrs.RecordMCPURL(mcpURL)
 		logAttrs.RecordMCPClient(clientIdentity.Name, clientIdentity.Version)
 		params := tm.LogParams{
@@ -477,10 +467,6 @@ func handleToolsCall(
 		}
 		telemLogger.Log(ctx, params)
 	}()
-	if metaAttempt != nil {
-		metaAttempt.logged = true
-	}
-
 	// The record is built when the call returns, so a call the scan stops still
 	// shows, and published off the response path.
 	defer func() {
@@ -494,7 +480,7 @@ func handleToolsCall(
 		OrganizationID:  descriptor.OrganizationID,
 		ProjectID:       descriptor.ProjectID,
 		ServerID:        serverID,
-		MetaServerID:    payload.metaMcpServerID,
+		MetaServerID:    "",
 		ToolsetID:       toolset.ID,
 		ToolName:        descriptor.Name,
 		ResourceURI:     "",
@@ -507,19 +493,12 @@ func handleToolsCall(
 		// A held call is an instruction, not a refusal: the agent reads the
 		// tool result, requests approval and retries.
 		rw.resultIsError = true
-		identity := serverInfoHostedToolset
-		if payload.metaMcpServerID != "" {
-			identity = serverInfoMetaServer
-		}
-		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
+		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, serverInfoHostedToolset)
 	}
 	if decision.Denied() {
 		failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
-	}
-	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
-		invocation.dispatched = true
 	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
@@ -533,13 +512,6 @@ func handleToolsCall(
 			rw.body.Reset()
 			rw.failure = interruption.Failure
 			return nil, interruption.Response
-		}
-		// The proxy refused a body it could not decode before contacting the
-		// tool's server, so a Code Mode program can fix it and call again.
-		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
-			invocation.dispatched = false
-			invocation.rejected = true
-			invocation.message = "invalid request body"
 		}
 		if rejected, ok := toolCallRejection(ctx, logger, err, attr.SlogToolName(params.Name)); ok {
 			recordToolCallErrorStatus(ctx, rw, rejected)
@@ -557,16 +529,6 @@ func handleToolsCall(
 	}
 
 	outputBytes = int64(rw.body.Len())
-
-	// The proxy refused the input before contacting the tool's server, so a
-	// Code Mode program can fix its arguments and call again.
-	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
-		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
-			invocation.dispatched = false
-			invocation.rejected = true
-			invocation.message = toolInputRejection(rw.body.Bytes())
-		}
-	}
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	if cpuStr := rw.headers.Get(functions.FunctionsCPUHeader); cpuStr != "" {
@@ -1017,15 +979,4 @@ func filterOmittedEnvVars(
 	}
 
 	return nil
-}
-
-// toolInputRejection extracts the proxy's input refusal from its error body.
-func toolInputRejection(body []byte) string {
-	var refusal struct {
-		Error string `json:"error"`
-	}
-	if err := json.Unmarshal(body, &refusal); err == nil && refusal.Error != "" {
-		return refusal.Error
-	}
-	return strings.TrimSpace(string(body))
 }
