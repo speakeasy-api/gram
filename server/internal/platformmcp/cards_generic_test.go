@@ -223,6 +223,20 @@ func TestDetailCardFindsTheNamedSubject(t *testing.T) {
 	require.Contains(t, rendered, "<code>support</code>")
 }
 
+// A read with no named subject but a list, such as a member's MCP servers,
+// is drawn as that list.
+func TestDetailWithoutSubjectFallsBackToList(t *testing.T) {
+	t.Parallel()
+
+	rendered := genericCardHTML(t, "See a Member's MCP Server Access", cardKindDetail, map[string]any{
+		"member":  map[string]any{"masked_identity": ""},
+		"servers": []map[string]any{{"mcp_name": "CRM"}, {"mcp_name": "Docs"}},
+	})
+	require.Contains(t, rendered, "2 servers")
+	require.Contains(t, rendered, "CRM")
+	require.NotContains(t, rendered, ">Details<")
+}
+
 func TestReceiptCardSaysWhatHappened(t *testing.T) {
 	t.Parallel()
 

@@ -135,6 +135,13 @@ func genericCard(ctx context.Context, links cardLinks, title string, spec cardSp
 		card = receiptCard(title, object)
 	default:
 		card = detailCard(title, object)
+		// A read that names no single resource but returns a list, such as
+		// a member's MCP servers, reads better as that list.
+		if cardSubject(object).firstString(cardNameKeys) == "" {
+			if listed, ok := listCard(title, object); ok {
+				card = listed
+			}
+		}
 	}
 	// A link the result itself returns, such as a setup or sign-in URL, is
 	// the next step and wins over the page link.
