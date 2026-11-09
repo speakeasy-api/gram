@@ -1450,6 +1450,11 @@ ORDER BY s.name;
 -- distributed to a plugin the user holds is still unreachable if RBAC does not
 -- allow it, so distribution is not consulted. Principal precedence also
 -- matches: a direct grant naming the skill outranks an inherited block.
+--
+-- Blocks pair with allows as the engine's exclusions do: skill:blocked_write
+-- withdraws skill:write, and skill:blocked_read withdraws both skill:read and
+-- skill:write, because a write check also honours a read block (see
+-- scopeExpansions in authz/scopes.go).
 WITH user_grants AS (
   SELECT
     pg.scope,
@@ -1498,7 +1503,10 @@ JOIN grant_matches allowed
 WHERE NOT EXISTS (
   SELECT 1 FROM grant_matches blocked
   WHERE blocked.skill_id = cs.id
-    AND blocked.scope = 'skill:blocked_' || split_part(allowed.scope, ':', 2)
+    AND (
+      blocked.scope = 'skill:blocked_read'
+      OR (blocked.scope = 'skill:blocked_write' AND allowed.scope = 'skill:write')
+    )
     AND (blocked.direct OR NOT (allowed.direct AND allowed.concrete))
 )
 -- SELECT DISTINCT only permits ORDER BY over selected columns, and

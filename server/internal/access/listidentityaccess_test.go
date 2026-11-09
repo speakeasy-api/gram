@@ -1,8 +1,11 @@
 package access
 
 import (
+	"context"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
@@ -62,4 +65,69 @@ func TestService_ListIdentityAccess_OwnBlockOutranksOwnGrant(t *testing.T) {
 	result, err := ti.service.ListIdentityAccess(ctx, &gen.ListIdentityAccessPayload{UserID: "local_blocked", SessionToken: nil})
 	require.NoError(t, err)
 	require.Empty(t, result.Servers)
+}
+
+func seedSkill(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) string {
+	t.Helper()
+
+	projectID := seedProject(t, ctx, conn, organizationID)
+	skillID := uuid.New()
+	_, err := conn.Exec(ctx,
+		`INSERT INTO skills (id, project_id, name, display_name) VALUES ($1, $2, $3, $4)`,
+		skillID, projectID, "skill-"+skillID.String()[:8], "Skill "+skillID.String()[:8],
+	)
+	require.NoError(t, err)
+	return skillID.String()
+}
+
+func listedSkillIDs(result *gen.ListIdentityAccessResult) []string {
+	ids := make([]string, 0, len(result.Skills))
+	for _, skill := range result.Skills {
+		ids = append(ids, skill.ID)
+	}
+	return ids
+}
+
+// A read block also withdraws write access, as it does in the engine, so a
+// skill:write grant does not keep a read-blocked skill listed.
+func TestService_ListIdentityAccess_SkillReadBlockWithdrawsWriteGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	blockedSkill := seedSkill(t, ctx, ti.conn, orgID)
+	openSkill := seedSkill(t, ctx, ti.conn, orgID)
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_skill_writer", "skill-writer@test.com", "Skill Writer", "workos_skill_writer", "membership_skill_writer")
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "local_skill_writer")
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillWrite, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillBlockedRead, blockedSkill)
+
+	result, err := ti.service.ListIdentityAccess(ctx, &gen.ListIdentityAccessPayload{UserID: "local_skill_writer", SessionToken: nil})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{openSkill}, listedSkillIDs(result))
+}
+
+// A write block leaves read access in place, as it does in the engine.
+func TestService_ListIdentityAccess_SkillWriteBlockLeavesReadGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	skill := seedSkill(t, ctx, ti.conn, orgID)
+
+	seedConnectedUser(t, ctx, ti.conn, orgID, "local_skill_reader", "skill-reader@test.com", "Skill Reader", "workos_skill_reader", "membership_skill_reader")
+	userPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, "local_skill_reader")
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillRead, authz.WildcardResource)
+	seedGrant(t, ctx, ti.conn, orgID, userPrincipal, authz.ScopeSkillBlockedWrite, skill)
+
+	result, err := ti.service.ListIdentityAccess(ctx, &gen.ListIdentityAccessPayload{UserID: "local_skill_reader", SessionToken: nil})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{skill}, listedSkillIDs(result))
 }
