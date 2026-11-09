@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
@@ -269,7 +270,7 @@ func handleToolsCall(
 		}
 	}
 
-	userConfig, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
+	userConfig, credentialSources, err := resolveUserConfiguration(ctx, logger, env, payload, plan)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +304,10 @@ func handleToolsCall(
 		GramEmail:  gramEmail,
 		GramChatID: payload.chatID,
 		MCPClient:  clientIdentity,
+		Credentials: &toolconfig.CredentialReport{
+			Sent:         nil,
+			GrantFailure: "",
+		},
 	}
 
 	err = filterOmittedEnvVars(ctx, toolCallEnv, mcpMetadataRepo, payload.projectID, toolsetID)
@@ -656,7 +661,80 @@ func handleToolsCall(
 		return nil, failure
 	}
 
+	if plan.Kind == gateway.ToolKindHTTP {
+		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, toolCallEnv.Credentials, credentialSources)
+	}
 	return bs, nil
+}
+
+// credentialSource is who supplied a variable a tool call may send as a credential.
+type credentialSource string
+
+const (
+	// credentialSourceSaved is an admin-set environment, the default for any variable not marked otherwise.
+	credentialSourceSaved credentialSource = "saved"
+
+	// credentialSourceCaller is a value the caller sent in a request header.
+	credentialSourceCaller credentialSource = "caller"
+
+	// credentialSourcePerson is the caller's own sign-in.
+	credentialSourcePerson credentialSource = "person"
+
+	// credentialSourceShared is the organization's shared sign-in.
+	credentialSourceShared credentialSource = "shared"
+)
+
+// httpToolRejectionHappened says who fixes an HTTP tool call its provider answered with 401 or 403,
+// from the credentials the call actually sent. A caller's own credential, or none, writes nothing.
+func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, sources map[string]credentialSource) mcpconnectionattempts.Code {
+	var none mcpconnectionattempts.Code
+	if report == nil || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+		return none
+	}
+	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
+		if source, ok := sources[strings.ToLower(credential.Variable)]; ok && !credential.System {
+			return source
+		}
+		return credentialSourceSaved
+	}
+
+	var sent remotemcp.UpstreamCredentialSent
+	for _, credential := range report.Sent {
+		switch sourceOf(credential) {
+		case credentialSourceCaller:
+			if credential.ClientGrant {
+				return none
+			}
+		case credentialSourcePerson:
+			sent.Attached = true
+		case credentialSourceShared:
+			sent.Self = true
+		case credentialSourceSaved:
+			if credential.ClientGrant {
+				sent.Self = true
+			} else {
+				sent.Configured = true
+			}
+		}
+	}
+
+	// The proxy answered 401 itself because it could not get a client credentials token.
+	switch report.GrantFailure {
+	case toolconfig.ClientGrantRejected:
+		return mcpconnectionattempts.CodeSharedCredentialRejected
+	case toolconfig.ClientGrantUnavailable:
+		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantMisconfigured:
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	}
+	code, _ := remotemcp.UpstreamFailureHappened(status, sent, false, "")
+	return code
+}
+
+// oauthTokenCovers reports whether dispatch writes token into the scheme's access token variable.
+func oauthTokenCovers(security *gateway.HTTPToolSecurity, token oauthTokenInputs) bool {
+	return (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") &&
+		(len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key))
 }
 
 // toolCallRejection answers a failed tool execution that the caller has to fix
@@ -711,8 +789,13 @@ func resolveUserConfiguration(
 	env toolconfig.EnvironmentLoader,
 	payload *mcpInputs,
 	plan *gateway.ToolCallPlan,
-) (*toolconfig.CaseInsensitiveEnv, error) {
+) (*toolconfig.CaseInsensitiveEnv, map[string]credentialSource, error) {
 	userConfig := toolconfig.NewCaseInsensitiveEnv()
+	sources := make(map[string]credentialSource)
+	set := func(key, value string, source credentialSource) {
+		userConfig.Set(key, value)
+		sources[strings.ToLower(key)] = source
+	}
 
 	// IMPORTANT: we must only attach gram environments to authenticated payloads. Speakeasy environments contain
 	// secrets owned by Speakeasy projects and should not be usable by public clients
@@ -720,28 +803,28 @@ func resolveUserConfiguration(
 		storedEnvVars, err := env.Load(ctx, payload.projectID, toolconfig.Slug(payload.environment))
 		switch {
 		case errors.Is(err, toolconfig.ErrNotFound):
-			return nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeBadRequest, err, "environment not found").LogError(ctx, logger)
 		case err != nil:
-			return nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
 		}
 
 		for k, v := range storedEnvVars {
-			userConfig.Set(k, v)
+			set(k, v, credentialSourceSaved)
 		}
 	}
 
 	for k, v := range payload.mcpEnvVariables {
-		userConfig.Set(k, v)
+		set(k, v, credentialSourceCaller)
 	}
 
 	// Process OAuth tokens for HTTP tools
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
-				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
-							userConfig.Set(envVar, token.Token)
+							set(envVar, token.Token, token.source())
 						}
 					}
 				}
@@ -758,7 +841,15 @@ func resolveUserConfiguration(
 		}
 	}
 
-	return userConfig, nil
+	return userConfig, sources, nil
+}
+
+// source says whose sign-in the token is.
+func (t oauthTokenInputs) source() credentialSource {
+	if t.shared {
+		return credentialSourceShared
+	}
+	return credentialSourcePerson
 }
 
 func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string, accountType string, billingRepository billing.Repository) error {

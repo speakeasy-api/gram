@@ -38,6 +38,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -329,7 +330,7 @@ func TestCallerSubjectPreservesAuthenticatedAgent(t *testing.T) {
 			hosted := mcpconnectionattemptstest.New(t)
 			service := &Service{connections: hosted.Recorder}
 			serverID := uuid.New()
-			service.recordHostedToolsCallRefusal(ctx, &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID}, errRiskPolicyDenied)
+			service.recordHostedToolsCallOutcome(ctx, &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID}, errRiskPolicyDenied)
 			hostedRow := hosted.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodePolicyBlocked)
 			require.Equal(t, urn.NewAgentSubject(agent).String(), hostedRow.SubjectURN)
 
@@ -590,4 +591,114 @@ func TestHostedMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 	require.Equal(t, member.serverID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1)
+}
+
+// A hosted HTTP tool's 401 or 403 names whose credential the provider refused; anything else writes nothing.
+func TestHTTPToolRejectionHappened(t *testing.T) {
+	t.Parallel()
+
+	user := func(variable string) toolconfig.AppliedCredential {
+		return toolconfig.AppliedCredential{Variable: variable}
+	}
+	system := func(variable string) toolconfig.AppliedCredential {
+		return toolconfig.AppliedCredential{Variable: variable, System: true}
+	}
+	grant := func(credential toolconfig.AppliedCredential) toolconfig.AppliedCredential {
+		credential.ClientGrant = true
+		return credential
+	}
+	sources := map[string]credentialSource{
+		"person_access_token": credentialSourcePerson,
+		"shared_access_token": credentialSourceShared,
+		"caller_key":          credentialSourceCaller,
+		"caller_access_token": credentialSourceCaller,
+		"caller_secret":       credentialSourceCaller,
+		"environment_key":     credentialSourceSaved,
+	}
+	none := mcpconnectionattempts.Code{}
+
+	for _, tc := range []struct {
+		name    string
+		status  int
+		sent    []toolconfig.AppliedCredential
+		failure toolconfig.ClientGrantFailure
+		want    mcpconnectionattempts.Code
+		who     mcpconnectionattempts.WhoFixes
+	}{
+		{name: "person's sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "shared sign-in", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("SHARED_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "saved client grant", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "environment key", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "filtered sign-in falls back to a system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token endpoint refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token endpoint down", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantUnavailable, want: mcpconnectionattempts.CodeRemoteSessionUnavailable, who: mcpconnectionattempts.WhoProvider},
+		{name: "token url blocked", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantBlocked, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "token url wrong", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantMisconfigured, want: mcpconnectionattempts.CodeCredentialMisconfigured, who: mcpconnectionattempts.WhoAdmin},
+		{name: "caller's client secret refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: none},
+		{name: "caller's client secret rejected upstream", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, want: none},
+		{name: "caller's access token", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_ACCESS_TOKEN")}, want: none},
+		{name: "caller's own key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_KEY")}, want: none},
+		{name: "no credential", status: http.StatusUnauthorized, want: none},
+		{name: "served", status: http.StatusOK, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
+		{name: "not found", status: http.StatusNotFound, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
+		{name: "rate limited", status: http.StatusTooManyRequests, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
+		{name: "server error", status: http.StatusInternalServerError, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Sent: tc.sent, GrantFailure: tc.failure}, sources)
+			require.Equal(t, tc.want, got)
+			if tc.want == none {
+				return
+			}
+			meaning, ok := mcpconnectionattempts.MeaningOf(got.String())
+			require.True(t, ok)
+			require.Equal(t, tc.who, meaning.WhoFixes)
+		})
+	}
+}
+
+// A provider's rejection writes one row for a hosted server; a refusal keeps its own code.
+func TestRecordHostedToolsCallOutcome(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	payload := func(rejection mcpconnectionattempts.Code) *mcpInputs {
+		return &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID, upstreamRejection: rejection}
+	}
+
+	rejected := mcpconnectionattemptstest.New(t)
+	(&Service{connections: rejected.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.CodeStaticKeyRejected), nil)
+	rejected.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Len(t, rejected.Rows(), 1)
+
+	served := mcpconnectionattemptstest.New(t)
+	(&Service{connections: served.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.Code{}), nil)
+	served.RequireNothing()
+
+	failed := mcpconnectionattemptstest.New(t)
+	(&Service{connections: failed.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.Code{}), errors.New("tool execution failed"))
+	failed.RequireNothing()
+}
+
+// A person's rejected sign-in is recorded only for a caller we know; an organization's credential always is.
+func TestRecordHostedToolsCallOutcomeNeedsACallerForPersonRejection(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	record := func(ctx context.Context, rejection mcpconnectionattempts.Code) *mcpconnectionattemptstest.Recording {
+		rec := mcpconnectionattemptstest.New(t)
+		(&Service{connections: rec.Recorder}).recordHostedToolsCallOutcome(ctx, &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID, upstreamRejection: rejection}, nil)
+		return rec
+	}
+
+	record(t.Context(), mcpconnectionattempts.CodeProviderRejected).RequireNothing()
+	record(t.Context(), mcpconnectionattempts.CodeSharedCredentialRejected).RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeSharedCredentialRejected)
+	record(t.Context(), mcpconnectionattempts.CodeStaticKeyRejected).RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+
+	signedIn := contextvalues.SetAuthContext(t.Context(), &contextvalues.AuthContext{UserID: "person"})
+	row := record(signedIn, mcpconnectionattempts.CodeProviderRejected).RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+	require.Equal(t, urn.NewUserSubject("person").String(), row.SubjectURN)
 }
