@@ -318,6 +318,110 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 	return total, err
 }
 
+const countChatsByUser = `-- name: CountChatsByUser :many
+WITH candidate_chats AS (
+  SELECT c.id, c.created_at, c.user_id
+  FROM chats c
+  WHERE c.project_id = $1
+    AND c.deleted IS FALSE
+    AND ($2 = '' OR c.external_user_id = $2)
+    AND ($3 = '' OR c.user_id = $3 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($4::uuid[])))
+    AND NOT EXISTS (
+      SELECT 1 FROM assistant_threads warmup
+      WHERE warmup.chat_id = c.id
+        AND warmup.project_id = c.project_id
+        AND warmup.deleted IS FALSE
+        AND warmup.source_kind = 'warmup'
+    )
+),
+chat_activity AS (
+  SELECT
+    cc.id,
+    cc.created_at,
+    cc.user_id,
+    COALESCE(last_msg.ts, cc.created_at) AS last_message_timestamp
+  FROM candidate_chats cc
+  CROSS JOIN LATERAL (
+    SELECT MAX(cm.created_at) AS ts
+    FROM chat_messages cm
+    WHERE cm.chat_id = cc.id
+      AND cm.project_id = $1::uuid
+  ) last_msg
+)
+, attributed AS (
+  SELECT
+    CASE WHEN $3::text <> '' THEN $3::text ELSE COALESCE(ca.user_id, '') END AS owner_id
+  FROM chat_activity ca
+  WHERE ($5::timestamptz IS NULL OR ca.last_message_timestamp >= $5)
+    AND ($6::timestamptz IS NULL OR ca.created_at <= $6)
+)
+SELECT
+  a.owner_id::text AS user_id,
+  COALESCE(MAX(u.email), '')::text AS email,
+  COALESCE(MAX(u.display_name), '')::text AS display_name,
+  COUNT(*)::bigint AS chat_count
+FROM attributed a
+LEFT JOIN users u ON u.id = a.owner_id AND u.deleted_at IS NULL
+GROUP BY a.owner_id
+ORDER BY chat_count DESC, user_id ASC
+`
+
+type CountChatsByUserParams struct {
+	ProjectID      uuid.UUID
+	ExternalUserID interface{}
+	UserID         interface{}
+	OwnedAgentIds  []uuid.UUID
+	FromTime       pgtype.Timestamptz
+	ToTime         pgtype.Timestamptz
+}
+
+type CountChatsByUserRow struct {
+	UserID      string
+	Email       string
+	DisplayName string
+	ChatCount   int64
+}
+
+// Per-user session counts for the project dashboard. Shares CountChats'
+// unfiltered population (project, not deleted, warmup threads excluded,
+// visibility scope, activity-overlap window) so each user's count equals what
+// chats.list returns when filtered to that user, and the counts sum to the
+// unfiltered chats.list total. Chats with no user_id (external users, agent
+// actors) group under ”. Under an own-sessions scope (@user_id set) every
+// visible row, including owned agents' sessions, belongs to that user, as it
+// does in chats.list.
+func (q *Queries) CountChatsByUser(ctx context.Context, arg CountChatsByUserParams) ([]CountChatsByUserRow, error) {
+	rows, err := q.db.Query(ctx, countChatsByUser,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.OwnedAgentIds,
+		arg.FromTime,
+		arg.ToTime,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []CountChatsByUserRow
+	for rows.Next() {
+		var i CountChatsByUserRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Email,
+			&i.DisplayName,
+			&i.ChatCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countInferenceMessages = `-- name: CountInferenceMessages :one
 SELECT count(*) FROM chat_messages
 WHERE chat_id = $1 AND project_id = $2

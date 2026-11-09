@@ -72,6 +72,11 @@ func ListSourcesChatPath() string {
 	return "/rpc/chat.listSources"
 }
 
+// CountByUserChatPath returns the URL path to the chat service countByUser HTTP endpoint.
+func CountByUserChatPath() string {
+	return "/rpc/chat.countByUser"
+}
+
 // ListSessionLinksChatPath returns the URL path to the chat service listSessionLinks HTTP endpoint.
 func ListSessionLinksChatPath() string {
 	return "/rpc/chat.listSessionLinks"

@@ -22,6 +22,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -73,6 +74,8 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); !ok || actor.Type != urn.PrincipalTypeUser || actor.ID != userID {
 		return nil, errPlatformGatewayIdentity
 	}
+	// As on a gateway: one recorded check per server the call names.
+	ctx = authz.WithOneChallengePerResource(ctx)
 	if _, delegated := principalcredential.FromContext(ctx); delegated {
 		return nil, errPlatformGatewayIdentity
 	}
@@ -138,6 +141,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		authentication:       nil,
 		unapprovedMembers:    nil,
 		hiddenMembers:        nil,
+		deniedMembers:        nil,
 		execute:              false,
 		discoveryMode:        metamcp.DiscoveryModeProgressive,
 		authenticated:        true,
@@ -148,8 +152,8 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		apiKeyID:             "",
 		protocolVersion:      mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:           connectURL,
-		agentOwner:           nil,
 		consentDiagnostics:   nil,
+		agentOwner:           nil,
 		skillsOverMCP:        nil,
 		servedCredentials:    nil,
 		skippedClientFailure: nil,
@@ -220,11 +224,16 @@ func (s *Service) searchPlatformGatewayTools(ctx context.Context, logger *slog.L
 		return nil, err
 	}
 	if args.Server != "" {
-		member, ok := findMetaMember(members, args.Server)
+		member, ok := s.findNamedMember(ctx, gate, members, args.Server)
 		if !ok {
 			return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 		}
 		members = []metaMember{member}
+	}
+	if args.Server == "" {
+		// A search across every server names none of them, so it records no
+		// authorization check for any.
+		ctx = authz.WithoutChallenges(ctx)
 	}
 
 	var mu sync.Mutex

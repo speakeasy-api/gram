@@ -350,14 +350,16 @@ func dispositionFromAnnotations(a *externalmcp.ToolAnnotations) string {
 }
 
 // filterToolsByMCPConnect keeps the tools the caller may connect to and stops
-// once the request is canceled.
+// once the request is canceled. Listing records no authorization check per
+// tool: the caller asked for a list, not for any one tool, and the call that
+// names a tool records its own.
 func filterToolsByMCPConnect(ctx context.Context, logger *slog.Logger, authzEngine *authz.Engine, resourceID string, projectID string, tools []*toolListEntry) ([]*toolListEntry, error) {
 	allowed := make([]*toolListEntry, 0, len(tools))
 	for _, t := range tools {
 		if err := ctx.Err(); err != nil {
 			return nil, fmt.Errorf("filter tools by authz: %w", err)
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
+		if err := authzEngine.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(resourceID, authz.MCPToolCallDimensions{
 			Tool:        t.Name,
 			Disposition: dispositionFromAnnotations(t.Annotations),
 			ProjectID:   projectID,

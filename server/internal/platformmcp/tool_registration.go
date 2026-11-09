@@ -2,6 +2,7 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 
 	"github.com/google/uuid"
@@ -11,10 +12,10 @@ import (
 )
 
 type RegisterCatalogMCPToolInput struct {
-	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the reviewed MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
+	ProjectSlug     string                     `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
 	ProviderKey     string                     `json:"provider_key" jsonschema:"server-issued catalogue source identity returned by search_mcp_catalog"`
 	CatalogRef      string                     `json:"catalog_ref" jsonschema:"exact catalogue reference returned by search_mcp_catalog"`
-	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_catalog_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
+	NonSecretConfig CatalogConfigurationValues `json:"non_secret_config,omitempty" jsonschema:"only declared non-secret configuration values keyed by inspect_mcp_candidate configuration field key; do not include API keys, tokens, passwords, OAuth codes, client secrets, or secret headers"`
 	IdempotencyKey  string                     `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project, catalogue candidate, and non-secret configuration"`
 }
 
@@ -29,11 +30,12 @@ type RegisterCatalogMCPToolOutput struct {
 	AlreadyRegistered   bool                        `json:"already_registered"`
 	NextAction          string                      `json:"next_action"`
 	DashboardSetupURL   string                      `json:"dashboard_setup_url,omitempty"`
+	SignInURL           string                      `json:"sign_in_url,omitempty" jsonschema:"when next_action is connect_sign_in, present this link for the user to sign in: it sets up sign-in and takes them to the provider, so do not also call attach_platform_mcp_identity_provider; it is the result card's Connect link"`
 	SecretFieldsPending []CatalogConfigurationField `json:"secret_fields_pending,omitempty"`
 }
 
 type RegisterRemoteMCPToolInput struct {
-	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional project slug that will own the user-supplied MCP; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
+	ProjectSlug    string `json:"project_slug,omitempty" jsonschema:"optional owning project slug; defaults to the organization's default project (a project assistant always uses its own)"`
 	RemoteURL      string `json:"remote_url" jsonschema:"HTTPS Streamable HTTP MCP URL; safe endpoint query parameters are supported, but fragments, userinfo, headers, credentials, and credential-like query parameters are not accepted"`
 	DisplayName    string `json:"display_name,omitempty" jsonschema:"optional project-local display name for the MCP; maximum 256 bytes; when omitted, the name the server reports for itself is used, or else the URL's host name; a new server's slug and address are derived from this name"`
 	IdempotencyKey string `json:"idempotency_key" jsonschema:"caller-generated idempotency key; reuse only to retry the same project and canonical remote URL"`
@@ -49,6 +51,7 @@ type RegisterRemoteMCPToolOutput struct {
 	AutomaticClientRegistration string `json:"automatic_client_registration,omitempty" jsonschema:"for a server that requires sign-in, the automatic OAuth client setup its provider offers: dynamic_client_registration, client_id_metadata_document, or none when it offers neither or OAuth discovery is incomplete; next_action says whether sign-in can be connected in chat (connect_sign_in) or needs the dashboard setup"`
 	NextAction                  string `json:"next_action"`
 	DashboardSetupURL           string `json:"dashboard_setup_url,omitempty"`
+	SignInURL                   string `json:"sign_in_url,omitempty" jsonschema:"when next_action is connect_sign_in, present this link for the user to sign in: it sets up sign-in and takes them to the provider, so do not also call attach_platform_mcp_identity_provider; it is the result card's Connect link"`
 }
 
 // registerCatalogRegistrationTool registers the reviewed-catalogue workflow in
@@ -59,7 +62,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 	addTool(reg, &mcp.Tool{
 		Name:        "register_catalog_mcp",
 		Title:       "Add a Catalog MCP Server to a Project",
-		Description: "Add one reviewed catalogue MCP server to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. This writes private project configuration only: it is not distributed to anyone until it is put into a plugin. When already_registered is true the server was already in that project and nothing new was added: say so instead of calling it added.",
+		Description: "Add one reviewed catalogue MCP server to a named project, or else the organization's default project; project_slug in the result names it. This writes private project configuration only: nothing is distributed until it is put into a plugin. already_registered true means the server was already there and nothing was added: say so instead of calling it added.",
 		Annotations: registrationAnnotations(),
 		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterCatalogMCPToolInput) (*mcp.CallToolResult, RegisterCatalogMCPToolOutput, error) {
@@ -113,7 +116,16 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				dashboardSetupURL = ""
 			}
 		}
-		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, nextAction, dashboardSetupURL, result.Receipt.AlreadyRegistered, "")), RegisterCatalogMCPToolOutput{
+		signInURL, err := registrations.signInURL(ctx, principal, result.Project, result.Registration, nextAction)
+		if err != nil {
+			// The card falls back to the dashboard setup link; the registration
+			// itself has committed and must not be reported as failed.
+			registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			if reg.logger != nil {
+				reg.logger.ErrorContext(ctx, "platform mcp catalog registration sign-in link failed after commit", attr.SlogError(err))
+			}
+		}
+		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, nextAction, cmp.Or(signInURL, dashboardSetupURL), result.Receipt.AlreadyRegistered, "")), RegisterCatalogMCPToolOutput{
 			ProjectSlug:         result.Project.Slug,
 			ProviderKey:         result.ProviderKey,
 			CatalogRef:          result.CatalogRef,
@@ -124,6 +136,7 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 			AlreadyRegistered:   result.Receipt.AlreadyRegistered,
 			NextAction:          nextAction,
 			DashboardSetupURL:   dashboardSetupURL,
+			SignInURL:           signInURL,
 			SecretFieldsPending: append([]CatalogConfigurationField(nil), result.SecretFieldsPending...),
 		}, nil
 	})
@@ -137,7 +150,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 	addTool(reg, &mcp.Tool{
 		Name:        "register_remote_mcp",
 		Title:       "Add Your Own MCP Server to a Project",
-		Description: "Add one MCP server of the user's own, by its Streamable HTTP URL, to a named project, or to the organization's default project when none is named; project_slug in the result says which project it was added to. Constraints: the URL is revalidated and re-inspected first. This writes private project configuration only: it is not distributed to anyone until it is put into a plugin, and a project Shadow MCP policy is applied at that later step, where the administrator's distribution counts as the review. When already_registered is true the server was already in that project and nothing new was added: say so instead of calling it added. When next_action is connect_sign_in, the server signs users in with OAuth and its client is set up automatically: tell the user so, offer to connect sign-in now, and only after explicit confirmation call attach_platform_mcp_identity_provider and present its authorization URL; dashboard_setup_url is the fallback.",
+		Description: "Add one of the user's own MCP servers, by Streamable HTTP URL, to a named project, or else the organization's default project; project_slug in the result names it. The URL is revalidated and re-inspected first. This writes private project configuration only: nothing is distributed until it is put into a plugin, where a project Shadow MCP policy applies and the administrator's distribution counts as the review. already_registered true means the server was already there and nothing was added: say so instead of calling it added. When next_action is connect_sign_in, present sign_in_url as a link for the user to sign in; it sets up sign-in itself. Without it, offer attach_platform_mcp_identity_provider after explicit confirmation; dashboard_setup_url is the fallback.",
 		Annotations: registrationAnnotations(),
 		Meta:        cardToolMeta(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, func(ctx context.Context, _ *mcp.CallToolRequest, input RegisterRemoteMCPToolInput) (*mcp.CallToolResult, RegisterRemoteMCPToolOutput, error) {
@@ -170,7 +183,16 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, result.NextAction, result.DashboardSetupURL, result.Receipt.AlreadyRegistered, result.RemoteURL)), RegisterRemoteMCPToolOutput{
+		signInURL, err := registrations.signInURL(ctx, principal, result.Project, result.Registration, result.NextAction)
+		if err != nil {
+			// The card falls back to the dashboard setup link; the registration
+			// itself has committed and must not be reported as failed.
+			registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			if reg.logger != nil {
+				reg.logger.ErrorContext(ctx, "platform mcp remote registration sign-in link failed after commit", attr.SlogError(err))
+			}
+		}
+		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, result.NextAction, cmp.Or(signInURL, result.DashboardSetupURL), result.Receipt.AlreadyRegistered, result.RemoteURL)), RegisterRemoteMCPToolOutput{
 			ProjectSlug:                 result.Project.Slug,
 			CanonicalURL:                result.RemoteURL,
 			ReceiptID:                   result.Receipt.ID.String(),
@@ -180,6 +202,7 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 			AutomaticClientRegistration: result.AutomaticClientRegistration,
 			NextAction:                  result.NextAction,
 			DashboardSetupURL:           result.DashboardSetupURL,
+			SignInURL:                   signInURL,
 		}, nil
 	})
 }

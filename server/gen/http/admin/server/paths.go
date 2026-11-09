@@ -477,6 +477,11 @@ func UpdateSignupOfferAdminPath() string {
 	return "/admin/signupOffers.update"
 }
 
+// ListPlatformMcpFeedbackAdminPath returns the URL path to the admin service listPlatformMcpFeedback HTTP endpoint.
+func ListPlatformMcpFeedbackAdminPath() string {
+	return "/admin/platformMcpFeedback.list"
+}
+
 // GetStripeSubscriptionCandidateAdminPath returns the URL path to the admin service getStripeSubscriptionCandidate HTTP endpoint.
 func GetStripeSubscriptionCandidateAdminPath() string {
 	return "/admin/organization.stripeSubscriptionCandidate"

@@ -126,11 +126,13 @@ interface BaseDimension<K extends FilterKind> {
    */
   allLabel?: string;
   /**
-   * The dimension always holds a value — there is no "all" for it, so its chip
-   * hides the × rather than offering a clear that resolves straight back to a
-   * value. Use for a scope the query cannot run without (e.g. the project a
-   * list is read within), never merely for a filter that happens to be
-   * important.
+   * Clearing the dimension never leaves it empty: the page resolves a missing
+   * value straight back to one, so its chip hides the × rather than offering a
+   * clear that looks like a no-op. Select controls also drop their "All …" row,
+   * unless `allLabel` names the empty state as a selection in its own right
+   * (e.g. "Anonymous excluded"), in which case the row is the way back to it.
+   * Use for a scope the query cannot run without (e.g. the project a list is
+   * read within), never merely for a filter that happens to be important.
    */
   required?: boolean;
 }
@@ -296,6 +298,16 @@ function dateRangeLabel(value: DateRangeValue, dim: FilterDimension): string {
  */
 export function allLabelFor(dim: FilterDimension): string {
   return dim.allLabel ?? `All ${pluralizeNoun(dim.label.toLowerCase())}`;
+}
+
+/**
+ * A required dimension with no named empty state always resolves to a real
+ * option, so an "All" row would only ever snap back to the first one. When
+ * `allLabel` is set the empty state is itself a selection (e.g. "Anonymous
+ * excluded") and the row is the only way back to it.
+ */
+export function hidesAllOption(dim: FilterDimension): boolean {
+  return !!dim.required && !dim.allLabel;
 }
 
 /**

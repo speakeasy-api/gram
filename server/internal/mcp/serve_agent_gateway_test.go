@@ -752,3 +752,83 @@ func TestServeAgentGateway_ExecutesPlatformToolOnHostedMember(t *testing.T) {
 	require.False(t, isError, text)
 	require.NotContains(t, text, "platform tool requires project auth context")
 }
+
+// A Slack platform tool on a server with no Slack token is a configuration
+// gap, not an internal error: the agent gets a tool error that names the
+// missing variable and who adds it, instead of a bare JSON-RPC -32603.
+func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "slack-member-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "search_channels")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{
+		ID: serverID, ProjectID: projectID,
+		Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted),
+		ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID.String())
+	seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeAgent, fx.agent.ID.String()), toolset.ID)
+	token := mintAgentGatewayKey(t, ctx, ti, fx.agent.ID, toolset.ID)
+
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "execute_tool",
+		"arguments": map[string]any{
+			"name": fx.granted + "--platform_slack_search_channels", "arguments": map[string]any{},
+		},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+	rpc := decodeRPCResponse(t, response)
+	require.NotContains(t, rpc, "error", "a missing token is not an internal error")
+	text, isError := metaToolResultText(t, rpc)
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q failed to execute %q: server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN).", fx.granted, "platform_slack_search_channels"))
+	require.Contains(t, text, "An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.")
+}
+
+// Called directly at /mcp/{slug}, the same Slack configuration gap answers
+// with its own failed precondition, not the generic rejection.
+func TestServePublic_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "slack-direct-"+uuid.NewString()[:8])
+	_, err := toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "search_channels")},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
+	require.NoError(t, err)
+
+	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name": "platform_slack_search_channels", "arguments": map[string]any{},
+	}), ti.createTestAPIKey(ctx, t), nil)
+	require.NoError(t, err)
+	var response struct {
+		Error struct {
+			Code    oops.MCPCode `json:"code"`
+			Message string       `json:"message"`
+		} `json:"error"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), w.Body.String())
+	require.Equal(t, oops.CodeFailedPrecondition.MCPCode(), response.Error.Code)
+	require.Equal(t, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.", response.Error.Message)
+}

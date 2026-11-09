@@ -219,6 +219,7 @@ trackedFiles:
   src/funcs/businessMemoriesList.ts: {}
   src/funcs/businessMemoriesListContentScopes.ts: {}
   src/funcs/businessMemoriesSearch.ts: {}
+  src/funcs/chatCountByUser.ts: {}
   src/funcs/chatCreditUsage.ts: {}
   src/funcs/chatDelete.ts: {}
   src/funcs/chatGenerateTitle.ts: {}
@@ -1077,6 +1078,7 @@ trackedFiles:
   src/models/components/chatsessionlink.ts: {}
   src/models/components/chatsummary.ts: {}
   src/models/components/chattotals.ts: {}
+  src/models/components/chatusersessioncount.ts: {}
   src/models/components/checkagentpolicygrantsform.ts: {}
   src/models/components/checkagentpolicygrantsresult.ts: {}
   src/models/components/cimdclientpreset.ts: {}
@@ -1093,6 +1095,7 @@ trackedFiles:
   src/models/components/completebindingrefreshrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsrequestbody.ts: {}
   src/models/components/confirmoktaresourceconnectionsresult.ts: {}
+  src/models/components/countchatsbyuserresult.ts: {}
   src/models/components/countremotesessionsresult.ts: {}
   src/models/components/createagentform.ts: {}
   src/models/components/createagentpolicygrantform.ts: {}
@@ -2332,6 +2335,7 @@ trackedFiles:
   src/models/operations/compileexpr.ts: {}
   src/models/operations/completebindingrefresh.ts: {}
   src/models/operations/confirmoktaresourceconnections.ts: {}
+  src/models/operations/countchatsbyuser.ts: {}
   src/models/operations/countremotesessions.ts: {}
   src/models/operations/createagent.ts: {}
   src/models/operations/createagentpolicygrant.ts: {}
@@ -3276,6 +3280,8 @@ trackedFiles:
   src/react-query/cloneToolset.ts: {}
   src/react-query/commitServerIdentityConfiguration.ts: {}
   src/react-query/confirmOktaResourceConnections.ts: {}
+  src/react-query/countChatsByUser.core.ts: {}
+  src/react-query/countChatsByUser.ts: {}
   src/react-query/createAPIKey.ts: {}
   src/react-query/createAgent.ts: {}
   src/react-query/createAgentSessionHandoff.ts: {}
@@ -5171,6 +5177,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  countChatsByUser:
+    speakeasy-default-count-chats-by-user:
+      parameters:
+        query:
+          limit: 10
+      responses:
+        "200":
+          application/json: {"total": 73492, "users": [{"count": 205882, "display_name": "Lurline_Gislason", "email": "Aidan.Zemlak49@hotmail.com", "user_id": "<id>"}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   countRemoteSessions:
     speakeasy-default-count-remote-sessions:
       parameters:

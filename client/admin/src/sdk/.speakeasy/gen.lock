@@ -95,6 +95,7 @@ trackedFiles:
   src/funcs/adminListOrganizationMembers.ts: {}
   src/funcs/adminListOrganizationProjects.ts: {}
   src/funcs/adminListOrganizations.ts: {}
+  src/funcs/adminListPlatformMcpFeedback.ts: {}
   src/funcs/adminListProjectMcpServers.ts: {}
   src/funcs/adminListRegistryEntries.ts: {}
   src/funcs/adminListRegistryOktaUnmapped.ts: {}
@@ -219,6 +220,7 @@ trackedFiles:
   src/models/components/adminorganizationonboardingplaybook.ts: {}
   src/models/components/adminorganizationstats.ts: {}
   src/models/components/adminpaygbillingsummary.ts: {}
+  src/models/components/adminplatformmcpfeedback.ts: {}
   src/models/components/adminproject.ts: {}
   src/models/components/adminprojectdetail.ts: {}
   src/models/components/adminprojectredeploypreview.ts: {}
@@ -289,6 +291,7 @@ trackedFiles:
   src/models/components/issuermigratepreflight.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listissuerconvergencecandidatesresult.ts: {}
+  src/models/components/listplatformmcpfeedbackresponsebody.ts: {}
   src/models/components/listsignupoffersresponsebody.ts: {}
   src/models/components/markenterprisetrialconvertedrequestbody.ts: {}
   src/models/components/markenterprisetrialconvertedresult.ts: {}
@@ -380,6 +383,7 @@ trackedFiles:
   src/models/operations/adminlistorganizationmembers.ts: {}
   src/models/operations/adminlistorganizationprojects.ts: {}
   src/models/operations/adminlistorganizations.ts: {}
+  src/models/operations/adminlistplatformmcpfeedback.ts: {}
   src/models/operations/adminlistprojectmcpservers.ts: {}
   src/models/operations/adminlistregistryentries.ts: {}
   src/models/operations/adminlistregistrypromotioncandidates.ts: {}
@@ -470,6 +474,8 @@ trackedFiles:
   src/react-query/adminListOrganizationProjects.ts: {}
   src/react-query/adminListOrganizations.core.ts: {}
   src/react-query/adminListOrganizations.ts: {}
+  src/react-query/adminListPlatformMcpFeedback.core.ts: {}
+  src/react-query/adminListPlatformMcpFeedback.ts: {}
   src/react-query/adminListProjectMcpServers.core.ts: {}
   src/react-query/adminListProjectMcpServers.ts: {}
   src/react-query/adminListRegistryEntries.core.ts: {}
@@ -1397,6 +1403,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  adminListPlatformMcpFeedback:
+    speakeasy-default-admin-list-platform-mcp-feedback:
+      parameters:
+        query:
+          limit: 200
+      responses:
+        "200":
+          application/json: {"feedback": [{"category": "<value>", "created_at": "2025-11-16T19:16:15.623Z", "delivery_state": "<value>", "expires_at": "2025-03-25T18:21:47.946Z", "id": "27f012a4-a624-4da5-a5fe-79bbc52909ff", "organization_id": "<id>", "subject_urn": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   adminListProjectMcpServers:
     speakeasy-default-admin-list-project-mcp-servers:
       parameters:

@@ -708,9 +708,18 @@ func handleToolsCall(
 // client can emit hundreds an hour, enough at error level to hold this
 // component's error-rate monitors at their threshold and mask a genuine
 // regression for a whole alert window.
+//
+// When the failure carries a ShareableError, the rejection answers with the
+// innermost one's code and message, which name what the caller has to change
+// (every ShareableError public message is written to be client-safe).
+// Otherwise it answers with a generic rejection.
 func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) (*oops.ShareableError, bool) {
 	if !oops.IsClientFault(err) {
 		return nil, false
+	}
+
+	if inner := oops.Innermost(err); inner != nil {
+		return oops.E(inner.Code, err, "%s", inner.Error()).LogWarn(ctx, logger, args...), true
 	}
 
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true

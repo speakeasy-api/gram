@@ -13,6 +13,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import {
   allLabelFor,
+  hidesAllOption,
   flattenOptions,
   isGroupedOptions,
   type DateRangeValue,
@@ -94,7 +95,11 @@ export function FilterControl({
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
+            {!hidesAllOption(dim) && (
+              <SelectItem value={SELECT_ALL_VALUE}>
+                {allLabelFor(dim)}
+              </SelectItem>
+            )}
             {flattenOptions(options).map((o) => (
               <SelectItem
                 key={o.value}

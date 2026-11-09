@@ -3443,6 +3443,80 @@ func (q *Queries) GetPlatformMCPReadiness(ctx context.Context, arg GetPlatformMC
 	return i, err
 }
 
+const getPlatformMCPRegistrationAwaitingSignIn = `-- name: GetPlatformMCPRegistrationAwaitingSignIn :one
+SELECT registration.id, registration.catalog_provider, project.slug AS project_slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+WHERE registration.mcp_server_id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+  AND server.remote_session_issuer_id IS NULL
+ORDER BY registration.id
+LIMIT 1
+`
+
+type GetPlatformMCPRegistrationAwaitingSignInParams struct {
+	McpServerID    uuid.NullUUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type GetPlatformMCPRegistrationAwaitingSignInRow struct {
+	ID              uuid.UUID
+	CatalogProvider string
+	ProjectSlug     string
+}
+
+// The live registration behind an MCP server whose sign-in provider is not
+// connected yet, so the consent page can connect it before it lists sign-in
+// options. No row once the server has a sign-in provider.
+func (q *Queries) GetPlatformMCPRegistrationAwaitingSignIn(ctx context.Context, arg GetPlatformMCPRegistrationAwaitingSignInParams) (GetPlatformMCPRegistrationAwaitingSignInRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationAwaitingSignIn, arg.McpServerID, arg.OrganizationID, arg.ProjectID)
+	var i GetPlatformMCPRegistrationAwaitingSignInRow
+	err := row.Scan(&i.ID, &i.CatalogProvider, &i.ProjectSlug)
+	return i, err
+}
+
+const getPlatformMCPRegistrationConnectSlug = `-- name: GetPlatformMCPRegistrationConnectSlug :one
+SELECT endpoint.slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_endpoints AS endpoint
+  ON endpoint.id = registration.mcp_endpoint_id
+ AND endpoint.project_id = registration.project_id
+ AND endpoint.mcp_server_id = registration.mcp_server_id
+ AND endpoint.custom_domain_id IS NULL
+ AND endpoint.deleted IS FALSE
+WHERE registration.id = $1
+  AND registration.organization_id = $2
+  AND registration.project_id = $3
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+`
+
+type GetPlatformMCPRegistrationConnectSlugParams struct {
+	RegistrationID uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// The platform endpoint slug a live registration's consent page is served at.
+// Custom-domain endpoints have no platform consent page, so they return no row.
+func (q *Queries) GetPlatformMCPRegistrationConnectSlug(ctx context.Context, arg GetPlatformMCPRegistrationConnectSlugParams) (string, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPRegistrationConnectSlug, arg.RegistrationID, arg.OrganizationID, arg.ProjectID)
+	var slug string
+	err := row.Scan(&slug)
+	return slug, err
+}
+
 const getPlatformMCPRegistrationLogo = `-- name: GetPlatformMCPRegistrationLogo :one
 SELECT a.url, a.content_type, a.content_length
 FROM platform_mcp_catalog_registrations r
@@ -5474,6 +5548,7 @@ SELECT
     m.toolset_id,
     m.unproxied_mcp_server_id,
     m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5601,6 +5676,7 @@ type ListPlatformMCPInventoryRow struct {
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
 	BuiltinBackend                  pgtype.Text
+	UserSessionIssuerID             uuid.NullUUID
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5657,6 +5733,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
 			&i.BuiltinBackend,
+			&i.UserSessionIssuerID,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
@@ -7192,6 +7269,53 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 			&i.PluginSlug,
 			&i.PluginDisplayName,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPServerNamesByResourceIDs = `-- name: ListPlatformMCPServerNamesByResourceIDs :many
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY($2::uuid[]) OR m.toolset_id = ANY($2::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id
+`
+
+type ListPlatformMCPServerNamesByResourceIDsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type ListPlatformMCPServerNamesByResourceIDsRow struct {
+	McpServerID uuid.UUID
+	ToolsetID   uuid.NullUUID
+	Name        string
+}
+
+// Names the MCP servers that authorization checks name by resource ID: a
+// server's own ID, which its endpoint checks, or the toolset ID the
+// organization gateway checks for a toolset-backed server. A toolset's
+// canonical server comes first, then the oldest, so it names the toolset.
+func (q *Queries) ListPlatformMCPServerNamesByResourceIDs(ctx context.Context, arg ListPlatformMCPServerNamesByResourceIDsParams) ([]ListPlatformMCPServerNamesByResourceIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServerNamesByResourceIDs, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPServerNamesByResourceIDsRow
+	for rows.Next() {
+		var i ListPlatformMCPServerNamesByResourceIDsRow
+		if err := rows.Scan(&i.McpServerID, &i.ToolsetID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

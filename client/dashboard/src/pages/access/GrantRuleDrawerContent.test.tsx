@@ -493,3 +493,33 @@ describe("grant rule picker checkboxes", () => {
     expect(screen.getByRole("checkbox", { name: "Project one" })).toBeTruthy();
   });
 });
+
+describe("grant rule project toggle", () => {
+  // A project-wide selector may be stored with no resource id. It ticks the
+  // project, so unticking the project must remove it too.
+  it.each(["mcp", "inference"] as const)(
+    "unticks a %s project-wide selector stored with no resource id",
+    (resourceType) => {
+      const onChangeSelectors = vi.fn<(selectors: Selector[] | null) => void>();
+      const stored: Selector = {
+        resourceKind: resourceType,
+        resourceId: "",
+        projectId: "project_one",
+      };
+      render(
+        <GrantRuleDrawerContent
+          resourceType={resourceType}
+          scope={
+            resourceType === "inference" ? "inference:execute" : "mcp:read"
+          }
+          selectors={[stored]}
+          onChangeSelectors={onChangeSelectors}
+        />,
+      );
+      const row = screen.getByRole("checkbox", { name: "Project one" });
+      expect(row.getAttribute("aria-checked")).toBe("true");
+      fireEvent.click(row);
+      expect(onChangeSelectors).toHaveBeenLastCalledWith([]);
+    },
+  );
+});

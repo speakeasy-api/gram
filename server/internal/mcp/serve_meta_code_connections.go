@@ -85,7 +85,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if err != nil {
 		return nil, err
 	}
-	member, ok := findMetaMember(members, server)
+	member, ok := b.service.findNamedMember(ctx, gate, members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
