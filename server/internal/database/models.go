@@ -6361,18 +6361,25 @@ type SessionHandoffLink struct {
 }
 
 type SessionHandoffUploadIntent struct {
-	ID             uuid.UUID
-	ProjectID      uuid.UUID
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
 	OrganizationID string
 	// @access: confidential
 	ActorUserID pgtype.Text
 	// @access: secret-restricted
 	ObjectPath string
 	// @access: secret-restricted
-	BlobUrl   string
-	State     string
+	BlobUrl string
+	// @access: confidential
+	State string
+	// @access: confidential
 	LastError pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
+	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
 }
 

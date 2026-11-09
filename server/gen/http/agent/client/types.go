@@ -154,8 +154,8 @@ type CreateSessionHandoffRequestBody struct {
 	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
 	// when omitted.
 	TTLSeconds *int `form:"ttl_seconds,omitempty" json:"ttl_seconds,omitempty" xml:"ttl_seconds,omitempty"`
-	// Optional retry key. Reuse the same key only when retrying an identical
-	// session, content, effective TTL, source, and device request.
+	// Optional printable-ASCII retry key. Reuse the same key only when retrying an
+	// identical session, content, effective TTL, source, and device request.
 	IdempotencyKey *string `form:"idempotency_key,omitempty" json:"idempotency_key,omitempty" xml:"idempotency_key,omitempty"`
 }
 

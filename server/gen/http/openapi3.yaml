@@ -106173,7 +106173,9 @@ components:
                     maxLength: 262144
                 idempotency_key:
                     type: string
-                    description: Optional retry key. Reuse the same key only when retrying an identical session, content, effective TTL, source, and device request.
+                    description: Optional printable-ASCII retry key. Reuse the same key only when retrying an identical session, content, effective TTL, source, and device request.
+                    pattern: ^[ -~]+$
+                    minLength: 1
                     maxLength: 128
                 session_id:
                     type: string

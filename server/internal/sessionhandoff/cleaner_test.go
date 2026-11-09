@@ -19,7 +19,7 @@ type cleanerRepositoryStub struct {
 	deletedIDs []uuid.UUID
 }
 
-func (s *cleanerRepositoryStub) ListExpiredUnread(context.Context, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error) {
+func (s *cleanerRepositoryStub) ListExpiredUnread(context.Context, uuid.UUID, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error) {
 	return s.rows, s.listErr
 }
 
@@ -59,7 +59,7 @@ func TestExpiredUnreadCleanerClean(t *testing.T) {
 	blobs := &blobDeleterStub{}
 	cleaner := NewExpiredUnreadCleaner(repository, blobs)
 
-	more, err := cleaner.Clean(t.Context())
+	_, more, err := cleaner.CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.False(t, more)
 	require.Equal(t, []uuid.UUID{id}, repository.deletedIDs)
@@ -72,7 +72,7 @@ func TestExpiredUnreadCleanerDoesNotDeleteRowWhenBlobDeleteFails(t *testing.T) {
 	repository := &cleanerRepositoryStub{rows: []ExpiredUnread{{ID: uuid.New(), BlobURL: "s3://handoffs/expired.md"}}}
 	cleaner := NewExpiredUnreadCleaner(repository, &blobDeleterStub{err: errors.New("storage unavailable")})
 
-	_, err := cleaner.Clean(t.Context())
+	_, _, err := cleaner.CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.ErrorContains(t, err, "blob")
 	require.Empty(t, repository.deletedIDs)
 }
@@ -85,7 +85,7 @@ func TestExpiredUnreadCleanerReportsFullBatch(t *testing.T) {
 	}
 	cleaner := NewExpiredUnreadCleaner(&cleanerRepositoryStub{rows: rows}, &blobDeleterStub{})
 
-	more, err := cleaner.Clean(t.Context())
+	_, more, err := cleaner.CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.True(t, more)
 }
@@ -99,7 +99,7 @@ func TestExpiredUnreadCleanerContinuesAfterMalformedURL(t *testing.T) {
 	}}
 	blobs := &blobDeleterStub{}
 
-	_, err := NewExpiredUnreadCleaner(repository, blobs).Clean(t.Context())
+	_, _, err := NewExpiredUnreadCleaner(repository, blobs).CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.Equal(t, []uuid.UUID{goodID}, repository.deletedIDs)
 	require.Len(t, blobs.deleted, 1)
@@ -115,13 +115,13 @@ func TestExpiredUnreadCleanerRetriesAfterDatabaseFailure(t *testing.T) {
 	blobs := &blobDeleterStub{}
 	cleaner := NewExpiredUnreadCleaner(repository, blobs)
 
-	_, err := cleaner.Clean(t.Context())
+	_, _, err := cleaner.CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.ErrorContains(t, err, "database unavailable")
 	require.Len(t, blobs.deleted, 1)
 	require.Empty(t, repository.deletedIDs)
 
 	repository.deleteErr = nil
-	_, err = cleaner.Clean(t.Context())
+	_, _, err = cleaner.CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.Len(t, blobs.deleted, 2)
 	require.Equal(t, []uuid.UUID{id}, repository.deletedIDs)
@@ -134,7 +134,7 @@ func TestExpiredUnreadCleanerConsumerClaimWinsRace(t *testing.T) {
 		claimLost: true,
 	}
 	blobs := &blobDeleterStub{}
-	_, err := NewExpiredUnreadCleaner(repository, blobs).Clean(t.Context())
+	_, _, err := NewExpiredUnreadCleaner(repository, blobs).CleanProjectAfter(t.Context(), uuid.New(), nil)
 	require.NoError(t, err)
 	require.Empty(t, blobs.deleted, "cleaner must not delete after losing the conditional claim")
 	require.Empty(t, repository.deletedIDs)

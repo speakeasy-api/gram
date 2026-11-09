@@ -147,19 +147,19 @@ const (
 )
 
 // safeChooserText turns database metadata into bounded display-only text. It
-// repairs invalid UTF-8, removes controls (including C1) and Unicode format
-// controls such as bidi overrides, collapses whitespace, and truncates only at
+// repairs invalid UTF-8, normalizes whitespace, removes remaining controls
+// (including C1) and Unicode format controls such as bidi overrides, and truncates only at
 // rune boundaries.
 func safeChooserText(value string, maxBytes int, fallback string) string {
 	value = strings.ToValidUTF8(value, string(utf8.RuneError))
 	var b strings.Builder
 	pendingSpace := false
 	for _, r := range value {
-		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
-			continue
-		}
 		if unicode.IsSpace(r) {
 			pendingSpace = b.Len() > 0
+			continue
+		}
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			continue
 		}
 		if pendingSpace {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -21,8 +22,31 @@ func NewPgxExpiredUnreadRepository(db *pgxpool.Pool) *PgxExpiredUnreadRepository
 	return &PgxExpiredUnreadRepository{queries: repo.New(db)}
 }
 
-func (r *PgxExpiredUnreadRepository) ListExpiredUnread(ctx context.Context, cursor *ExpiredUnreadCursor, batchSize int32) ([]ExpiredUnread, error) {
+func (r *PgxExpiredUnreadRepository) ListExpiredUnreadProjects(ctx context.Context, cursor *uuid.UUID, batchSize int32) ([]uuid.UUID, error) {
+	params := repo.ListProjectsWithExpiredSessionHandoffsParams{
+		ConsumerLeaseBefore: conv.ToPGTimestamptz(time.Now().Add(-ConsumerClaimLease)),
+		AfterProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		BatchSize:           batchSize,
+	}
+	if cursor != nil {
+		params.AfterProjectID = uuid.NullUUID{UUID: *cursor, Valid: true}
+	}
+	rows, err := r.queries.ListProjectsWithExpiredSessionHandoffs(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list projects with expired unread session handoffs: %w", err)
+	}
+	result := make([]uuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		if row.Valid {
+			result = append(result, row.UUID)
+		}
+	}
+	return result, nil
+}
+
+func (r *PgxExpiredUnreadRepository) ListExpiredUnread(ctx context.Context, projectID uuid.UUID, cursor *ExpiredUnreadCursor, batchSize int32) ([]ExpiredUnread, error) {
 	var params repo.ListExpiredUnreadSessionHandoffLinksParams
+	params.ProjectID = projectID
 	params.ConsumerLeaseBefore = conv.ToPGTimestamptz(time.Now().Add(-ConsumerClaimLease))
 	params.BatchSize = batchSize
 	if cursor != nil {

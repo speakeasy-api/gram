@@ -335,6 +335,7 @@ func TestSafeChooserTextRepairsAndBoundsHostileMetadata(t *testing.T) {
 	require.NotContains(t, got, "\u0085")
 	require.NotContains(t, got, "\x00")
 	require.NotContains(t, got, "  ")
+	require.Equal(t, "Fix login bug now", safeChooserText("Fix\tlogin\nbug\rnow", 40, capturedSessionFallback))
 	require.Equal(t, capturedSessionFallback, safeChooserText("\u202e\x00\t", 40, capturedSessionFallback))
 }
 

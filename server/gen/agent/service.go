@@ -560,8 +560,8 @@ type CreateSessionHandoffPayload struct {
 	// Requested link lifetime in seconds. Clamped to [60, 3600]; defaults to 900
 	// when omitted.
 	TTLSeconds *int
-	// Optional retry key. Reuse the same key only when retrying an identical
-	// session, content, effective TTL, source, and device request.
+	// Optional printable-ASCII retry key. Reuse the same key only when retrying an
+	// identical session, content, effective TTL, source, and device request.
 	IdempotencyKey *string
 	// Hardware serial number of the machine minting the link, when the agent can
 	// read it.

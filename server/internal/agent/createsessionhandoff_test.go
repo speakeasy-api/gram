@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -385,7 +386,7 @@ func TestCreateSessionHandoff_ExpiredCleanupPreservesIdempotencyTombstone(t *tes
 	require.NoError(t, err)
 
 	cleaner := sessionhandoff.NewExpiredUnreadCleaner(sessionhandoff.NewPgxExpiredUnreadRepository(ti.conn), ti.blobs)
-	_, err = cleaner.Clean(ctx)
+	_, _, err = cleaner.CleanProjectAfter(ctx, ti.projectID, nil)
 	require.NoError(t, err)
 
 	payload := &gen.CreateSessionHandoffPayload{SessionID: sessionID, Content: content, TTLSeconds: conv.PtrEmpty(300), IdempotencyKey: &key}
@@ -531,7 +532,7 @@ func TestExpiredCleanerRespectsActiveConsumerLease(t *testing.T) {
 		ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), Token: token, ProjectID: ti.projectID,
 	}))
 	cleaner := sessionhandoff.NewExpiredUnreadCleaner(sessionhandoff.NewPgxExpiredUnreadRepository(ti.conn), ti.blobs)
-	_, err = cleaner.Clean(ctx)
+	_, _, err = cleaner.CleanProjectAfter(ctx, ti.projectID, nil)
 	require.NoError(t, err)
 	exists, err := ti.blobs.Exists(ctx, blobURL)
 	require.NoError(t, err)
@@ -540,7 +541,7 @@ func TestExpiredCleanerRespectsActiveConsumerLease(t *testing.T) {
 	require.NoError(t, fixtures.AgeSessionHandoffConsumerClaimFixture(ctx, testrepo.AgeSessionHandoffConsumerClaimFixtureParams{
 		AttemptedAt: conv.ToPGTimestamptz(time.Now().Add(-sessionhandoff.ConsumerClaimLease - time.Minute)), Token: token, ProjectID: ti.projectID,
 	}))
-	_, err = cleaner.Clean(ctx)
+	_, _, err = cleaner.CleanProjectAfter(ctx, ti.projectID, nil)
 	require.NoError(t, err)
 	exists, err = ti.blobs.Exists(ctx, blobURL)
 	require.NoError(t, err)
@@ -741,4 +742,77 @@ func TestSessionHandoffOldReplicaRegistryCleansAfterProjectDeletion(t *testing.T
 	exists, err := ti.blobs.Exists(ctx, blobURL)
 	require.NoError(t, err)
 	require.False(t, exists)
+}
+
+func TestCreateSessionHandoffMissingProjectReturnsNotFound(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	require.NoError(t, testrepo.New(ti.conn).HardDeleteProjectFixture(ctx, ti.projectID))
+	userCtx := withPerUserKeyAuth(t, ctx, "dev@example.test")
+	_, err := ti.service.CreateSessionHandoff(userCtx, &gen.CreateSessionHandoffPayload{
+		SessionID: uuid.NewString(), Content: "# missing project",
+	})
+	requireCode(t, err, oops.CodeNotFound)
+}
+
+func TestSessionHandoffRegistryRejectsCrossProjectBlobConflict(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	secondProjectID := seedProject(t, ctx, ti.conn, ti.orgID, "handoff-registry-conflict")
+	blobURL := "https://example.test/session-handoffs/tenant-conflict.md"
+	queries := repo.New(ti.conn)
+	_, err := queries.CreateSessionHandoffUploadIntent(ctx, repo.CreateSessionHandoffUploadIntentParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, ActorUserID: "first-user",
+		ObjectPath: "session-handoffs/tenant-conflict.md", BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+
+	err = testrepo.New(ti.conn).InsertLegacySessionHandoffLinkFixture(ctx, testrepo.InsertLegacySessionHandoffLinkFixtureParams{
+		ProjectID: secondProjectID, OrganizationID: ti.orgID, SessionID: uuid.NewString(),
+		Token: strings.Repeat("9", 64), BlobUrl: blobURL, CreatedByEmail: "legacy@example.test",
+	})
+	require.ErrorContains(t, err, "registry tenant conflict")
+	registry, err := testrepo.New(ti.conn).GetSessionHandoffUploadRegistryFixture(ctx, testrepo.GetSessionHandoffUploadRegistryFixtureParams{
+		ProjectID: ti.projectID, BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, ti.projectID, registry.ProjectID)
+	require.Equal(t, ti.orgID, registry.OrganizationID)
+	require.Equal(t, "pending", registry.State)
+}
+
+func TestExpiredCleanerScopesSelectionToOneProject(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	secondProjectID := seedProject(t, ctx, ti.conn, ti.orgID, "handoff-cleanup-scope")
+	minter := sessionhandoff.NewSessionHandoffMinter(testenv.NewLogger(t), ti.conn, ti.blobs, "https://example.test", audit.NewLogger())
+	mint := func(projectID uuid.UUID, userID string) (string, *url.URL) {
+		t.Helper()
+		result, err := minter.Mint(ctx, sessionhandoff.SessionHandoffMintInput{
+			OrganizationID: ti.orgID, ProjectID: projectID, UserID: userID,
+			ChatID: uuid.New(), SessionID: uuid.NewString(), Content: "# scoped cleanup",
+		})
+		require.NoError(t, err)
+		token := result.URL[strings.LastIndex(result.URL, "/")+1:]
+		row, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
+		require.NoError(t, err)
+		blobURL, err := url.Parse(row.BlobUrl)
+		require.NoError(t, err)
+		require.NoError(t, testrepo.New(ti.conn).ExpireSessionHandoffLinkFixture(ctx, testrepo.ExpireSessionHandoffLinkFixtureParams{
+			ExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)), Token: token, ProjectID: projectID,
+		}))
+		return token, blobURL
+	}
+	_, firstBlob := mint(ti.projectID, "first-user")
+	_, secondBlob := mint(secondProjectID, "second-user")
+
+	cleaner := sessionhandoff.NewExpiredUnreadCleaner(sessionhandoff.NewPgxExpiredUnreadRepository(ti.conn), ti.blobs)
+	_, _, err := cleaner.CleanProjectAfter(ctx, ti.projectID, nil)
+	require.NoError(t, err)
+	firstExists, err := ti.blobs.Exists(ctx, firstBlob)
+	require.NoError(t, err)
+	secondExists, err := ti.blobs.Exists(ctx, secondBlob)
+	require.NoError(t, err)
+	require.False(t, firstExists)
+	require.True(t, secondExists, "project-scoped cleanup must not select another project's blob")
 }

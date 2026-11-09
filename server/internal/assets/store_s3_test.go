@@ -160,3 +160,59 @@ func TestS3WritePreservesBody(t *testing.T) {
 		t.Fatalf("uploaded body = %q, want %q", got, want)
 	}
 }
+
+func TestS3WriteCloseIsIdempotent(t *testing.T) {
+	t.Parallel()
+	store := newTestS3BlobStore(t, func(req *http.Request) (*http.Response, error) {
+		if _, err := io.Copy(io.Discard, req.Body); err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+		return successfulS3Response(), nil
+	})
+	w, _, err := store.Write(context.Background(), "idempotent-close", "text/plain", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, "data"); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	closedAgain := make(chan error, 1)
+	go func() { closedAgain <- w.Close() }()
+	select {
+	case err := <-closedAgain:
+		if err != nil {
+			t.Fatalf("second Close returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second Close blocked")
+	}
+}
+
+func TestS3WriteCloseCachesPutObjectError(t *testing.T) {
+	t.Parallel()
+	putErr := errors.New("cached put failure")
+	store := newTestS3BlobStore(t, func(req *http.Request) (*http.Response, error) {
+		if _, err := io.Copy(io.Discard, req.Body); err != nil {
+			return nil, fmt.Errorf("read request body: %w", err)
+		}
+		return nil, putErr
+	})
+	w, _, err := store.Write(context.Background(), "idempotent-error", "text/plain", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.WriteString(w, "data"); err != nil {
+		t.Fatal(err)
+	}
+	first := w.Close()
+	second := w.Close()
+	if !errors.Is(first, putErr) || !errors.Is(second, putErr) {
+		t.Fatalf("Close errors = (%v, %v), want wrapped %v", first, second, putErr)
+	}
+	if first.Error() != second.Error() {
+		t.Fatalf("Close did not cache result: first=%q second=%q", first, second)
+	}
+}

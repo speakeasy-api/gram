@@ -131,6 +131,15 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 	}, attrs.Size, nil
 }
 
+// Location returns the stable object URL for subpath without writing it.
+func (gbs *GCSBlobStore) Location(subpath string) (*url.URL, error) {
+	uri, err := gbs.getBucketURI(subpath)
+	if err != nil {
+		return nil, fmt.Errorf("generate asset path: %w", err)
+	}
+	return uri, nil
+}
+
 // Write attaches a DoesNotExist:true precondition so retries and concurrent
 // racers cannot produce duplicates: a retry after a transient failure can't
 // re-create the object, and concurrent writers racing to the same
@@ -140,14 +149,6 @@ func (gbs *GCSBlobStore) ReadAt(ctx context.Context, u *url.URL) (ReaderAtCloser
 // desired state. The precondition also flips the SDK's default
 // RetryIdempotent policy on for this Writer, so transient errors retry
 // automatically.
-func (gbs *GCSBlobStore) Location(subpath string) (*url.URL, error) {
-	uri, err := gbs.getBucketURI(subpath)
-	if err != nil {
-		return nil, fmt.Errorf("generate asset path: %w", err)
-	}
-	return uri, nil
-}
-
 func (gbs *GCSBlobStore) Write(ctx context.Context, subpath string, contentType string, contentLength int64) (io.WriteCloser, *url.URL, error) {
 	uri, err := gbs.Location(subpath)
 	if err != nil {

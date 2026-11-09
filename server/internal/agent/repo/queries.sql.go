@@ -1026,22 +1026,23 @@ func (q *Queries) ListDeviceAgentSyncs(ctx context.Context, organizationID strin
 const listExpiredUnreadSessionHandoffLinks = `-- name: ListExpiredUnreadSessionHandoffLinks :many
 SELECT id, project_id, blob_url, expires_at, blob_cleanup_state
 FROM session_handoff_links
-WHERE project_id IS NOT NULL
+WHERE project_id = $1::uuid
   AND expires_at <= clock_timestamp()
   AND (
     blob_cleanup_state = 'cleaner_claimed'
-    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= $1)
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= $2)
     OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
   )
   AND (
-    $2::timestamptz IS NULL
-    OR (expires_at, id) > ($2::timestamptz, $3::uuid)
+    $3::timestamptz IS NULL
+    OR (expires_at, id) > ($3::timestamptz, $4::uuid)
   )
 ORDER BY expires_at, id
-LIMIT $4
+LIMIT $5
 `
 
 type ListExpiredUnreadSessionHandoffLinksParams struct {
+	ProjectID           uuid.UUID
 	ConsumerLeaseBefore pgtype.Timestamptz
 	AfterExpiresAt      pgtype.Timestamptz
 	AfterID             uuid.UUID
@@ -1058,6 +1059,7 @@ type ListExpiredUnreadSessionHandoffLinksRow struct {
 
 func (q *Queries) ListExpiredUnreadSessionHandoffLinks(ctx context.Context, arg ListExpiredUnreadSessionHandoffLinksParams) ([]ListExpiredUnreadSessionHandoffLinksRow, error) {
 	rows, err := q.db.Query(ctx, listExpiredUnreadSessionHandoffLinks,
+		arg.ProjectID,
 		arg.ConsumerLeaseBefore,
 		arg.AfterExpiresAt,
 		arg.AfterID,
@@ -1136,6 +1138,50 @@ func (q *Queries) ListOwnedChatSessionMeta(ctx context.Context, arg ListOwnedCha
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsWithExpiredSessionHandoffs = `-- name: ListProjectsWithExpiredSessionHandoffs :many
+SELECT DISTINCT project_id
+FROM session_handoff_links
+WHERE project_id IS NOT NULL
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= $1)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+  AND (
+    $2::uuid IS NULL
+    OR project_id > $2::uuid
+  )
+ORDER BY project_id
+LIMIT $3
+`
+
+type ListProjectsWithExpiredSessionHandoffsParams struct {
+	ConsumerLeaseBefore pgtype.Timestamptz
+	AfterProjectID      uuid.NullUUID
+	BatchSize           int32
+}
+
+func (q *Queries) ListProjectsWithExpiredSessionHandoffs(ctx context.Context, arg ListProjectsWithExpiredSessionHandoffsParams) ([]uuid.NullUUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsWithExpiredSessionHandoffs, arg.ConsumerLeaseBefore, arg.AfterProjectID, arg.BatchSize)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.NullUUID
+	for rows.Next() {
+		var project_id uuid.NullUUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

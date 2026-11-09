@@ -22,7 +22,7 @@ type ExpiredUnread struct {
 }
 
 type ExpiredUnreadRepository interface {
-	ListExpiredUnread(context.Context, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error)
+	ListExpiredUnread(context.Context, uuid.UUID, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error)
 	ClaimExpiredUnread(context.Context, ExpiredUnread) (ExpiredUnread, bool, error)
 	FinalizeExpiredUnread(context.Context, ExpiredUnread) (bool, error)
 	QuarantineExpiredUnread(context.Context, ExpiredUnread, string) error
@@ -31,6 +31,10 @@ type ExpiredUnreadRepository interface {
 type ExpiredUnreadCursor struct {
 	ExpiresAt time.Time
 	ID        uuid.UUID
+}
+
+type ExpiredUnreadProjectLister interface {
+	ListExpiredUnreadProjects(context.Context, *uuid.UUID, int32) ([]uuid.UUID, error)
 }
 
 type blobDeleter interface {
@@ -46,22 +50,26 @@ func NewExpiredUnreadCleaner(repository ExpiredUnreadRepository, blobs blobDelet
 	return &ExpiredUnreadCleaner{repository: repository, blobs: blobs}
 }
 
-// Clean removes one bounded batch. Per-row failures are joined after every
-// independent row has been attempted, so one malformed or unavailable blob
-// cannot prevent successful rows from being reclaimed.
-func (c *ExpiredUnreadCleaner) Clean(ctx context.Context) (bool, error) {
-	_, more, err := c.CleanAfter(ctx, nil)
-	return more, err
-}
-
 // CleanAfter removes one ordered batch after cursor. The returned cursor always
 // advances past every selected row, including malformed or failed rows, so a
 // permanent leading failure cannot poison later batches in the same activity.
-func (c *ExpiredUnreadCleaner) CleanAfter(ctx context.Context, cursor *ExpiredUnreadCursor) (*ExpiredUnreadCursor, bool, error) {
+func (c *ExpiredUnreadCleaner) ListProjects(ctx context.Context, cursor *uuid.UUID, batchSize int32) ([]uuid.UUID, bool, error) {
+	lister, ok := c.repository.(ExpiredUnreadProjectLister)
+	if !ok {
+		return nil, false, fmt.Errorf("expired unread handoff project lister is not configured")
+	}
+	projects, err := lister.ListExpiredUnreadProjects(ctx, cursor, batchSize)
+	if err != nil {
+		return nil, false, fmt.Errorf("list projects with expired unread handoffs: %w", err)
+	}
+	return projects, len(projects) == int(batchSize), nil
+}
+
+func (c *ExpiredUnreadCleaner) CleanProjectAfter(ctx context.Context, projectID uuid.UUID, cursor *ExpiredUnreadCursor) (*ExpiredUnreadCursor, bool, error) {
 	if c == nil || c.repository == nil || c.blobs == nil {
 		return cursor, false, fmt.Errorf("expired unread handoff cleaner is not configured")
 	}
-	rows, err := c.repository.ListExpiredUnread(ctx, cursor, expiredUnreadCleanupBatchSize)
+	rows, err := c.repository.ListExpiredUnread(ctx, projectID, cursor, expiredUnreadCleanupBatchSize)
 	if err != nil {
 		return cursor, false, fmt.Errorf("list expired unread handoffs: %w", err)
 	}

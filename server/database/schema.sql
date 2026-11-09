@@ -14719,9 +14719,16 @@ CREATE TABLE IF NOT EXISTS session_handoff_upload_intents (
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   CONSTRAINT session_handoff_upload_intents_pkey PRIMARY KEY (id)
 );
+COMMENT ON COLUMN session_handoff_upload_intents.id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.project_id IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.organization_id IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_upload_intents.actor_user_id IS '@access: confidential';
 COMMENT ON COLUMN session_handoff_upload_intents.object_path IS '@access: secret-restricted';
 COMMENT ON COLUMN session_handoff_upload_intents.blob_url IS '@access: secret-restricted';
+COMMENT ON COLUMN session_handoff_upload_intents.state IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.last_error IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.created_at IS '@access: confidential';
+COMMENT ON COLUMN session_handoff_upload_intents.updated_at IS '@access: confidential';
 CREATE INDEX IF NOT EXISTS session_handoff_upload_intents_stale_idx
 ON session_handoff_upload_intents (created_at, id) WHERE state IN ('pending', 'cleaning', 'linked');
 CREATE UNIQUE INDEX IF NOT EXISTS session_handoff_upload_intents_blob_url_key
@@ -14819,6 +14826,10 @@ ON session_handoff_links (organization_id, project_id);
 
 CREATE INDEX IF NOT EXISTS session_handoff_links_expires_at_idx ON session_handoff_links (expires_at);
 
+CREATE INDEX IF NOT EXISTS session_handoff_links_cleanup_pending_idx
+ON session_handoff_links (project_id, expires_at, id)
+WHERE project_id IS NOT NULL AND blob_cleanup_state IN ('available', 'consumer_claimed', 'cleaner_claimed');
+
 
 -- Keep a durable blob cleanup pointer for new and rolling-deploy legacy link
 -- writers. The trigger runs in the link transaction, so rollback restores a
@@ -14827,6 +14838,8 @@ CREATE OR REPLACE FUNCTION register_session_handoff_blob()
 RETURNS trigger
 LANGUAGE plpgsql
 AS $$
+DECLARE
+  registry_id uuid;
 BEGIN
   IF NEW.blob_url <> '' AND NEW.project_id IS NOT NULL
      AND (TG_OP = 'INSERT' OR OLD.blob_url IS DISTINCT FROM NEW.blob_url) THEN
@@ -14836,12 +14849,17 @@ BEGIN
       NEW.project_id, NEW.organization_id, NULLIF(to_jsonb(NEW)->>'actor_user_id', ''), '', NEW.blob_url, 'linked'
     )
     ON CONFLICT (blob_url) WHERE blob_url <> '' DO UPDATE
-    SET project_id = EXCLUDED.project_id,
-        organization_id = EXCLUDED.organization_id,
-        actor_user_id = COALESCE(session_handoff_upload_intents.actor_user_id, EXCLUDED.actor_user_id),
+    SET actor_user_id = COALESCE(session_handoff_upload_intents.actor_user_id, EXCLUDED.actor_user_id),
         state = 'linked',
         last_error = NULL,
-        updated_at = clock_timestamp();
+        updated_at = clock_timestamp()
+    WHERE session_handoff_upload_intents.project_id = EXCLUDED.project_id
+      AND session_handoff_upload_intents.organization_id = EXCLUDED.organization_id
+    RETURNING id INTO registry_id;
+    IF registry_id IS NULL THEN
+      RAISE EXCEPTION 'session handoff blob registry tenant conflict'
+        USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
   END IF;
   RETURN NEW;
 END;

@@ -20,31 +20,46 @@ import (
 
 func TestSessionHandoffCleanupWorkflow(t *testing.T) {
 	t.Parallel()
-	for _, fail := range []bool{false, true} {
-		fail := fail
-		t.Run(map[bool]string{false: "success", true: "failure"}[fail], func(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		failExpired bool
+		failIntents bool
+	}{
+		{name: "success"},
+		{name: "expired failure", failExpired: true},
+		{name: "intent failure", failIntents: true},
+	} {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			var suite testsuite.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
 			env.SetWorkerOptions(worker.Options{DeadlockDetectionTimeout: 5 * time.Second})
-			calls := 0
+			expiredCalls, intentCalls := 0, 0
 			env.RegisterActivityWithOptions(func(context.Context) error {
-				calls++
-				if fail {
-					return errors.New("storage unavailable")
+				expiredCalls++
+				if tc.failExpired {
+					return errors.New("expired storage unavailable")
 				}
 				return nil
-			}, activity.RegisterOptions{Name: "CleanupSessionHandoffStorage"})
+			}, activity.RegisterOptions{Name: "CleanupExpiredUnreadSessionHandoffs"})
+			env.RegisterActivityWithOptions(func(context.Context) error {
+				intentCalls++
+				if tc.failIntents {
+					return errors.New("intent storage unavailable")
+				}
+				return nil
+			}, activity.RegisterOptions{Name: "CleanupStaleSessionHandoffUploadIntents"})
 
 			env.ExecuteWorkflow(SessionHandoffCleanupWorkflow)
 			require.True(t, env.IsWorkflowCompleted())
-			if fail {
+			if tc.failExpired || tc.failIntents {
 				require.Error(t, env.GetWorkflowError())
-				require.Equal(t, sessionHandoffCleanupMaxAttempts, calls)
 			} else {
 				require.NoError(t, env.GetWorkflowError())
-				require.Equal(t, 1, calls)
 			}
+			require.Equal(t, map[bool]int{false: 1, true: sessionHandoffCleanupMaxAttempts}[tc.failExpired], expiredCalls)
+			require.Equal(t, map[bool]int{false: 1, true: sessionHandoffCleanupMaxAttempts}[tc.failIntents], intentCalls)
 		})
 	}
 }
@@ -65,13 +80,24 @@ func TestSessionHandoffCleanupScheduleOptions(t *testing.T) {
 }
 
 type cleanupTraversalRepository struct {
-	pages       [][]sessionhandoff.ExpiredUnread
-	calls       int
-	deletedRows []uuid.UUID
-	cursors     []*sessionhandoff.ExpiredUnreadCursor
+	projectID       uuid.UUID
+	listedProjects  []uuid.UUID
+	pages           [][]sessionhandoff.ExpiredUnread
+	calls           int
+	deletedRows     []uuid.UUID
+	quarantinedRows []uuid.UUID
+	cursors         []*sessionhandoff.ExpiredUnreadCursor
 }
 
-func (r *cleanupTraversalRepository) ListExpiredUnread(_ context.Context, cursor *sessionhandoff.ExpiredUnreadCursor, _ int32) ([]sessionhandoff.ExpiredUnread, error) {
+func (r *cleanupTraversalRepository) ListExpiredUnreadProjects(_ context.Context, cursor *uuid.UUID, _ int32) ([]uuid.UUID, error) {
+	if cursor != nil {
+		return nil, nil
+	}
+	return []uuid.UUID{r.projectID}, nil
+}
+
+func (r *cleanupTraversalRepository) ListExpiredUnread(_ context.Context, projectID uuid.UUID, cursor *sessionhandoff.ExpiredUnreadCursor, _ int32) ([]sessionhandoff.ExpiredUnread, error) {
+	r.listedProjects = append(r.listedProjects, projectID)
 	r.cursors = append(r.cursors, cursor)
 	if r.calls >= len(r.pages) {
 		return nil, nil
@@ -89,6 +115,7 @@ func (r *cleanupTraversalRepository) FinalizeExpiredUnread(_ context.Context, ro
 	return true, nil
 }
 func (r *cleanupTraversalRepository) QuarantineExpiredUnread(_ context.Context, row sessionhandoff.ExpiredUnread, _ string) error {
+	r.quarantinedRows = append(r.quarantinedRows, row.ID)
 	return nil
 }
 
@@ -96,28 +123,31 @@ type cleanupTraversalBlobs struct{}
 
 func (cleanupTraversalBlobs) Delete(_ context.Context, _ *url.URL) error { return nil }
 
-func TestCleanupExpiredUnreadSessionHandoffsAdvancesPastFailedLeadingRow(t *testing.T) {
+func TestCleanupExpiredUnreadSessionHandoffsAdvancesPastMalformedLeadingRow(t *testing.T) {
 	t.Parallel()
 	expiresAt := time.Now().Add(-time.Hour)
+	projectID := uuid.New()
 	firstPage := make([]sessionhandoff.ExpiredUnread, 100)
 	for i := range firstPage {
-		firstPage[i] = sessionhandoff.ExpiredUnread{ID: uuid.New(), ProjectID: uuid.New(), BlobURL: "s3://handoffs/ok.md", ExpiresAt: expiresAt}
+		firstPage[i] = sessionhandoff.ExpiredUnread{ID: uuid.New(), ProjectID: projectID, BlobURL: "s3://handoffs/ok.md", ExpiresAt: expiresAt}
 	}
 	failedID := firstPage[0].ID
 	firstPage[0].BlobURL = "://malformed"
 	laterID := uuid.New()
-	repository := &cleanupTraversalRepository{pages: [][]sessionhandoff.ExpiredUnread{
+	repository := &cleanupTraversalRepository{projectID: projectID, pages: [][]sessionhandoff.ExpiredUnread{
 		firstPage,
-		{{ID: laterID, ProjectID: uuid.New(), BlobURL: "s3://handoffs/later.md", ExpiresAt: expiresAt.Add(time.Second)}},
+		{{ID: laterID, ProjectID: projectID, BlobURL: "s3://handoffs/later.md", ExpiresAt: expiresAt.Add(time.Second)}},
 	}}
 	activities := &Activities{sessionHandoffCleaner: sessionhandoff.NewExpiredUnreadCleaner(repository, cleanupTraversalBlobs{})}
 
 	err := activities.CleanupExpiredUnreadSessionHandoffs(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, 2, repository.calls)
+	require.Equal(t, []uuid.UUID{projectID, projectID}, repository.listedProjects)
 	require.Nil(t, repository.cursors[0])
 	require.NotNil(t, repository.cursors[1])
 	require.Equal(t, firstPage[len(firstPage)-1].ID, repository.cursors[1].ID)
 	require.Contains(t, repository.deletedRows, laterID)
 	require.NotContains(t, repository.deletedRows, failedID)
+	require.Equal(t, []uuid.UUID{failedID}, repository.quarantinedRows)
 }

@@ -85,3 +85,31 @@ func TestCreateSessionHandoffLinkClampsTTLAndHidesForeignSessions(t *testing.T) 
 	require.ErrorIs(t, unknownErr, errSessionNotFound)
 	require.Equal(t, foreignErr.Error(), unknownErr.Error())
 }
+
+func TestCreateSessionHandoffLinkReplaysSameKeyWithoutMintingAgain(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_handoff_replay")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	enabled := true
+	svc, _ := newRecallService(t, conn, &enabled)
+	minter := &recordingHandoffMinter{}
+	svc.WithHandoffMinter(minter)
+	sessionID := uuid.NewString()
+	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "replay", uuid.NullUUID{})
+	seedRecallMessage(t, ctx, conn, chatID, project.ID, recallMessageSeed{
+		role: "user", content: "continue safely", at: time.Now().UTC(), generation: 1,
+		userID: principal.UserID, source: "codex", analyzed: true,
+	})
+	input := CreateSessionHandoffLinkInput{
+		SessionID: sessionID, Confirmed: true, IdempotencyKey: "stable-retry-key",
+	}
+
+	first, err := svc.CreateSessionHandoffLink(ctx, principal, input)
+	require.NoError(t, err)
+	second, err := svc.CreateSessionHandoffLink(ctx, principal, input)
+	require.NoError(t, err)
+	require.Equal(t, first, second)
+	require.Len(t, minter.inputs, 1)
+}

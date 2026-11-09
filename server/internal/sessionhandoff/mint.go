@@ -148,6 +148,9 @@ func (m *SessionHandoffMinter) Mint(ctx context.Context, input SessionHandoffMin
 		ActorUserID: input.UserID, ObjectPath: objectPath, BlobUrl: expectedBlobURL.String(),
 		ProjectID: input.ProjectID, OrganizationID: input.OrganizationID,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return SessionHandoffMintResult{}, oops.E(oops.CodeNotFound, err, "project not found")
+	}
 	if err != nil {
 		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, err, "record handoff upload intent").LogError(ctx, m.logger)
 	}

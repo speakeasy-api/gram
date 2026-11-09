@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -209,12 +210,14 @@ func (sbs *S3BlobStore) Write(ctx context.Context, subpath string, contentType s
 		done <- putErr
 	}()
 
-	return &s3WriteCloser{pipe: pw, done: done}, uri, nil
+	return &s3WriteCloser{pipe: pw, done: done, closeOnce: sync.Once{}, closeErr: nil}, uri, nil
 }
 
 type s3WriteCloser struct {
-	pipe *io.PipeWriter
-	done <-chan error
+	pipe      *io.PipeWriter
+	done      <-chan error
+	closeOnce sync.Once
+	closeErr  error
 }
 
 func (w *s3WriteCloser) Write(p []byte) (int, error) {
@@ -226,13 +229,16 @@ func (w *s3WriteCloser) Write(p []byte) (int, error) {
 }
 
 func (w *s3WriteCloser) Close() error {
-	if err := w.pipe.Close(); err != nil {
-		return fmt.Errorf("close s3 upload body: %w", err)
-	}
-	if err := <-w.done; err != nil {
-		return fmt.Errorf("put object: %w", err)
-	}
-	return nil
+	w.closeOnce.Do(func() {
+		if err := w.pipe.Close(); err != nil {
+			w.closeErr = fmt.Errorf("close s3 upload body: %w", err)
+			return
+		}
+		if err := <-w.done; err != nil {
+			w.closeErr = fmt.Errorf("put object: %w", err)
+		}
+	})
+	return w.closeErr
 }
 
 // Delete removes the object; a missing key is success (S3 DeleteObject is

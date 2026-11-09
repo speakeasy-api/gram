@@ -635,10 +635,27 @@ ORDER BY id;
 -- name: AcquireAIScanTargetsLock :exec
 SELECT pg_advisory_xact_lock(hashtextextended('ai_scan_targets:' || @organization_id::text, 0));
 
+-- name: ListProjectsWithExpiredSessionHandoffs :many
+SELECT DISTINCT project_id
+FROM session_handoff_links
+WHERE project_id IS NOT NULL
+  AND expires_at <= clock_timestamp()
+  AND (
+    blob_cleanup_state = 'cleaner_claimed'
+    OR (blob_cleanup_state = 'consumer_claimed' AND blob_cleanup_attempted_at <= @consumer_lease_before)
+    OR (blob_cleanup_state = 'available' AND consumed_at IS NULL)
+  )
+  AND (
+    sqlc.narg('after_project_id')::uuid IS NULL
+    OR project_id > sqlc.narg('after_project_id')::uuid
+  )
+ORDER BY project_id
+LIMIT @batch_size;
+
 -- name: ListExpiredUnreadSessionHandoffLinks :many
 SELECT id, project_id, blob_url, expires_at, blob_cleanup_state
 FROM session_handoff_links
-WHERE project_id IS NOT NULL
+WHERE project_id = sqlc.arg(project_id)::uuid
   AND expires_at <= clock_timestamp()
   AND (
     blob_cleanup_state = 'cleaner_claimed'

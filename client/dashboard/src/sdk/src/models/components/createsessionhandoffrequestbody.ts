@@ -11,6 +11,10 @@ export type CreateSessionHandoffRequestBody = {
    */
   content: string;
   /**
+   * Optional printable-ASCII retry key. Reuse the same key only when retrying an identical session, content, effective TTL, source, and device request.
+   */
+  idempotencyKey?: string | undefined;
+  /**
    * Native harness session identifier the handoff was rendered from. Speakeasy derives its chat id from this the same way hook ingest does; a not-yet-captured session can still mint a link.
    */
   sessionId: string;
@@ -27,6 +31,7 @@ export type CreateSessionHandoffRequestBody = {
 /** @internal */
 export type CreateSessionHandoffRequestBody$Outbound = {
   content: string;
+  idempotency_key?: string | undefined;
   session_id: string;
   source_surface?: string | undefined;
   ttl_seconds?: number | undefined;
@@ -39,12 +44,14 @@ export const CreateSessionHandoffRequestBody$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     content: z.string(),
+    idempotencyKey: z.optional(z.string()),
     sessionId: z.string(),
     sourceSurface: z.optional(z.string()),
     ttlSeconds: z.optional(z.int()),
   }),
   z.transform((v) => {
     return remap$(v, {
+      idempotencyKey: "idempotency_key",
       sessionId: "session_id",
       sourceSurface: "source_surface",
       ttlSeconds: "ttl_seconds",

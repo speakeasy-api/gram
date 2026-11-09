@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -16,20 +17,22 @@ import (
 )
 
 const (
-	sessionHandoffCleanupMaxBatches         = 100
-	sessionHandoffCleanupActivityTimeout    = 10 * time.Minute
-	sessionHandoffCleanupMaxAttempts        = 3
-	sessionHandoffCleanupRetryInterval      = time.Minute
-	sessionHandoffCleanupBackoffCoefficient = 2
-	sessionHandoffCleanupScheduleInterval   = time.Hour
-	sessionHandoffCleanupWorkflowRunTimeout = 40 * time.Minute
-	sessionHandoffCleanupScheduleID         = "v1:session-handoff-expired-unread-cleanup"
-	sessionHandoffCleanupWorkflowID         = "v1:session-handoff-expired-unread-cleanup/scheduled"
+	sessionHandoffCleanupMaxBatches               = 100
+	expiredUnreadProjectBatchSize           int32 = 100
+	sessionHandoffCleanupActivityTimeout          = 10 * time.Minute
+	sessionHandoffCleanupMaxAttempts              = 3
+	sessionHandoffCleanupRetryInterval            = time.Minute
+	sessionHandoffCleanupBackoffCoefficient       = 2
+	sessionHandoffCleanupScheduleInterval         = time.Hour
+	sessionHandoffCleanupWorkflowRunTimeout       = 40 * time.Minute
+	sessionHandoffCleanupScheduleID               = "v1:session-handoff-expired-unread-cleanup"
+	sessionHandoffCleanupWorkflowID               = "v1:session-handoff-expired-unread-cleanup/scheduled"
 )
 
-// SessionHandoffCleanupWorkflow removes expired unread handoff blobs. One
-// global hourly workflow and activity cost about 1,440 Temporal actions per
-// month per namespace; retries raise the maximum to about 2,880 actions.
+// SessionHandoffCleanupWorkflow removes expired unread handoff blobs and stale
+// upload intents. One hourly workflow plus two activities costs about 2,160
+// Temporal actions per month per namespace; exhausting both retry budgets raises
+// the maximum to about 5,040 actions.
 func SessionHandoffCleanupWorkflow(ctx workflow.Context) error {
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: sessionHandoffCleanupActivityTimeout,
@@ -40,31 +43,43 @@ func SessionHandoffCleanupWorkflow(ctx workflow.Context) error {
 		},
 	})
 	var activities *Activities
-	return workflow.ExecuteActivity(ctx, activities.CleanupSessionHandoffStorage).Get(ctx, nil)
-}
-
-func (a *Activities) CleanupSessionHandoffStorage(ctx context.Context) error {
-	return errors.Join(
-		a.CleanupExpiredUnreadSessionHandoffs(ctx),
-		a.CleanupStaleSessionHandoffUploadIntents(ctx),
-	)
+	expired := workflow.ExecuteActivity(ctx, activities.CleanupExpiredUnreadSessionHandoffs)
+	intents := workflow.ExecuteActivity(ctx, activities.CleanupStaleSessionHandoffUploadIntents)
+	return errors.Join(expired.Get(ctx, nil), intents.Get(ctx, nil))
 }
 
 func (a *Activities) CleanupExpiredUnreadSessionHandoffs(ctx context.Context) error {
-	var cursor *sessionhandoff.ExpiredUnreadCursor
+	var projectCursor *uuid.UUID
 	var cleanupErrors []error
+	remainingBatches := sessionHandoffCleanupMaxBatches
 	for range sessionHandoffCleanupMaxBatches {
-		next, more, err := a.sessionHandoffCleaner.CleanAfter(ctx, cursor)
+		projects, moreProjects, err := a.sessionHandoffCleaner.ListProjects(ctx, projectCursor, expiredUnreadProjectBatchSize)
 		if err != nil {
-			cleanupErrors = append(cleanupErrors, fmt.Errorf("clean expired unread session handoffs: %w", err))
+			return errors.Join(append(cleanupErrors, err)...)
 		}
-		if !more {
+		for _, projectID := range projects {
+			var cursor *sessionhandoff.ExpiredUnreadCursor
+			for {
+				if remainingBatches == 0 {
+					return errors.Join(append(cleanupErrors, fmt.Errorf("session handoff cleanup per-attempt batch budget exhausted"))...)
+				}
+				remainingBatches--
+				next, more, cleanErr := a.sessionHandoffCleaner.CleanProjectAfter(ctx, projectID, cursor)
+				if cleanErr != nil {
+					cleanupErrors = append(cleanupErrors, fmt.Errorf("clean expired unread session handoffs for project: %w", cleanErr))
+				}
+				if !more {
+					break
+				}
+				cursor = next
+			}
+		}
+		if !moreProjects {
 			return errors.Join(cleanupErrors...)
 		}
-		cursor = next
+		projectCursor = &projects[len(projects)-1]
 	}
-	cleanupErrors = append(cleanupErrors, fmt.Errorf("session handoff cleanup per-attempt batch budget exhausted"))
-	return errors.Join(cleanupErrors...)
+	return errors.Join(append(cleanupErrors, fmt.Errorf("session handoff project traversal batch budget exhausted"))...)
 }
 
 func (a *Activities) CleanupStaleSessionHandoffUploadIntents(ctx context.Context) error {

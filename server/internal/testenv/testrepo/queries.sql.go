@@ -175,11 +175,11 @@ SELECT l.project_id, l.organization_id, NULL, '', l.blob_url, 'linked'
 FROM session_handoff_links l
 WHERE l.project_id = $1::uuid AND l.blob_url <> ''
 ON CONFLICT (blob_url) WHERE blob_url <> '' DO UPDATE
-SET project_id = EXCLUDED.project_id,
-    organization_id = EXCLUDED.organization_id,
-    state = 'linked',
+SET state = 'linked',
     last_error = NULL,
     updated_at = clock_timestamp()
+WHERE session_handoff_upload_intents.project_id = EXCLUDED.project_id
+  AND session_handoff_upload_intents.organization_id = EXCLUDED.organization_id
 `
 
 // Project-scoped equivalent of the migration backfill for compatibility tests.
