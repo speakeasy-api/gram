@@ -480,8 +480,8 @@ type cardVerdict struct {
 
 // cardApplicability judges each card against the organization's recorded
 // stack. A card applies when it has no methods, or when one of its methods
-// belongs to a vendor in the stack (or to no vendor in particular) and the
-// support matrix does not mark it not applicable on every platform of the
+// belongs to a vendor in the stack (or is cross-platform) and the support
+// matrix does not mark it not applicable on every platform of the
 // stack. The wizard and the playbook check share it, so they never disagree.
 //
 // stackRecorded reports whether the stack names any vendor. Without one, a
@@ -514,7 +514,7 @@ func cardApplicability(ctx context.Context, queries *repo.Queries, organizationI
 			cardVerdicts[method.StepSlug] = cardVerdict{applies: false, reason: ""}
 			needs[method.StepSlug] = nil
 		}
-		anyVendor := method.MethodVendor == "Cross-platform" || method.MethodVendor == "Others"
+		anyVendor := method.MethodVendor == "Cross-platform"
 		if (anyVendor || slices.Contains(vendors, method.MethodVendor)) && !method.NotApplicableEverywhere {
 			cardVerdicts[method.StepSlug] = cardVerdict{applies: true, reason: ""}
 			continue

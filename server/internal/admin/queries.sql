@@ -733,10 +733,18 @@ WHERE deleted_at IS NULL
   );
 
 -- name: SeedSupportMethods :exec
+-- The catalog owns a method's name, vendor, plan notes and order, so those
+-- follow the file on every start; staff edit a method's facts and platform
+-- mappings, never the method itself.
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
 FROM jsonb_array_elements(sqlc.arg(catalog)::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING;
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp();
 
 -- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)

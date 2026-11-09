@@ -66,7 +66,9 @@ func TestOnboardingStackOptionsComeFromTheSupportMatrix(t *testing.T) {
 		vendors[vendor.Vendor] = vendor
 		order = append(order, vendor.Vendor)
 	}
-	require.Equal(t, []string{"Anthropic", "OpenAI", "Cursor", "OpenCode", "Google", "OpenClaw", "GitHub"}, order, "catalog order, and no Others bucket")
+	require.Equal(t, []string{"Anthropic", "OpenAI", "Cursor", "OpenCode", "Google", "OpenClaw", "GitHub", "LiteLLM"}, order, "catalog order, and no Others bucket")
+	require.Empty(t, vendors["LiteLLM"].Plans, "LiteLLM sells no plans")
+	require.Equal(t, "LiteLLM Gateway", vendors["LiteLLM"].Platforms[0].Name)
 	require.Len(t, vendors["Anthropic"].Plans, 2, "organizational plans only")
 	require.Equal(t, "anthropic-enterprise", vendors["Anthropic"].Plans[1].Slug)
 	require.Len(t, vendors["Google"].Plans, 2)

@@ -234,8 +234,14 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 		require.ErrorContains(t, err, "not both", name)
 	}
+	// LiteLLM is a vendor, so Set up LiteLLM needs it in the stack.
 	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "litellm"})
-	require.NoError(t, err, "LiteLLM belongs to no vendor in particular")
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.ErrorContains(t, err, "needs LiteLLM")
+	_, err = organizations.SaveOnboardingStack(ctx, ti.conn, audit.NewLogger(), ac.ActiveOrganizationID, organizations.OnboardingStackInput{Vendors: []organizations.OnboardingStackVendorInput{{Vendor: "Anthropic", PlanSlug: conv.PtrEmpty("anthropic-team")}, {Vendor: "LiteLLM", PlanSlug: nil}}, MdmVendor: "none", MdmVendorName: nil}, actor, nil)
+	require.NoError(t, err, "LiteLLM sells no plans")
+	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "litellm"})
+	require.NoError(t, err, "LiteLLM is in the stack")
 	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "mcp-distribution"})
 	require.NoError(t, err, "the device agent installs from the marketplace on every stack")
 	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", true, []string{"enable-logging"})
