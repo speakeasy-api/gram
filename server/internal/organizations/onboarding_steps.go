@@ -94,7 +94,13 @@ func SyncOnboardingSteps(ctx context.Context, db *pgxpool.Pool) error {
 			slugs = append(slugs, record.Slug)
 		}
 		// Playbooks skip retired steps silently, so move saved playbooks onto
-		// a retired step's successor before retiring it.
+		// a retired step's successor before retiring it. Take the playbook
+		// lock that every playbook write takes, so an edit can't interleave
+		// with the move. Only this function takes the steps lock, so taking
+		// the playbook lock second can't deadlock.
+		if err := q.LockOnboardingPlaybooks(ctx); err != nil {
+			return fmt.Errorf("lock onboarding playbooks: %w", err)
+		}
 		for _, replaced := range retiredStepSuccessors {
 			if _, err := q.RepointRetiredOnboardingPlaybookSteps(ctx, repo.RepointRetiredOnboardingPlaybookStepsParams{SuccessorSlug: replaced.Successor, RetiredSlugs: replaced.Retired}); err != nil {
 				return fmt.Errorf("repoint playbooks from %v to %q: %w", replaced.Retired, replaced.Successor, err)

@@ -36,6 +36,8 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	require.Less(t, position["agent-observability"], position["instrument-agents"], "a group precedes its cards")
 	require.Nil(t, bySlug["distribute-servers"].ParentSlug, "Distribute MCP servers is a top-level card")
 	require.Empty(t, bySlug["distribute-servers"].Requires, "it publishes the marketplace itself")
+	require.False(t, bySlug["distribute-servers"].HiddenByDefault, "it shows by default")
+	require.Equal(t, "manual", bySlug["distribute-servers"].Completion, "it is still marked done by hand")
 	require.NotContains(t, bySlug, "mcp-distribution")
 	require.NotContains(t, bySlug, "create-marketplace")
 
