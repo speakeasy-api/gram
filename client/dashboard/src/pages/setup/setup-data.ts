@@ -124,7 +124,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
     {
       title: "Allow Speakeasy in Claude's network egress settings",
       description:
-        "Cowork runs plugins in a sandbox that reaches only the hosts your organization allows, so the plugin can't upload sessions to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities and turn on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Session uploads and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring allowlists its own collector; the plugin does not. The organization instruction also needs Code execution and file creation.",
+        "Cowork runs plugins in a sandbox that reaches only the hosts your organization allows, so the plugin can't upload sessions to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities and turn on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Session uploads and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring allowlists its own collector; the plugin does not. On Claude Team, the organization instruction also needs Code execution and file creation.",
       helpLink: {
         url: "https://claude.ai/admin-settings/capabilities",
         linkLabel: "Capabilities settings",
@@ -178,20 +178,29 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
     description:
       "Start a new conversation and send any message. Claude runs a short command before replying, and the conversation appears in Agent Sessions once the reply finishes. No command? Check the instruction is saved and Code execution is on. No session? Check the plugin is Required and the egress domains are added.",
   };
-  return { registration, instruction, monitoring, check };
+  // The general walkthrough serves Team and Enterprise alike, so it verifies
+  // without the Team-only organization instruction.
+  const verify: PlatformSetupStep = {
+    title: "Verify in a new Cowork session",
+    description:
+      "Start a new Cowork session and run a tool. Once Claude's reply finishes, the conversation appears in Agent Sessions. On Claude Team, also add the organization instruction from the Set up Claude Desktop card so every conversation runs in Cowork.",
+  };
+  return { registration, instruction, monitoring, check, verify };
 };
 
-// The whole Team and Enterprise Cowork rollout, in the order an Owner follows
-// it: register the plugins, add the instruction, export telemetry, check.
+// The Team and Enterprise Cowork rollout the Plugins and Organization Gateway
+// pages show: register the plugins, export telemetry, verify. The Team-only
+// organization instruction and its check live on their setup card, which
+// applies the plan condition these pages can't.
 const coworkTeamSteps = (
   origin: string,
   egressHosts: string[],
 ): PlatformSetupStep[] => {
-  const { registration, instruction, monitoring, check } = coworkTeamStepGroups(
+  const { registration, monitoring, verify } = coworkTeamStepGroups(
     origin,
     egressHosts,
   );
-  return [...registration, instruction, monitoring, check];
+  return [...registration, monitoring, verify];
 };
 
 /**

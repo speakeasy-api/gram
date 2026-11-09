@@ -150,6 +150,9 @@ describe("AnthropicAdminControlsStep", () => {
     ).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
+    expect(
+      screen.getByText("Organization Gateway connector section"),
+    ).toBeTruthy();
     expect(screen.getAllByText("Optional")).toHaveLength(1);
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
