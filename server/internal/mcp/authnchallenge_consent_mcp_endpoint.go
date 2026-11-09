@@ -187,7 +187,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeBadRequest, nil, "gateway tools are captured when the consent page loads").LogWarn(ctx, logger)
 	}
 
-	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
+	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt, reconsentConsenter(challengeState))
 	if err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "server configuration changed; reload this page to review access").LogWarn(ctx, logger)
@@ -594,7 +594,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// returns, allowing its next tools/list request to capture a page in
 		// parallel. Re-read before storing the session id so a stale initialize
 		// draft cannot overwrite that newer capture.
-		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt)
+		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt, reconsentConsenter(challengeState))
 		if ferr != nil {
 			s.logger.WarnContext(ctx, "reload consent inventory before recording session id", attr.SlogError(ferr))
 		} else if freshDraft.McpSessionID == "" {
