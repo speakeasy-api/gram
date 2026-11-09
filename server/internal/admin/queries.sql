@@ -744,7 +744,11 @@ ON CONFLICT (slug) DO UPDATE SET
     vendor = EXCLUDED.vendor,
     plan_notes = EXCLUDED.plan_notes,
     sort_order = EXCLUDED.sort_order,
-    updated_at = clock_timestamp();
+    updated_at = clock_timestamp()
+WHERE support_matrix_integration_methods.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_integration_methods.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_integration_methods.plan_notes IS DISTINCT FROM EXCLUDED.plan_notes
+   OR support_matrix_integration_methods.sort_order IS DISTINCT FROM EXCLUDED.sort_order;
 
 -- name: SeedSupportCapabilities :exec
 INSERT INTO support_matrix_capabilities (slug, name, category, sort_order)
