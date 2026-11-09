@@ -128,7 +128,7 @@ func registerCatalogTools(reg *Registrar, catalog Catalog, budget OperationBudge
 		}
 		project := registrations.catalogCardProject(ctx, principal, input.ProjectSlug, page)
 		carousel := buildCatalogCarousel(page, project, output.NextCursor != "")
-		carousel.fillLogos(registrations.catalogLogoURIs(ctx, page))
+		carousel.fillLogos(registrations.catalogLogoURIs(ctx, page, carousel.storedLogos()))
 		return catalogCarouselResult(carousel), output, nil
 	})
 }

@@ -183,7 +183,23 @@ func (s *RegistrationService) catalogCardProject(ctx context.Context, principal 
 	for _, candidate := range page {
 		onPage[catalogServerKey{providerKey: candidate.ProviderKey, catalogRef: candidate.CatalogRef}] = true
 	}
+	addedOnPage := false
+	for _, row := range rows {
+		if onPage[catalogServerKey{providerKey: row.CatalogProvider, catalogRef: row.CatalogReference}] {
+			addedOnPage = true
+			break
+		}
+	}
+	// The organization slug is read once, and only when an Open link needs it.
 	organizationSlug := ""
+	if addedOnPage && s.dashboardURL != nil {
+		organization, err := organizationsrepo.New(s.logos.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
+		if err != nil {
+			s.logos.logger.WarnContext(ctx, "read platform mcp card organization", attr.SlogError(err))
+		} else {
+			organizationSlug = organization.Slug
+		}
+	}
 	cardProject := &catalogCardProject{Slug: project.Slug, Added: make(map[catalogServerKey]catalogAddedServer)}
 	for _, row := range rows {
 		key := catalogServerKey{providerKey: row.CatalogProvider, catalogRef: row.CatalogReference}
@@ -192,14 +208,6 @@ func (s *RegistrationService) catalogCardProject(ctx context.Context, principal 
 		}
 		if _, seen := cardProject.Added[key]; seen {
 			continue
-		}
-		if organizationSlug == "" && s.dashboardURL != nil {
-			organization, err := organizationsrepo.New(s.logos.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
-			if err != nil {
-				s.logos.logger.WarnContext(ctx, "read platform mcp card organization", attr.SlogError(err))
-			} else {
-				organizationSlug = organization.Slug
-			}
 		}
 		added := catalogAddedServer{
 			Logo:    s.logos.registrationLogo(ctx, principal.OrganizationID, project.ID, row.RegistrationID.String()),
