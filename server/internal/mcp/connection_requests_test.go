@@ -920,6 +920,32 @@ func TestHostedToolProviderRejectionRecords(t *testing.T) {
 	}
 }
 
+// A provider's rejection is recorded even when its response cannot be formatted for the client.
+func TestHostedToolRejectionWithUnreadableResponseRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-unreadable-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; =")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	t.Cleanup(upstream.Close)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, decodeRPCResponse(t, resp)["error"])
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
 // A key the caller sent in a request header is the caller's own, so its rejection writes nothing.
 func TestHostedToolCallerKeyRejectionRecordsNothing(t *testing.T) {
 	t.Parallel()

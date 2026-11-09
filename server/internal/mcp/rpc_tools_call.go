@@ -564,6 +564,11 @@ func handleToolsCall(
 
 	outputBytes = int64(rw.body.Len())
 
+	// Classified before any branch below can return, so a refused response is still recorded.
+	if plan.Kind == gateway.ToolKindHTTP {
+		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, toolCallEnv.Credentials, credentialSources)
+	}
+
 	// The proxy refused the input before contacting the tool's server, so a
 	// Code Mode program can fix its arguments and call again.
 	if rw.headers.Get(gateway.ToolInputRejectedHeader) != "" {
@@ -662,9 +667,6 @@ func handleToolsCall(
 		return nil, failure
 	}
 
-	if plan.Kind == gateway.ToolKindHTTP {
-		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, toolCallEnv.Credentials, credentialSources)
-	}
 	return bs, nil
 }
 
