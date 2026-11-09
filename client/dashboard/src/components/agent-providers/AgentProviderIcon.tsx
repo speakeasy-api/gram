@@ -556,6 +556,10 @@ export function AgentProviderIcon({
       return <OpencodeIcon className={className} />;
     case "openclaw":
       return <OpenClawIcon className={className} />;
+    case "kit":
+      return (
+        <img src="/icons/platforms/kit.png" alt="" className={className} />
+      );
     case "pi":
       return <PiIcon className={className} />;
     case "litellm":

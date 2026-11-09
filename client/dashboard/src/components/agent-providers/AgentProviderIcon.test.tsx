@@ -85,6 +85,11 @@ describe("AgentProviderIcon", () => {
     ["copilot-cli", "copilot"],
     ["opencode", "opencode"],
     ["pi", "pi"],
+    ["kit", "kit"],
+    [" Kit ", "kit"],
+    ["ahp-harness:kit", "kit"],
+    ["toolkit", "unknown"],
+    ["kit-fork", "unknown"],
     // "copilot" contains "pi": the Pi mapping must not steal it.
     ["copilot", "copilot"],
     ["LiteLLM", "litellm"],
@@ -100,6 +105,21 @@ describe("AgentProviderIcon", () => {
       expect(agentProviderIconKind(provider.iconSource)).not.toBe("unknown");
     }
   });
+
+  it.each(["kit", "ahp-harness:kit"])(
+    "renders the Kit mark for %s",
+    (source) => {
+      const { container } = render(
+        <AgentProviderIcon source={source} className="size-4" />,
+      );
+      const image = container.querySelector(
+        'img[src="/icons/platforms/kit.png"]',
+      );
+      expect(image).toBeTruthy();
+      expect(image?.getAttribute("class")).toBe("size-4");
+      expect(image?.getAttribute("alt")).toBe("");
+    },
+  );
 
   it("renders the LiteLLM logo", () => {
     const { container } = render(<AgentProviderIcon source="litellm" />);
