@@ -109,3 +109,44 @@ it("says an agent already has a key that nothing has used yet", () => {
     screen.getByRole("button", { name: "Issue another key" }),
   ).toBeTruthy();
 });
+
+it("tells an OpenClaw user how to update, reinstall or uninstall", () => {
+  const writeText = vi.fn<(text: string) => Promise<void>>(() =>
+    Promise.resolve(),
+  );
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText },
+  });
+  render(
+    <StepInstall
+      command="curl -fsSL https://app.example.test/install/code | sh"
+      commandError={null}
+      minting={false}
+      onRegenerate={vi.fn<() => void>()}
+      onIssue={vi.fn<() => void>()}
+      issuing={false}
+      secret="gram_secret"
+      existingKey={null}
+      gatewayURL={gatewayURL}
+      serverCount={1}
+    />,
+  );
+
+  // Folded away on the one-line tab, where the setup command is.
+  expect(
+    screen.getByText("Need to update, reinstall or uninstall on OpenClaw?"),
+  ).toBeTruthy();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Copy Uninstall from OpenClaw" }),
+  );
+
+  // The plugin id and the gateway entry name the one-line setup uses.
+  expect(writeText.mock.calls[0]?.[0]).toBe(
+    [
+      "openclaw plugins uninstall speakeasy-observability --force",
+      "openclaw config unset mcp.servers.speakeasy",
+      "openclaw gateway restart",
+    ].join("\n"),
+  );
+});
