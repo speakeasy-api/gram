@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -230,4 +231,41 @@ func TestConsentCardsApprovable(t *testing.T) {
 			require.Equal(t, tc.want, consentCardsApprovable(tc.cards))
 		})
 	}
+}
+
+func TestGatewayConsentAuthChoicesUsesMemberQualifiedCards(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_member_qualified_choices")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.enforce()
+	client := f.adminClient(authClientTypeRemoteSession, validUUID(f.registration))
+	second, _ := f.server()
+	require.NoError(t, f.q.SeedServerAuthClientLinkFixture(t.Context(), authclientbackfill.SeedServerAuthClientLinkFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, McpServerID: second, AuthClientID: client, Source: "admin"}))
+	members := []metaMember{
+		{serverID: f.serverID, projectID: f.projectID, slug: "member-a", backend: metaMemberBackendProxied},
+		{serverID: second, projectID: f.projectID, slug: "member-b", backend: metaMemberBackendProxied},
+	}
+	a := []remoteSessionCard{{ClientID: f.registration.String(), Connected: true}}
+	b := []remoteSessionCard{{ClientID: f.registration.String()}, {ClientID: uuid.NewString(), Connected: true}}
+	choices, err := f.service.gatewayConsentAuthChoices(t.Context(), httptest.NewRequest("GET", "/", nil), &ResolvedMcpEndpoint{OrganizationID: f.orgID}, urn.NewUserSubject("user_1"), members, a, map[uuid.UUID][]remoteSessionCard{f.serverID: a, second: b})
+	require.NoError(t, err)
+	require.Equal(t, consentClientReady, choices[f.serverID].Options[0].State)
+	require.Equal(t, consentClientConnect, choices[second].Options[0].State)
+	require.Equal(t, f.registration.String(), choices[second].Options[0].ConnectClientID)
+	require.Equal(t, client, choices[second].Options[0].ID)
+	require.Nil(t, choices[second].Selected(), "another member's connected card must not preselect B")
+}
+
+func TestGatewayConsentPicksDoNotBorrowAnotherMembersResource(t *testing.T) {
+	t.Parallel()
+	registration, a, b := uuid.New(), uuid.New(), uuid.New()
+	members := []metaMember{
+		{serverID: a, associatedClients: map[uuid.UUID]bool{registration: true}, typedRegistrations: true},
+		{serverID: b, associatedClients: map[uuid.UUID]bool{registration: true}, typedRegistrations: true},
+	}
+	ready := []remoteSessionCard{{ClientID: registration.String(), Connected: true}}
+	reconnect := []remoteSessionCard{{ClientID: registration.String(), Unroutable: true}}
+	got := chooseConsentUpstreamClientPicks(&ResolvedMcpEndpoint{MetaMcpServerID: validUUID(uuid.New())}, members, ready, map[uuid.UUID][]remoteSessionCard{a: ready, b: reconnect})
+	require.Equal(t, map[uuid.UUID]uuid.UUID{a: registration}, got)
 }

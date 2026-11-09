@@ -407,3 +407,43 @@ func TestConsentAutoVerify_IntrospectionRunsBesideTheProbe(t *testing.T) {
 	require.Equal(t, "ok", enrichment.Interfaces["introspection"].Status, "introspection ran within the auto-verify budget")
 	require.Contains(t, renderConsent(t, fx), `data-validation="inactive"`)
 }
+
+func TestConsentAutoVerify_ExpandedResourcesProbeOnlyCommittedAudience(t *testing.T) {
+	t.Parallel()
+	ctx, fx := seedMetaValidationFixture(t, "auto-resource-pair")
+	projectID, orgID := consentTestTenant(t, ctx)
+	require.NoError(t, testrepo.New(fx.ti.conn).ExpandRemoteSessionResourceIndexesFixture(ctx))
+	issuerID := clientRemoteIssuerID(t, ctx, fx.ti.conn, projectID, orgID, fx.clientID)
+	second := newValidationMember(t)
+	createMetaMember(t, ctx, fx.ti.conn, projectID, fx.endpoint.MetaMcpServerID.UUID, "auto-resource-b", second.url, conv.ToNullUUID(issuerID), 1)
+	encrypted, err := fx.ti.enc.Encrypt([]byte("committed-b-token"))
+	require.NoError(t, err)
+	q := remotesessions_repo.New(fx.ti.conn)
+	committed, err := q.UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
+		AccessTokenEncrypted: encrypted, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		Resource: conv.ToPGText(second.url), Scopes: []string{},
+	})
+	require.NoError(t, err)
+	a, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID, Resource: fx.member.url})
+	require.NoError(t, err)
+	fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, remotesessions.RemoteGrant{
+		ParentChallengeID: fx.stateID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID,
+		RemoteSessionClientID: fx.clientID, Subject: fx.subject, RemoteSessionID: committed.ID,
+		RemoteSessionUpdatedAt: committed.UpdatedAt.Time, GrantGeneration: committed.GrantGeneration,
+	})
+	require.Empty(t, fx.member.drain(), "B callback must not probe A")
+	requireProbe(t, second.drain(), "committed-b-token", true, true)
+	refreshedA, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{ID: a.ID, SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, a, refreshedA, "B verification must not change A's grant or verdict")
+	b, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{ID: committed.ID, SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, string(remotesessions.ValidationOutcomeValid), b.ValidationStatus.String)
+	stale := remotesessions.RemoteGrant{ParentChallengeID: fx.stateID, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID, Subject: fx.subject, RemoteSessionID: committed.ID, RemoteSessionUpdatedAt: committed.UpdatedAt.Time.Add(-time.Second)}
+	fx.ti.service.VerifyRemoteGrantOn(ctx, fx.endpoint, stale)
+	require.Empty(t, second.drain(), "stale callback references must not probe or rewrite a current grant")
+	currentB, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: fx.subject, RemoteSessionClientID: fx.clientID})
+	require.NoError(t, err)
+	require.Equal(t, b, currentB, "stale callback must preserve B’s row and verdict")
+}
