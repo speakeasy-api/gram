@@ -156,9 +156,9 @@ export function useProviderConnection(
       providerKey === "slack"
         ? scopesFor({ values: { access } })
         : providerKey === "salesforce"
-          ? salesforceScopes(s.values.integration)
+          ? salesforceScopes()
           : [],
-    [access, providerKey, s.values.integration],
+    [access, providerKey],
   );
   const sdk = useSdkClient();
   const session = useSession();
@@ -881,7 +881,7 @@ export function useProviderConnection(
             clientConfiguration: {
               clientId: s.values.clientId.trim(),
               clientSecret:
-                providerKey === "salesforce" && !s.values.clientSecret.trim()
+                providerKey === "salesforce"
                   ? undefined
                   : s.values.clientSecret.trim(),
               tokenEndpointAuthMethod:

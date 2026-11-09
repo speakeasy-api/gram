@@ -239,76 +239,48 @@ function SalesforceFixture({
     </SetupContext>
   );
 }
-it("shows both Salesforce connection choices and the hosted instance field", async () => {
+it("offers the documented app methods, org types and seven native servers", async () => {
   const user = userEvent.setup();
   render(<SalesforceFixture step="choices" />);
+  expect(screen.getByRole("radio", { name: "Production" })).toBeDefined();
+  expect(screen.getByRole("radio", { name: "Sandbox" })).toBeDefined();
   expect(
-    screen.getByRole("radio", { name: "Salesforce native MCP" }),
-  ).toBeDefined();
-  expect(screen.getByLabelText("Salesforce server")).toBeDefined();
-  await user.click(screen.getByText("Speakeasy-hosted Salesforce CRM"));
-  expect(screen.getByLabelText("Salesforce instance URL")).toBeDefined();
-  expect(screen.queryByLabelText("Salesforce server")).toBeNull();
-});
-it.each([
-  ["none", "", "No secret required"],
-  ["client_secret_post", "••••••••", "Paste Client Secret"],
-  [undefined, "", "Secret status unavailable"],
-])(
-  "presents the saved hosted secret according to auth method %s",
-  (method, value, placeholder) => {
-    render(
-      <SalesforceFixture
-        step="credentials"
-        integration="hosted"
-        saved
-        savedTokenEndpointAuthMethod={method}
-      />,
-    );
-    const secret = screen.getByLabelText("Client Secret (optional)");
-    expect(secret).toHaveProperty("disabled", true);
-    expect(secret).toHaveProperty("value", value);
-    expect(secret.getAttribute("placeholder")).toBe(placeholder);
-  },
-);
-it.each([
-  ["data360", "Data 360", /Data 360 license/, /View Data 360/],
-  [
-    "headless-360",
+    screen.getAllByRole("option").map((option) => option.textContent),
+  ).toEqual([
+    "SObject Reads",
+    "SObject Mutations",
+    "SObject Deletes",
+    "SObject All",
+    "Data 360",
     "Headless 360 (Beta)",
-    /67.0 or later/,
-    /Salesforce beta service/,
-  ],
-  [
-    "tableau-next",
     "Tableau Next",
-    /Tableau Next guided or manual setup/,
-    /access to the Tableau Next models/,
-  ],
-])(
-  "enables %s and explains its prerequisites",
-  async (id, title, requirement, permissions) => {
-    const user = userEvent.setup();
-    render(<SalesforceFixture step="choices" />);
-    const option = screen.getByRole("option", { name: title });
-    expect(option).toHaveProperty("disabled", false);
-    await user.selectOptions(screen.getByLabelText("Salesforce server"), id);
-    expect(screen.getByText(requirement)).toBeDefined();
-    expect(screen.getByText(permissions)).toBeDefined();
-  },
-);
-it.each([
-  ["data360", "Data 360", /Data 360 license/],
-  ["headless-360", "Headless 360 (Beta)", /67.0 or later/],
-  ["tableau-next", "Tableau Next", /Tableau Next guided or manual setup/],
-])("uses %s activation instructions", (id, title, requirement) => {
-  render(<SalesforceFixture step="activation" salesforceServer={id} />);
-  expect(screen.getByText(title)).toBeDefined();
-  expect(screen.getByText(id)).toBeDefined();
-  expect(screen.getByText(requirement)).toBeDefined();
+  ]);
   expect(
-    screen.getByText(/only a successful connection test confirms access/),
+    screen.queryByRole("group", { name: "Salesforce connection" }),
+  ).toBeNull();
+  expect(screen.getByRole("group", { name: "Setup method" })).toBeDefined();
+  expect(screen.getByRole("radio", { name: "Use your own app" })).toBeDefined();
+  expect(
+    screen.getByRole("radio", { name: "Use Speakeasy’s app" }),
   ).toBeDefined();
+  expect(screen.queryByLabelText("Salesforce instance URL")).toBeNull();
+  await user.selectOptions(
+    screen.getByLabelText("Salesforce server"),
+    "sobject-mutations",
+  );
+  await user.click(screen.getByText("Sandbox", { exact: true }));
+  await user.click(screen.getByText("View selected endpoint"));
+  expect(
+    screen.getByText(
+      "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-mutations",
+    ),
+  ).toBeDefined();
+});
+it("reuses shared app registration controls for the own-app instructions", () => {
+  render(<SalesforceFixture step="app" />);
+  expect(screen.getByText("New External Client App")).toBeDefined();
+  expect(screen.getByRole("radiogroup", { name: "OAuth app" })).toBeDefined();
+  expect(screen.queryByText("Use Speakeasy’s app")).toBeNull();
 });
 it("uses the real Salesforce callback and native scopes", () => {
   render(<SalesforceFixture step="oauth" />);
@@ -316,43 +288,32 @@ it("uses the real Salesforce callback and native scopes", () => {
     "value",
     "https://current.example/callback",
   );
-  expect(screen.getByText("mcp_api")).toBeDefined();
-  expect(screen.getByText("refresh_token")).toBeDefined();
+  expect(screen.getByText("Access MCP servers (mcp_api)")).toBeDefined();
+  expect(
+    screen.getByText("Perform requests at any time (refresh_token)"),
+  ).toBeDefined();
 });
-it("shows Consumer Key-only native credentials and the optional hosted secret", () => {
-  const native = render(<SalesforceFixture step="credentials" />);
+it("shows only the documented Consumer Key credential", () => {
+  render(<SalesforceFixture step="credentials" />);
   expect(screen.getByLabelText("Consumer Key")).toBeDefined();
-  expect(screen.queryByLabelText("Client Secret (optional)")).toBeNull();
-  native.unmount();
-  render(<SalesforceFixture step="credentials" integration="hosted" />);
-  expect(screen.getByLabelText("Client Secret (optional)")).toBeDefined();
+  expect(screen.queryByLabelText(/Client Secret/)).toBeNull();
 });
-it.each([
-  ["hosted", "sobject-reads", /Enter an HTTPS Salesforce instance URL/],
-  ["native", "unsupported", /Choose a supported Salesforce server/],
-])(
-  "shows connection validation from credentials for %s and offers correction",
-  async (integration, salesforceServer, message) => {
-    const user = userEvent.setup();
-    render(
-      <SalesforceFixture
-        step="credentials"
-        integration={integration}
-        salesforceServer={salesforceServer}
-      />,
-    );
-    await user.type(screen.getByLabelText("Consumer Key"), "consumer-key");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByText(message)).toBeDefined();
-    await user.click(
-      screen.getByRole("button", { name: "Review connection choices" }),
-    );
-    expect(
-      screen.getByRole("radio", { name: "Salesforce native MCP" }),
-    ).toBeDefined();
-    expect(screen.queryByLabelText("Consumer Key")).toBeNull();
-  },
-);
+it("shows invalid SObject selection from credentials and offers correction", async () => {
+  const user = userEvent.setup();
+  render(
+    <SalesforceFixture step="credentials" salesforceServer="unsupported" />,
+  );
+  await user.type(screen.getByLabelText("Consumer Key"), "consumer-key");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText("Choose a documented Salesforce server and environment."),
+  ).toBeDefined();
+  await user.click(
+    screen.getByRole("button", { name: "Review connection choices" }),
+  );
+  expect(screen.getByLabelText("Salesforce server")).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});
 it.each([
   ["salesforce", "oauth", "callback URL"],
   ["github", "app", "authorization callback URL"],
@@ -384,18 +345,11 @@ it.each([
     expect(callback.refetch).toHaveBeenCalledOnce();
   },
 );
-it("retains the unresolved support branch with a real correction action and no simulated success", () => {
-  render(<SalesforceFixture step="support" path="support" />);
-  expect(
-    screen.getByRole("button", { name: "Choose another setup method" }),
-  ).toBeDefined();
-  expect(screen.queryByText(/Simulate/)).toBeNull();
-});
 
 it.each([
   ["github", "GitHub", "permission to manage OAuth apps"],
   ["slack", "Slack", "permission to manage an app"],
-  ["salesforce", "Salesforce", "administrator access to your Salesforce org"],
+  ["salesforce", "Salesforce", "Salesforce System Administrator access"],
 ] as const)(
   "uses the shared setup-plan card with %s content",
   (provider, name, requirement) => {
@@ -413,7 +367,9 @@ it.each([
     expect(screen.getByText(requirement, { exact: false })).toBeDefined();
     if (provider === "salesforce") {
       expect(
-        screen.getByText("Salesforce’s native MCP servers", { exact: false }),
+        screen.getByText("create your own External Client App", {
+          exact: false,
+        }),
       ).toBeDefined();
       expect(
         screen.queryByText("Using an existing app or an IP allowlist?"),
@@ -422,3 +378,37 @@ it.each([
     }
   },
 );
+
+it("uses the published app installation URL and stops at the documented support handoff", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="choices" />);
+  await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Open Salesforce installation" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2",
+  );
+  expect(
+    screen.getByText(/Installation alone does not complete OAuth/),
+  ).toBeDefined();
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen
+      .getByRole("link", { name: "Read support instructions" })
+      .getAttribute("href"),
+  ).toBe(
+    "https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support",
+  );
+  expect(screen.getByLabelText("Selected MCP endpoint")).toHaveProperty(
+    "value",
+    "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText(/Your next step is with Speakeasy support/),
+  ).toBeDefined();
+  expect(screen.queryByLabelText("Consumer Key")).toBeNull();
+});

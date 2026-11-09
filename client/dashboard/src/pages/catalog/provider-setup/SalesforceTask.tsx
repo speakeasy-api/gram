@@ -1,5 +1,5 @@
 import { useNewRemoteSessionClientCallbackUrl } from "@gram/client/react-query/newRemoteSessionClientCallbackUrl.js";
-import { Layers, Server, ShieldCheck, ShieldCog, CopyPlus } from "lucide-react";
+import { Layers, ShieldCheck, ShieldCog, CopyPlus } from "lucide-react";
 import { useSetup } from "./setup-context";
 import {
   AppChoice,
@@ -10,15 +10,19 @@ import {
   ExternalAction,
   InProvider,
   Note,
+  ProviderFieldInstructions,
   Section,
-  SetupField,
+  SetupGroup,
 } from "./shared";
-import { salesforceConnection, salesforceServers } from "./salesforce";
+import {
+  salesforceConnection,
+  salesforceServers,
+  salesforceAppInstallationUrl,
+} from "./salesforce";
 
-/** Provider tasks adapted from the interactive Salesforce demo. */
+/** Provider instructions follow the current published Salesforce setup guide. */
 export function SalesforceTask(): JSX.Element {
   const { s, live } = useSetup();
-  const hosted = s.values.integration === "hosted";
   const existing = s.values.appChoice === "existing";
   const connection = salesforceConnection(s.values);
   const callback = useNewRemoteSessionClientCallbackUrl(undefined, undefined, {
@@ -28,30 +32,34 @@ export function SalesforceTask(): JSX.Element {
   const server = salesforceServers.find(
     (x) => x.id === s.values.salesforceServer,
   );
+  const basicFields: Parameters<typeof ProviderFieldInstructions>[0]["items"] =
+    [
+      {
+        label: "Distribution State",
+        description: (
+          <>
+            Select <strong>Local</strong> for the app in this org.
+          </>
+        ),
+      },
+    ];
+  if (!existing)
+    basicFields.unshift(
+      {
+        label: "App Name",
+        description:
+          "Enter a descriptive name for the app in Salesforce. You can use the suggested name below.",
+        copyValue: "Speakeasy MCP",
+      },
+      {
+        label: "Contact Email",
+        description: "Enter the email of the administrator or app owner.",
+      },
+    );
   switch (s.step) {
     case "choices":
       return (
         <>
-          <Choices
-            field="integration"
-            label="Salesforce connection"
-            options={[
-              {
-                value: "native",
-                title: "Salesforce native MCP",
-                description:
-                  "Choose a Salesforce-hosted server with the capabilities you need.",
-                icon: Server,
-              },
-              {
-                value: "hosted",
-                title: "Speakeasy-hosted Salesforce CRM",
-                description:
-                  "Connect the hosted CRM tools to your Salesforce instance.",
-                icon: Layers,
-              },
-            ]}
-          />
           <Choices
             field="path"
             label="Setup method"
@@ -67,7 +75,7 @@ export function SalesforceTask(): JSX.Element {
                 value: "support",
                 title: "Use Speakeasy’s app",
                 description:
-                  "Requires app installation and setup with support.",
+                  "Install Speakeasy’s Salesforce app, then finish OAuth with support.",
                 icon: CopyPlus,
               },
             ]}
@@ -90,46 +98,39 @@ export function SalesforceTask(): JSX.Element {
               },
             ]}
           />
-          {hosted ? (
-            <SetupField
-              field="instanceUrl"
-              label="Salesforce instance URL"
-              placeholder="https://your-org.my.salesforce.com"
-            />
-          ) : (
-            <>
-              <label htmlFor="salesforce-server" className="mb-2 block">
-                Salesforce server
-              </label>
-              <select
-                id="salesforce-server"
-                className="h-10 w-full border bg-background px-3"
-                value={s.values.salesforceServer}
-                onChange={(event) =>
-                  live.changeField({
-                    field: "salesforceServer",
-                    value: event.target.value,
-                  })
-                }
-              >
-                {salesforceServers.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.title}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-3">{server?.description}</p>
-              {!!server?.prerequisites.length && (
-                <Section title="Before you connect">
-                  <ul className="list-disc pl-5">
-                    {server.prerequisites.map((requirement) => (
-                      <li key={requirement}>{requirement}</li>
-                    ))}
-                  </ul>
-                </Section>
-              )}
-            </>
-          )}
+          <SetupGroup
+            label="Salesforce server"
+            labelId="salesforce-server-label"
+          >
+            <select
+              id="salesforce-server"
+              aria-labelledby="salesforce-server-label"
+              className="h-10 w-full border bg-background px-3"
+              value={s.values.salesforceServer}
+              onChange={(event) =>
+                live.changeField({
+                  field: "salesforceServer",
+                  value: event.target.value,
+                })
+              }
+            >
+              {salesforceServers.map((x) => (
+                <option key={x.id} value={x.id}>
+                  {x.title}
+                </option>
+              ))}
+            </select>
+            <p className="mt-3">{server?.description}</p>
+            {!!server?.prerequisites.length && (
+              <Section title="Before you connect">
+                <ul className="list-disc pl-5">
+                  {server.prerequisites.map((requirement) => (
+                    <li key={requirement}>{requirement}</li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+          </SetupGroup>
           <p className="mt-4">
             Use the same org for the app and sign-in. This flow does not cover
             scratch orgs.
@@ -138,12 +139,6 @@ export function SalesforceTask(): JSX.Element {
             <details className="mt-5">
               <summary>View selected endpoint</summary>
               <code className="mt-3 block break-all">{connection.url}</code>
-              {hosted && (
-                <p className="mt-3">
-                  The instance is saved separately; changing org type does not
-                  change this MCP endpoint.
-                </p>
-              )}
             </details>
           )}
         </>
@@ -161,11 +156,9 @@ export function SalesforceTask(): JSX.Element {
             title="Open Salesforce"
             label="Open Salesforce"
             href={
-              hosted
-                ? (connection?.instanceUrl ?? undefined)
-                : s.values.environment === "sandbox"
-                  ? "https://test.salesforce.com/"
-                  : "https://login.salesforce.com/"
+              s.values.environment === "sandbox"
+                ? "https://test.salesforce.com/"
+                : "https://login.salesforce.com/"
             }
           />
           <InProvider
@@ -180,20 +173,14 @@ export function SalesforceTask(): JSX.Element {
                   Select <strong>New External Client App</strong>.
                 </>
               ),
+              <>
+                In Salesforce’s <strong>Basic Information</strong> section,
+                enter the app details shown below.
+              </>,
             ]}
           />
-          {!existing && (
-            <>
-              <CopyValue label="App Name" value="Speakeasy MCP" />
-              <Section title="Contact Email">
-                <p>Enter the email of the administrator or app owner.</p>
-              </Section>
-            </>
-          )}
-          <Section title="Distribution State">
-            <p>
-              Use <strong>Local</strong> for the app in this org.
-            </p>
+          <Section title="Basic information">
+            <ProviderFieldInstructions items={basicFields} />
           </Section>
         </>
       );
@@ -209,6 +196,11 @@ export function SalesforceTask(): JSX.Element {
               <>
                 Set <strong>Callback URL</strong> to the address below.
               </>,
+              <>
+                Select each scope shown below in{" "}
+                <strong>Available OAuth Scopes</strong>, then use the right
+                arrow to move it to <strong>Selected OAuth Scopes</strong>.
+              </>,
             ]}
           />
           {redirectUrl ? (
@@ -221,23 +213,20 @@ export function SalesforceTask(): JSX.Element {
             />
           )}
           <Section title="OAuth scopes">
-            <p>Add these to Selected OAuth Scopes:</p>
-            <ul className="mt-3 list-disc pl-5">
-              <li>
-                {hosted ? (
-                  <>
-                    Manage user data via APIs (<code>api</code>)
-                  </>
-                ) : (
-                  <>
-                    Access MCP servers (<code>mcp_api</code>)
-                  </>
-                )}
-              </li>
-              <li>
-                Perform requests at any time (<code>refresh_token</code>)
-              </li>
-            </ul>
+            <ProviderFieldInstructions
+              items={[
+                {
+                  label: "Access MCP servers (mcp_api)",
+                  description:
+                    "Allows the app to access Salesforce MCP servers on your behalf.",
+                },
+                {
+                  label: "Perform requests at any time (refresh_token)",
+                  description:
+                    "Allows the connection to refresh access without asking you to sign in again each time an access token expires.",
+                },
+              ]}
+            />
           </Section>
         </>
       );
@@ -257,11 +246,17 @@ export function SalesforceTask(): JSX.Element {
                 .
               </>,
               <>
+                Leave{" "}
+                <strong>
+                  Require Proof Key for Code Exchange (PKCE) extension for
+                  Supported Authorization Flows
+                </strong>{" "}
+                deselected.
+              </>,
+              <>
                 Leave <strong>Require Secret for Web Server Flow</strong> and{" "}
-                <strong>Require Secret for Refresh Token Flow</strong> off for a
-                Consumer Key-only connection. If your hosted CRM app requires a
-                secret, retain that requirement and supply the secret on the
-                next credentials step.
+                <strong>Require Secret for Refresh Token Flow</strong> off for
+                this Consumer Key-only connection.
               </>,
               <>
                 Leave other editable security requirements off, as described in
@@ -305,21 +300,62 @@ export function SalesforceTask(): JSX.Element {
               </>,
             ]}
           />
-          <p className="mt-4">
-            Salesforce documents up to two minutes for activation. Continue to
-            connect and test; only a successful connection test confirms access.
-          </p>
+          <p className="mt-4">Activation can take up to two minutes.</p>
         </>
       );
     case "install":
+      return (
+        <>
+          <ExternalAction
+            title="Install Speakeasy’s Salesforce app"
+            label="Open Salesforce installation"
+            href={salesforceAppInstallationUrl}
+          />
+          <InProvider
+            actions={[
+              <>
+                Install Speakeasy’s Salesforce application into the intended
+                org.
+              </>,
+              <>
+                After installation, contact Speakeasy support to finish OAuth
+                and coordinate the selected endpoint and server activation.
+              </>,
+            ]}
+          />
+          <Note>
+            Installation alone does not complete OAuth. Continue for the support
+            handoff instructions; this page does not verify installation.
+          </Note>
+        </>
+      );
     case "support":
       return (
-        <Note>
-          The Speakeasy app installation and support completion handoff are not
-          configured for this connection yet. This path cannot complete until
-          those details are available.{" "}
-          <Correction step="choices">Choose another setup method</Correction>.
-        </Note>
+        <>
+          <InProvider
+            actions={[
+              <>Contact Speakeasy support to finish OAuth setup.</>,
+              <>
+                Share the selected endpoint below and coordinate server
+                activation in the same Salesforce org.
+              </>,
+            ]}
+          />
+          {connection && (
+            <CopyValue label="Selected MCP endpoint" value={connection.url} />
+          )}
+          <ExternalAction
+            title="Support handoff"
+            label="Read support instructions"
+            href="https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce#contact-speakeasy-support"
+          />
+          <Note>
+            Your next step is with Speakeasy support. This page has no verified
+            completion signal for that handoff and will not mark the connection
+            complete.{" "}
+            <Correction step="choices">Choose another setup method</Correction>.
+          </Note>
+        </>
       );
     default:
       return <></>;

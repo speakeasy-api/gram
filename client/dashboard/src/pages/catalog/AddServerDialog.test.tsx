@@ -214,7 +214,7 @@ describe("Salesforce catalog Add entry", () => {
       name: "Test Server",
     });
   });
-  it("defers hosted instance configuration to Setup and restores it for Manual", async () => {
+  it("keeps the older hosted registry entry on the existing generic configuration path", async () => {
     const hosted = {
       ...salesforceServer,
       registrySpecifier: "com.pulsemcp.mirror/gram-salesforce",
@@ -232,7 +232,10 @@ describe("Salesforce catalog Add entry", () => {
     await screen.findByRole("radio", { name: /User Identity/ });
     expect(
       mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes[0].headers,
-    ).toEqual([]);
+    ).toEqual(hosted.remotes[0]!.headers);
+    expect(
+      mocks.workflow.mock.calls.at(-1)![0].initialConfiguration,
+    ).toBeUndefined();
     fireEvent.click(screen.getByRole("radio", { name: /Manual/ }));
     expect(mocks.workflow.mock.calls.at(-1)![0].servers[0].remotes).toEqual(
       hosted.remotes,

@@ -39,29 +39,17 @@ Use organization-owned OAuth app settings for new and existing apps, with the ac
 
 ### Salesforce
 
-| Connection                                                   | Configuration                                                           | OAuth                                                                                                                                                          |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Native (`com.salesforce/hosted-mcp`)                         | Selected server and production/sandbox determine the upstream URL       | External Client App Consumer Key, public client with PKCE, `mcp_api refresh_token`; production uses `login.salesforce.com`, sandbox uses `test.salesforce.com` |
-| Speakeasy-hosted CRM (`com.pulsemcp.mirror/gram-salesforce`) | Fixed hosted endpoint; instance stored separately as `MCP-Instance-URL` | Instance-specific authorization/token endpoints, Consumer Key with optional secret, `api refresh_token`; a supplied secret selects `client_secret_post`        |
+Read the current [published Salesforce setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce) directly before changing this flow. Cached search excerpts have omitted documented branches and endpoints; their omissions are not evidence that a path is unsupported.
 
-The native and hosted records are distinct integrations. The hosted registry's placeholder OAuth metadata and empty registration endpoint do not establish a working dynamic-registration contract; setup uses manual credentials and concrete instance endpoints.
+The current guide documents **two app methods** against Salesforce-native MCP endpoints: install Speakeasy’s Salesforce application and finish OAuth with support, or create your own External Client App and configure credentials. Both select production/sandbox and one of seven native servers: the four SObject variants, Data 360, Headless 360 (Beta), or Tableau Next. Keep each server’s prerequisites and endpoint mapping. These app methods do not select different MCP implementations.
 
-Use the explicit mappings in `salesforce.ts` for all seven native choices. Data 360 places `sandbox` after `data/`; the platform and analytics servers place it before their category. Preserve exact endpoint matching and the selected catalog server/environment when entering setup.
+The installation URL comes from the guide and lives in `salesforce.ts`. Installation alone does not finish OAuth. The support page supplies the selected native endpoint and links to the published support instructions; it stops at that handoff without inventing tickets, activation polling, or a completion signal. The own-app path saves Consumer Key-only credentials with native `mcp_api refresh_token` scopes and uses the shared real sign-in/test actions. The guide explicitly says that compatibility is not yet live-verified with the product; report it accordingly.
 
-For a single Salesforce catalog Add with setup enabled, retain the existing Identity and optional Guardrails steps, then open the guided page. Endpoint, environment and instance selection belong on that page; the generic endpoint/header picker must not precede it. Installation starts with one verified catalog endpoint, not all endpoints. Choosing Shared credential or Manual restores the original catalog configuration; bulk, headless, gateway/plugin and rollout-disabled installs retain their existing paths.
+The older fixed-endpoint registry integration is a distinct server and retains generic configuration. It is not a hosting-mode alternative within the guide’s native setup. Reuse the shared plan, fields, provider instructions, credentials and connection actions rather than copying prototype layouts.
 
-Keep prerequisites specific to the selected server: Data 360 licensing/API version/permissions, Headless 360 beta/API availability, and Tableau Next setup/asset access. Activation is an instruction followed by the actual connection test; the page does not detect licenses, permissions, or activation.
+For a single supported catalog Add with setup enabled, retain Identity and optional Guardrails, then open Setup. Org type and native server selection belong on the guided page; install one catalog endpoint initially. Other identity modes, bulk/headless/plugin callers and rollout-disabled installs retain their existing paths.
 
-Source writes must reject wrapper drift, conflicting Authorization headers, dynamic/secret or duplicate instance headers, and changes to a source shared by another server. Preserve retryable partial writes and persisted `configurationPending`: a failed credential replacement must not rehydrate an older client as successfully saved. Pending drafts are bound to the source ID, URL, and instance; external source changes return to the current connection choices, while completed partial writes advance the draft baseline for retry. Provider slugs include the issuer so switching environments or instances can create distinct bindings.
-
-The support-assisted branch remains visibly unavailable with a correction action. Wiring it requires an installation URL, a support handoff, and an established completion contract. Keep those requirements separate from the own-app connection flow.
-
-Authoritative references for rechecking Salesforce requirements:
-
-- [Speakeasy SObject setup guide](https://www.speakeasy.com/docs/ai-control-plane/guides/salesforce)
-- [External Client App](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/create-external-client-app.html), [OAuth endpoints and PKCE](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/postman.html), [GA OAuth scopes](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/beta-to-ga-transition.html)
-- [Data 360](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/data360-mcp.html), [Headless 360](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/guide/headless-360-mcp.html), [Tableau Next](https://developer.salesforce.com/docs/platform/hosted-mcp-servers/references/reference/tableau-next.html), [Tableau Next prerequisites](https://help.salesforce.com/s/articleView?id=005462387&language=en_US&type=1)
-- [Hosted CRM registry record](https://github.com/speakeasy-api/mcp-registry/blob/main/data/servers/com.pulsemcp.mirror__gram-salesforce.json)
+Salesforce progress uses revision 4 and persists only non-secret native server/environment, app-method choices and configuration fingerprints. Older snapshots reset; they cannot restore the removed legacy-integration switch. Preserve configuration invalidation, stale-operation rejection, shared-source safeguards and guarded rollback. Compensation is not an atomic transaction.
 
 ## Verification and related surfaces
 

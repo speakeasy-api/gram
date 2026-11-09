@@ -73,16 +73,16 @@ describe("Salesforce source-bound progress", () => {
       ).values.salesforceServer,
     ).toBe("sobject-reads");
   });
-  it("keeps the intended connection after a partial source write and failed credential replacement", () => {
+  it("retains a documented environment/server draft after a source write and failed credential replacement", () => {
     const state = initialState("salesforce");
     const partial = {
       ...source,
-      instanceUrl: "https://example.my.salesforce.com",
+      url: "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-reads",
     };
     const partialBaseline = salesforceSourceFingerprint("upstream", partial);
     Object.assign(state.values, {
-      integration: "hosted",
-      instanceUrl: partial.instanceUrl,
+      environment: "sandbox",
+      salesforceServer: "sobject-all",
     });
     state.configChanged = true;
     state.sourceFingerprint = partialBaseline;
@@ -90,16 +90,90 @@ describe("Salesforce source-bound progress", () => {
     const restored = loadProviderProgress(
       "salesforce",
       "sf-partial",
-      {
-        ...initialState("salesforce").values,
-        instanceUrl: partial.instanceUrl,
-      },
+      { ...initialState("salesforce").values, environment: "sandbox" },
       partialBaseline,
     );
-    expect(restored.values.integration).toBe("hosted");
-    expect(restored.values.instanceUrl).toBe(partial.instanceUrl);
+    expect(restored.values.environment).toBe("sandbox");
+    expect(restored.values.salesforceServer).toBe("sobject-all");
     expect(restored.configChanged).toBe(true);
     expect(restored.saved).toBe(false);
+  });
+  it.each([1, 2, 3])(
+    "drops obsolete revision %s prototype branches instead of restoring them",
+    (revision) => {
+      sessionStorage.setItem(
+        "sf-prototype",
+        JSON.stringify({
+          revision,
+          step: "support",
+          done: ["begin", "choices", "install"],
+          values: {
+            integration: "hosted",
+            path: "support",
+            appChoice: "existing",
+            instanceUrl: "https://example.my.salesforce.com",
+            salesforceServer: "data360",
+            environment: "sandbox",
+          },
+        }),
+      );
+      const restored = loadProviderProgress("salesforce", "sf-prototype");
+      expect(restored.values.integration).toBe("native");
+      expect(restored.values.path).toBe("own");
+      expect(restored.values.appChoice).toBe("new");
+      expect(restored.values.instanceUrl).toBe("");
+      expect(restored.values.salesforceServer).toBe("sobject-reads");
+      expect(restored.saved || restored.authorized || restored.tested).toBe(
+        false,
+      );
+      expect(["begin", "choices"]).toContain(restored.step);
+      expect(restored.done).not.toContain("install");
+    },
+  );
+  it("persists documented app paths and native Salesforce choices in revision 4", () => {
+    const state = initialState("salesforce");
+    Object.assign(state.values, {
+      clientId: "private-id",
+      clientSecret: "private-secret",
+      integration: "hosted",
+      path: "support",
+      instanceUrl: "https://example.my.salesforce.com",
+      appChoice: "existing",
+    });
+    saveProviderProgress("sf-current", state);
+    const saved = JSON.parse(sessionStorage.getItem("sf-current")!);
+    expect(saved.revision).toBe(4);
+    expect(saved.values).not.toHaveProperty("integration");
+    expect(saved.values.path).toBe("support");
+    expect(saved.values).not.toHaveProperty("instanceUrl");
+    expect(saved.values.appChoice).toBe("existing");
+    expect(sessionStorage.getItem("sf-current")).not.toContain("private-");
+  });
+  it("ignores a legacy hosted integration field while retaining documented app and server choices", () => {
+    sessionStorage.setItem(
+      "sf-injected",
+      JSON.stringify({
+        revision: 4,
+        step: "support",
+        done: ["install"],
+        values: {
+          integration: "hosted",
+          path: "support",
+          appChoice: "existing",
+          instanceUrl: "https://example.my.salesforce.com",
+          salesforceServer: "data360",
+          environment: "sandbox",
+        },
+      }),
+    );
+    const state = loadProviderProgress("salesforce", "sf-injected");
+    expect(state.values.integration).toBe("native");
+    expect(state.values.path).toBe("support");
+    expect(state.values.appChoice).toBe("existing");
+    expect(state.values.instanceUrl).toBe("");
+    expect(state.values.salesforceServer).toBe("data360");
+    expect(state.step).toBe("support");
+    expect(state.done).toContain("install");
   });
 });
 
@@ -408,7 +482,10 @@ it.each(["all", "read"])(
 
 it.each([
   "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
-  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/sobject-all",
+  "https://api.salesforce.com/platform/mcp/v1/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/platform/headless-360",
+  "https://api.salesforce.com/platform/mcp/v1/analytics/tableau-next",
 ])("hands off only User Identity Salesforce installs: %s", (url) => {
   const servers = [{ remotes: [{ url }] }];
   const status = {
@@ -429,3 +506,29 @@ it.each([
     providerSetupInstallTarget(servers, [{ ...status, identityMode: "none" }]),
   ).toBeNull();
 });
+
+it.each([
+  "https://app.getgram.ai/mcp/speakeasy-team-salesforce",
+  "https://api.salesforce.com/platform/mcp/v1/sandbox/data/data360",
+  "https://api.salesforce.com/platform/mcp/v1/platform/unknown",
+])(
+  "does not hand an undocumented Salesforce catalog endpoint into guided setup: %s",
+  (url) => {
+    expect(
+      providerSetupInstallTarget(
+        [{ remotes: [{ url }] }],
+        [
+          {
+            status: "completed",
+            key: "sf",
+            name: "Salesforce",
+            identityMode: "user",
+            remoteUrl: url,
+            mcpServerId: "id",
+            mcpServerParam: "installed",
+          },
+        ],
+      ),
+    ).toBeNull();
+  },
+);

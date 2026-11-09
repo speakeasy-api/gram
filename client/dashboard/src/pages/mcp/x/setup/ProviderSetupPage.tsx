@@ -488,7 +488,7 @@ function SetupBody({
                         live.loading ||
                         (s.provider === "salesforce" &&
                           s.values.path === "support" &&
-                          ["install", "support"].includes(s.step))
+                          s.step === "support")
                       }
                       onClick={live.next}
                     >

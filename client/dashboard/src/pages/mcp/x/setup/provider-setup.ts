@@ -1,4 +1,7 @@
-import { salesforceSelectionForUrl } from "@/pages/catalog/provider-setup/salesforce";
+import {
+  salesforceSelectionForUrl,
+  salesforceConnection,
+} from "@/pages/catalog/provider-setup/salesforce";
 import {
   initialState,
   steps,
@@ -70,7 +73,7 @@ export function saveProviderProgress(key: string, state: State): void {
     sessionStorage.setItem(
       key,
       JSON.stringify({
-        revision: 2,
+        revision: state.provider === "salesforce" ? 4 : 2,
         step: state.step,
         done: state.done.filter(
           (step) => !["credentials", "test"].includes(step),
@@ -79,16 +82,17 @@ export function saveProviderProgress(key: string, state: State): void {
           ...(state.provider === "github" ? { org: state.values.org } : {}),
           ...(state.provider === "salesforce"
             ? {
-                integration: state.values.integration,
                 environment: state.values.environment,
                 salesforceServer: state.values.salesforceServer,
-                instanceUrl: state.values.instanceUrl,
                 path: state.values.path,
+                appChoice: state.values.appChoice,
                 configurationPending: state.configChanged,
                 sourceFingerprint: state.sourceFingerprint,
               }
             : {}),
-          appChoice: state.values.appChoice,
+          ...(state.provider !== "salesforce"
+            ? { appChoice: state.values.appChoice }
+            : {}),
           ...(state.accessChosen ? { access: state.values.access } : {}),
         },
       }),
@@ -105,14 +109,24 @@ export function loadProviderProgress(
 ): State {
   const initial = initialState(provider);
   Object.assign(initial.values, defaults);
-  if (provider === "salesforce") initial.sourceFingerprint = sourceFingerprint;
+  if (provider === "salesforce") {
+    initial.sourceFingerprint = sourceFingerprint;
+    Object.assign(initial.values, {
+      integration: "native",
+      path: "own",
+      instanceUrl: "",
+      appChoice: "new",
+    });
+  }
   try {
     const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
     if (
       !value ||
       typeof value !== "object" ||
       !("revision" in value) ||
-      (value.revision !== 1 && value.revision !== 2)
+      (provider === "salesforce"
+        ? value.revision !== 4
+        : value.revision !== 1 && value.revision !== 2)
     )
       return initial;
     if (
@@ -136,6 +150,7 @@ export function loadProviderProgress(
     )
       initial.values.org = values.org;
     if (
+      provider !== "salesforce" &&
       "appChoice" in values &&
       (values.appChoice === "new" || values.appChoice === "existing")
     )
@@ -153,12 +168,7 @@ export function loadProviderProgress(
       initial.configChanged =
         "configurationPending" in values &&
         values.configurationPending === true;
-      for (const field of [
-        "integration",
-        "environment",
-        "salesforceServer",
-        "instanceUrl",
-      ] as const) {
+      for (const field of ["environment", "salesforceServer"] as const) {
         const candidate = (values as Record<string, unknown>)[field];
         if (
           (!defaults ||
@@ -174,12 +184,16 @@ export function loadProviderProgress(
         (values.path === "own" || values.path === "support")
       )
         initial.values.path = values.path;
-      if (!["native", "hosted"].includes(initial.values.integration))
-        initial.values.integration = "native";
-      if (!["production", "sandbox"].includes(initial.values.environment))
-        initial.values.environment = "production";
-      if (!["own", "support"].includes(initial.values.path))
-        initial.values.path = "own";
+      if (
+        "appChoice" in values &&
+        (values.appChoice === "new" || values.appChoice === "existing")
+      )
+        initial.values.appChoice = values.appChoice;
+      if (!salesforceConnection(initial.values)) {
+        initial.values.environment = defaults?.environment ?? "production";
+        initial.values.salesforceServer =
+          defaults?.salesforceServer ?? "sobject-reads";
+      }
     }
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);

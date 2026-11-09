@@ -1,6 +1,9 @@
 import type { CatalogServer } from "../hooks";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 
+export const salesforceAppInstallationUrl =
+  "https://login.salesforce.com/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2";
+
 export const salesforceInstanceHeader = "MCP-Instance-URL";
 const isSalesforceInstanceHeader = (name: string): boolean =>
   name.toLowerCase() === salesforceInstanceHeader.toLowerCase();
@@ -25,10 +28,8 @@ export function salesforceInstanceConfiguration(
   return { header, instanceUrl: salesforceInstance(raw) ?? raw };
 }
 
-export function salesforceScopes(integration: string): string[] {
-  return integration === "hosted"
-    ? ["api", "refresh_token"]
-    : ["mcp_api", "refresh_token"];
+export function salesforceScopes(): string[] {
+  return ["mcp_api", "refresh_token"];
 }
 
 export function salesforceLogin(issuer = "https://login.salesforce.com"): {
@@ -61,9 +62,7 @@ function strictHttpsUrl(value: string): URL | null {
   }
 }
 
-/** Salesforce's native endpoints and the separate hosted CRM contract. */
-const salesforceHostedUrl =
-  "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
+/** Native MCP servers documented by the current Salesforce setup guide. */
 export const salesforceServers = [
   {
     id: "sobject-reads",
@@ -169,6 +168,7 @@ type Selection = {
   salesforceServer: string;
   instanceUrl: string;
   clientSecret?: string;
+  path?: string;
 };
 export function salesforceInstance(value: string): string | null {
   const url = strictHttpsUrl(value.trim());
@@ -188,7 +188,6 @@ export function salesforceSelectionForUrl(
   const url = strictHttpsUrl(value);
   if (!url) return null;
   const clean = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
-  if (clean === salesforceHostedUrl) return { integration: "hosted" };
   if (url.origin !== "https://api.salesforce.com") return null;
   for (const server of salesforceServers) {
     for (const environment of ["production", "sandbox"]) {
@@ -212,28 +211,21 @@ export function salesforceConnection(values: Selection): {
   scopes: string[];
   authMethod: "none" | "client_secret_post";
 } | null {
-  const hosted = values.integration === "hosted";
-  if (!hosted && values.integration !== "native") return null;
-  const instance = hosted ? salesforceInstance(values.instanceUrl) : null;
-  if (hosted && !instance) return null;
+  if (values.integration !== "native") return null;
   if (!["production", "sandbox"].includes(values.environment)) return null;
   const server = salesforceServers.find(
     (server) => server.id === values.salesforceServer,
   );
-  if (!hosted && !server) return null;
+  if (!server) return null;
   const issuer =
-    instance ??
-    (values.environment === "sandbox"
+    values.environment === "sandbox"
       ? "https://test.salesforce.com"
-      : "https://login.salesforce.com");
+      : "https://login.salesforce.com";
   return {
     ...salesforceLogin(issuer),
-    url: hosted ? salesforceHostedUrl : nativeUrl(server!, values.environment),
-    instanceUrl: instance,
-    scopes: salesforceScopes(values.integration),
-    authMethod:
-      hosted && values.clientSecret?.trim()
-        ? ("client_secret_post" as const)
-        : ("none" as const),
+    url: nativeUrl(server, values.environment),
+    instanceUrl: null,
+    scopes: salesforceScopes(),
+    authMethod: "none",
   };
 }

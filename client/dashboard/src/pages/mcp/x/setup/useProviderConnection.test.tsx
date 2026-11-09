@@ -1458,6 +1458,12 @@ describe("Slack permission choice hydration", () => {
 
 describe("Salesforce shared actions", () => {
   it.each([
+    ["sobject-reads", "sandbox", "sandbox/platform/sobject-reads"],
+    ["sobject-mutations", "production", "platform/sobject-mutations"],
+    ["sobject-mutations", "sandbox", "sandbox/platform/sobject-mutations"],
+    ["sobject-deletes", "production", "platform/sobject-deletes"],
+    ["sobject-deletes", "sandbox", "sandbox/platform/sobject-deletes"],
+    ["sobject-all", "production", "platform/sobject-all"],
     ["sobject-all", "sandbox", "sandbox/platform/sobject-all"],
     ["data360", "production", "data/data360"],
     ["data360", "sandbox", "data/sandbox/data360"],
@@ -1502,47 +1508,39 @@ describe("Salesforce shared actions", () => {
       ).toBe(false);
     },
   );
-  it("saves hosted instance configuration without changing the MCP endpoint", async () => {
-    const url = "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
-    mocks.remote.mockResolvedValue({ id: "upstream", url });
-    const s = initialState("salesforce");
-    const { result } = mount(
-      "salesforce",
-      {
+  it.each([
+    { integration: "hosted", instanceUrl: "https://example.my.salesforce.com" },
+  ])(
+    "refuses an undocumented retained Salesforce choice without writes: %j",
+    async (values) => {
+      const initial = initialState("salesforce");
+      const { result } = mount("salesforce", {
         step: "credentials",
-        values: {
-          ...s.values,
-          integration: "hosted",
-          instanceUrl: "https://example.my.salesforce.com",
-          clientId: "key",
-          clientSecret: "secret",
-        },
-      },
-      { url, instanceUrl: "" },
-    );
+        values: { ...initial.values, ...values, clientId: "key" },
+      });
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      act(() => result.current.next());
+      await waitFor(() =>
+        expect(result.current.state.errors.salesforceServer).toBeTruthy(),
+      );
+      expect(result.current.state.saved).toBe(false);
+      expect(mocks.updateRemote).not.toHaveBeenCalled();
+      expect(mocks.createHeader).not.toHaveBeenCalled();
+      expect(mocks.commit).not.toHaveBeenCalled();
+    },
+  );
+  it("does not save credentials or mutate the source on the documented support handoff path", async () => {
+    const initial = initialState("salesforce");
+    const { result } = mount("salesforce", {
+      step: "credentials",
+      values: { ...initial.values, path: "support", clientId: "key" },
+    });
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.next());
-    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    await waitFor(() => expect(result.current.error).toBeTruthy());
+    expect(result.current.state.saved).toBe(false);
     expect(mocks.updateRemote).not.toHaveBeenCalled();
-    expect(mocks.createHeader).toHaveBeenCalledWith({
-      createServerHeaderForm: {
-        remoteMcpServerId: "upstream",
-        name: "MCP-Instance-URL",
-        value: "https://example.my.salesforce.com",
-        isRequired: true,
-        isSecret: false,
-      },
-    });
-    expect(mocks.commit).toHaveBeenCalledWith({
-      commitServerIdentityConfigurationForm: expect.objectContaining({
-        clientConfiguration: {
-          clientId: "key",
-          clientSecret: "secret",
-          tokenEndpointAuthMethod: "client_secret_post",
-          scope: ["api", "refresh_token"],
-        },
-      }),
-    });
+    expect(mocks.commit).not.toHaveBeenCalled();
   });
   it("does not bind credentials after a configuration write fails and supports retry", async () => {
     mocks.updateRemote.mockRejectedValueOnce(new Error("unavailable"));
@@ -1594,15 +1592,11 @@ describe("Salesforce target changes", () => {
     expect(mocks.updateRemote).not.toHaveBeenCalled();
     expect(mocks.commit).not.toHaveBeenCalled();
   });
-  it("uses distinct provider slugs for production, sandbox and hosted instances", async () => {
+  it("uses distinct provider slugs for production and sandbox", async () => {
     const slugs: string[] = [];
     for (const values of [
       { environment: "production" },
       { environment: "sandbox" },
-      {
-        integration: "hosted",
-        instanceUrl: "https://example.my.salesforce.com",
-      },
     ]) {
       mocks.remote.mockResolvedValue({
         id: "upstream",
@@ -1625,7 +1619,7 @@ describe("Salesforce target changes", () => {
       );
       mounted.unmount();
     }
-    expect(new Set(slugs).size).toBe(3);
+    expect(new Set(slugs).size).toBe(2);
   });
   it("restores the original source after a failed credential commit and keeps the pending draft", async () => {
     mocks.associations.mockResolvedValue({
@@ -1691,92 +1685,7 @@ describe("Salesforce source safeguards", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
     expect(result.current.recovery).toBe("settings");
   });
-  it("updates an existing hosted instance header without creating a duplicate", async () => {
-    const url = "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
-    mocks.remote.mockResolvedValue({ id: "upstream", url });
-    mocks.headers.mockResolvedValue({
-      headers: [
-        {
-          id: "instance",
-          name: "mcp-instance-url",
-          description: "Existing instance",
-          value: "https://old.my.salesforce.com",
-          isSecret: false,
-        },
-      ],
-    });
-    const s = initialState("salesforce");
-    const { result } = mount(
-      "salesforce",
-      {
-        step: "credentials",
-        values: {
-          ...s.values,
-          integration: "hosted",
-          instanceUrl: "https://new.my.salesforce.com",
-          clientId: "key",
-        },
-      },
-      { url, instanceUrl: "https://old.my.salesforce.com" },
-    );
-    await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.next());
-    await waitFor(() => expect(result.current.state.saved).toBe(true));
-    expect(mocks.updateHeader).toHaveBeenCalledWith({
-      updateServerHeaderForm: {
-        id: "instance",
-        name: "mcp-instance-url",
-        description: "Existing instance",
-        value: "https://new.my.salesforce.com",
-        isSecret: false,
-        isRequired: true,
-      },
-    });
-    expect(mocks.createHeader).not.toHaveBeenCalled();
-    expect(
-      mocks.commit.mock.lastCall![0].commitServerIdentityConfigurationForm
-        .clientConfiguration.tokenEndpointAuthMethod,
-    ).toBe("none");
-  });
-  it("rolls back a new instance header when its URL write fails and retries the retained draft", async () => {
-    const source = {
-      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
-      instanceUrl: "",
-    };
-    const instanceUrl = "https://example.my.salesforce.com";
-    mocks.updateRemote.mockRejectedValueOnce(new Error("source save failed"));
-    const s = initialState("salesforce");
-    const mounted = mount(
-      "salesforce",
-      {
-        step: "credentials",
-        values: {
-          ...s.values,
-          integration: "hosted",
-          instanceUrl,
-          clientId: "key",
-        },
-      },
-      source,
-    );
-    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
-    act(() => mounted.result.current.next());
-    await waitFor(() => expect(mounted.result.current.error).toBeTruthy());
-    expect(mounted.result.current.state.sourceFingerprint).toBe(
-      JSON.stringify(["upstream", source.url, ""]),
-    );
-    expect((await mocks.headers()).headers).toEqual([]);
-    expect(mocks.deleteHeader).toHaveBeenCalledWith({ id: "instance" });
-    mounted.rerender({ mcpServer: server, currentSource: source });
-    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
-    expect(mounted.result.current.state.values.integration).toBe("hosted");
-    expect(mounted.result.current.state.values.clientId).toBe("key");
-    expect(mounted.result.current.state.configChanged).toBe(true);
-    act(() => mounted.result.current.next());
-    await waitFor(() => expect(mounted.result.current.state.saved).toBe(true));
-    expect(mocks.createHeader).toHaveBeenCalledTimes(2);
-    expect(mocks.updateRemote).toHaveBeenCalledTimes(2);
-  });
+
   it("rejects a late successful test after the upstream source changes externally", async () => {
     mocks.associations.mockResolvedValue({
       associations: [
@@ -1964,14 +1873,14 @@ describe("Salesforce review recovery", () => {
     expect(mounted.result.current.state.saved).toBe(false);
   });
 
-  it("restores URL and existing header metadata when credential commit rejects, and can retry", async () => {
-    const url = "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
-    const oldInstance = "https://old.my.salesforce.com";
+  it("restores the native URL after credential rejection and preserves unrelated headers", async () => {
+    const url =
+      "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads";
     const original = {
-      id: "instance",
-      name: "mcp-instance-url",
+      id: "deployment",
+      name: "X-Deployment",
       description: "Keep this description",
-      value: oldInstance,
+      value: "production",
       isRequired: false,
       isSecret: false,
     };
@@ -1989,13 +1898,15 @@ describe("Salesforce review recovery", () => {
           clientId: "replacement",
         },
       },
-      { url, instanceUrl: oldInstance },
+      { url, instanceUrl: "" },
     );
     await waitFor(() => expect(result.current.loading).toBe(false));
     act(() => result.current.next());
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect((await mocks.remote()).url).toBe(url);
     expect((await mocks.headers()).headers).toEqual([original]);
+    expect(mocks.updateHeader).not.toHaveBeenCalled();
+    expect(mocks.deleteHeader).not.toHaveBeenCalled();
     expect(result.current.state.saved).toBe(false);
     act(() => result.current.next());
     await waitFor(() => expect(result.current.state.saved).toBe(true));
@@ -2024,52 +1935,7 @@ describe("Salesforce review recovery", () => {
     expect(mocks.updateRemote).toHaveBeenCalledTimes(1);
     expect(result.current.recovery).toBe("settings");
   });
-  it("normalizes an existing hosted instance before hydrating credentials", async () => {
-    const url = "https://app.getgram.ai/mcp/speakeasy-team-salesforce";
-    mocks.associations.mockResolvedValue({
-      associations: [
-        {
-          issuerUrl: "https://example.my.salesforce.com",
-          remoteSessionClientId: "client",
-          serverCount: 1,
-        },
-      ],
-    });
-    mocks.client.mockResolvedValue({
-      id: "client",
-      clientId: "key",
-      scope: ["api", "refresh_token"],
-      callbackUrl: "https://platform.example/callback",
-    });
-    mocks.remote.mockResolvedValue({ id: "upstream", url });
-    mocks.headers.mockResolvedValue({
-      headers: [
-        {
-          id: "instance",
-          name: "MCP-Instance-URL",
-          value: "https://Example.my.salesforce.com/",
-          isSecret: false,
-        },
-      ],
-    });
-    const state = initialState("salesforce");
-    const { result } = mount(
-      "salesforce",
-      {
-        step: "test",
-        values: {
-          ...state.values,
-          integration: "hosted",
-          instanceUrl: "https://example.my.salesforce.com",
-        },
-      },
-      { url, instanceUrl: "https://Example.my.salesforce.com/" },
-    );
-    await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.testConnection());
-    await waitFor(() => expect(result.current.state.tested).toBe(true));
-    expect(mocks.updateHeader).not.toHaveBeenCalled();
-  });
+
   it.each(["duplicate", "secret", "request"])(
     "names invalid %s instance headers before saving",
     async (kind) => {

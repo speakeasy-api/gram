@@ -2,7 +2,12 @@ import { useSetup } from "./setup-context";
 import { useState, type ReactNode, type ComponentType } from "react";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Field, FieldError, FieldLabel } from "@/components/ui/Field";
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/Field";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { ArrowUpRight, CirclePlus, SquareDashed } from "lucide-react";
 import { type FieldName, names } from "./state";
@@ -185,6 +190,31 @@ export type ChoiceOption = {
   description?: string;
   icon: ComponentType<{ className?: string }>;
 };
+export function SetupGroup({
+  label,
+  labelId,
+  visibleLabel = true,
+  className,
+  children,
+}: {
+  label: string;
+  labelId?: string;
+  visibleLabel?: boolean;
+  className?: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
+      {visibleLabel && (
+        <legend id={labelId} className="mb-3 text-base font-semibold">
+          {label}
+        </legend>
+      )}
+      {children}
+    </fieldset>
+  );
+}
+
 export function Choices({
   field,
   label,
@@ -200,10 +230,7 @@ export function Choices({
 }): JSX.Element {
   const { s, live } = useSetup();
   return (
-    <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
-      {visibleLabel && (
-        <legend className="mb-3 text-base font-semibold">{label}</legend>
-      )}
+    <SetupGroup label={label} visibleLabel={visibleLabel} className={className}>
       <RadioCardGroup
         aria-label={label}
         value={s.values[field]}
@@ -231,7 +258,7 @@ export function Choices({
           </RadioCard>
         ))}
       </RadioCardGroup>
-    </fieldset>
+    </SetupGroup>
   );
 }
 export function AppChoice({
@@ -334,6 +361,28 @@ export function CopyValue({
     </div>
   );
 }
+export function ProviderFieldInstructions({
+  items,
+}: {
+  items: { label: string; description: ReactNode; copyValue?: string }[];
+}): JSX.Element {
+  return (
+    <dl className="space-y-6">
+      {items.map(({ label, description, copyValue }) => (
+        <div key={label}>
+          <dt className="text-sm font-medium">{label}</dt>
+          <dd className="mt-2">
+            <FieldDescription>{description}</FieldDescription>
+            {copyValue !== undefined && (
+              <CopyValue label={label} value={copyValue} hideLabel />
+            )}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
 export function Correction({
   step,
   children,
@@ -354,7 +403,7 @@ export function Correction({
 }
 export function Note({ children }: { children: ReactNode }): JSX.Element {
   return (
-    <div className="mt-6 border-l-2 bg-muted px-5 py-4" role="status">
+    <div className="mt-6 border-l-2 bg-muted/30 px-5 py-4" role="status">
       {children}
     </div>
   );

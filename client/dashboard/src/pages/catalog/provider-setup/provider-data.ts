@@ -14,9 +14,9 @@ export const setupPlanCopy = {
   },
   salesforce: {
     introduction:
-      "Choose Salesforce’s native MCP servers or Speakeasy’s hosted Salesforce CRM connection. We’ll walk you through configuring your app, saving its credentials, signing in, and testing access.",
+      "Choose a Salesforce MCP server and either create your own External Client App or install Speakeasy’s Salesforce app and finish OAuth with support.",
     requirements:
-      "You’ll need administrator access to your Salesforce org, or a teammate who can help. Native MCP servers also require API access and Hosted MCP Servers availability.",
+      "You’ll need Salesforce System Administrator access—or a teammate who can help—in an API-enabled production or sandbox org with Hosted MCP Servers available. Salesforce documents availability for Enterprise Edition and above.",
   },
 } satisfies Record<
   State["provider"],

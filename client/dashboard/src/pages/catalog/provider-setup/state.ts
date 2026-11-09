@@ -54,26 +54,27 @@ export function initialState(provider: Provider): State {
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
-  if (s.provider === "salesforce")
-    return [
+  if (s.provider === "salesforce") {
+    const start = [
       { id: "begin", title: "Setup plan" },
       { id: "choices", title: "Choose your connection" },
-      ...(s.values.path === "support"
-        ? [
-            { id: "install", title: "Install Speakeasy’s app" },
-            { id: "support", title: "Finish with support" },
-          ]
-        : [
-            { id: "app", title: "App basics" },
-            { id: "oauth", title: "OAuth settings" },
-            { id: "security", title: "Security settings" },
-            ...(s.values.integration === "native"
-              ? [{ id: "activation", title: "Enable Salesforce MCP" }]
-              : []),
-            { id: "credentials", title: "Enter app credentials" },
-          ]),
+    ];
+    if (s.values.path === "support")
+      return [
+        ...start,
+        { id: "install", title: "Install Speakeasy’s app" },
+        { id: "support", title: "Finish with support" },
+      ];
+    return [
+      ...start,
+      { id: "app", title: "App basics" },
+      { id: "oauth", title: "OAuth settings" },
+      { id: "security", title: "Security settings" },
+      { id: "activation", title: "Enable Salesforce MCP" },
+      { id: "credentials", title: "Enter app credentials" },
       { id: "test", title: "Connect and test" },
     ];
+  }
   if (s.provider === "github")
     return [
       { id: "begin", title: "Setup plan" },
@@ -121,12 +122,8 @@ export function validate(s: State): State["errors"] {
     ["choices", "credentials"].includes(s.step)
   ) {
     if (!salesforceConnection(s.values)) {
-      if (s.values.integration === "hosted")
-        errors.instanceUrl =
-          "Enter an HTTPS Salesforce instance URL without a path.";
-      else
-        errors.salesforceServer =
-          "Choose a supported Salesforce server and environment.";
+      errors.salesforceServer =
+        "Choose a documented Salesforce server and environment.";
     }
   }
   if (s.step === "credentials") {
@@ -235,7 +232,7 @@ export function reduce(s: State, a: Action): State {
       if (
         s.provider === "salesforce" &&
         s.values.path === "support" &&
-        ["install", "support"].includes(s.step)
+        s.step === "support"
       )
         return s;
       const errors = validate(s);

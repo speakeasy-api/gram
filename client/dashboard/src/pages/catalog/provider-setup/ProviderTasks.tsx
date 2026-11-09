@@ -111,24 +111,14 @@ function credentialInstructions(
 function Credentials() {
   const { s, dispatch, live } = useSetup();
   const saved = s.saved;
-  const maskedSecret =
-    s.provider !== "salesforce" ||
-    live.savedTokenEndpointAuthMethod === "client_secret_post";
-  let secretPlaceholder = "Paste Client Secret";
-  if (saved && s.provider === "salesforce" && !maskedSecret)
-    secretPlaceholder =
-      live.savedTokenEndpointAuthMethod === "none"
-        ? "No secret required"
-        : "Secret status unavailable";
   return (
     <>
-      {s.provider === "salesforce" &&
-        (s.errors.instanceUrl || s.errors.salesforceServer) && (
-          <Alert variant="error">
-            {s.errors.instanceUrl ?? s.errors.salesforceServer}{" "}
-            <Correction step="choices">Review connection choices</Correction>
-          </Alert>
-        )}
+      {s.provider === "salesforce" && s.errors.salesforceServer && (
+        <Alert variant="error">
+          {s.errors.salesforceServer}{" "}
+          <Correction step="choices">Review connection choices</Correction>
+        </Alert>
+      )}
       <InProvider
         actions={credentialInstructions(
           s.provider,
@@ -144,17 +134,13 @@ function Credentials() {
           s.provider === "salesforce" ? "Paste Consumer Key" : "Paste Client ID"
         }
       />
-      {(s.provider !== "salesforce" || s.values.integration === "hosted") && (
+      {s.provider !== "salesforce" && (
         <SetupField
           field="clientSecret"
-          label={
-            s.provider === "salesforce"
-              ? "Client Secret (optional)"
-              : "Client Secret"
-          }
+          label="Client Secret"
           disabled={saved}
-          value={saved ? (maskedSecret ? "••••••••" : "") : undefined}
-          placeholder={secretPlaceholder}
+          value={saved ? "••••••••" : undefined}
+          placeholder="Paste Client Secret"
         />
       )}
       {saved && (

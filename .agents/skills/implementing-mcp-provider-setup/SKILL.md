@@ -5,7 +5,7 @@ description: Use when adding, integrating, changing, or reviewing a provider's M
 
 # Implementing MCP provider setup
 
-Extend the approved first-time provider setup flow from the user’s intended entry through successful connection. Reuse the working implementation and actions; sharing components alone does not prove the complete experience matches.
+Extend approved setup from first entry through connection completion. Reuse existing components and actions; verify progression end to end.
 
 ## Establish scope before editing
 
@@ -13,7 +13,7 @@ Extend the approved first-time provider setup flow from the user’s intended en
 2. Inspect Git status, branch/base and worktrees. Locate the established working flow (such as Slack/GitHub) and requested provider implementation, including dirty reference files.
 3. Briefly state provider/issue, base, reuse files and unresolved requirements. Keep the new diff provider-scoped; preserve inherited providers and fixes.
 
-**Ready to implement:** issue, base, existing implementation, first-time entry sequence and provider contracts are established. Keep unresolved branches pending; continue authorized integration without asking for the same approval again.
+**Ready to implement:** scope, base, first-time sequence and provider contracts are established. Keep unresolved branches pending; continue authorized work.
 
 ## Source precedence and UI approval
 
@@ -21,24 +21,30 @@ Use this order:
 
 1. The user's current instructions and explicit approvals.
 2. The provider issue and its reviewed decisions.
-3. Existing provider React implementation plus the implemented shared setup shell.
-4. Approved design lineage, only to resolve a specific gap or check fidelity.
+3. Current published product/provider setup documentation and verified owning API/backend contracts for behavior.
+4. Existing provider React implementation and shared components for reuse; approved design lineage for presentation.
 
-Find previous work through `git worktree list`, repository search and linked branches/PRs. Read committed or dirty reference files without switching or editing that checkout. Adapt provider-specific pieces onto the current implementation so inherited fixes survive.
+Read the current linked source before asserting support or absence. Cached summaries and excerpts can lag; their omissions do not justify removing approved choices. Compare current sources and ask on unresolved conflicts.
+
+Establish every offered branch against those behavioral sources before wiring it. Demo/prototype branches remain proposed UI until their contracts are verified. Approval to reuse a demo does not establish provisioning, support, authentication or activation capabilities. Keep distinct registry integrations separate; a shared provider name does not make them interchangeable. Resolve conflicts with the user using the exact sources rather than combining them into an invented flow.
+
+Record each branch's authoritative sources and distinguish documented candidate settings, implemented contracts, controlled checks and live provider verification.
+
+Find previous work through `git worktree list`, repository search and linked branches/PRs. Read reference files without editing that checkout. Adapt provider-specific pieces so inherited fixes survive.
 
 When design evidence is needed, follow `setup-design-lineage.json`. Approved appearance does not establish provider outcomes. `designs/research/` is excluded without explicit authorization; missing files do not authorize substitute UI.
 
-**Approval gate:** before introducing a different layout, navigation, step sequence, interaction pattern, new control, or provider behavior not established by the issue and approved implementation, show the concrete proposed difference and obtain explicit approval. Silence is not approval. Investigate contracts and continue independent work while waiting; keep the dependent UI unchanged. This gate takes precedence over generic frontend guidance to choose a design when the user is unavailable. Reusing approved UI, wiring real actions, and fixing defects within that behavior do not require renewed design approval. If sources conflict, identify the conflict and ask which governs that part.
+**Approval gate:** before changing approved layout, navigation, sequence, interactions, controls or provider behavior, show the concrete difference and obtain explicit approval. Silence is not approval. Continue independent work while waiting; keep dependent UI unchanged. This overrides generic frontend guidance to choose a design when the user is unavailable. Reusing approved UI, wiring verified actions and fixing defects within that behavior do not require renewed approval.
 
 ## First-time entry and progression
 
-Before editing, trace the intended user’s first-time entry through every intermediate screen and decision to completion. For catalog onboarding this includes the **Add** action users actually take; other entry points matter when the task affects them. Compare the actual handlers and user actions against the established working flow and approved provider React implementation.
+Trace first-time entry through every intermediate screen and decision to completion. Catalog onboarding includes the actual **Add** action; other entries matter when affected. Compare handlers and user actions against the established working flow and approved React implementation.
 
 Keep each provider choice at its approved step. Preserve approved identity choices and unaffected installation paths. An existing generic component does not authorize extra steps or relocating fields; restore the approved sequence or obtain approval under the gate above.
 
 ## Reuse map
 
-Paths are repository-relative; inspect the active branch before relying on them.
+Inspect referenced paths on the active branch.
 
 | Existing surface                                                                                                    | Reuse for                                                                     |
 | ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
@@ -50,7 +56,7 @@ Paths are repository-relative; inspect the active branch before relying on them.
 | `client/dashboard/src/pages/mcp/x/setup/provider-setup.ts`                                                          | Exact endpoint matching, installation handoff and non-secret browser progress |
 | `server/internal/remotesessions/SETUP.md`                                                                           | Backend contract and identity boundaries                                      |
 
-Keep provider-specific tasks: GitHub's organization step is not universal, and Slack's shorter sequence does not remove another provider's requirements. Follow `frontend` for components, tokens and implementation standards; preserve the approved flow.
+Preserve provider-specific requirements while sharing layout and actions. Follow `frontend` for components, tokens and implementation standards.
 
 ## Integrate real behavior
 
@@ -58,7 +64,7 @@ Read the backend contract before adapting actions. Reuse supported shared operat
 
 Preserve secret-free reads/progress, invalidation when app, environment, server or setup path changes, permission-change authorization invalidation, inline recovery, and rejection of stale asynchronous results. Returning from an OAuth popup is not verified sign-in. Completion requires the real connection result and opens Overview.
 
-Provider-side activation, support handoff or credential requirements represented only by simulated outcomes need a verified implementation contract. Surface unresolved product decisions rather than creating success controls or guessing backend support. A missing backend capability is a separate scope decision.
+Surface unresolved product decisions and missing capabilities as separate scope decisions. Continue independent work whose contracts are established, without implying end-to-end verification or simulating success.
 
 ## Verify the extension
 
@@ -70,6 +76,5 @@ Report the exact click path observed and any unverified entry points; claim simi
 
 - Rebuilding approved HTML while existing provider React code sits in a previous worktree: locate and reuse that code first.
 - Carrying all providers into one provider issue: transfer only the requested provider and necessary shared integration.
-- Taking a new-flow design exercise as permission to redesign the shared shell: use the approval gate above.
 - Reporting simulated or controlled success as a live connection: label the evidence accurately.
 - Claiming equivalent onboarding from shared components or a later screen: compare the user’s first-time progression end to end.
