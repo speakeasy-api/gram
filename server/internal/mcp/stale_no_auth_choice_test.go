@@ -41,6 +41,7 @@ import (
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -346,8 +347,10 @@ func (g *staleChoiceGateway) postConnect(t *testing.T, ctx context.Context, regi
 	return w, g.ti.service.ServeConsentAction(w, req, endpoint)
 }
 
-// The reconnect text is only given where Connect gets past its member and issuer checks.
-func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
+// Under enforcement the reconnect text follows the registrations the server's
+// typed auth clients offer, whether or not the server is associated with one
+// or the gateway's sign-in is bound to it.
+func TestStaleNoAuthReconnectCopyFollowsTypedOffers(t *testing.T) {
 	t.Parallel()
 	t.Run("associated and bound", func(t *testing.T) {
 		t.Parallel()
@@ -370,7 +373,7 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		connection := g.approve(t, ctx)
 		registration := g.attachTypedOnly(t, ctx, []uuid.UUID{g.issuer})
 		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
-		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 		w, err := g.postConnect(t, ctx, registration)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusSeeOther, w.Code, w.Body.String())
@@ -384,7 +387,16 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		registration := g.attachTypedOnly(t, ctx, nil)
 		_, err := upstreamclientsrepo.New(g.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: g.org, ProjectID: g.project, McpServerID: g.serverID, RemoteSessionClientID: registration})
 		require.NoError(t, err)
-		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleAdminCopy)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
+	})
+	t.Run("neither associated nor bound", func(t *testing.T) {
+		t.Parallel()
+		ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
+		g.enforce(t, ctx)
+		g.ti.service.SetAuthClientPermission(func() bool { return true })
+		connection := g.approve(t, ctx)
+		g.attachTypedOnly(t, ctx, nil)
+		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 	})
 	t.Run("already connected needs no Connect", func(t *testing.T) {
 		t.Parallel()
@@ -398,6 +410,47 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		renewed := g.approve(t, ctx)
 		requireExecuted(t, g.call(t, renewed.token, "source--tool_000"))
 	})
+}
+
+// Resynchronizing a no-auth gateway member's derived authorization server is
+// not a change an approval covers under enforcement, so the frozen approval
+// keeps serving. Without enforcement the same resync asks for the approval
+// again.
+func TestGatewayApprovalAcrossDerivedIssuerResync(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		enforced bool
+		served   bool
+	}{
+		{name: "no-auth member under enforcement", enforced: true, served: true},
+		{name: "no-auth member without enforcement", enforced: false, served: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect)
+			if tc.enforced {
+				g.enforce(t, ctx)
+			}
+			connection := g.approve(t, ctx)
+			requireExecuted(t, g.call(t, connection.token, "source--tool_000"))
+
+			issuer, err := remotesessionsrepo.New(g.ti.conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+				ProjectID: conv.ToNullUUID(g.project), Slug: "resync-" + uuid.NewString()[:8], Issuer: "https://resync-gateway-as.example.com",
+				ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+				TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+			})
+			require.NoError(t, err)
+			require.NoError(t, authclientfixtures.New(g.ti.conn).SetServerRemoteSessionIssuerFixture(ctx, authclientfixtures.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: conv.ToNullUUID(issuer.ID), ID: g.serverID}))
+
+			w := g.call(t, connection.token, "source--tool_000")
+			if tc.served {
+				requireExecuted(t, w)
+				return
+			}
+			require.Contains(t, w.Body.String(), "configuration changed")
+		})
+	}
 }
 
 func TestStaleNoAuthCachedDescribeMatchesTheCall(t *testing.T) {

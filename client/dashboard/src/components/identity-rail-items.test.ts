@@ -60,7 +60,7 @@ describe("identityRailItems", () => {
       "permissions",
       "sessions",
       "activity",
-      "credentials",
+      "sign-in",
       "controls",
     ]);
   });
@@ -78,7 +78,7 @@ describe("identityRailItems", () => {
     // The keys and the federated platforms are the only way an agent gets
     // in, so the rail has to reach them: without this entry the panels still
     // render at their address and nothing links to it.
-    expect(titles["credentials"]).toBe("Credentials");
+    expect(titles["sign-in"]).toBe("Agent sign-in");
   });
 
   it("carries the current query string onto every link", () => {
@@ -99,7 +99,7 @@ describe("identityRailItems", () => {
       identityRailItems(routes(), "agent%3A1", "", "agent"),
     );
     expect(agent["controls"]).toBe("Controls & Safety");
-    expect(agent["credentials"]).toBe("Credentials");
+    expect(agent["sign-in"]).toBe("Agent sign-in");
     const person = identitySectionCrumbs(
       identityRailItems(routes(), "user%3A1", "", "user"),
     );

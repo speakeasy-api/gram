@@ -502,6 +502,9 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           credentials: {
             component: IdentityAgentSection,
           },
+          legacyCredentials: {
+            component: IdentityAgentSection,
+          },
           provisioning: {
             component: IdentityAgentSection,
           },

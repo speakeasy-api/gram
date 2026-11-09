@@ -3,6 +3,8 @@ package mcp_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"sync"
 	"testing"
 
@@ -196,4 +198,30 @@ func TestServeConsentMCP_BuiltinBackendListsItsTools(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"name":"builtin_tool"`)
 	require.Contains(t, w.Body.String(), `"readOnlyHint":true`)
 	require.Empty(t, calls.seen(), "listing tools for consent must not call the backend")
+}
+
+func TestOrganizationGatewayBuiltinBackendIsNotAProxiedMember(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedHiddenGateway(t, ctx, ti)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, builtin, calls := createBuiltinServer(t, ctx, ti, *auth.ProjectID, fx.issuerID)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, fx.organizationID, fx.subject.ID, builtin.ID.String())
+	// A real connected-client choice makes the consent page construct member cards.
+	createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, fx.organizationID, "gateway-card-client", "", []uuid.UUID{fx.issuerID})
+	insertUserSessionClient(t, ctx, ti.conn, fx.issuerID, "org-gateway-mcp-client")
+	endpoint, stateID := storeHiddenGatewayChallenge(t, ti, fx)
+	request := httptest.NewRequest(http.MethodGet, "/mcp/gateway/"+fx.organizationSlug+"/connect?state="+url.QueryEscape(stateID), nil)
+	response := httptest.NewRecorder()
+	require.NoError(t, ti.service.ServeConsent(response, request, endpoint), "a builtin is not a gateway member, so consent renders without it")
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), fx.granted)
+	require.Contains(t, response.Body.String(), fx.open)
+	require.NotContains(t, response.Body.String(), builtin.Slug.String)
+	slugs := listedServerSlugs(organizationGatewayListServers(t, ti, fx.organizationGatewayFixture))
+	require.Contains(t, slugs, fx.granted)
+	require.Contains(t, slugs, fx.open)
+	require.NotContains(t, slugs, builtin.Slug.String, "gateways have no builtin dispatch path")
+	require.Empty(t, calls.seen())
 }

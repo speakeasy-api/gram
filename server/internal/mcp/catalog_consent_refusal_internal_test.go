@@ -26,7 +26,7 @@ import (
 func approveChangedMember(gate *metaGateContext, member *metaMember, mode toolfilter.CatalogMode, signInChanged bool) {
 	gate.catalogRef = &toolfilter.CatalogReference{ID: uuid.New(), Mode: mode}
 	approved := connectionCatalogMember{ServerID: member.serverID, ProjectID: member.projectID, BackendHash: "approved", Auth: nil}
-	member.configurationHash = "changed"
+	member.configuration = memberConfiguration{hash: "changed", typedHash: "changed"}
 	if member.backend == metaMemberBackendProxied {
 		approved.Auth = &connectionCatalogAuth{ClientID: uuid.Nil, RegistrationID: member.chosenClientID}
 		if signInChanged {

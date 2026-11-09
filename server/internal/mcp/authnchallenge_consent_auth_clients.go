@@ -193,7 +193,7 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		ids = append(ids, server.id)
 	}
 	queries := upstreamclientsrepo.New(s.db)
-	rows, err := queries.ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: ids})
+	offers, err := s.configuredAuthOffers(ctx, organizationID, ids)
 	if err != nil {
 		return nil, fmt.Errorf("list consent auth clients: %w", err)
 	}
@@ -208,27 +208,20 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		}
 	}
 
-	byServer := map[uuid.UUID][]upstreamclientsrepo.ListServerConsentAuthClientsRow{}
-	for _, row := range rows {
-		byServer[row.McpServerID] = append(byServer[row.McpServerID], row)
-	}
-
 	// A personal connection or identity-provider sign-in belongs to a person;
 	// a caller representing nobody cannot use one.
 	represented := subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAgent
 
 	choices := make(map[uuid.UUID]*consentServerAuth, len(servers))
 	for _, server := range servers {
-		serverRows := byServer[server.id]
+		offer, known := offers[server.id]
 		auth := &consentServerAuth{ServerID: server.id, Status: consentAuthChoose, Options: nil}
 		choices[server.id] = auth
 
-		offered := slices.DeleteFunc(slices.Clone(serverRows), func(row upstreamclientsrepo.ListServerConsentAuthClientsRow) bool {
-			return !row.AuthClientID.Valid
-		})
+		offered := offer.clients
 		switch {
 		case len(offered) > 0:
-		case len(serverRows) > 0 && serverRows[0].UpstreamAuthPending:
+		case !known || offer.pending:
 			// Upstream credentials no auth client records yet are incomplete
 			// setup, never a server needing none.
 			auth.Status = consentAuthSetupIncomplete

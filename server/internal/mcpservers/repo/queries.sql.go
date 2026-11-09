@@ -722,22 +722,6 @@ source_annotations AS (
   JOIN active_deployment ad ON ad.id = f.deployment_id
   WHERE f.project_id = $2
     AND f.deleted IS FALSE
-  UNION ALL
-  SELECT
-    e.tool_urn,
-    e.name AS tool_name,
-    e.read_only_hint,
-    e.destructive_hint,
-    e.idempotent_hint,
-    e.open_world_hint
-  FROM latest_toolset_version tv
-  JOIN external_mcp_tool_definitions e ON e.tool_urn = ANY(tv.tool_urns)
-  JOIN external_mcp_attachments a ON a.id = e.external_mcp_attachment_id
-  JOIN active_deployment ad ON ad.id = a.deployment_id
-  WHERE e.deleted IS FALSE
-    AND a.deleted IS FALSE
-    AND e.type <> 'proxy'
-    AND e.name IS NOT NULL
 ),
 varied_annotations AS (
   SELECT
@@ -968,7 +952,7 @@ func (q *Queries) ListMCPServerAssociationProviders(ctx context.Context, arg Lis
 
 const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
 WITH servers AS (
-    SELECT m.id, m.project_id, m.remote_session_issuer_id,
+    SELECT m.id, m.project_id, m.toolset_id, m.remote_session_issuer_id,
            jsonb_build_object(
                'remote', m.remote_mcp_server_id, 'url', r.url,
                'transport', r.transport_type,
@@ -1015,7 +999,14 @@ SELECT id, project_id,
            (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
        encode(sha256(convert_to(
            (base || jsonb_build_object('issuer',
-               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer', remote_session_issuer_id) END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer',
+                     CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END) END)::text, 'UTF8')), 'hex')::text AS typed_association_configuration_hash
 FROM servers
 `
 
@@ -1025,10 +1016,12 @@ type ListMCPServerConsentConfigurationsParams struct {
 }
 
 type ListMCPServerConsentConfigurationsRow struct {
-	ID                           uuid.UUID
-	ProjectID                    uuid.UUID
-	ConfigurationHash            string
-	AssociationConfigurationHash string
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	ConfigurationHash                 string
+	AssociationConfigurationHash      string
+	TypedConfigurationHash            string
+	TypedAssociationConfigurationHash string
 }
 
 // Hash stored routing configuration in one tenant-scoped read. Header secrets
@@ -1039,6 +1032,12 @@ type ListMCPServerConsentConfigurationsRow struct {
 // provider, or null with several or none. jsonb stores its keys sorted, so
 // adding the issuer to the rest renders the same text as building every key
 // at once.
+//
+// The typed hashes are what an approval is compared on where typed auth
+// clients choose upstream authentication: they leave out a proxied server's
+// upstream issuer, which decides nothing there, so resynchronizing it changes
+// nothing an approval covers. A hosted server is still routed by that issuer,
+// so its typed hashes cover it.
 func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1053,6 +1052,8 @@ func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg Li
 			&i.ProjectID,
 			&i.ConfigurationHash,
 			&i.AssociationConfigurationHash,
+			&i.TypedConfigurationHash,
+			&i.TypedAssociationConfigurationHash,
 		); err != nil {
 			return nil, err
 		}
@@ -1915,16 +1916,6 @@ SELECT
         WHERE pt.project_id = t.project_id
           AND pt.deleted IS FALSE
           AND pt.tool_urn = ANY(lv.tool_urns)
-      )
-      + (
-        SELECT COUNT(*)
-        FROM external_mcp_tool_definitions x
-        JOIN external_mcp_attachments e ON e.id = x.external_mcp_attachment_id
-        WHERE e.deployment_id = ad.id
-          AND e.deleted IS FALSE
-          AND x.deleted IS FALSE
-          AND x.tool_urn = ANY(lv.tool_urns)
-          AND x.tool_urn NOT LIKE 'tools:externalmcp:%:proxy'
       )
     )::bigint AS tool_count
   , ARRAY(

@@ -125,7 +125,6 @@ func emptyToolCallEnv() toolconfig.ToolCallEnv {
 	return toolconfig.ToolCallEnv{
 		SystemEnv:  toolconfig.NewCaseInsensitiveEnv(),
 		UserConfig: toolconfig.NewCaseInsensitiveEnv(),
-		OAuthToken: "",
 		GramEmail:  "",
 		GramChatID: "",
 		MCPClient:  toolconfig.MCPClientIdentity{Name: "", Version: "", OAuthClientID: ""},
