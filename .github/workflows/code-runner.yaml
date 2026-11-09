@@ -161,8 +161,7 @@ jobs:
       # compiled packages, but always execute the integration tests.
       - run: mise run test:code-mode -count=1
       - name: Save Go integration build
-        # TEMPORARY: let this PR save so a rerun can measure a warm cache. Revert before merge.
-        if: (github.event_name == 'push' || github.event_name == 'pull_request') && steps.go-restore.outputs.cache-hit != 'true'
+        if: github.event_name == 'push' && steps.go-restore.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
