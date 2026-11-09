@@ -46,7 +46,9 @@ const decodeBodySampleLimit = 1024
 // every hooks request body. Hooks are reachable before authentication, so a
 // small gzip body must not be able to expand without limit in memory. It
 // matches the OTLP export limit of the otel ingest service, since the hooks
-// logs and metrics routes carry the same payloads.
+// logs and metrics routes carry the same payloads. On the wire the listener's
+// constants.MaxRequestBodyBytes is the lower ceiling; this value is what a
+// gzip body may expand to.
 const maxHooksRequestBodyBytes = 20 * constants.MiB
 
 var errHooksRequestBodyTooLarge = errors.New("hooks request body too large")

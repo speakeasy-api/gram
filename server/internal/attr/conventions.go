@@ -172,6 +172,10 @@ const (
 	HTTPRequestHeadersKey            = attribute.Key("http.request.headers")
 	HTTPResponseHeadersKey           = attribute.Key("http.response.headers")
 	HTTPResponseHeaderContentTypeKey = attribute.Key("http.response.header.content_type")
+	// HTTPResponseHeaderContentEncodingKey records the content coding a
+	// response body left the server with (br, gzip), so the split between
+	// codings can be read from access logs.
+	HTTPResponseHeaderContentEncodingKey = attribute.Key("http.response.header.content_encoding")
 	// HTTPResponseHeaderWWWAuthenticateKey carries the RFC 6750 challenge an
 	// upstream returned on 401/403 — the machine-readable rejection reason
 	// (error, error_description) for a refused bearer token.
@@ -1562,6 +1566,14 @@ func HTTPResponseHeaderContentType(v string) attribute.KeyValue {
 
 func SlogHTTPResponseHeaderContentType(v string) slog.Attr {
 	return slog.String(string(HTTPResponseHeaderContentTypeKey), v)
+}
+
+func HTTPResponseHeaderContentEncoding(v string) attribute.KeyValue {
+	return HTTPResponseHeaderContentEncodingKey.String(v)
+}
+
+func SlogHTTPResponseHeaderContentEncoding(v string) slog.Attr {
+	return slog.String(string(HTTPResponseHeaderContentEncodingKey), v)
 }
 
 func HTTPResponseHeaderWWWAuthenticate(v string) attribute.KeyValue {

@@ -7,11 +7,17 @@ import (
 	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	networkingv1 "k8s.io/api/networking/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
+
+// ingressProxyBodySize is the nginx proxy-body-size of every ingress this
+// package provisions, in nginx's binary megabytes, so the edge refuses the
+// same uploads the server's own request body limit does.
+var ingressProxyBodySize = fmt.Sprintf("%dm", constants.MaxRequestBodyBytes/constants.MiB)
 
 type IngressProvisioner struct {
 	clientset      kubernetes.Interface
@@ -154,7 +160,7 @@ func (p *IngressProvisioner) buildIngress(domain string, ipAllowlist []string) (
 
 	annotations := map[string]string{
 		"cert-manager.io/cluster-issuer":              "gram-letsencrypt",
-		"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
+		"nginx.ingress.kubernetes.io/proxy-body-size": ingressProxyBodySize,
 		"nginx.ingress.kubernetes.io/use-regex":       "true",
 	}
 	// A non-empty allowlist restricts inbound traffic to the given IPv4 sources.
@@ -267,7 +273,7 @@ func (p *IngressProvisioner) buildRootIngress(name, domain, secretName string, i
 	nginxIngressClassName := "nginx"
 	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
 	annotations := map[string]string{
-		"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
+		"nginx.ingress.kubernetes.io/proxy-body-size": ingressProxyBodySize,
 		"nginx.ingress.kubernetes.io/rewrite-target":  rootTarget,
 		"nginx.ingress.kubernetes.io/use-regex":       "true",
 	}
@@ -323,7 +329,7 @@ func (p *IngressProvisioner) buildWellKnownRootIngress(name, domain, secretName 
 	nginxIngressClassName := "nginx"
 	pathTypeImplementationSpecific := networkingv1.PathTypeImplementationSpecific
 	annotations := map[string]string{
-		"nginx.ingress.kubernetes.io/proxy-body-size": "15m",
+		"nginx.ingress.kubernetes.io/proxy-body-size": ingressProxyBodySize,
 		"nginx.ingress.kubernetes.io/rewrite-target":  rewriteTarget,
 		"nginx.ingress.kubernetes.io/use-regex":       "true",
 	}

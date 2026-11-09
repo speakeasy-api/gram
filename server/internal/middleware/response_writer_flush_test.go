@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -33,6 +34,14 @@ func TestResponseWriterWrappersForwardFlush(t *testing.T) {
 		"admin_security.adminCookieRewriter":  &adminCookieRewriter{ResponseWriter: inner, domain: "example.com", wroteHeader: false},
 		"clear_site_data.clearSiteDataWriter": &clearSiteDataWriter{ResponseWriter: inner, wroteHeader: false},
 		"denial_headers.denialWriter":         &denialWriter{ResponseWriter: inner, recorded: nil, wroteHeader: false},
+		"request_body_limit.requestTooLargeWriter": &requestTooLargeWriter{
+			ResponseWriter: inner,
+			reject:         func() {},
+			exceeded:       atomic.Bool{},
+			wroteHeader:    false,
+			replaced:       false,
+		},
+		"compression.compressResponseWriter": &compressResponseWriter{ResponseWriter: inner, declaredLength: -1},
 	}
 
 	for name, w := range wrappers {
