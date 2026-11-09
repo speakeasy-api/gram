@@ -332,7 +332,8 @@ export function AppSidebar({
             ? flatEntries.map((entry) => (
                 <SidebarMenuItem key={entry.item.url}>
                   <NavButton
-                    title={entry.item.title}
+                    id={entry.item.title}
+                    title={entry.label ?? entry.item.title}
                     href={entry.item.href()}
                     active={entry.item.active}
                     Icon={entry.item.Icon}

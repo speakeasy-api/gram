@@ -61,6 +61,21 @@ describe("sidebarNavLayout", () => {
     expect(layout.showDivider).toBe(false);
   });
 
+  it("checks each entry against its own resource and project", () => {
+    const scoped: ScopeGatedNavEntry = {
+      ...entry("Skills", "skill:read"),
+      resourceId: "res_a",
+      projectId: "proj_a",
+    };
+    const layout = sidebarNavLayout(
+      [{ label: "MCP Gateway", items: [scoped, entry("MCP", "mcp:read")] }],
+      false,
+      (_scopes, resourceId, projectId) =>
+        resourceId === "res_a" && projectId === "proj_a",
+    );
+    expect(layout.flatEntries?.map((e) => e.item.title)).toEqual(["Skills"]);
+  });
+
   it("keeps groups collapsible when more than one is visible", () => {
     const layout = sidebarNavLayout(
       groups,
