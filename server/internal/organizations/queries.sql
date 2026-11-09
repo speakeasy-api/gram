@@ -1117,24 +1117,10 @@ ON CONFLICT (organization_id, task_key) DO UPDATE SET
 RETURNING *;
 
 -- name: GetSetupTaskCompletionFacts :one
-WITH default_project AS (
-    SELECT id
-    FROM projects
-    WHERE organization_id = @organization_id
-      AND deleted IS FALSE
-    ORDER BY created_at, id
-    LIMIT 1
-)
 SELECT
     COALESCE(organization_metadata.sso_enabled, FALSE)::boolean AS sso_configured,
     COALESCE(organization_metadata.scim_enabled, FALSE)::boolean AS dsync_configured,
     (COALESCE(cardinality(organization_metadata.verified_domains), 0) > 0)::boolean AS domain_verified,
-    EXISTS (
-        SELECT 1
-        FROM plugin_github_connections
-        JOIN default_project ON default_project.id = plugin_github_connections.project_id
-        WHERE NULLIF(plugin_github_connections.marketplace_token, '') IS NOT NULL
-    ) AS marketplace_published,
     (
         SELECT COUNT(DISTINCT organization_features.feature_name) = 3
         FROM organization_features
@@ -1404,6 +1390,51 @@ INSERT INTO onboarding_playbook_steps (playbook_id, step_id, position)
 SELECT @playbook_id, s.id, @position
 FROM onboarding_steps s
 WHERE s.slug = @slug AND s.deleted_at IS NULL;
+
+-- name: RepointRetiredOnboardingPlaybookSteps :execrows
+-- Moves each playbook's first step among the retired slugs onto the successor
+-- slug, keeping its position, unless the playbook already lists the
+-- successor. Retired slugs match whether or not they are retired yet.
+WITH successor AS (
+    SELECT onboarding_steps.id
+    FROM onboarding_steps
+    WHERE onboarding_steps.slug = @successor_slug::text
+      AND onboarding_steps.deleted_at IS NULL
+),
+firsts AS (
+    SELECT DISTINCT ON (ps.playbook_id) ps.playbook_id, ps.step_id
+    FROM onboarding_playbook_steps ps
+    JOIN onboarding_steps s ON s.id = ps.step_id
+    WHERE s.slug = ANY(@retired_slugs::text[])
+    ORDER BY ps.playbook_id, ps.position
+)
+UPDATE onboarding_playbook_steps ps
+SET step_id = successor.id, updated_at = clock_timestamp()
+FROM firsts, successor
+WHERE ps.playbook_id = firsts.playbook_id
+  AND ps.step_id = firsts.step_id
+  AND NOT EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      WHERE listed.playbook_id = ps.playbook_id
+        AND listed.step_id = successor.id
+  );
+
+-- name: DeleteRetiredOnboardingPlaybookSteps :execrows
+-- Drops the retired slugs' steps from every playbook that lists the successor
+-- slug. After the repoint, that is every playbook that listed one.
+DELETE FROM onboarding_playbook_steps ps
+USING onboarding_steps s
+WHERE s.id = ps.step_id
+  AND s.slug = ANY(@retired_slugs::text[])
+  AND EXISTS (
+      SELECT 1
+      FROM onboarding_playbook_steps listed
+      JOIN onboarding_steps successor ON successor.id = listed.step_id
+      WHERE listed.playbook_id = ps.playbook_id
+        AND successor.slug = @successor_slug::text
+        AND successor.deleted_at IS NULL
+  );
 
 -- name: GetOrganizationOnboardingPlaybookID :one
 SELECT om.id AS organization_id, o.playbook_id

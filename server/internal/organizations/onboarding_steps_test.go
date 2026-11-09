@@ -20,7 +20,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 
 	steps, err := organizations.ListOnboardingSteps(ctx, ti.conn)
 	require.NoError(t, err)
-	require.Len(t, steps, 19, "sixteen cards and three groups")
+	require.Len(t, steps, 17, "fifteen cards and two groups")
 	position := make(map[string]int, len(steps))
 	bySlug := make(map[string]*admingen.AdminOnboardingStep, len(steps))
 	for index, step := range steps {
@@ -34,8 +34,10 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	require.False(t, group.HiddenByDefault, "visible because a card of its is")
 	require.Empty(t, group.MethodSlugs)
 	require.Less(t, position["agent-observability"], position["instrument-agents"], "a group precedes its cards")
-	require.Less(t, position["mcp-distribution"], position["create-marketplace"])
-	require.False(t, bySlug["mcp-distribution"].HiddenByDefault, "its cards are visible by default")
+	require.Nil(t, bySlug["distribute-servers"].ParentSlug, "Distribute MCP servers is a top-level card")
+	require.Empty(t, bySlug["distribute-servers"].Requires, "it publishes the marketplace itself")
+	require.NotContains(t, bySlug, "mcp-distribution")
+	require.NotContains(t, bySlug, "create-marketplace")
 
 	card := bySlug["confirm-traffic"]
 	require.Equal(t, "agent-observability", *card.ParentSlug)
@@ -56,8 +58,7 @@ func TestSyncOnboardingStepsMirrorsTheCatalog(t *testing.T) {
 	require.Equal(t, "fact", bySlug["claude-org-instructions"].Completion)
 	require.True(t, bySlug["cursor-admin-controls"].HiddenByDefault, "the device agent covers Cursor by default")
 	require.Equal(t, []string{"cursor-marketplace"}, bySlug["cursor-admin-controls"].MethodSlugs, "applies only to stacks with Cursor")
-	require.Equal(t, []string{"device", "plugins"}, bySlug["create-marketplace"].MethodSlugs, "the device agent installs from the marketplace too")
-	require.Equal(t, []string{"device", "plugins"}, bySlug["distribute-servers"].MethodSlugs)
+	require.Equal(t, []string{"device", "plugins"}, bySlug["distribute-servers"].MethodSlugs, "the device agent installs from the marketplace too")
 	require.Equal(t, []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, bySlug["additional-agent-config"].MethodSlugs)
 	require.Equal(t, "manual", bySlug["configure-policies"].Completion)
 	require.Empty(t, bySlug["configure-policies"].MethodSlugs, "a step with no method applies to every stack")

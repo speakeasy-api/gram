@@ -49,7 +49,7 @@ func TestService_ListSetupTasksHidesCardsTheStackRulesOut(t *testing.T) {
 	everyDefaultCard := []string{
 		"identity-provider", "enable-logging", "anthropic-observability",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers",
+		"distribute-servers",
 		"claude-desktop", "claude-plugin-registration", "claude-org-instructions",
 		"platform-mcp", "anthropic-admin-controls", "configure-policies",
 	}
@@ -65,7 +65,7 @@ func TestService_ListSetupTasksHidesCardsTheStackRulesOut(t *testing.T) {
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging",
 		"agent-observability", "instrument-agents", "confirm-traffic", "additional-agent-config",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
+		"distribute-servers", "platform-mcp",
 		"configure-policies",
 	}, listedSetupTaskKeys(ctx, t, ti))
 
@@ -75,7 +75,7 @@ func TestService_ListSetupTasksHidesCardsTheStackRulesOut(t *testing.T) {
 	require.Equal(t, []string{
 		"identity-provider", "enable-logging",
 		"agent-observability", "instrument-agents", "confirm-traffic",
-		"mcp-distribution", "create-marketplace", "distribute-servers", "platform-mcp",
+		"distribute-servers", "platform-mcp",
 		"configure-policies",
 	}, listedSetupTaskKeys(ctx, t, ti))
 

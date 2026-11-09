@@ -82,7 +82,6 @@ type setupTaskGroup struct {
 // in the wizard where its first card does.
 var setupTaskGroups = []setupTaskGroup{
 	{Key: "agent-observability", Title: "Set up agent observability", Description: "Connect coding agents to Speakeasy hook telemetry and confirm traffic arrives."},
-	{Key: "mcp-distribution", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it."},
 	{Key: "claude-desktop", Title: "Set up Claude Desktop", Description: "Register Speakeasy's plugins in Claude.ai and move every conversation into Cowork, where they run."},
 }
 
@@ -105,18 +104,18 @@ var setupTaskCatalog = []setupTaskDefinition{
 	{Key: "confirm-traffic", Title: "Confirm traffic", Description: "Verify that instrumented agents are sending hook events.", Prerequisites: []string{"instrument-agents"}, HiddenByDefault: false, Parent: "agent-observability", Methods: nil, Completion: setupTaskCompletionManual},
 	{Key: "litellm", Title: "Set up LiteLLM", Description: "Point a LiteLLM proxy at Speakeasy so its traffic is scanned by risk policies and lands in observability, and confirm traffic arrives.", Prerequisites: nil, HiddenByDefault: true, Parent: "", Methods: []string{"litellm"}, Completion: setupTaskCompletionManual},
 	{Key: "additional-agent-config", Title: "Configure integrations", Description: "Import usage, spend, and conversations from the Anthropic, Cursor, and OpenAI admin and compliance APIs.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"anthropic-api", "cursor-api", "openai-api", "conversations"}, Completion: setupTaskCompletionManual},
-	// Distribute. The device agent installs plugins from the same marketplace,
-	// so these cards apply to every stack the device agent covers, not only to
-	// Anthropic's admin plugin distribution.
-	{Key: "create-marketplace", Title: "Create marketplace", Description: "Publish the organization's default project marketplace.", Prerequisites: nil, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Completion: setupTaskCompletionFact},
-	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Distribute approved MCP servers through the plugin marketplace.", Prerequisites: []string{"create-marketplace"}, HiddenByDefault: false, Parent: "mcp-distribution", Methods: []string{"device", "plugins"}, Completion: setupTaskCompletionManual},
+	// Distribute. The card publishes the plugin marketplace inline, as every
+	// card that needs it does, so there is no separate marketplace card. The
+	// device agent installs plugins from the same marketplace, so it applies
+	// to every stack the device agent covers, not only to Anthropic's admin
+	// plugin distribution.
+	{Key: "distribute-servers", Title: "Distribute MCP servers", Description: "Publish the plugin marketplace and distribute approved MCP servers through it.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: []string{"device", "plugins"}, Completion: setupTaskCompletionManual},
 	// Claude Desktop runs only plugins registered on the Claude organization,
 	// and only inside Cowork. The organization instruction moves every
 	// conversation into Cowork. Both cards complete once a Cowork transcript
-	// arrives, and either can still be marked done by hand. Like the Anthropic
-	// and Cursor admin-controls cards, the registration card publishes the
-	// marketplace inline rather than requiring the MCP distribution group, so a
-	// playbook can walk it without distributing servers.
+	// arrives, and either can still be marked done by hand. Like the other
+	// cards that need the marketplace, the registration card publishes it
+	// inline, so a playbook can walk it without distributing servers.
 	{Key: "claude-plugin-registration", Title: "Register Speakeasy's plugins in Claude", Description: "Sync the plugin marketplace in Claude.ai, mark the observability plugin Required, and allow Speakeasy in Claude's network egress settings.", Prerequisites: nil, HiddenByDefault: false, Parent: "claude-desktop", Methods: []string{"plugins"}, Completion: setupTaskCompletionFact},
 	{Key: "claude-org-instructions", Title: "Add Claude organization instructions", Description: "Add an organization instruction in Claude.ai that moves every conversation into Cowork, where the observability plugin captures it.", Prerequisites: []string{"claude-plugin-registration"}, HiddenByDefault: false, Parent: "claude-desktop", Methods: []string{"cowork-org-instructions"}, Completion: setupTaskCompletionFact},
 	{Key: "platform-mcp", Title: "Set up Platform MCP", Description: "Connect Platform MCP and distribute its catalog.", Prerequisites: nil, HiddenByDefault: false, Parent: "", Methods: nil, Completion: setupTaskCompletionManual},
@@ -503,8 +502,6 @@ func setupTaskFact(key string, facts orgrepo.GetSetupTaskCompletionFactsRow) boo
 		// sign-on and directory sync are configured; an admin who skips
 		// directory sync marks the card done by hand.
 		return facts.SsoConfigured && facts.DsyncConfigured
-	case "create-marketplace":
-		return facts.MarketplacePublished
 	case "enable-logging":
 		return facts.LoggingEnabled
 	case "claude-plugin-registration", "claude-org-instructions":

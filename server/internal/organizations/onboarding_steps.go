@@ -49,6 +49,20 @@ func onboardingStepRecords() []onboardingStepRecord {
 	return records
 }
 
+// retiredStepSuccessors names, for steps the catalog no longer defines, the
+// step that now does their job. SyncOnboardingSteps moves saved playbooks
+// onto the successor, at the first retired step's position, before retiring
+// the old steps. Entries can go once every environment has started on a
+// build that carries them.
+var retiredStepSuccessors = []struct {
+	Successor string
+	Retired   []string
+}{
+	// The Create marketplace card folded into Distribute MCP servers, and its
+	// group went with it.
+	{Successor: "distribute-servers", Retired: []string{"mcp-distribution", "create-marketplace"}},
+}
+
 // SyncOnboardingSteps mirrors the setup task catalog and its groups into
 // onboarding_steps so playbooks can reference them and staff can read them.
 // Code owns every column: a slug the code no longer defines is retired, and
@@ -78,6 +92,16 @@ func SyncOnboardingSteps(ctx context.Context, db *pgxpool.Pool) error {
 			}
 			ids[record.Slug] = id
 			slugs = append(slugs, record.Slug)
+		}
+		// Playbooks skip retired steps silently, so move saved playbooks onto
+		// a retired step's successor before retiring it.
+		for _, replaced := range retiredStepSuccessors {
+			if _, err := q.RepointRetiredOnboardingPlaybookSteps(ctx, repo.RepointRetiredOnboardingPlaybookStepsParams{SuccessorSlug: replaced.Successor, RetiredSlugs: replaced.Retired}); err != nil {
+				return fmt.Errorf("repoint playbooks from %v to %q: %w", replaced.Retired, replaced.Successor, err)
+			}
+			if _, err := q.DeleteRetiredOnboardingPlaybookSteps(ctx, repo.DeleteRetiredOnboardingPlaybookStepsParams{SuccessorSlug: replaced.Successor, RetiredSlugs: replaced.Retired}); err != nil {
+				return fmt.Errorf("drop retired playbook steps %v: %w", replaced.Retired, err)
+			}
 		}
 		if err := q.RetireOnboardingStepsNotIn(ctx, slugs); err != nil {
 			return fmt.Errorf("retire onboarding steps: %w", err)
