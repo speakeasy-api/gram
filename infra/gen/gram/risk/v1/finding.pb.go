@@ -121,6 +121,7 @@ type Finding struct {
 	xxx_hidden_Attribution        *Finding_Attribution       `protobuf:"bytes,29,opt,name=attribution"`
 	xxx_hidden_Execution          *Finding_Execution         `protobuf:"bytes,30,opt,name=execution"`
 	xxx_hidden_EnforcementOutcome Finding_EnforcementOutcome `protobuf:"varint,31,opt,name=enforcement_outcome,json=enforcementOutcome,enum=gram.risk.v1.Finding_EnforcementOutcome"`
+	xxx_hidden_SafeMatch          *Finding_SafeMatch         `protobuf:"bytes,32,opt,name=safe_match,json=safeMatch"`
 	XXX_raceDetectHookData        protoimpl.RaceDetectHookData
 	XXX_presence                  [1]uint32
 	unknownFields                 protoimpl.UnknownFields
@@ -437,69 +438,76 @@ func (x *Finding) GetEnforcementOutcome() Finding_EnforcementOutcome {
 	return Finding_ENFORCEMENT_OUTCOME_UNSPECIFIED
 }
 
+func (x *Finding) GetSafeMatch() *Finding_SafeMatch {
+	if x != nil {
+		return x.xxx_hidden_SafeMatch
+	}
+	return nil
+}
+
 func (x *Finding) SetId(v string) {
 	x.xxx_hidden_Id = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 32)
 }
 
 func (x *Finding) SetRequestId(v string) {
 	x.xxx_hidden_RequestId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 32)
 }
 
 func (x *Finding) SetChatMessageId(v string) {
 	x.xxx_hidden_ChatMessageId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 32)
 }
 
 func (x *Finding) SetProjectId(v string) {
 	x.xxx_hidden_ProjectId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 32)
 }
 
 func (x *Finding) SetOrganizationId(v string) {
 	x.xxx_hidden_OrganizationId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 32)
 }
 
 func (x *Finding) SetRiskPolicyId(v string) {
 	x.xxx_hidden_RiskPolicyId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 32)
 }
 
 func (x *Finding) SetRiskPolicyVersion(v int64) {
 	x.xxx_hidden_RiskPolicyVersion = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 32)
 }
 
 func (x *Finding) SetCreatedAt(v string) {
 	x.xxx_hidden_CreatedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 32)
 }
 
 func (x *Finding) SetRuleId(v string) {
 	x.xxx_hidden_RuleId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 32)
 }
 
 func (x *Finding) SetDescription(v string) {
 	x.xxx_hidden_Description = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 32)
 }
 
 func (x *Finding) SetMatch(v string) {
 	x.xxx_hidden_Match = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 32)
 }
 
 func (x *Finding) SetStartPos(v int32) {
 	x.xxx_hidden_StartPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 32)
 }
 
 func (x *Finding) SetEndPos(v int32) {
 	x.xxx_hidden_EndPos = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 32)
 }
 
 func (x *Finding) SetTags(v []string) {
@@ -508,72 +516,72 @@ func (x *Finding) SetTags(v []string) {
 
 func (x *Finding) SetSource(v string) {
 	x.xxx_hidden_Source = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 14, 32)
 }
 
 func (x *Finding) SetConfidence(v float64) {
 	x.xxx_hidden_Confidence = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 15, 32)
 }
 
 func (x *Finding) SetDeadLetterReason(v string) {
 	x.xxx_hidden_DeadLetterReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 16, 32)
 }
 
 func (x *Finding) SetContentPartId(v string) {
 	x.xxx_hidden_ContentPartId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 17, 32)
 }
 
 func (x *Finding) SetFalsePositiveAt(v string) {
 	x.xxx_hidden_FalsePositiveAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 18, 32)
 }
 
 func (x *Finding) SetSurface(v string) {
 	x.xxx_hidden_Surface = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 19, 32)
 }
 
 func (x *Finding) SetField(v string) {
 	x.xxx_hidden_Field = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 20, 32)
 }
 
 func (x *Finding) SetPath(v string) {
 	x.xxx_hidden_Path = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 21, 32)
 }
 
 func (x *Finding) SetToolCallId(v string) {
 	x.xxx_hidden_ToolCallId = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 22, 32)
 }
 
 func (x *Finding) SetExcludedAt(v string) {
 	x.xxx_hidden_ExcludedAt = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 23, 32)
 }
 
 func (x *Finding) SetExcludedReason(v string) {
 	x.xxx_hidden_ExcludedReason = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 24, 32)
 }
 
 func (x *Finding) SetExcludedDetail(v string) {
 	x.xxx_hidden_ExcludedDetail = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 25, 32)
 }
 
 func (x *Finding) SetEventKind(v string) {
 	x.xxx_hidden_EventKind = &v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 26, 32)
 }
 
 func (x *Finding) SetShadow(v bool) {
 	x.xxx_hidden_Shadow = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 27, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 27, 32)
 }
 
 func (x *Finding) SetAttribution(v *Finding_Attribution) {
@@ -586,7 +594,11 @@ func (x *Finding) SetExecution(v *Finding_Execution) {
 
 func (x *Finding) SetEnforcementOutcome(v Finding_EnforcementOutcome) {
 	x.xxx_hidden_EnforcementOutcome = v
-	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 30, 31)
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 30, 32)
+}
+
+func (x *Finding) SetSafeMatch(v *Finding_SafeMatch) {
+	x.xxx_hidden_SafeMatch = v
 }
 
 func (x *Finding) HasId() bool {
@@ -799,6 +811,13 @@ func (x *Finding) HasEnforcementOutcome() bool {
 	return protoimpl.X.Present(&(x.XXX_presence[0]), 30)
 }
 
+func (x *Finding) HasSafeMatch() bool {
+	if x == nil {
+		return false
+	}
+	return x.xxx_hidden_SafeMatch != nil
+}
+
 func (x *Finding) ClearId() {
 	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
 	x.xxx_hidden_Id = nil
@@ -947,6 +966,10 @@ func (x *Finding) ClearEnforcementOutcome() {
 	x.xxx_hidden_EnforcementOutcome = Finding_ENFORCEMENT_OUTCOME_UNSPECIFIED
 }
 
+func (x *Finding) ClearSafeMatch() {
+	x.xxx_hidden_SafeMatch = nil
+}
+
 type Finding_builder struct {
 	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
 
@@ -1022,6 +1045,7 @@ type Finding_builder struct {
 	Attribution        *Finding_Attribution
 	Execution          *Finding_Execution
 	EnforcementOutcome *Finding_EnforcementOutcome
+	SafeMatch          *Finding_SafeMatch
 }
 
 func (b0 Finding_builder) Build() *Finding {
@@ -1029,120 +1053,121 @@ func (b0 Finding_builder) Build() *Finding {
 	b, x := &b0, m0
 	_, _ = b, x
 	if b.Id != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 32)
 		x.xxx_hidden_Id = b.Id
 	}
 	if b.RequestId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 32)
 		x.xxx_hidden_RequestId = b.RequestId
 	}
 	if b.ChatMessageId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 32)
 		x.xxx_hidden_ChatMessageId = b.ChatMessageId
 	}
 	if b.ProjectId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 32)
 		x.xxx_hidden_ProjectId = b.ProjectId
 	}
 	if b.OrganizationId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 32)
 		x.xxx_hidden_OrganizationId = b.OrganizationId
 	}
 	if b.RiskPolicyId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 32)
 		x.xxx_hidden_RiskPolicyId = b.RiskPolicyId
 	}
 	if b.RiskPolicyVersion != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 32)
 		x.xxx_hidden_RiskPolicyVersion = *b.RiskPolicyVersion
 	}
 	if b.CreatedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 32)
 		x.xxx_hidden_CreatedAt = b.CreatedAt
 	}
 	if b.RuleId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 32)
 		x.xxx_hidden_RuleId = b.RuleId
 	}
 	if b.Description != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 32)
 		x.xxx_hidden_Description = b.Description
 	}
 	if b.Match != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 32)
 		x.xxx_hidden_Match = b.Match
 	}
 	if b.StartPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 32)
 		x.xxx_hidden_StartPos = *b.StartPos
 	}
 	if b.EndPos != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 32)
 		x.xxx_hidden_EndPos = *b.EndPos
 	}
 	x.xxx_hidden_Tags = b.Tags
 	if b.Source != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 14, 32)
 		x.xxx_hidden_Source = b.Source
 	}
 	if b.Confidence != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 15, 32)
 		x.xxx_hidden_Confidence = *b.Confidence
 	}
 	if b.DeadLetterReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 16, 32)
 		x.xxx_hidden_DeadLetterReason = b.DeadLetterReason
 	}
 	if b.ContentPartId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 17, 32)
 		x.xxx_hidden_ContentPartId = b.ContentPartId
 	}
 	if b.FalsePositiveAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 18, 32)
 		x.xxx_hidden_FalsePositiveAt = b.FalsePositiveAt
 	}
 	if b.Surface != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 19, 32)
 		x.xxx_hidden_Surface = b.Surface
 	}
 	if b.Field != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 20, 32)
 		x.xxx_hidden_Field = b.Field
 	}
 	if b.Path != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 21, 32)
 		x.xxx_hidden_Path = b.Path
 	}
 	if b.ToolCallId != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 22, 32)
 		x.xxx_hidden_ToolCallId = b.ToolCallId
 	}
 	if b.ExcludedAt != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 23, 32)
 		x.xxx_hidden_ExcludedAt = b.ExcludedAt
 	}
 	if b.ExcludedReason != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 24, 32)
 		x.xxx_hidden_ExcludedReason = b.ExcludedReason
 	}
 	if b.ExcludedDetail != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 25, 32)
 		x.xxx_hidden_ExcludedDetail = b.ExcludedDetail
 	}
 	if b.EventKind != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 26, 32)
 		x.xxx_hidden_EventKind = b.EventKind
 	}
 	if b.Shadow != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 27, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 27, 32)
 		x.xxx_hidden_Shadow = *b.Shadow
 	}
 	x.xxx_hidden_Attribution = b.Attribution
 	x.xxx_hidden_Execution = b.Execution
 	if b.EnforcementOutcome != nil {
-		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 30, 31)
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 30, 32)
 		x.xxx_hidden_EnforcementOutcome = *b.EnforcementOutcome
 	}
+	x.xxx_hidden_SafeMatch = b.SafeMatch
 	return m0
 }
 
@@ -1830,11 +1855,514 @@ func (b0 Finding_Execution_builder) Build() *Finding_Execution {
 	return m0
 }
 
+// SafeMatch is prepared by trusted internal producers while the raw match is
+// still available. It replaces match, never accompanies it. Deploy every
+// Finding consumer's SafeMatch support before enabling producers of this
+// representation. Older consumers cannot reconstruct this information.
+//
+// Filtering and exclusion decisions are snapshots at prepared_at, using the
+// same policy, preset and exclusion evaluators as raw finding ingestion.
+// Consumers must not evaluate match-dependent rules against an absent match.
+type Finding_SafeMatch struct {
+	state                               protoimpl.MessageState `protogen:"opaque.v1"`
+	xxx_hidden_Version                  uint32                 `protobuf:"varint,1,opt,name=version"`
+	xxx_hidden_PreparedAt               *string                `protobuf:"bytes,2,opt,name=prepared_at,json=preparedAt"`
+	xxx_hidden_MatchLen                 uint32                 `protobuf:"varint,3,opt,name=match_len,json=matchLen"`
+	xxx_hidden_MatchRedacted            *string                `protobuf:"bytes,4,opt,name=match_redacted,json=matchRedacted"`
+	xxx_hidden_FingerprintPepperVersion *string                `protobuf:"bytes,5,opt,name=fingerprint_pepper_version,json=fingerprintPepperVersion"`
+	xxx_hidden_FingerprintGlobalHs256   *string                `protobuf:"bytes,6,opt,name=fingerprint_global_hs256,json=fingerprintGlobalHs256"`
+	xxx_hidden_FingerprintTenantHs256   *string                `protobuf:"bytes,7,opt,name=fingerprint_tenant_hs256,json=fingerprintTenantHs256"`
+	xxx_hidden_DisabledRule             bool                   `protobuf:"varint,8,opt,name=disabled_rule,json=disabledRule"`
+	xxx_hidden_BuiltinPreset            bool                   `protobuf:"varint,9,opt,name=builtin_preset,json=builtinPreset"`
+	xxx_hidden_ExcludedAt               *string                `protobuf:"bytes,10,opt,name=excluded_at,json=excludedAt"`
+	xxx_hidden_ExclusionId              *string                `protobuf:"bytes,11,opt,name=exclusion_id,json=exclusionId"`
+	xxx_hidden_ExcludedReason           *string                `protobuf:"bytes,12,opt,name=excluded_reason,json=excludedReason"`
+	xxx_hidden_ExcludedDetail           *string                `protobuf:"bytes,13,opt,name=excluded_detail,json=excludedDetail"`
+	xxx_hidden_CaptureRedacted          bool                   `protobuf:"varint,14,opt,name=capture_redacted,json=captureRedacted"`
+	XXX_raceDetectHookData              protoimpl.RaceDetectHookData
+	XXX_presence                        [1]uint32
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
+}
+
+func (x *Finding_SafeMatch) Reset() {
+	*x = Finding_SafeMatch{}
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Finding_SafeMatch) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Finding_SafeMatch) ProtoMessage() {}
+
+func (x *Finding_SafeMatch) ProtoReflect() protoreflect.Message {
+	mi := &file_gram_risk_v1_finding_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+func (x *Finding_SafeMatch) GetVersion() uint32 {
+	if x != nil {
+		return x.xxx_hidden_Version
+	}
+	return 0
+}
+
+func (x *Finding_SafeMatch) GetPreparedAt() string {
+	if x != nil {
+		if x.xxx_hidden_PreparedAt != nil {
+			return *x.xxx_hidden_PreparedAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetMatchLen() uint32 {
+	if x != nil {
+		return x.xxx_hidden_MatchLen
+	}
+	return 0
+}
+
+func (x *Finding_SafeMatch) GetMatchRedacted() string {
+	if x != nil {
+		if x.xxx_hidden_MatchRedacted != nil {
+			return *x.xxx_hidden_MatchRedacted
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetFingerprintPepperVersion() string {
+	if x != nil {
+		if x.xxx_hidden_FingerprintPepperVersion != nil {
+			return *x.xxx_hidden_FingerprintPepperVersion
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetFingerprintGlobalHs256() string {
+	if x != nil {
+		if x.xxx_hidden_FingerprintGlobalHs256 != nil {
+			return *x.xxx_hidden_FingerprintGlobalHs256
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetFingerprintTenantHs256() string {
+	if x != nil {
+		if x.xxx_hidden_FingerprintTenantHs256 != nil {
+			return *x.xxx_hidden_FingerprintTenantHs256
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetDisabledRule() bool {
+	if x != nil {
+		return x.xxx_hidden_DisabledRule
+	}
+	return false
+}
+
+func (x *Finding_SafeMatch) GetBuiltinPreset() bool {
+	if x != nil {
+		return x.xxx_hidden_BuiltinPreset
+	}
+	return false
+}
+
+func (x *Finding_SafeMatch) GetExcludedAt() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedAt != nil {
+			return *x.xxx_hidden_ExcludedAt
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetExclusionId() string {
+	if x != nil {
+		if x.xxx_hidden_ExclusionId != nil {
+			return *x.xxx_hidden_ExclusionId
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetExcludedReason() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedReason != nil {
+			return *x.xxx_hidden_ExcludedReason
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetExcludedDetail() string {
+	if x != nil {
+		if x.xxx_hidden_ExcludedDetail != nil {
+			return *x.xxx_hidden_ExcludedDetail
+		}
+		return ""
+	}
+	return ""
+}
+
+func (x *Finding_SafeMatch) GetCaptureRedacted() bool {
+	if x != nil {
+		return x.xxx_hidden_CaptureRedacted
+	}
+	return false
+}
+
+func (x *Finding_SafeMatch) SetVersion(v uint32) {
+	x.xxx_hidden_Version = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 0, 14)
+}
+
+func (x *Finding_SafeMatch) SetPreparedAt(v string) {
+	x.xxx_hidden_PreparedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 1, 14)
+}
+
+func (x *Finding_SafeMatch) SetMatchLen(v uint32) {
+	x.xxx_hidden_MatchLen = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 2, 14)
+}
+
+func (x *Finding_SafeMatch) SetMatchRedacted(v string) {
+	x.xxx_hidden_MatchRedacted = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 3, 14)
+}
+
+func (x *Finding_SafeMatch) SetFingerprintPepperVersion(v string) {
+	x.xxx_hidden_FingerprintPepperVersion = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 4, 14)
+}
+
+func (x *Finding_SafeMatch) SetFingerprintGlobalHs256(v string) {
+	x.xxx_hidden_FingerprintGlobalHs256 = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 5, 14)
+}
+
+func (x *Finding_SafeMatch) SetFingerprintTenantHs256(v string) {
+	x.xxx_hidden_FingerprintTenantHs256 = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 6, 14)
+}
+
+func (x *Finding_SafeMatch) SetDisabledRule(v bool) {
+	x.xxx_hidden_DisabledRule = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 7, 14)
+}
+
+func (x *Finding_SafeMatch) SetBuiltinPreset(v bool) {
+	x.xxx_hidden_BuiltinPreset = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 8, 14)
+}
+
+func (x *Finding_SafeMatch) SetExcludedAt(v string) {
+	x.xxx_hidden_ExcludedAt = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 9, 14)
+}
+
+func (x *Finding_SafeMatch) SetExclusionId(v string) {
+	x.xxx_hidden_ExclusionId = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 10, 14)
+}
+
+func (x *Finding_SafeMatch) SetExcludedReason(v string) {
+	x.xxx_hidden_ExcludedReason = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 11, 14)
+}
+
+func (x *Finding_SafeMatch) SetExcludedDetail(v string) {
+	x.xxx_hidden_ExcludedDetail = &v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 12, 14)
+}
+
+func (x *Finding_SafeMatch) SetCaptureRedacted(v bool) {
+	x.xxx_hidden_CaptureRedacted = v
+	protoimpl.X.SetPresent(&(x.XXX_presence[0]), 13, 14)
+}
+
+func (x *Finding_SafeMatch) HasVersion() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 0)
+}
+
+func (x *Finding_SafeMatch) HasPreparedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 1)
+}
+
+func (x *Finding_SafeMatch) HasMatchLen() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 2)
+}
+
+func (x *Finding_SafeMatch) HasMatchRedacted() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 3)
+}
+
+func (x *Finding_SafeMatch) HasFingerprintPepperVersion() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 4)
+}
+
+func (x *Finding_SafeMatch) HasFingerprintGlobalHs256() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 5)
+}
+
+func (x *Finding_SafeMatch) HasFingerprintTenantHs256() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 6)
+}
+
+func (x *Finding_SafeMatch) HasDisabledRule() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 7)
+}
+
+func (x *Finding_SafeMatch) HasBuiltinPreset() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 8)
+}
+
+func (x *Finding_SafeMatch) HasExcludedAt() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 9)
+}
+
+func (x *Finding_SafeMatch) HasExclusionId() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 10)
+}
+
+func (x *Finding_SafeMatch) HasExcludedReason() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 11)
+}
+
+func (x *Finding_SafeMatch) HasExcludedDetail() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 12)
+}
+
+func (x *Finding_SafeMatch) HasCaptureRedacted() bool {
+	if x == nil {
+		return false
+	}
+	return protoimpl.X.Present(&(x.XXX_presence[0]), 13)
+}
+
+func (x *Finding_SafeMatch) ClearVersion() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 0)
+	x.xxx_hidden_Version = 0
+}
+
+func (x *Finding_SafeMatch) ClearPreparedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 1)
+	x.xxx_hidden_PreparedAt = nil
+}
+
+func (x *Finding_SafeMatch) ClearMatchLen() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 2)
+	x.xxx_hidden_MatchLen = 0
+}
+
+func (x *Finding_SafeMatch) ClearMatchRedacted() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 3)
+	x.xxx_hidden_MatchRedacted = nil
+}
+
+func (x *Finding_SafeMatch) ClearFingerprintPepperVersion() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 4)
+	x.xxx_hidden_FingerprintPepperVersion = nil
+}
+
+func (x *Finding_SafeMatch) ClearFingerprintGlobalHs256() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 5)
+	x.xxx_hidden_FingerprintGlobalHs256 = nil
+}
+
+func (x *Finding_SafeMatch) ClearFingerprintTenantHs256() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 6)
+	x.xxx_hidden_FingerprintTenantHs256 = nil
+}
+
+func (x *Finding_SafeMatch) ClearDisabledRule() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 7)
+	x.xxx_hidden_DisabledRule = false
+}
+
+func (x *Finding_SafeMatch) ClearBuiltinPreset() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 8)
+	x.xxx_hidden_BuiltinPreset = false
+}
+
+func (x *Finding_SafeMatch) ClearExcludedAt() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 9)
+	x.xxx_hidden_ExcludedAt = nil
+}
+
+func (x *Finding_SafeMatch) ClearExclusionId() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 10)
+	x.xxx_hidden_ExclusionId = nil
+}
+
+func (x *Finding_SafeMatch) ClearExcludedReason() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 11)
+	x.xxx_hidden_ExcludedReason = nil
+}
+
+func (x *Finding_SafeMatch) ClearExcludedDetail() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 12)
+	x.xxx_hidden_ExcludedDetail = nil
+}
+
+func (x *Finding_SafeMatch) ClearCaptureRedacted() {
+	protoimpl.X.ClearPresent(&(x.XXX_presence[0]), 13)
+	x.xxx_hidden_CaptureRedacted = false
+}
+
+type Finding_SafeMatch_builder struct {
+	_ [0]func() // Prevents comparability and use of unkeyed literals for the builder.
+
+	Version                  *uint32
+	PreparedAt               *string
+	MatchLen                 *uint32
+	MatchRedacted            *string
+	FingerprintPepperVersion *string
+	FingerprintGlobalHs256   *string
+	FingerprintTenantHs256   *string
+	DisabledRule             *bool
+	BuiltinPreset            *bool
+	ExcludedAt               *string
+	ExclusionId              *string
+	ExcludedReason           *string
+	ExcludedDetail           *string
+	// Deterministic capture privacy scanning produced this Gitleaks finding,
+	// independently of the organization's selected enforcement engine. The
+	// finding also carries the capture_redaction tag for persisted provenance.
+	CaptureRedacted *bool
+}
+
+func (b0 Finding_SafeMatch_builder) Build() *Finding_SafeMatch {
+	m0 := &Finding_SafeMatch{}
+	b, x := &b0, m0
+	_, _ = b, x
+	if b.Version != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 0, 14)
+		x.xxx_hidden_Version = *b.Version
+	}
+	if b.PreparedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 1, 14)
+		x.xxx_hidden_PreparedAt = b.PreparedAt
+	}
+	if b.MatchLen != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 2, 14)
+		x.xxx_hidden_MatchLen = *b.MatchLen
+	}
+	if b.MatchRedacted != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 3, 14)
+		x.xxx_hidden_MatchRedacted = b.MatchRedacted
+	}
+	if b.FingerprintPepperVersion != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 4, 14)
+		x.xxx_hidden_FingerprintPepperVersion = b.FingerprintPepperVersion
+	}
+	if b.FingerprintGlobalHs256 != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 5, 14)
+		x.xxx_hidden_FingerprintGlobalHs256 = b.FingerprintGlobalHs256
+	}
+	if b.FingerprintTenantHs256 != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 6, 14)
+		x.xxx_hidden_FingerprintTenantHs256 = b.FingerprintTenantHs256
+	}
+	if b.DisabledRule != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 7, 14)
+		x.xxx_hidden_DisabledRule = *b.DisabledRule
+	}
+	if b.BuiltinPreset != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 8, 14)
+		x.xxx_hidden_BuiltinPreset = *b.BuiltinPreset
+	}
+	if b.ExcludedAt != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 9, 14)
+		x.xxx_hidden_ExcludedAt = b.ExcludedAt
+	}
+	if b.ExclusionId != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 10, 14)
+		x.xxx_hidden_ExclusionId = b.ExclusionId
+	}
+	if b.ExcludedReason != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 11, 14)
+		x.xxx_hidden_ExcludedReason = b.ExcludedReason
+	}
+	if b.ExcludedDetail != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 12, 14)
+		x.xxx_hidden_ExcludedDetail = b.ExcludedDetail
+	}
+	if b.CaptureRedacted != nil {
+		protoimpl.X.SetPresentNonAtomic(&(x.XXX_presence[0]), 13, 14)
+		x.xxx_hidden_CaptureRedacted = *b.CaptureRedacted
+	}
+	return m0
+}
+
 var File_gram_risk_v1_finding_proto protoreflect.FileDescriptor
 
 const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\n" +
-	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xab\x10\n" +
+	"\x1agram/risk/v1/finding.proto\x12\fgram.risk.v1\x1a\x1bgcp/pubsub/v1/options.proto\"\xb7\x15\n" +
 	"\aFinding\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -1875,7 +2403,9 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x06shadow\x18\x1c \x01(\bR\x06shadow\x12C\n" +
 	"\vattribution\x18\x1d \x01(\v2!.gram.risk.v1.Finding.AttributionR\vattribution\x12=\n" +
 	"\texecution\x18\x1e \x01(\v2\x1f.gram.risk.v1.Finding.ExecutionR\texecution\x12Y\n" +
-	"\x13enforcement_outcome\x18\x1f \x01(\x0e2(.gram.risk.v1.Finding.EnforcementOutcomeR\x12enforcementOutcome\x1a\x8e\x02\n" +
+	"\x13enforcement_outcome\x18\x1f \x01(\x0e2(.gram.risk.v1.Finding.EnforcementOutcomeR\x12enforcementOutcome\x12>\n" +
+	"\n" +
+	"safe_match\x18  \x01(\v2\x1f.gram.risk.v1.Finding.SafeMatchR\tsafeMatch\x1a\x8e\x02\n" +
 	"\vAttribution\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12(\n" +
@@ -1899,7 +2429,25 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x06method\x18\b \x01(\tR\x06method\x12%\n" +
 	"\x0eprincipal_kind\x18\t \x01(\tR\rprincipalKind\x12)\n" +
 	"\x10identity_stamped\x18\n" +
-	" \x01(\bR\x0fidentityStamped\"\xbf\x02\n" +
+	" \x01(\bR\x0fidentityStamped\x1a\xc9\x04\n" +
+	"\tSafeMatch\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\rR\aversion\x12\x1f\n" +
+	"\vprepared_at\x18\x02 \x01(\tR\n" +
+	"preparedAt\x12\x1b\n" +
+	"\tmatch_len\x18\x03 \x01(\rR\bmatchLen\x12%\n" +
+	"\x0ematch_redacted\x18\x04 \x01(\tR\rmatchRedacted\x12<\n" +
+	"\x1afingerprint_pepper_version\x18\x05 \x01(\tR\x18fingerprintPepperVersion\x128\n" +
+	"\x18fingerprint_global_hs256\x18\x06 \x01(\tR\x16fingerprintGlobalHs256\x128\n" +
+	"\x18fingerprint_tenant_hs256\x18\a \x01(\tR\x16fingerprintTenantHs256\x12#\n" +
+	"\rdisabled_rule\x18\b \x01(\bR\fdisabledRule\x12%\n" +
+	"\x0ebuiltin_preset\x18\t \x01(\bR\rbuiltinPreset\x12\x1f\n" +
+	"\vexcluded_at\x18\n" +
+	" \x01(\tR\n" +
+	"excludedAt\x12!\n" +
+	"\fexclusion_id\x18\v \x01(\tR\vexclusionId\x12'\n" +
+	"\x0fexcluded_reason\x18\f \x01(\tR\x0eexcludedReason\x12'\n" +
+	"\x0fexcluded_detail\x18\r \x01(\tR\x0eexcludedDetail\x12)\n" +
+	"\x10capture_redacted\x18\x0e \x01(\bR\x0fcaptureRedacted\"\xbf\x02\n" +
 	"\x12EnforcementOutcome\x12#\n" +
 	"\x1fENFORCEMENT_OUTCOME_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aENFORCEMENT_OUTCOME_LOGGED\x10\x01\x12\x1e\n" +
@@ -1912,22 +2460,24 @@ const file_gram_risk_v1_finding_proto_rawDesc = "" +
 	"\x8a\xb5\x18\x06\x12\x04\b\x80\xf5$B=Z;github.com/speakeasy-api/gram/infra/gen/gram/risk/v1;riskv1b\beditionsp\xe9\a"
 
 var file_gram_risk_v1_finding_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_gram_risk_v1_finding_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_gram_risk_v1_finding_proto_goTypes = []any{
 	(Finding_EnforcementOutcome)(0), // 0: gram.risk.v1.Finding.EnforcementOutcome
 	(*Finding)(nil),                 // 1: gram.risk.v1.Finding
 	(*Finding_Attribution)(nil),     // 2: gram.risk.v1.Finding.Attribution
 	(*Finding_Execution)(nil),       // 3: gram.risk.v1.Finding.Execution
+	(*Finding_SafeMatch)(nil),       // 4: gram.risk.v1.Finding.SafeMatch
 }
 var file_gram_risk_v1_finding_proto_depIdxs = []int32{
 	2, // 0: gram.risk.v1.Finding.attribution:type_name -> gram.risk.v1.Finding.Attribution
 	3, // 1: gram.risk.v1.Finding.execution:type_name -> gram.risk.v1.Finding.Execution
 	0, // 2: gram.risk.v1.Finding.enforcement_outcome:type_name -> gram.risk.v1.Finding.EnforcementOutcome
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4, // 3: gram.risk.v1.Finding.safe_match:type_name -> gram.risk.v1.Finding.SafeMatch
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_gram_risk_v1_finding_proto_init() }
@@ -1941,7 +2491,7 @@ func file_gram_risk_v1_finding_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_gram_risk_v1_finding_proto_rawDesc), len(file_gram_risk_v1_finding_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

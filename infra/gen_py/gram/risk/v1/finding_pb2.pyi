@@ -9,7 +9,7 @@ from typing import ClassVar as _ClassVar, Optional as _Optional, Union as _Union
 DESCRIPTOR: _descriptor.FileDescriptor
 
 class Finding(_message.Message):
-    __slots__ = ("id", "request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "rule_id", "description", "match", "start_pos", "end_pos", "tags", "source", "confidence", "dead_letter_reason", "content_part_id", "false_positive_at", "surface", "field", "path", "tool_call_id", "excluded_at", "excluded_reason", "excluded_detail", "event_kind", "shadow", "attribution", "execution", "enforcement_outcome")
+    __slots__ = ("id", "request_id", "chat_message_id", "project_id", "organization_id", "risk_policy_id", "risk_policy_version", "created_at", "rule_id", "description", "match", "start_pos", "end_pos", "tags", "source", "confidence", "dead_letter_reason", "content_part_id", "false_positive_at", "surface", "field", "path", "tool_call_id", "excluded_at", "excluded_reason", "excluded_detail", "event_kind", "shadow", "attribution", "execution", "enforcement_outcome", "safe_match")
     class EnforcementOutcome(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
         __slots__ = ()
         ENFORCEMENT_OUTCOME_UNSPECIFIED: _ClassVar[Finding.EnforcementOutcome]
@@ -70,6 +70,37 @@ class Finding(_message.Message):
         principal_kind: str
         identity_stamped: bool
         def __init__(self, execution_id: _Optional[str] = ..., mcp_server_id: _Optional[str] = ..., meta_mcp_server_id: _Optional[str] = ..., toolset_id: _Optional[str] = ..., tool_name: _Optional[str] = ..., phase: _Optional[str] = ..., mediation_surface: _Optional[str] = ..., method: _Optional[str] = ..., principal_kind: _Optional[str] = ..., identity_stamped: _Optional[bool] = ...) -> None: ...
+    class SafeMatch(_message.Message):
+        __slots__ = ("version", "prepared_at", "match_len", "match_redacted", "fingerprint_pepper_version", "fingerprint_global_hs256", "fingerprint_tenant_hs256", "disabled_rule", "builtin_preset", "excluded_at", "exclusion_id", "excluded_reason", "excluded_detail", "capture_redacted")
+        VERSION_FIELD_NUMBER: _ClassVar[int]
+        PREPARED_AT_FIELD_NUMBER: _ClassVar[int]
+        MATCH_LEN_FIELD_NUMBER: _ClassVar[int]
+        MATCH_REDACTED_FIELD_NUMBER: _ClassVar[int]
+        FINGERPRINT_PEPPER_VERSION_FIELD_NUMBER: _ClassVar[int]
+        FINGERPRINT_GLOBAL_HS256_FIELD_NUMBER: _ClassVar[int]
+        FINGERPRINT_TENANT_HS256_FIELD_NUMBER: _ClassVar[int]
+        DISABLED_RULE_FIELD_NUMBER: _ClassVar[int]
+        BUILTIN_PRESET_FIELD_NUMBER: _ClassVar[int]
+        EXCLUDED_AT_FIELD_NUMBER: _ClassVar[int]
+        EXCLUSION_ID_FIELD_NUMBER: _ClassVar[int]
+        EXCLUDED_REASON_FIELD_NUMBER: _ClassVar[int]
+        EXCLUDED_DETAIL_FIELD_NUMBER: _ClassVar[int]
+        CAPTURE_REDACTED_FIELD_NUMBER: _ClassVar[int]
+        version: int
+        prepared_at: str
+        match_len: int
+        match_redacted: str
+        fingerprint_pepper_version: str
+        fingerprint_global_hs256: str
+        fingerprint_tenant_hs256: str
+        disabled_rule: bool
+        builtin_preset: bool
+        excluded_at: str
+        exclusion_id: str
+        excluded_reason: str
+        excluded_detail: str
+        capture_redacted: bool
+        def __init__(self, version: _Optional[int] = ..., prepared_at: _Optional[str] = ..., match_len: _Optional[int] = ..., match_redacted: _Optional[str] = ..., fingerprint_pepper_version: _Optional[str] = ..., fingerprint_global_hs256: _Optional[str] = ..., fingerprint_tenant_hs256: _Optional[str] = ..., disabled_rule: _Optional[bool] = ..., builtin_preset: _Optional[bool] = ..., excluded_at: _Optional[str] = ..., exclusion_id: _Optional[str] = ..., excluded_reason: _Optional[str] = ..., excluded_detail: _Optional[str] = ..., capture_redacted: _Optional[bool] = ...) -> None: ...
     ID_FIELD_NUMBER: _ClassVar[int]
     REQUEST_ID_FIELD_NUMBER: _ClassVar[int]
     CHAT_MESSAGE_ID_FIELD_NUMBER: _ClassVar[int]
@@ -101,6 +132,7 @@ class Finding(_message.Message):
     ATTRIBUTION_FIELD_NUMBER: _ClassVar[int]
     EXECUTION_FIELD_NUMBER: _ClassVar[int]
     ENFORCEMENT_OUTCOME_FIELD_NUMBER: _ClassVar[int]
+    SAFE_MATCH_FIELD_NUMBER: _ClassVar[int]
     id: str
     request_id: str
     chat_message_id: str
@@ -132,4 +164,5 @@ class Finding(_message.Message):
     attribution: Finding.Attribution
     execution: Finding.Execution
     enforcement_outcome: Finding.EnforcementOutcome
-    def __init__(self, id: _Optional[str] = ..., request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., rule_id: _Optional[str] = ..., description: _Optional[str] = ..., match: _Optional[str] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., tags: _Optional[_Iterable[str]] = ..., source: _Optional[str] = ..., confidence: _Optional[float] = ..., dead_letter_reason: _Optional[str] = ..., content_part_id: _Optional[str] = ..., false_positive_at: _Optional[str] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., excluded_at: _Optional[str] = ..., excluded_reason: _Optional[str] = ..., excluded_detail: _Optional[str] = ..., event_kind: _Optional[str] = ..., shadow: _Optional[bool] = ..., attribution: _Optional[_Union[Finding.Attribution, _Mapping]] = ..., execution: _Optional[_Union[Finding.Execution, _Mapping]] = ..., enforcement_outcome: _Optional[_Union[Finding.EnforcementOutcome, str]] = ...) -> None: ...
+    safe_match: Finding.SafeMatch
+    def __init__(self, id: _Optional[str] = ..., request_id: _Optional[str] = ..., chat_message_id: _Optional[str] = ..., project_id: _Optional[str] = ..., organization_id: _Optional[str] = ..., risk_policy_id: _Optional[str] = ..., risk_policy_version: _Optional[int] = ..., created_at: _Optional[str] = ..., rule_id: _Optional[str] = ..., description: _Optional[str] = ..., match: _Optional[str] = ..., start_pos: _Optional[int] = ..., end_pos: _Optional[int] = ..., tags: _Optional[_Iterable[str]] = ..., source: _Optional[str] = ..., confidence: _Optional[float] = ..., dead_letter_reason: _Optional[str] = ..., content_part_id: _Optional[str] = ..., false_positive_at: _Optional[str] = ..., surface: _Optional[str] = ..., field: _Optional[str] = ..., path: _Optional[str] = ..., tool_call_id: _Optional[str] = ..., excluded_at: _Optional[str] = ..., excluded_reason: _Optional[str] = ..., excluded_detail: _Optional[str] = ..., event_kind: _Optional[str] = ..., shadow: _Optional[bool] = ..., attribution: _Optional[_Union[Finding.Attribution, _Mapping]] = ..., execution: _Optional[_Union[Finding.Execution, _Mapping]] = ..., enforcement_outcome: _Optional[_Union[Finding.EnforcementOutcome, str]] = ..., safe_match: _Optional[_Union[Finding.SafeMatch, _Mapping]] = ...) -> None: ...

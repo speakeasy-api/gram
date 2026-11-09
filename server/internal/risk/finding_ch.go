@@ -140,8 +140,14 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 	webhookEvents := make([]RiskFindingCreatedEvent, 0, len(messages))
 	webhookFindingIDs := make(map[uuid.UUID]struct{}, len(messages))
 	for msgIdx, message := range messages {
+		if err := ValidateSafeFinding(message); err != nil {
+			w.metrics.RecordFindingCHSkipped(ctx, "invalid_safe_match")
+			failed[msgIdx] = err
+			continue
+		}
 		orgID := strings.TrimSpace(message.GetOrganizationId())
 		match := message.GetMatch()
+		safe := message.GetSafeMatch()
 		deadLetter := message.GetDeadLetterReason() != ""
 
 		// The id maps to a ClickHouse UUID column. Parse it here so a malformed
@@ -186,15 +192,22 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 
 		// Suppression state events must land even when the original finding is now filtered.
 		if !deadLetter && eventKind == chrepo.EventKindFinding {
-			filters, err := w.policyFilters.filtersFor(ctx, message, missingPolicies)
-			if err != nil {
-				return nil, fmt.Errorf("resolve finding policy filters: %w", err)
+			disabled, builtin := false, false
+			if safe != nil {
+				disabled, builtin = safe.GetDisabledRule(), safe.GetBuiltinPreset()
+			} else {
+				filters, err := w.policyFilters.filtersFor(ctx, message, missingPolicies)
+				if err != nil {
+					return nil, fmt.Errorf("resolve finding policy filters: %w", err)
+				}
+				disabled = filters.disabledRules.Contains(message.GetRuleId())
+				builtin = !disabled && filters.builtinPresetsEnabled && risk_analysis.IsBuiltinFalsePositive(w.builtinPresets, message.GetSource(), message.GetRuleId(), match)
 			}
 			switch {
-			case filters.disabledRules.Contains(message.GetRuleId()):
+			case disabled:
 				w.metrics.RecordFindingCHFiltered(ctx, "disabled_rule")
 				continue
-			case filters.builtinPresetsEnabled && risk_analysis.IsBuiltinFalsePositive(w.builtinPresets, message.GetSource(), message.GetRuleId(), match):
+			case builtin:
 				w.metrics.RecordFindingCHFiltered(ctx, "builtin_preset")
 				continue
 			}
@@ -230,6 +243,17 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 			excludedAt = &utc
 			excludedReason = message.GetExcludedReason()
 			excludedDetail = message.GetExcludedDetail()
+		} else if safe != nil {
+			if safe.GetExcludedAt() != "" {
+				// ValidateSafeFinding checked both values before this message was accepted.
+				at, _ := time.Parse(time.RFC3339, safe.GetExcludedAt())
+				at = at.UTC()
+				exID, _ := uuid.Parse(safe.GetExclusionId())
+				excludedAt, exclusionID = &at, &exID
+				excludedReason = safe.GetExcludedReason()
+				excludedDetail = safe.GetExcludedDetail()
+				w.metrics.RecordFindingCHExcluded(ctx)
+			}
 		} else if !deadLetter {
 			exID, excluded, err := w.exclusions.ExcludedBy(ctx, message)
 			if err != nil {
@@ -251,7 +275,10 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		pepperVersion := ""
 
 		globalHS256 := ""
-		if !deadLetter && match != "" {
+		if safe != nil {
+			globalHS256 = safe.GetFingerprintGlobalHs256()
+			pepperVersion = safe.GetFingerprintPepperVersion()
+		} else if !deadLetter && match != "" {
 			if sum, pepperver, err := w.fingerprinter.HS256([]byte(match)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute global fingerprint", attr.SlogError(err))
 			} else {
@@ -261,7 +288,9 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		}
 
 		tenantHS256 := ""
-		if !deadLetter && orgID != "" && match != "" {
+		if safe != nil {
+			tenantHS256 = safe.GetFingerprintTenantHs256()
+		} else if !deadLetter && orgID != "" && match != "" {
 			if sum, pepperver, err := w.fingerprinter.TenantedHS256(orgID, []byte(match), WithKeyCache(tenantKeyCache)); err != nil {
 				logger.ErrorContext(ctx, "failed to compute tenant-qualified fingerprint", attr.SlogError(err))
 			} else {
@@ -276,7 +305,9 @@ func (w *FindingCHWriter) ProcessBatch(ctx context.Context, messages []*riskv1.F
 		// stays empty.
 		matchRedacted := ""
 		matchLen := uint32(0)
-		if !deadLetter && match != "" {
+		if safe != nil {
+			matchLen, matchRedacted = safe.GetMatchLen(), safe.GetMatchRedacted()
+		} else if !deadLetter && match != "" {
 			if n := len(match); n > math.MaxUint32 {
 				matchLen = math.MaxUint32
 			} else {

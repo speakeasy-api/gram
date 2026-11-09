@@ -45,6 +45,21 @@ func (r *FindingExclusionResolver) ExcludedBy(ctx context.Context, message *risk
 	if message == nil {
 		return uuid.UUID{}, false, errors.New("finding is nil")
 	}
+	if err := ValidateSafeFinding(message); err != nil {
+		return uuid.UUID{}, false, err
+	}
+	if safe := message.GetSafeMatch(); safe != nil {
+		if safe.GetExcludedAt() == "" {
+			return uuid.UUID{}, false, nil
+		}
+		// Safe findings carry the decision made while the raw match existed.
+		// Re-running a regex against an absent match would change that decision.
+		exclusionID, err := uuid.Parse(safe.GetExclusionId())
+		if err != nil {
+			return uuid.UUID{}, false, fmt.Errorf("parse safe finding exclusion id: %w", err)
+		}
+		return exclusionID, true, nil
+	}
 
 	projectID, err := uuid.Parse(message.GetProjectId())
 	if err != nil {

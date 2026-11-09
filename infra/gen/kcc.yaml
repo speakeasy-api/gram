@@ -1065,6 +1065,22 @@ pubsub:
             string principal_kind = 9;
             bool identity_stamped = 10;
           }
+          message SafeMatch {
+            uint32 version = 1;
+            string prepared_at = 2;
+            uint32 match_len = 3;
+            string match_redacted = 4;
+            string fingerprint_pepper_version = 5;
+            string fingerprint_global_hs256 = 6;
+            string fingerprint_tenant_hs256 = 7;
+            bool disabled_rule = 8;
+            bool builtin_preset = 9;
+            string excluded_at = 10;
+            string exclusion_id = 11;
+            string excluded_reason = 12;
+            string excluded_detail = 13;
+            bool capture_redacted = 14;
+          }
           string id = 1;
           string request_id = 2;
           string chat_message_id = 3;
@@ -1096,6 +1112,7 @@ pubsub:
           Attribution attribution = 29;
           Execution execution = 30;
           EnforcementOutcome enforcement_outcome = 31;
+          SafeMatch safe_match = 32;
         }
       type: PROTOCOL_BUFFER
   - labels:
