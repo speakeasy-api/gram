@@ -65,6 +65,11 @@ type metaMember struct {
 	// so NULL or stale degrades to an anonymous call, never a wrong bearer.
 	remoteSessionIssuerID uuid.NullUUID
 
+	// upstreamIssuer holds both of the member server's upstream issuer
+	// sources, its column and its client associations, as listed. It does not
+	// change when a choice replaces remoteSessionIssuerID.
+	upstreamIssuer upstreamIssuerKeys
+
 	// A tunneled member's recorded RFC 8707 resource identifier, empty when it
 	// records none. Routing accepts a grant qualified to this value; it never
 	// selects across issuers, so it is not an address and is never dialed.
@@ -146,7 +151,19 @@ type metaMemberCandidate struct {
 	environmentID              uuid.NullUUID
 	toolVariationsGroupID      uuid.NullUUID
 	remoteSessionIssuerID      uuid.NullUUID
+	upstreamIssuer             upstreamIssuerKeys
 	tunneledResourceIdentifier string
+}
+
+// memberUpstreamIssuer is a listed member's two upstream issuer sources: its
+// column, and the providers its live client associations name.
+func memberUpstreamIssuer(column uuid.NullUUID, associationProviderIDs []uuid.UUID) upstreamIssuerKeys {
+	association := remotesessions.AssociationIssuerFromProviders(associationProviderIDs)
+	return upstreamIssuerKeys{
+		column:      column,
+		association: associationUpstreamIssuer{Provider: association.Provider, Providers: association.Providers},
+		known:       true,
+	}
 }
 
 // resolveMetaMemberSnapshot loads a stored meta server's servable members and
@@ -196,6 +213,7 @@ func (s *Service) resolveMetaMemberSnapshot(
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
@@ -353,6 +371,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			environmentID:              row.McpServerEnvironmentID,
 			toolVariationsGroupID:      row.McpServerToolVariationsGroupID,
 			remoteSessionIssuerID:      row.McpServerRemoteSessionIssuerID,
+			upstreamIssuer:             memberUpstreamIssuer(row.McpServerRemoteSessionIssuerID, row.McpServerAssociationProviderIds),
 			tunneledResourceIdentifier: row.TunneledResourceIdentifier,
 		})
 	}
@@ -498,6 +517,7 @@ func (s *Service) admitMetaMembers(
 			environmentID:              candidate.environmentID,
 			toolVariationsGroupID:      candidate.toolVariationsGroupID,
 			remoteSessionIssuerID:      candidate.remoteSessionIssuerID,
+			upstreamIssuer:             candidate.upstreamIssuer,
 			tunneledResourceIdentifier: candidate.tunneledResourceIdentifier,
 			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:             false,

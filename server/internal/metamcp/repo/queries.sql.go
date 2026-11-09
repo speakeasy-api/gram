@@ -1408,6 +1408,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
@@ -1432,20 +1448,21 @@ type ListServableMetaMCPMembersParams struct {
 }
 
 type ListServableMetaMCPMembersRow struct {
-	ID                             uuid.UUID
-	McpServerID                    uuid.UUID
-	SortOrder                      int32
-	McpServerName                  pgtype.Text
-	McpServerSlug                  pgtype.Text
-	McpServerVisibility            string
-	McpServerToolsetID             uuid.NullUUID
-	McpServerRemoteMcpServerID     uuid.NullUUID
-	McpServerTunneledMcpServerID   uuid.NullUUID
-	McpServerUnproxiedMcpServerID  uuid.NullUUID
-	McpServerEnvironmentID         uuid.NullUUID
-	McpServerToolVariationsGroupID uuid.NullUUID
-	McpServerRemoteSessionIssuerID uuid.NullUUID
-	TunneledResourceIdentifier     string
+	ID                              uuid.UUID
+	McpServerID                     uuid.UUID
+	SortOrder                       int32
+	McpServerName                   pgtype.Text
+	McpServerSlug                   pgtype.Text
+	McpServerVisibility             string
+	McpServerToolsetID              uuid.NullUUID
+	McpServerRemoteMcpServerID      uuid.NullUUID
+	McpServerTunneledMcpServerID    uuid.NullUUID
+	McpServerUnproxiedMcpServerID   uuid.NullUUID
+	McpServerEnvironmentID          uuid.NullUUID
+	McpServerToolVariationsGroupID  uuid.NullUUID
+	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerAssociationProviderIds []uuid.UUID
+	TunneledResourceIdentifier      string
 }
 
 // Serving-path variant of ListMetaMCPMembers: additionally hides members
@@ -1459,6 +1476,8 @@ type ListServableMetaMCPMembersRow struct {
 // identifier so credential routing needs no second read per dial. A member
 // whose tunneled source is soft-deleted reads as no identifier and routes
 // anonymously; the dial then fails member-scoped on the missing tunnel.
+// association_provider_ids are the distinct live providers of the member's
+// live client associations.
 func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServableMetaMCPMembersParams) ([]ListServableMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listServableMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -1482,6 +1501,7 @@ func (q *Queries) ListServableMetaMCPMembers(ctx context.Context, arg ListServab
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 		); err != nil {
 			return nil, err

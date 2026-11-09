@@ -72,7 +72,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 		for _, client := range bound {
 			ids = append(ids, client.ClientID)
 		}
-		required, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
+		required, _, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide required MCP server clients").LogError(ctx, logger)
 		}

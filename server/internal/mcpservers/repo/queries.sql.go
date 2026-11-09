@@ -1597,6 +1597,22 @@ SELECT
     s.environment_id AS mcp_server_environment_id,
     s.tool_variations_group_id AS mcp_server_tool_variations_group_id,
     s.remote_session_issuer_id AS mcp_server_remote_session_issuer_id,
+    ARRAY(
+        SELECT DISTINCT c.remote_session_issuer_id
+        FROM mcp_server_remote_session_clients AS a
+        JOIN remote_session_clients AS c
+          ON c.id = a.remote_session_client_id
+         AND c.deleted IS FALSE
+         AND (c.project_id = a.project_id
+              OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+        JOIN remote_session_issuers AS provider
+          ON provider.id = c.remote_session_issuer_id
+         AND provider.deleted IS FALSE
+         AND (provider.project_id = a.project_id
+              OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+        WHERE a.mcp_server_id = s.id
+          AND a.deleted IS FALSE
+    )::uuid[] AS mcp_server_association_provider_ids,
     COALESCE(t.resource_identifier, '')::text AS tunneled_resource_identifier,
     EXISTS (
       SELECT 1 FROM unnest(latest.tool_urns) AS u(urn)
@@ -1627,22 +1643,23 @@ ORDER BY s.project_id, s.slug
 `
 
 type ListServableMCPServersByOrganizationIDRow struct {
-	McpServerID                    uuid.UUID
-	McpServerProjectID             uuid.UUID
-	McpServerProjectSlug           string
-	McpServerName                  pgtype.Text
-	McpServerSlug                  pgtype.Text
-	McpServerVisibility            string
-	McpServerNetworkAccessMode     pgtype.Text
-	McpServerToolsetID             uuid.NullUUID
-	McpServerRemoteMcpServerID     uuid.NullUUID
-	McpServerTunneledMcpServerID   uuid.NullUUID
-	McpServerUnproxiedMcpServerID  uuid.NullUUID
-	McpServerEnvironmentID         uuid.NullUUID
-	McpServerToolVariationsGroupID uuid.NullUUID
-	McpServerRemoteSessionIssuerID uuid.NullUUID
-	TunneledResourceIdentifier     string
-	HasPlatformTool                bool
+	McpServerID                     uuid.UUID
+	McpServerProjectID              uuid.UUID
+	McpServerProjectSlug            string
+	McpServerName                   pgtype.Text
+	McpServerSlug                   pgtype.Text
+	McpServerVisibility             string
+	McpServerNetworkAccessMode      pgtype.Text
+	McpServerToolsetID              uuid.NullUUID
+	McpServerRemoteMcpServerID      uuid.NullUUID
+	McpServerTunneledMcpServerID    uuid.NullUUID
+	McpServerUnproxiedMcpServerID   uuid.NullUUID
+	McpServerEnvironmentID          uuid.NullUUID
+	McpServerToolVariationsGroupID  uuid.NullUUID
+	McpServerRemoteSessionIssuerID  uuid.NullUUID
+	McpServerAssociationProviderIds []uuid.UUID
+	TunneledResourceIdentifier      string
+	HasPlatformTool                 bool
 }
 
 // Candidate members for a gateway whose membership is derived rather than
@@ -1669,6 +1686,8 @@ type ListServableMCPServersByOrganizationIDRow struct {
 // reduce it to one flag would scale with toolset size. Ordered by project then
 // slug: a derived gateway has no operator-authored order, and slugs are unique
 // only within a project, so the pair is what makes the listing stable.
+// association_provider_ids are the distinct live providers of the member's
+// live client associations.
 func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, organizationID string) ([]ListServableMCPServersByOrganizationIDRow, error) {
 	rows, err := q.db.Query(ctx, listServableMCPServersByOrganizationID, organizationID)
 	if err != nil {
@@ -1693,6 +1712,7 @@ func (q *Queries) ListServableMCPServersByOrganizationID(ctx context.Context, or
 			&i.McpServerEnvironmentID,
 			&i.McpServerToolVariationsGroupID,
 			&i.McpServerRemoteSessionIssuerID,
+			&i.McpServerAssociationProviderIds,
 			&i.TunneledResourceIdentifier,
 			&i.HasPlatformTool,
 		); err != nil {
