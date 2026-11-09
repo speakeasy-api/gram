@@ -73,7 +73,7 @@ const (
 // *workos.Client implements it.
 type OrganizationProvider interface {
 	DeleteOrganizationMembership(ctx context.Context, workosMembershipID string) error
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetOrganizationDomainPolicy(ctx context.Context, workosOrgID string) (*workos.OrganizationDomainPolicy, error)
@@ -1247,7 +1247,7 @@ func (s *Service) handleSetupCallback(w http.ResponseWriter, r *http.Request) {
 func (s *Service) writeSetupCallbackError(w http.ResponseWriter, r *http.Request, description string, status int) {
 	page := oauthui.AuthorizationError{
 		Recovery: &oauthui.RecoveryLink{URL: strings.TrimRight(s.siteURL, "/") + "/@self/setup", Label: "Open organization setup"},
-		Setup:    true, Status: status, Reason: oauthui.ReasonDefault, Approval: false,
+		Setup:    true, Status: status, Reason: oauthui.ReasonDefault,
 		ErrorID: "", Code: oautherr.CodeInvalidRequest, Description: description,
 		ProviderName: "",
 		CallbackURL:  "", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: "",
@@ -1760,12 +1760,12 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 		return
 	}
 
-	workosRoleSlugs := []string{invite.RoleSlug.String}
-	membershipID, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
+	member, err := s.orgs.CreateOrganizationMembership(ctx, workosUserID, org.WorkosID.String, invite.RoleSlug.String)
 	if err != nil {
 		s.logger.WarnContext(ctx, "invite callback: failed to create WorkOS membership; checking for an existing membership", attr.SlogError(err))
 
-		member, lookupErr := s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
+		var lookupErr error
+		member, lookupErr = s.orgs.GetOrgMembership(ctx, workosUserID, org.WorkosID.String)
 		if lookupErr != nil {
 			s.logger.WarnContext(ctx, "invite callback: failed to look up WorkOS membership", attr.SlogError(lookupErr))
 			return
@@ -1774,7 +1774,7 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			return
 		}
 
-		workosRoleSlugs = append([]string(nil), member.RoleSlugs...)
+		workosRoleSlugs := append([]string(nil), member.RoleSlugs...)
 		if !slices.Contains(workosRoleSlugs, invite.RoleSlug.String) {
 			workosRoleSlugs = append(workosRoleSlugs, invite.RoleSlug.String)
 		}
@@ -1783,18 +1783,15 @@ func (s *Service) reconcileInvitationWorkOSMembership(ctx context.Context, invit
 			s.logger.WarnContext(ctx, "invite callback: failed to update WorkOS membership role", attr.SlogError(updateErr))
 			return
 		}
-		membershipID = member.ID
-		if updated != nil && updated.ID != "" {
-			membershipID = updated.ID
-		}
+		member = updated
 	}
 
 	if err := orgrepo.New(s.db).SyncUserOrganizationRoleAssignments(ctx, orgrepo.SyncUserOrganizationRoleAssignmentsParams{
 		OrganizationID:     invite.OrganizationID,
 		WorkosUserID:       workosUserID,
-		WorkosRoleSlugs:    workosRoleSlugs,
+		WorkosRoleSlugs:    member.RoleSlugs,
 		UserID:             conv.ToPGText(gramUserID),
-		WorkosMembershipID: conv.ToPGText(membershipID),
+		WorkosMembershipID: conv.ToPGText(member.ID),
 		WorkosUpdatedAt:    pgtype.Timestamptz{Time: time.Now(), InfinityModifier: pgtype.Finite, Valid: true},
 		WorkosLastEventID:  pgtype.Text{String: "", Valid: false},
 	}); err != nil {

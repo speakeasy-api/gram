@@ -11,13 +11,12 @@ export type AdminMcpTool = {
   name: string;
   title: string;
   description: string;
-  access: "read" | "approval" | "write";
+  access: "read" | "write";
 };
 
 const accessLabels = {
   read: "Read-only",
-  approval: "Approval flow",
-  write: "Direct write",
+  write: "Write",
 } as const;
 
 export function AdminMcpTools(): JSX.Element {
@@ -94,7 +93,7 @@ export function AdminMcpTools(): JSX.Element {
           aria-label="Tool access"
           className="flex flex-wrap gap-2"
         >
-          {(["all", "read", "approval", "write"] as const).map((value) => (
+          {(["all", "read", "write"] as const).map((value) => (
             <Button
               key={value}
               variant={access === value ? "secondary" : "outline"}
@@ -154,9 +153,9 @@ export function AdminMcpTools(): JSX.Element {
           </ul>
         )}
         <p className="text-muted-foreground text-xs leading-relaxed">
-          Approval flow tools prepare, then execute changes after your browser
-          approval. Direct write tools can act without a separate approval; read
-          their descriptions before use. Both require write access.
+          Write tools apply as soon as they run and require write access. Your
+          agent is told to get your explicit confirmation first, but the server
+          does not enforce it, so check what it proposes before you agree.
         </p>
       </>
     );

@@ -487,3 +487,14 @@ func TestStaffOAuthMissingGrantType(t *testing.T) {
 		})
 	}
 }
+
+func TestStaffOAuthRefreshRestartsInactivityTimeout(t *testing.T) {
+	t.Parallel()
+	tokens, store, _ := staffTokensFixture(t)
+
+	response := httptest.NewRecorder()
+	tokens.TokenHandler().ServeHTTP(response, staffTokenRequest("refresh_token", url.Values{"refresh_token": {"old-refresh-token"}}))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.WithinDuration(t, time.Now().Add(staffInactivityTimeout), store.issued.RefreshTil, time.Minute)
+	require.WithinDuration(t, time.Now().Add(staffAccessLifetime), store.issued.ExpiresAt, time.Minute)
+}

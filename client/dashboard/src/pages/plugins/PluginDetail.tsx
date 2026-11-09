@@ -18,6 +18,7 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { Button as UiButton } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import {
   ServerPickerSheet,
   type ServerPickerOption,
@@ -135,7 +136,7 @@ export default function PluginDetail(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   // Keep privileged queries unmounted, rather than hiding their rendered UI.
   return canWritePlugin || hasScope("org:read", organization.id) ? (
     <AdminPluginDetail />

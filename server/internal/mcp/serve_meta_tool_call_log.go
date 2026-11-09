@@ -2,11 +2,13 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
@@ -23,6 +25,24 @@ import (
 // attribution, and its URN source stays empty rather than naming a kind the
 // tool may not have.
 const unresolvedToolKind = "unresolved"
+
+// gatewayDiscoveryToolPrefix starts the tool name of a member's row for a
+// gateway discovery call that could not describe it. Discovery tools belong to
+// the gateway, not the member, so the row must not share a name, URN or stats
+// with a member tool of the same name. The URN keeps the member's own kind and
+// source, which Tool logs needs to list the row.
+const gatewayDiscoveryToolPrefix = "gateway_"
+
+// metaFailureRow is how a failed gateway tool_call row is attributed.
+type metaFailureRow struct {
+	// unstamped leaves out the gateway's stamp, for a call the gateway
+	// counts from another row.
+	unstamped bool
+
+	// source names the tool's source when its URN cannot carry one. Only a
+	// discovery failure row on a hosted member sets it.
+	source string
+}
 
 // metaToolCallAttemptKey carries a gateway member tool call's attempt into
 // handleToolsCall.
@@ -115,6 +135,16 @@ func metaMemberErrorStatus(err error) int {
 // otherwise; a call on an agent gateway that reached no member has no project
 // to be logged under and is skipped.
 func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error) {
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, arguments, attempt, handlerErr, metaFailureRow{unstamped: false, source: ""})
+	if params == nil {
+		return
+	}
+	s.telemLogger.Log(ctx, *params)
+}
+
+// metaToolCallFailureLogParams builds the failed tool_call row for a gateway
+// call, or nil when it has no project to be logged under.
+func metaToolCallFailureLogParams(ctx context.Context, gate *metaGateContext, qualified string, arguments []byte, attempt *metaToolCallAttempt, handlerErr error, row metaFailureRow) *tm.LogParams {
 	status, message := attempt.status, attempt.message
 	if status == 0 {
 		status, message = http.StatusInternalServerError, "unexpected error"
@@ -138,9 +168,15 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 		toolInfo.ProjectID = gate.projectID.String()
 	}
 	logAttrs := tm.HTTPLogAttributes{
-		attr.EventSourceKey:     string(tm.EventSourceToolCall),
-		attr.ToolCallIDKey:      uuid.NewString(),
-		attr.MetaMcpServerIDKey: gate.metaServerID.String(),
+		attr.EventSourceKey: string(tm.EventSourceToolCall),
+		attr.ToolCallIDKey:  uuid.NewString(),
+	}
+	if !row.unstamped {
+		logAttrs[attr.MetaMcpServerIDKey] = gate.metaServerID.String()
+	}
+	// ToolInfo sets the source from a URN it can parse, which wins over this.
+	if row.source != "" {
+		logAttrs[attr.ToolCallSourceKey] = row.source
 	}
 	if member := attempt.member; member != nil {
 		toolInfo.ProjectID = member.projectID.String()
@@ -162,7 +198,7 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 		toolInfo.OrganizationID = descriptor.OrganizationID
 	}
 	if toolInfo.ProjectID == "" {
-		return
+		return nil
 	}
 
 	logAttrs[attr.OutcomeKey] = dialect.ToolCallOutcome(status, true)
@@ -185,12 +221,99 @@ func (s *Service) logMetaToolCallFailure(ctx context.Context, gate *metaGateCont
 		logAttrs[attr.APIKeyIDKey] = gate.apiKeyID
 	}
 
-	s.telemLogger.Log(ctx, tm.LogParams{
+	return &tm.LogParams{
 		Timestamp:  time.Now(),
 		ToolInfo:   toolInfo,
 		UserInfo:   tm.UserInfoByID(gate.userID),
 		Attributes: logAttrs,
-	})
+	}
+}
+
+// metaMemberFailure is a member a discovery call named that could not be
+// described. The call answers it as an isError result or a failed entry
+// rather than as an error.
+type metaMemberFailure struct {
+	// member is the member that failed.
+	member metaMember
+
+	// status is the HTTP status the failure is logged with.
+	status int
+
+	// message is what the caller was told about the failure.
+	message string
+
+	// arguments is the part of the call's arguments that named this member,
+	// logged as the row's request. A describe_tools can name tools of members
+	// in other projects, and this member's row must not list them.
+	arguments []byte
+}
+
+// newMetaMemberFailure records that member failed with err, whose message the
+// caller was told, for a call whose arguments named it as arguments.
+func newMetaMemberFailure(member metaMember, err error, message string, arguments []byte) metaMemberFailure {
+	return metaMemberFailure{member: member, status: metaMemberErrorStatus(err), message: message, arguments: arguments}
+}
+
+// logMetaMemberDiscoveryFailure writes a failed tool_call row on a member that
+// a gateway discovery call named and could not describe, so the member's
+// failure counts include the call. It is shaped like a gateway tool call that
+// failed before dispatch, with three differences:
+//
+//   - It is not stamped with the gateway. Gateway usage counts discovery calls
+//     from their meta_discovery rows and executions from the tool_call rows
+//     stamped with the gateway, so a stamp would count this call twice.
+//   - It is written on its own trace, linked to the request's. Rows that share
+//     a trace and a project are summarized as one call, and the call's
+//     meta_discovery row would otherwise hide this one from tool logs. The
+//     tracer that runs when OTel tracing is off ignores trace.WithNewRoot, so
+//     the row then gets a fresh trace of its own.
+//   - It is named as the gateway's discovery tool (gateway_describe_server),
+//     not a tool of the member, so it never shares a URN or stats with a
+//     member tool. Its URN keeps the member's kind and source, and a hosted
+//     member, whose URN cannot carry one, gets its server slug as the source,
+//     so Tool logs lists the row.
+func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, failure metaMemberFailure) {
+	parent := trace.SpanContextFromContext(ctx)
+	ctx, span := s.tracer.Start(ctx, "mcp.meta.member_discovery_failure",
+		trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)))
+	defer span.End()
+	ctx = withOwnTrace(ctx, parent)
+
+	attempt := newMetaToolCallAttempt(start)
+	attempt.member = &failure.member
+	attempt.fail(failure.status, failure.message)
+	row := metaFailureRow{unstamped: true, source: ""}
+	if failure.member.backend == metaMemberBackendHosted {
+		row.source = failure.member.slug
+	}
+	qualified := metamcp.QualifyName(failure.member.slug, gatewayDiscoveryToolPrefix+toolName)
+	params := metaToolCallFailureLogParams(ctx, gate, qualified, failure.arguments, attempt, nil, row)
+	if params == nil {
+		return
+	}
+	s.telemLogger.Log(ctx, *params)
+}
+
+// withOwnTrace keeps ctx's trace when it differs from parent's, and otherwise
+// gives ctx a fresh random trace. A span started with trace.WithNewRoot gets a
+// new trace from a real tracer; a no-op tracer keeps the parent's, which is
+// empty when the request carried no trace.
+func withOwnTrace(ctx context.Context, parent trace.SpanContext) context.Context {
+	current := trace.SpanContextFromContext(ctx)
+	if current.TraceID() != parent.TraceID() {
+		return ctx
+	}
+	var traceID trace.TraceID
+	var spanID trace.SpanID
+	_, _ = rand.Read(traceID[:])
+	_, _ = rand.Read(spanID[:])
+	return trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: parent.TraceFlags(),
+		TraceState: trace.TraceState{},
+		Remote:     false,
+	}))
 }
 
 // metaMemberToolURN is the synthetic URN of a member tool that failed before

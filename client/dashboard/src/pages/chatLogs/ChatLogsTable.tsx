@@ -14,6 +14,7 @@ import { Dialog } from "@/components/ui/Dialog";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { formatChatSource } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
+import { formatDaysHours } from "@/lib/format-duration";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { isCostUnknown } from "@/pages/chatLogs/claudeUsage";
@@ -55,6 +56,7 @@ import {
   summarizeLineage,
   type LineageSummary,
 } from "./sessionLinks";
+import { SkeletonTable } from "@/components/ui/Skeleton";
 
 interface ChatLogsTableProps {
   chats: ChatOverview[];
@@ -476,13 +478,11 @@ function Cell({
   );
 }
 
-/** When the session started, when it last moved, and how long that spanned. */
+/** Latest message time (or creation time), session duration, and message count. */
 function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
   const lastActivityTimestamp = chat.lastMessageTimestamp ?? chat.createdAt;
-  // One date, not two. Both timestamps are nearly always the same minute of
-  // the same day, so printing each in full wrapped the column mid-date and
-  // read as four facts where there are two: when it started, and how long it
-  // ran. The exact pair stays in the title attribute.
+  // Show the same timestamp used by Activity sorting. Keep creation time
+  // in the tooltip without crowding the column with a second date.
   return (
     <Cell
       className="font-mono whitespace-nowrap"
@@ -494,10 +494,10 @@ function ActivityCell({ chat }: { chat: ChatOverview }): JSX.Element {
             "MMM d, HH:mm",
           )}`}
         >
-          {format(chat.createdAt, "MMM d, HH:mm")}
+          {format(lastActivityTimestamp, "MMM d, HH:mm")}
         </span>
       }
-      // Smaller and iconed so the start time reads as the cell's headline and
+      // Smaller and iconed so last activity reads as the cell's headline and
       // these two read as facts about it.
       secondary={
         // `leading-none` on the text: the mono face's default line box sits
@@ -598,10 +598,12 @@ function SessionLineageIcons({
 function formatDuration(chat: ChatOverview): string {
   // Use lastMessageTimestamp if available, otherwise fall back to updatedAt
   const endTime = chat.lastMessageTimestamp ?? chat.updatedAt;
-  const seconds = Math.round(
-    (endTime.getTime() - chat.createdAt.getTime()) / 1000,
-  );
+  const elapsedMs = endTime.getTime() - chat.createdAt.getTime();
+  const seconds = Math.round(elapsedMs / 1000);
   if (seconds < 60) return `${seconds}s`;
+  // Days use whole elapsed seconds, so 23:59:59.6 is not rounded up to 1d.
+  const daysHours = formatDaysHours(Math.floor(elapsedMs / 1000));
+  if (daysHours) return daysHours;
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = seconds % 60;
   return remainingSeconds > 0
@@ -685,7 +687,9 @@ export function ChatLogsTable({
   });
   const { data: ancestors } = useQuery({
     queryKey: ["chatSubsessionAncestors", chatIds, linksData?.links],
-    enabled: !!linksData?.links.some((link) => link.kind === "subagent"),
+    enabled:
+      sort == null &&
+      !!linksData?.links.some((link) => link.kind === "subagent"),
     retry: false,
     throwOnError: false,
     queryFn: async () => {
@@ -744,14 +748,31 @@ export function ChatLogsTable({
     }
     return map;
   }, [chatIds, linksData]);
-  const groupedChats = useMemo(
-    () =>
-      groupSubsessions(
-        [...chats, ...(ancestors?.parents ?? [])],
-        ancestors?.links ?? linksData?.links ?? [],
-      ),
-    [chats, linksData, ancestors],
-  );
+  const groupedChats = useMemo(() => {
+    const links = linksData?.links ?? [];
+    if (sort != null) {
+      // The API sorts and paginates the whole result set. Keep its exact rows
+      // and order; grouping or inserting ancestors would break that contract.
+      const subagentIds = new Set(
+        links
+          .filter(
+            (link) =>
+              link.kind === "subagent" &&
+              link.parentChatId &&
+              link.parentChatId !== link.childChatId,
+          )
+          .map((link) => link.childChatId),
+      );
+      return chats.map((session) => ({
+        session,
+        depth: subagentIds.has(session.id) ? 1 : 0,
+      }));
+    }
+    return groupSubsessions(
+      [...chats, ...(ancestors?.parents ?? [])],
+      ancestors?.links ?? links,
+    );
+  }, [chats, linksData, ancestors, sort]);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
   const columns: Column<SessionRow>[] = [
@@ -863,14 +884,7 @@ export function ChatLogsTable({
 
   if (isLoading && chats.length === 0) {
     return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="border-muted-foreground/30 border-t-muted-foreground size-5 animate-spin rounded-full border-2" />
-          <span className="text-muted-foreground text-sm">
-            Loading traces...
-          </span>
-        </div>
-      </div>
+      <SkeletonTable label="Loading traces" className="bg-card border-none" />
     );
   }
 

@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { RequireScope } from "@/components/require-scope";
 import { FieldError } from "@/components/ui/Field";
 import { Input } from "@/components/ui/Input";
@@ -14,7 +15,6 @@ import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSes
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { AuthRow, RowSave } from "./AuthRow";
@@ -163,7 +163,7 @@ export function UserSessionDurationField({
             >
               {update.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>

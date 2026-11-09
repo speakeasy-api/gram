@@ -18,6 +18,7 @@ import {
   type FilterValue,
 } from "@/components/filters";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
@@ -30,6 +31,8 @@ import {
   formatActingSurfaceLabel,
   isNotableActingSurface,
 } from "@/lib/audit-surfaces";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
+import { scopeLabel, type ScopeCatalogue } from "@/pages/access/scopeCatalogue";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -54,6 +57,7 @@ import {
   formatSubjectLabel,
   getActorLabel,
   renderVerb,
+  sensitiveScopesAdded,
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
@@ -239,6 +243,7 @@ function AuditLogRow({
   isHighlighted,
   rowRef,
   highlightMatch,
+  catalogue,
 }: {
   log: AuditLog;
   identities: ReturnType<typeof useAuditPrincipals>;
@@ -248,12 +253,17 @@ function AuditLogRow({
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
+  /** Read once by the list, so every row shares the one subscription. */
+  catalogue: ScopeCatalogue;
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  // A role or membership change that gave sensitive access says so on the
+  // row, named from the catalogue, so it can be found without opening the diff.
+  const sensitiveAdded = sensitiveScopesAdded(log);
 
   const rowContent = (
     <div className="group flex items-center gap-3 px-4 py-2.5">
@@ -283,6 +293,14 @@ function AuditLogRow({
               }
             >
               via {formatActingSurfaceLabel(log.actingSurface)}
+            </span>
+          )}
+          {sensitiveAdded.length > 0 && (
+            <span className="border-warning-softest text-default-warning ml-2 border px-1.5 py-0.5 align-middle text-xs">
+              Added sensitive access:{" "}
+              {sensitiveAdded
+                .map((scope) => scopeLabel(catalogue, scope))
+                .join(", ")}
             </span>
           )}
         </span>
@@ -347,14 +365,13 @@ const CATEGORY_OPTIONS: {
     value: "security",
     label: "Security activity",
     tooltip:
-      "Machine access, such as an agent's runtime admitting its workload identity",
+      "Machine access and other security activity that isn't a settings change",
   },
 ];
 
 /**
- * A collapsed run of consecutive security entries by one actor, typically an
- * agent's runtime admitting and withdrawing its workload identity on every
- * start and teardown. Expanding it shows each entry.
+ * A collapsed run of consecutive security entries by one actor. Expanding it
+ * shows each entry.
  */
 function ActorRunRow({
   run,
@@ -532,6 +549,7 @@ export default function OrgAuditLogs(): React.JSX.Element {
 function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
+  const { catalogue } = useScopeCatalogue();
   const {
     values: rawFilterValues,
     setValue: setFilterValue,
@@ -629,8 +647,8 @@ function OrgAuditLogsInner() {
     [logs, tsMode],
   );
 
-  // Security entries from one actor arrive in bursts (a runtime writes one on
-  // every start and teardown), so each day groups consecutive entries by actor.
+  // Security entries from one actor arrive in bursts, so each day groups
+  // consecutive entries by actor.
   // Configuration changes stay one row each.
   const dateRuns = useMemo(
     () =>
@@ -682,7 +700,7 @@ function OrgAuditLogsInner() {
     }
     parts.push(
       category === "security"
-        ? "Showing security activity: machine access such as agents' runtimes admitting their workload identity."
+        ? "Showing security activity: machine access and other activity that isn't a settings change."
         : "Showing configuration changes.",
     );
     parts.push(`Currently showing ${logs.length} audit log entries.`);
@@ -967,7 +985,7 @@ function OrgAuditLogsInner() {
     <ResourceListPage
       scope="org:read"
       title="Audit Logs"
-      description="Review changes to your organization's configuration, and security activity such as agents' runtimes admitting their workload identity. Filter by project, action, or actor."
+      description="Review changes to your organization's configuration, and security activity such as machine access. Filter by project, action, or actor."
     >
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />
@@ -1106,9 +1124,12 @@ function OrgAuditLogsInner() {
             className="focus:outline-none"
           >
             {isLoading ? (
-              <div className="text-muted-foreground flex items-center justify-center gap-2 py-12">
-                <Icon name="loader-circle" className="size-4 animate-spin" />
-                <span>Loading audit logs...</span>
+              <div className="p-4">
+                <Skeleton label="Loading audit logs">
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="h-10 w-full" />
+                  ))}
+                </Skeleton>
               </div>
             ) : error ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -1128,7 +1149,7 @@ function OrgAuditLogsInner() {
                   {hasActiveFilters
                     ? "No audit logs match the selected filters."
                     : category === "security"
-                      ? "Machine access appears here, such as an agent's runtime admitting its workload identity."
+                      ? "Machine access and other security activity appear here."
                       : "Activity will appear here as changes are made across your organization."}
                 </Text>
               </div>
@@ -1153,6 +1174,7 @@ function OrgAuditLogsInner() {
                             }
                             orgSlug={orgSlug ?? ""}
                             timestampMode={tsMode}
+                            catalogue={catalogue}
                             isHighlighted={idx === currentLogIndex}
                             rowRef={(el) => {
                               if (el) logRefs.current.set(idx, el);

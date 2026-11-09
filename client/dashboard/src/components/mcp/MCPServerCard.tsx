@@ -17,13 +17,23 @@ import {
   type McpServerKind,
 } from "./mcp-server-kind";
 
+/** Same wording as the MCP list's Status filter. */
+function statusLabel(server: McpServer): string {
+  if (server.visibility === "public") return "Public";
+  if (server.visibility === "private") return "Private";
+  return "Disabled";
+}
+
 /** One card per mcp_servers row in the /mcp grid, whatever its backend. */
 export function MCPServerCard({
   server,
   kind,
+  showAddressAndStatus = false,
 }: {
   server: McpServer;
   kind: McpServerKind;
+  /** Show the server's URL (else slug) and status instead of its description. */
+  showAddressAndStatus?: boolean;
 }): JSX.Element {
   const routes = useRoutes();
   const { canvasRef, start, stop } = useIconDither();
@@ -98,7 +108,18 @@ export function MCPServerCard({
         </div>
 
         {/* Description, else origin or tool count; the slug when there is no summary. */}
-        {toolset ? (
+        {showAddressAndStatus ? (
+          <Text
+            small
+            muted
+            className="mt-1 truncate font-mono"
+            title={server.primaryEndpointUrl ?? server.slug}
+          >
+            {server.primaryEndpointUrl?.replace(/^https?:\/\//, "") ??
+              server.slug ??
+              "No slug yet"}
+          </Text>
+        ) : toolset ? (
           <Text small muted className="mt-1 line-clamp-2">
             {toolset.description?.trim() ||
               (toolset.registrySpecifier
@@ -111,11 +132,23 @@ export function MCPServerCard({
           </Text>
         )}
 
-        <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+        <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
           <div className="flex items-center gap-2">
             <Badge variant="neutral">
               <Badge.Text>{MCP_SERVER_KIND_LABEL[kind]}</Badge.Text>
             </Badge>
+            {showAddressAndStatus && (
+              <Badge
+                variant={
+                  server.visibility === "public" ||
+                  server.visibility === "private"
+                    ? "neutral"
+                    : "warning"
+                }
+              >
+                <Badge.Text>{statusLabel(server)}</Badge.Text>
+              </Badge>
+            )}
           </div>
           {needsOAuth ? (
             <div className="text-warning flex items-center gap-1 text-sm">
@@ -141,7 +174,7 @@ export function MCPServerCardSkeleton(): JSX.Element {
         <div className="bg-muted h-5 w-2/3 animate-pulse" />
         <div className="bg-muted h-5 w-10 animate-pulse rounded-full" />
       </div>
-      <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-2">
         <div className="flex items-center gap-2">
           <div className="bg-muted h-2.5 w-2.5 animate-pulse rounded-full" />
           <div className="bg-muted h-3.5 w-12 animate-pulse" />

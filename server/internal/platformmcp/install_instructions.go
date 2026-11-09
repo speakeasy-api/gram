@@ -23,7 +23,7 @@ import (
 )
 
 type GetMyInstallInstructionsInput struct {
-	ProjectID string `json:"project_id,omitempty" jsonschema:"optional project ID that owns the target; defaults to the organization's default project for external callers; a project assistant always uses its own project"`
+	ProjectID string `json:"project_id,omitempty" jsonschema:"optional owning project ID; defaults to the organization's default project (a project assistant always uses its own)"`
 	Plugin    string `json:"plugin,omitempty" jsonschema:"exact assigned plugin ID, slug, or name"`
 	MCPID     string `json:"mcp_id,omitempty" jsonschema:"exact configured MCP ID"`
 	// RegistrationID names a server added through setup without a find_mcp

@@ -10,6 +10,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 // ConnectionAttribution files a proxy's refused and failed tool calls.
@@ -100,7 +101,7 @@ func (c *toolsCallConnections) InterceptToolsCallRefusal(ctx context.Context, er
 
 // InterceptToolsCallFailure implements [proxy.ToolsCallFailureInterceptor].
 func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, failure *proxy.ToolsCallFailure) {
-	if proxy.IsShutdownInterrupt(failure.Err) {
+	if errors.Is(failure.Err, shutdowndrain.ErrInterrupted) {
 		return
 	}
 	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
@@ -181,7 +182,8 @@ func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunn
 
 // refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
 func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
-	if _, held := errors.AsType[*proxy.ToolResultError](err); held {
+	// A tool the catalog doesn't have is not a connection outcome.
+	if _, held := errors.AsType[*proxy.ToolResultError](err); held || errors.Is(err, errToolNotOnUpstream) {
 		var none mcpconnectionattempts.Code
 		return none, false
 	}

@@ -1731,6 +1731,9 @@ func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.En
 		if p.ClientID != nil {
 			values.Add("client_id", *p.ClientID)
 		}
+		if p.ReplaceClient != nil {
+			values.Add("replace_client", fmt.Sprintf("%v", *p.ReplaceClient))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

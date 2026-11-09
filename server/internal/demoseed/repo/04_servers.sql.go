@@ -2172,28 +2172,26 @@ func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg Se
 	return result.RowsAffected(), nil
 }
 
-const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
+const serversStampRemoteSessionIssuer = `-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1::uuid
 WHERE id = $2::uuid
   AND project_id = $3::uuid
 `
 
-type ServersStampLinearRemoteSessionIssuerParams struct {
+type ServersStampRemoteSessionIssuerParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	McpServerID           uuid.UUID
 	ProjectID             uuid.UUID
 }
 
-// mcp_servers.remote_session_issuer_id is denormalized from the live client
-// bindings, and the app recomputes it after the commit that writes them
-// (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
-// goes through that path, so stamp what the resync would derive: exactly one
-// remote issuer is bound to this server's user session issuer (the
-// attachment fixture's client below sits under the same one). Left NULL,
-// upstream token routing fails closed and Linear reads as having no identity.
-func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
+// mcp_servers.remote_session_issuer_id is denormalized from a server's client
+// associations, and the app recomputes it after the commit that writes them
+// (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+// that path, so stamp what the resync would derive. Left NULL, upstream token
+// routing fails closed and the server reads as having no identity.
+func (q *Queries) ServersStampRemoteSessionIssuer(ctx context.Context, arg ServersStampRemoteSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversStampRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
 }
 

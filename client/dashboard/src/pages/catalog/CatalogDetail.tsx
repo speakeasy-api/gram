@@ -2,7 +2,6 @@ import { CatalogLogo } from "./CatalogLogo";
 import { cn } from "@/lib/utils";
 import { Page } from "@/components/page-layout";
 import { Card } from "@/components/ui/Card";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { SetupGuideCallout } from "@/components/setup-guide/SetupGuideCallout";
 import { ManualSetupBadge } from "@/pages/catalog/ManualSetupBadge";
@@ -25,9 +24,12 @@ import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Minus, Server as ServerIcon } from "lucide-react";
+import { Minus, Server as ServerIcon } from "lucide-react";
 import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
+import { Spinner } from "@/components/ui/Spinner";
+import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
 
 // Map of server specifiers to their website URLs
 const SERVER_WEBSITE_MAP: Record<string, string> = {
@@ -75,7 +77,8 @@ export default function CatalogDetail(): JSX.Element {
       throwOnError: false,
     });
   const deployment = deploymentResult?.deployment;
-  const { installState, liveExternalMcp } = useCatalogInstallations();
+  const { installState, liveExternalMcp, instances } =
+    useCatalogInstallations();
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
@@ -131,6 +134,7 @@ export default function CatalogDetail(): JSX.Element {
   const install = server ? installState(server) : "unknown";
   const existingExternalMcp =
     server && install === "added" ? liveExternalMcp(server) : undefined;
+  const existingServers = server ? instances(server) : undefined;
 
   if (isLoading) {
     return (
@@ -142,18 +146,7 @@ export default function CatalogDetail(): JSX.Element {
             }}
           />
         </Page.Header>
-        <Page.Body>
-          <div className="@container">
-            <div className="grid grid-cols-1 gap-8 @3xl:grid-cols-3">
-              <div className="@3xl:col-span-2">
-                <Skeleton className="h-[400px]" />
-              </div>
-              <div>
-                <Skeleton className="h-[200px]" />
-              </div>
-            </div>
-          </div>
-        </Page.Body>
+        <Page.Body isLoading>{null}</Page.Body>
       </Page>
     );
   }
@@ -262,7 +255,7 @@ export default function CatalogDetail(): JSX.Element {
                           >
                             <Button.LeftIcon>
                               {removeServerMutation.isPending ? (
-                                <Loader2 className="h-4 w-4 animate-spin" />
+                                <Spinner className="mr-0" />
                               ) : (
                                 <Minus className="h-4 w-4" />
                               )}
@@ -380,6 +373,9 @@ export default function CatalogDetail(): JSX.Element {
             </div>
           </div>
         </div>
+        {existingServers && existingServers.length > 0 && (
+          <ExistingServers servers={existingServers} />
+        )}
         <AddServerDialog
           openProviderSetup
           servers={[server]}
@@ -391,6 +387,30 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+/** The project's servers already created from this entry, one card each. */
+function ExistingServers({
+  servers,
+}: {
+  servers: ListedMcpServer[];
+}): JSX.Element {
+  return (
+    <section className="mt-8">
+      <div className="text-eyebrow mb-3">
+        {servers.length === 1
+          ? "1 server in this project"
+          : `${servers.length} servers in this project`}
+      </div>
+      <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto pb-2">
+        {servers.map(({ server, kind }) => (
+          <div key={server.id} className="w-md max-w-full shrink-0 snap-start">
+            <MCPServerCard server={server} kind={kind} showAddressAndStatus />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

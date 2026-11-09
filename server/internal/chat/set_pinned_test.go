@@ -8,6 +8,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -157,4 +158,32 @@ func TestService_SetPinned_ExternalTokenOwnerMismatch(t *testing.T) {
 		&gen.SetPinnedPayload{ID: chatID.String(), Pinned: true},
 	)
 	requireOopsCode(t, err, oops.CodeUnauthorized)
+}
+
+// pinned_first lists pinned chats ahead of unpinned ones in one call.
+func TestService_ListChats_PinnedFirst(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatWrite(t, initSessionCtx(t, ti))
+
+	pinnedID := seedChat(t, ctx, ti, "", "ext-user", "Pinned Chat")
+	unpinnedIDs := []string{
+		seedChat(t, ctx, ti, "", "ext-user", "Unpinned 1").String(),
+		seedChat(t, ctx, ti, "", "ext-user", "Unpinned 2").String(),
+		seedChat(t, ctx, ti, "", "ext-user", "Unpinned 3").String(),
+	}
+	require.NoError(t, ti.service.SetPinned(ctx, &gen.SetPinnedPayload{ID: pinnedID.String(), Pinned: true}))
+
+	p := defaultPayload()
+	p.PinnedFirst = true
+	p.Limit = 2
+	res, err := ti.service.ListChats(ctx, p)
+	require.NoError(t, err)
+	ids := chatOverviewIDs(res)
+	require.Len(t, ids, 2)
+	require.Equal(t, pinnedID.String(), ids[0])
+	require.Contains(t, unpinnedIDs, ids[1])
+	require.True(t, *res.Chats[0].Pinned)
+	require.False(t, conv.PtrValOr(res.Chats[1].Pinned, false))
+	require.Equal(t, 4, res.Total)
 }

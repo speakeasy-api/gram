@@ -17,6 +17,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -405,13 +407,18 @@ func TestRefreshNow_LockContentionIsNotAProviderOutage(t *testing.T) {
 	held, err := cache.NewRedisCacheAdapter(redisClient).Add(ctx, remotesessions.RefreshLockKey(env.subject, env.clientID), time.Minute)
 	require.NoError(t, err)
 	require.True(t, held)
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(env.refresher)
+	attribution := remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR))
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, attribution)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 	require.True(t, remotesessions.RefreshBusy(err))
 	require.Positive(t, remotesessions.RetryAfter(err))
 	require.Zero(t, refreshAttempts.Load())
+	require.Equal(t, mcpconnectionattempts.Code{}, remotesessions.ConnectionOutageHappened(err), "the lock holder's row covers it")
+	require.Empty(t, rec.Rows())
 }
 
 // A reply cut off or unreadable is the provider's fault, so the connect page and retries say so.

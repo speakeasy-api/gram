@@ -402,7 +402,25 @@ WITH selected AS (
                      AND c.client_type IN ('static_credential', 'pass_through'))))
       )
   ) AS candidates
-  WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  WHERE $1::boolean AND NOT $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  UNION ALL
+  -- Discovery evaluates every offered client in one metadata-only read, using
+  -- the same authoritative header-source checks as a single proposed choice.
+  SELECT FALSE, link.auth_client_id, NULL::uuid, m.id, m.project_id,
+         p.organization_id, FALSE
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = $5::text AND p.deleted IS FALSE
+  JOIN mcp_server_auth_clients AS link ON link.mcp_server_id = m.id
+   AND link.project_id = m.project_id AND link.organization_id = p.organization_id
+   AND link.deleted IS FALSE
+  JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+   AND c.organization_id = p.organization_id
+   AND (c.project_id IS NULL OR c.project_id = m.project_id)
+   AND c.deleted IS FALSE
+  WHERE $1::boolean AND $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,
@@ -644,6 +662,7 @@ type GetAuthClientSelectionParams struct {
 	ProposedRegistrationID uuid.NullUUID
 	ProposedAuthClientID   uuid.NullUUID
 	ProposedNoAuth         bool
+	ProposeAllClients      bool
 }
 
 type GetAuthClientSelectionRow struct {
@@ -694,6 +713,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		arg.ProposedRegistrationID,
 		arg.ProposedAuthClientID,
 		arg.ProposedNoAuth,
+		arg.ProposeAllClients,
 	)
 	if err != nil {
 		return nil, err
@@ -1104,6 +1124,48 @@ func (q *Queries) ListMCPServerRemoteSessionClients(ctx context.Context, arg Lis
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServerUpstreamIssuers = `-- name: ListMCPServerUpstreamIssuers :many
+SELECT DISTINCT c.remote_session_issuer_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+ AND i.deleted IS FALSE
+WHERE a.mcp_server_id = $1::uuid
+  AND a.project_id = $2::uuid
+  AND a.deleted IS FALSE
+ORDER BY c.remote_session_issuer_id
+`
+
+type ListMCPServerUpstreamIssuersParams struct {
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// The distinct live providers one MCP server reaches through its live client
+// associations.
+func (q *Queries) ListMCPServerUpstreamIssuers(ctx context.Context, arg ListMCPServerUpstreamIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMCPServerUpstreamIssuers, arg.McpServerID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_issuer_id uuid.UUID
+		if err := rows.Scan(&remote_session_issuer_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_issuer_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1642,6 +1704,58 @@ func (q *Queries) RecordAuthClientChoice(ctx context.Context, arg RecordAuthClie
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const recordMCPServerRemoteSessionClientDetach = `-- name: RecordMCPServerRemoteSessionClientDetach :one
+INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope, deleted_at)
+SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope, clock_timestamp()
+FROM mcp_servers AS s
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.organization_id = $1::text
+ AND p.deleted IS FALSE
+JOIN remote_session_client_user_session_issuers AS link
+  ON link.user_session_issuer_id = s.user_session_issuer_id
+JOIN remote_session_clients AS c
+  ON c.id = link.remote_session_client_id
+ AND c.deleted IS FALSE
+ AND (c.project_id = p.id
+      OR (c.project_id IS NULL AND c.organization_id = p.organization_id)
+      OR (c.project_id IS NULL AND c.organization_id IS NULL))
+WHERE s.id = $2::uuid
+  AND s.project_id = $3::uuid
+  AND s.deleted IS FALSE
+  AND c.id = $4::uuid
+RETURNING (
+  SELECT recorded.client_id
+  FROM remote_session_clients AS recorded
+  WHERE recorded.id = remote_session_client_id
+)::text AS external_client_id
+`
+
+type RecordMCPServerRemoteSessionClientDetachParams struct {
+	OrganizationID        string
+	McpServerID           uuid.UUID
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+}
+
+// Records an explicit detach for a client bound to the server's user session
+// issuer that the server has no association with, so a server that signs in
+// through a binding alone can give it up. The row is written soft-deleted, the
+// same record DetachMCPServerRemoteSessionClient leaves. Returns the client's
+// external id, and no row when the server or client does not qualify. Both ids
+// are re-checked against the caller's tenant.
+func (q *Queries) RecordMCPServerRemoteSessionClientDetach(ctx context.Context, arg RecordMCPServerRemoteSessionClientDetachParams) (string, error) {
+	row := q.db.QueryRow(ctx, recordMCPServerRemoteSessionClientDetach,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+	)
+	var external_client_id string
+	err := row.Scan(&external_client_id)
+	return external_client_id, err
 }
 
 const removeGlobalClientAssociations = `-- name: RemoveGlobalClientAssociations :execrows

@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import {
   DangerSettingsSection,
   FooterSaveButton,
@@ -270,9 +271,10 @@ export function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
-          instructions reflect the active discovery mode; your text replaces
-          them. Save it blank to restore the built-in text. Anyone who can
-          connect to this gateway can read the text, and clients already
+          instructions reflect the active discovery mode and, when a user can
+          use any of its servers, start with a line naming them; your text
+          replaces both. Save it blank to restore the built-in text. Anyone who
+          can connect to this gateway can read the text, and clients already
           connected keep the old text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
@@ -511,7 +513,7 @@ function GatewayDangerZoneSection({
             >
               {remove.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Delete gateway</Button.Text>

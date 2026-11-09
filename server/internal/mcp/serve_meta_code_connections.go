@@ -63,7 +63,7 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		}
 	}
 	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
-		if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); !reconnect {
+		if message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member); remedy != staleChoiceReconnect {
 			state.Consent = "unknown"
 			state.Instructions = message
 			return state
@@ -85,7 +85,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if err != nil {
 		return nil, err
 	}
-	member, ok := findMetaMember(members, server)
+	member, ok := b.service.findNamedMember(ctx, gate, members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
@@ -159,8 +159,8 @@ func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateCont
 	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
 		return nil
 	}
-	message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-	if reconnect {
+	message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+	if remedy == staleChoiceReconnect {
 		return nil
 	}
 	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
@@ -260,7 +260,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	if gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser {
 		probeGate.chainUpstream = b.service.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
 	}
-	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
+	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate), false)
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {

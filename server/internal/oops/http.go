@@ -83,15 +83,22 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 				providerName = presentation.providerName
 				recovery = presentation.recovery
 			}
+			// A fault's message is written for developers; the error ID finds it.
+			description := payload.Message
+			if payload.Fault {
+				description = CodeUnexpected.UserMessage()
+				if reason == oauthui.ReasonDefault {
+					reason = oauthui.ReasonInternal
+				}
+			}
 			page := oauthui.AuthorizationError{
 				Recovery:       recovery,
 				Setup:          false,
 				Status:         code,
 				Reason:         reason,
-				Approval:       false,
 				ErrorID:        payload.ID,
 				Code:           payload.Name,
-				Description:    payload.Message,
+				Description:    description,
 				CallbackURL:    "",
 				ClientName:     clientName,
 				ClientID:       "",

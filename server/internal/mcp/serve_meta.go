@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
@@ -107,6 +108,11 @@ type metaGateContext struct {
 	unapprovedMembers []metaMember
 	// hiddenMembers are members the caller hid, reported but never served.
 	hiddenMembers []metaMember
+	// deniedMembers are members admission turned away: private members refused
+	// their own connect and, on derived gateways, public members refused their
+	// private toolset's. They are never listed or served; a call that names one
+	// records its denied check.
+	deniedMembers []metaMember
 	// execute permits live credential resolution for a cached tool call.
 	execute         bool
 	discoveryMode   metamcp.DiscoveryMode
@@ -119,6 +125,9 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
+	// agentFix, on an agent gateway, builds the links someone who can edit
+	// the agent opens to fix a member the agent cannot use; nil elsewhere.
+	agentFix *agentFixLinks
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
 	skillsOverMCP *bool
@@ -345,7 +354,10 @@ func (s *Service) handleMetaMCPRequest(
 	case mcpversions.MethodInitialize:
 		return s.handleMetaInitialize(ctx, logger, metaServer, gate, req, gate.protocolVersion.InEffect)
 	case mcpversions.MethodServerDiscover:
-		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)), mcpversions.SupportedMetaServer())
+		if !req.ID.IsSet() {
+			return nil, nil
+		}
+		return handleServerDiscover(ctx, logger, req.ID, describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)), mcpversions.SupportedMetaServer())
 	case mcpversions.MethodNotificationsCancelled:
 		if gate.discoveryMode == metamcp.DiscoveryModeCode {
 			return nil, s.cancelMetaCode(ctx, gate, req)
@@ -477,7 +489,7 @@ func (s *Service) handleMetaInitialize(
 
 	result := &result[initializeResult]{
 		ID:             req.ID,
-		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate)).initializeResult(negotiated),
+		Result:         describeMetaServer(metaServer, gate.discoveryMode, s.metaSkillsEnabled(ctx, gate), s.metaInstructionMembers(ctx, logger, metaServer, gate)).initializeResult(negotiated),
 		serverIdentity: serverInfoMetaServer,
 		cacheHints:     nil,
 	}
@@ -486,6 +498,42 @@ func (s *Service) handleMetaInitialize(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize initialize response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// metaInstructionMembers names the servers this caller's tool listing would
+// offer. A failed snapshot only drops the summary: the handshake must not fail.
+func (s *Service) metaInstructionMembers(ctx context.Context, logger *slog.Logger, metaServer *metamcprepo.MetaMcpServer, gate *metaGateContext) []metamcp.MemberLabel {
+	if gate.organizationID == "" || metamcp.HasCustomInstructions(conv.FromPGText[string](metaServer.Instructions)) {
+		return nil
+	}
+	if gate.memberChoices != nil {
+		gate.memberChoices.readOnly = true
+	}
+	// Only servers the connection approved are named; an expired or
+	// unreadable approval names none.
+	if gate.catalogRef != nil && gate.catalog == nil {
+		if gate.authentication == nil {
+			return nil
+		}
+		catalog, err := s.loadConnectionCatalog(ctx, gate.authentication.endpoint, gate.authentication.subject, gate.catalogRef, time.Now())
+		if err != nil {
+			if !errors.Is(err, errConnectionCatalogExpired) {
+				logger.WarnContext(ctx, "failed to load approved tools for instructions", attr.SlogError(err))
+			}
+			return nil
+		}
+		gate.catalog = catalog
+	}
+	_, members, err := s.resolveGateMemberSnapshot(ctx, logger, gate, metaServer.ID, gate.projectID)
+	if err != nil {
+		return nil
+	}
+	selected := catalogSelectedMembers(gate, members)
+	labels := make([]metamcp.MemberLabel, 0, len(selected))
+	for _, member := range selected {
+		labels = append(labels, metamcp.MemberLabel{Slug: member.slug, Name: member.name})
+	}
+	return labels
 }
 
 func (s *Service) listMetaServerTools(ctx context.Context, logger *slog.Logger, req *rawRequest) (json.RawMessage, error) {
@@ -551,6 +599,9 @@ func (s *Service) callMetaServerTool(
 	if params.Name == "" {
 		return nil, oops.E(oops.CodeInvalid, nil, "tool name is required").LogError(ctx, logger)
 	}
+	// Admission and listings record no authorization checks; a call records
+	// one for each server it names, however often it checks that server.
+	ctx = authz.WithOneChallengePerResource(ctx)
 
 	// A name another mode serves usually comes from a tools/list the client
 	// cached before this connection's mode changed, so the refusal says to
@@ -588,7 +639,7 @@ func (s *Service) callMetaServerTool(
 			s.logMetaToolCallFailure(ctx, gate, params.Name, params.Arguments, newMetaToolCallAttempt(start), err)
 			return nil, err
 		}
-		s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+		s.logMetaDiscovery(ctx, gate, params.Name, start, err, nil)
 		return nil, err
 	}
 
@@ -599,29 +650,46 @@ func (s *Service) callMetaServerTool(
 		return s.executeMetaCode(ctx, logger, mcpEndpoint, metaServer, gate, members, req, params)
 	}
 	var body json.RawMessage
+	// callFailure is a describe_server answered with an isError result because
+	// its member failed; memberFailures are every member a describe could not
+	// reach, each logged on that member.
+	var callFailure *metaMemberFailure
+	var memberFailures []metaMemberFailure
 	switch params.Name {
 	case metamcp.ToolListServers:
-		body, err = s.handleMetaListServersCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req)
+		body, err = s.handleMetaListServersCall(authz.WithoutChallenges(ctx), logger, gate, catalogSelectedMembers(gate, members), req)
 	case metamcp.ToolDescribeServer:
-		body, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
+		body, callFailure, err = s.handleMetaDescribeServerCall(ctx, logger, gate, catalogSelectedMembers(gate, members), req, params.Arguments)
+		if callFailure != nil {
+			memberFailures = []metaMemberFailure{*callFailure}
+		}
 	case metamcp.ToolDescribeTools:
-		body, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
+		body, memberFailures, err = s.handleMetaDescribeToolsCall(ctx, logger, gate, members, req, params.Arguments)
 	case metamcp.ToolConnectionStatus:
-		body, err = s.handleMetaConnectionStatusCall(ctx, logger, gate, members, req)
+		body, err = s.handleMetaConnectionStatusCall(authz.WithoutChallenges(ctx), logger, gate, members, req)
 	default:
 		// execute_tool is deliberately not logged here: it writes a single
 		// tool_call row stamped with this gateway's id, the member dispatch's
 		// or, when it fails before one, its own.
 		return s.handleMetaExecuteToolCall(ctx, logger, gate, members, req, params.Arguments, params.Meta)
 	}
-	s.logMetaDiscovery(ctx, gate, params.Name, start, err)
+	s.logMetaDiscovery(ctx, gate, params.Name, start, err, callFailure)
+	for _, failure := range memberFailures {
+		s.logMetaMemberDiscoveryFailure(ctx, gate, params.Name, start, failure)
+	}
 	return body, err
 }
 
 // logMetaDiscovery writes one meta_discovery telemetry row for a gateway
-// discovery call. Failures record their oops status code.
-func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error) {
-	s.telemLogger.Log(ctx, metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr))
+// discovery call. Failures record their oops status code, and a call answered
+// as an isError result because its member failed records that failure.
+func (s *Service) logMetaDiscovery(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, handlerErr error, memberFailure *metaMemberFailure) {
+	params := metaDiscoveryLogParams(ctx, gate, toolName, start, handlerErr)
+	if memberFailure != nil {
+		tm.HTTPLogAttributes(params.Attributes).RecordStatusCode(memberFailure.status)
+		params.Attributes[attr.ErrorMessageKey] = memberFailure.message
+	}
+	s.telemLogger.Log(ctx, params)
 }
 
 // metaDiscoveryLogParams builds a meta_discovery telemetry row for a gateway
@@ -850,6 +918,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       metamcp.ResolveDiscoveryMode(metaServer.DiscoveryMode),
 		authenticated:       false,
@@ -862,6 +931,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		// tools/call path reads it (upstream dials pin their own version).
 		protocolVersion:   request.resolution,
 		connectURL:        connectURL,
+		agentFix:          s.newAgentFixLinks(ctx, logger, metaServer.OrganizationID, membership.agentID),
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}

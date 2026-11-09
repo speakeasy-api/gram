@@ -28,6 +28,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
@@ -51,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -89,12 +91,31 @@ type Service struct {
 	// to loading the reply once it lands.
 	turnStream *TurnStream
 
+	// streamMetrics records how the turn stream and completions stream end.
+	// Nil records nothing.
+	streamMetrics *httpstream.Metrics
+
+	// streamMaxAge bounds how long a turn stream stays open before it is
+	// ended for the client to reconnect; zero leaves it open until the turn
+	// ends.
+	streamMaxAge time.Duration
+
 	workloadInference WorkloadInferenceAuthorizer
 }
 
 // WithTurnStream enables streaming assistant turn frames to subscribers.
 func (s *Service) WithTurnStream(stream *TurnStream) *Service {
 	s.turnStream = stream
+	return s
+}
+
+// WithStreamRotation records how long-lived chat responses end and bounds
+// how long a turn stream stays open: at maxAge the stream ends with an SSE
+// retry field so the client reconnects before the load balancer's response
+// deadline cuts it. Zero or negative leaves streams open until they end.
+func (s *Service) WithStreamRotation(meterProvider metric.MeterProvider, maxAge time.Duration) *Service {
+	s.streamMetrics = httpstream.NewMetrics(meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/chat"), s.logger)
+	s.streamMaxAge = maxAge
 	return s
 }
 
@@ -157,6 +178,8 @@ func NewService(
 		audit:            auditLogger,
 		riskFindings:     nil,
 		turnStream:       nil, // opt in via WithTurnStream
+		streamMetrics:    nil, // opt in via WithStreamRotation
+		streamMaxAge:     0,   // opt in via WithStreamRotation
 
 		workloadInference: nil, // opt in via WithWorkloadInference
 	}
@@ -377,6 +400,7 @@ func (s *Service) ListChats(ctx context.Context, payload *gen.ListChatsPayload) 
 		AccountType:       accountType,
 		SortBy:            payload.SortBy,
 		SortOrder:         payload.SortOrder,
+		PinnedFirst:       payload.PinnedFirst,
 		PageLimit:         conv.SafeInt32(payload.Limit),
 		PageOffset:        conv.SafeInt32(payload.Offset),
 	})
@@ -828,6 +852,65 @@ func (s *Service) ListSources(ctx context.Context, payload *gen.ListSourcesPaylo
 	}
 
 	return &gen.ListSourcesResult{Sources: canonicalizeSources(raws)}, nil
+}
+
+// CountByUser ranks users by agent session count. It applies listChats'
+// visibility scope and unfiltered population, so the dashboard's per-user
+// counts and total line up with the Agent Sessions list they drill into.
+func (s *Service) CountByUser(ctx context.Context, payload *gen.CountByUserPayload) (*gen.CountChatsByUserResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil || authCtx.ProjectID == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+
+	var fromTime, toTime pgtype.Timestamptz
+	if payload.From != nil {
+		t, err := time.Parse(time.RFC3339, *payload.From)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid from timestamp").LogError(ctx, s.logger)
+		}
+		fromTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+	if payload.To != nil {
+		t, err := time.Parse(time.RFC3339, *payload.To)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid to timestamp").LogError(ctx, s.logger)
+		}
+		toTime = pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}
+	}
+
+	visibility, err := s.chatVisibilityScope(ctx, authCtx, nil, nil, withOwnedAgentSessions)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.repo.CountChatsByUser(ctx, repo.CountChatsByUserParams{
+		ProjectID:      *authCtx.ProjectID,
+		ExternalUserID: visibility.ExternalUserID,
+		UserID:         visibility.UserID,
+		OwnedAgentIds:  visibility.ScopedAgentIDs,
+		FromTime:       fromTime,
+		ToTime:         toTime,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "count chats by user").LogError(ctx, s.logger)
+	}
+
+	var total int64
+	users := make([]*gen.ChatUserSessionCount, 0, min(len(rows), payload.Limit))
+	for _, row := range rows {
+		total += row.ChatCount
+		if len(users) < payload.Limit {
+			users = append(users, &gen.ChatUserSessionCount{
+				UserID:      row.UserID,
+				Email:       row.Email,
+				DisplayName: row.DisplayName,
+				Count:       int(row.ChatCount),
+			})
+		}
+	}
+
+	return &gen.CountChatsByUserResult{Users: users, Total: int(total)}, nil
 }
 
 // ListSessionLinks resolves session-lineage edges (session portability moves)
@@ -1320,7 +1403,7 @@ func (s *Service) LoadChatOverview(ctx context.Context, payload *gen.LoadChatOve
 		FromTime: pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		ToTime:   pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: pgtype.Finite, Valid: false},
 		Search:   "", AssistantID: "", SourceKind: "", ExcludeSourceKind: "", HasRiskFilter: "",
-		MinRiskScore: -1, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PageLimit: 1, PageOffset: 0,
+		MinRiskScore: -1, RiskChatIds: nil, Pinned: "", Sources: nil, AccountType: "", SortBy: "last_message_timestamp", SortOrder: "desc", PinnedFirst: false, PageLimit: 1, PageOffset: 0,
 	})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat overview").LogError(ctx, s.logger)
@@ -1972,6 +2055,7 @@ func (s *Service) linkSetupAssistantThread(ctx context.Context, projectID *uuid.
 
 // HandleCompletion is a proxy to the OpenAI API that logs request and response data.
 func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error {
+	started := time.Now()
 	ctx, authCtx, keySlot, err := s.authorizeCompletion(r)
 	if err != nil {
 		return err
@@ -2253,7 +2337,9 @@ func (s *Service) HandleCompletion(w http.ResponseWriter, r *http.Request) error
 			defer done()
 		}
 
-		if err := s.streamCompletion(ctx, w, src, getContextWindow); err != nil {
+		reason, err := s.streamCompletion(ctx, w, src, getContextWindow)
+		s.streamMetrics.RecordEnd(ctx, r, reason, started, time.Now())
+		if err != nil {
 			return err
 		}
 
@@ -2342,16 +2428,27 @@ func (s *Service) resolveContextWindow(ctx context.Context, requestedModel strin
 	return tokens
 }
 
-func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, src io.Reader, getContextWindow func() int) error {
+// streamCompletion relays the model's SSE events from src to w and reports
+// how the stream ended. A completion stream is never ended early by the
+// server: its client cannot resume a half-finished completion, so cutting it
+// at a maximum age would only truncate the answer. A stream the model
+// provider closes before its [completionStreamDone] event is reported as
+// upstream_closed, since the client received a truncated answer.
+func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, src io.Reader, getContextWindow func() int) (httpstream.EndReason, error) {
 	flusher, canFlush := w.(http.Flusher)
 	br := bufio.NewReader(src)
 
 	var event strings.Builder
 	injected := false
+	sawDone := false
 
 	flush := func() error {
 		text := event.String()
 		event.Reset()
+
+		if _, payload, ok := extractDataPayload(text); ok && payload == completionStreamDone {
+			sawDone = true
+		}
 
 		if !injected {
 			if rewritten, ok := maybeInjectContextWindow(text, getContextWindow); ok {
@@ -2379,7 +2476,7 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 				event.WriteString(line)
 				if isBlank {
 					if flushErr := flush(); flushErr != nil {
-						return flushErr
+						return httpstream.CanceledReason(ctx), flushErr
 					}
 				}
 			}
@@ -2388,20 +2485,32 @@ func (s *Service) streamCompletion(ctx context.Context, w http.ResponseWriter, s
 			if errors.Is(err, io.EOF) {
 				if event.Len() > 0 {
 					if flushErr := flush(); flushErr != nil {
-						return flushErr
+						return httpstream.CanceledReason(ctx), flushErr
 					}
 				}
-				return nil
+				if !sawDone {
+					return httpstream.EndUpstreamClosed, nil
+				}
+				return httpstream.EndCompleted, nil
+			}
+			if ctx.Err() != nil {
+				// The request ended and took the upstream request with it;
+				// the model provider did not fail.
+				return httpstream.CanceledReason(ctx), oops.E(oops.CodeGatewayError, err, "stream read failed").LogWarn(ctx, s.logger)
 			}
 			s.logger.ErrorContext(ctx, "stream read error", attr.SlogError(err))
-			return oops.E(oops.CodeGatewayError, err, "stream read failed").LogError(ctx, s.logger)
+			return httpstream.EndUpstreamClosed, oops.E(oops.CodeGatewayError, err, "stream read failed").LogError(ctx, s.logger)
 		}
 	}
 }
 
+// completionStreamDone is the data payload of the event that ends an
+// OpenAI-compatible completion stream.
+const completionStreamDone = "[DONE]"
+
 func maybeInjectContextWindow(eventText string, getContextWindow func() int) (string, bool) {
 	dataLine, payload, ok := extractDataPayload(eventText)
-	if !ok || payload == "" || payload == "[DONE]" {
+	if !ok || payload == "" || payload == completionStreamDone {
 		return eventText, false
 	}
 

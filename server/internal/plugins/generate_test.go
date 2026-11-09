@@ -1076,6 +1076,7 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
 		HooksAPIKey:  "gram_local_secret_xyz",
 		ProjectSlug:  "acme-prod",
 		BrowserLogin: true,
+		InstallRoute: InstallRouteMarketplace,
 	}
 	files, err := GeneratePluginPackages(nil, cfg)
 	require.NoError(t, err)
@@ -1090,7 +1091,8 @@ func TestGenerateObservabilityPluginsIncludeBootstrapLayout(t *testing.T) {
   "project": "acme-prod",
   "org": "org_123",
   "hooks_api_key": "gram_local_secret_xyz",
-  "browser_login": true
+  "browser_login": true,
+  "install_route": "marketplace"
 }`, string(files[root+"/speakeasy.json"]), "%s/speakeasy.json", root)
 		require.NotEmpty(t, files[root+"/hooks/bootstrap.sh"], "%s/hooks/bootstrap.sh", root)
 		require.NotContains(t, string(files[root+"/hooks/bootstrap.sh"]), cfg.HooksAPIKey)
@@ -2637,6 +2639,69 @@ setTimeout(() => process.exit(0), 500)
 		for _, secret := range []string{"gram_agent_secret", "env-secret", "token=secret", "user:pass", "stale.example.com"} {
 			require.NotContains(t, string(encoded), secret)
 		}
+	}
+}
+
+// OpenClaw's Codex harness fires after_tool_call for an MCP tool only from
+// Codex's PostToolUse, which a failed call never gets. At agent_end the shim
+// reports each call of the run still waiting for its result from the run's
+// transcript, a failed one with its text as the error, and drops a late
+// after_tool_call for a call it already reported. A call with no transcript
+// result, and a call of another run, are not reported.
+func TestGenerateOpenClawShimReportsUnfinishedCallsAtAgentEnd(t *testing.T) {
+	t.Parallel()
+	frames := runOpenClawShim(t, `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const ctx = { runId: "r1", sessionId: "s1", agentId: "main" }
+const other = { runId: "r2", sessionId: "s2", agentId: "main" }
+const pre = (id, c) => handlers.before_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: id, runId: c.runId, params: { name: id } }, { ...c, toolCallId: id })
+await pre("ok", ctx)
+handlers.after_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: "ok", runId: "r1", params: { name: "ok" }, result: { content: [] } }, { ...ctx, toolCallId: "ok" })
+await pre("bad", ctx)
+await pre("quiet", ctx)
+await pre("lost", ctx)
+await pre("elsewhere", other)
+handlers.agent_end({ runId: "r1", success: true, messages: [
+  { role: "toolResult", toolCallId: "bad", toolName: "mcp__speakeasy__execute_tool", isError: true, content: [{ type: "text", text: "MCP error -32603: internal error" }], details: { status: "failed" } },
+  { role: "toolResult", toolCallId: "quiet", toolName: "mcp__speakeasy__execute_tool", isError: false, content: [{ type: "text", text: "done" }] },
+  { role: "toolResult", toolCallId: "elsewhere", toolName: "mcp__speakeasy__execute_tool", isError: true, content: [{ type: "text", text: "not this run" }] },
+] }, ctx)
+handlers.after_tool_call({ toolName: "mcp__speakeasy__execute_tool", toolCallId: "bad", runId: "r1", params: { name: "bad" }, result: { content: [] } }, { ...ctx, toolCallId: "bad" })
+setTimeout(() => process.exit(0), 2500)
+`)
+
+	afters := map[string][]map[string]any{}
+	for _, frame := range frames {
+		if frame["hook"] != "after_tool_call" {
+			continue
+		}
+		event, _ := frame["event"].(map[string]any)
+		id, _ := event["toolCallId"].(string)
+		afters[id] = append(afters[id], event)
+	}
+	require.Len(t, afters["ok"], 1, "a call OpenClaw reported is sent once")
+	require.Len(t, afters["bad"], 1, "a failed call is reported once, and its late after_tool_call is dropped")
+	bad := afters["bad"][0]
+	require.Equal(t, "MCP error -32603: internal error", bad["error"])
+	require.Equal(t, "mcp__speakeasy__execute_tool", bad["toolName"])
+	require.Equal(t, "r1", bad["runId"])
+	require.Equal(t, map[string]any{"name": "bad"}, bad["params"], "the report carries the call's own params")
+	require.Equal(t, map[string]any{
+		"content": []any{map[string]any{"type": "text", "text": "MCP error -32603: internal error"}},
+		"details": map[string]any{"status": "failed"},
+	}, bad["result"])
+	require.Len(t, afters["quiet"], 1, "a successful call with no after_tool_call is reported from its result")
+	require.NotContains(t, afters["quiet"][0], "error")
+	require.Empty(t, afters["lost"], "a call with no transcript result has an unknown outcome and is not reported")
+	require.Empty(t, afters["elsewhere"], "a call of another run is not reported")
+
+	for _, frame := range frames {
+		if frame["hook"] != "agent_end" {
+			continue
+		}
+		event, _ := frame["event"].(map[string]any)
+		require.NotContains(t, event, "messages", "agent_end still drops the transcript")
 	}
 }
 

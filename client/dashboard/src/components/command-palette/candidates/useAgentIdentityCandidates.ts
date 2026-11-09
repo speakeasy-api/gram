@@ -122,11 +122,37 @@ export function useAgentIdentityCandidates({
             );
           },
         };
+        // Where its keys are listed and issued. Found by the old tab name too.
+        const signIn: LauncherCandidate = {
+          ...identity,
+          id: `agent-sign-in:${agent.id}`,
+          title: `${agent.name} · Agent sign-in`,
+          detail: "API keys · issue a key",
+          keywords: [
+            ...identity.keywords,
+            "sign-in",
+            "credentials",
+            "api key",
+            "key",
+          ],
+          run: () => {
+            void navigate(
+              withIdentityWindow(
+                routes.identities.detail.credentials.href(
+                  encodeIdentityUrn(urn),
+                ),
+                search,
+              ),
+            );
+          },
+        };
         // Request headers may fall back to the default project in the org shell;
         // only a real project route can offer this project-scoped control.
-        if (!routeProjectSlug || !agent.permissions?.write) return [identity];
+        if (!routeProjectSlug || !agent.permissions?.write)
+          return [identity, signIn];
         return [
           identity,
+          signIn,
           {
             ...identity,
             id: `agent-inference-access:${agent.id}`,

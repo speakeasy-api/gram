@@ -274,6 +274,8 @@ const (
 	verifyNotConnectedCard = ">Not connected</span"
 	verifyExpiredCard      = ">Expired — reconnect to continue</span"
 	verifyNoSignInNotice   = "data-validation-notice >We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator.</span"
+	verifyUnservedMessage  = "This connection can't be checked here."
+	verifyReconnectNotice  = "data-validation-notice >Disconnect this service, then connect it again."
 )
 
 // requireVerifyNotice posts Verify and checks it returns to the card showing want and probed nothing.
@@ -283,7 +285,12 @@ func requireVerifyNotice(t *testing.T, fx validationFixture, clientID uuid.UUID,
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.Equal(t, consentPagePath(fx)+"&consent=required&validate_failed="+clientID.String(), location)
+	base := consentPagePath(fx) + "&consent=required&validate_failed=" + clientID.String()
+	require.Contains(t, []string{
+		base,
+		base + "&validate_notice=" + "reconnect",
+		base + "&validate_notice=" + "ours",
+	}, location)
 	require.Contains(t, renderConsentAt(t, fx, location), want)
 	if fx.member != nil {
 		require.Empty(t, fx.member.drain(), "no probe reached the member")
@@ -422,7 +429,8 @@ func TestServeConsentAction_VerifyUnfixableByRetryKeepsNextSteps(t *testing.T) {
 		ctx, fx := seedMetaValidationFixture(t, "verify-unreadable-"+uuid.NewString()[:8])
 		storeVerifyGrant(t, ctx, fx, conv.ToPGText("not-ciphertext"), pgtype.Timestamptz{}, pgtype.Timestamptz{})
 
-		requireVerifyNotice(t, fx, fx.clientID, verifyNoSignInNotice)
+		// Token resolution reports a grant to replace: the notice names the card's own controls.
+		requireVerifyNotice(t, fx, fx.clientID, verifyReconnectNotice)
 		page := renderConsent(t, fx)
 		require.Contains(t, page, `value="disconnect"`)
 		require.NotContains(t, page, `data-connect-link`, "a connected card has no Reconnect button to point at")

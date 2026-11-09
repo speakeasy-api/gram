@@ -42,6 +42,11 @@ func resolveUserEmail(ctx context.Context, typed any) string {
 			return email
 		}
 	}
+	if coworkTranscriptMode(base) {
+		if email := claudeAccountEmail(); email != "" {
+			return email
+		}
+	}
 	return topLevelPayloadEmail(base.Raw)
 }
 
@@ -580,6 +585,35 @@ func codexAuthFileEmail() string {
 		if email := jwtEmail(auth.Tokens[key]); email != "" {
 			return email
 		}
+	}
+	return ""
+}
+
+// claudeAccountEmail returns the signed-in Claude account inside the Cowork
+// VM, where no device agent runs and Claude Code's hook payloads carry no
+// email. Claude sets CLAUDE_CODE_USER_EMAIL for the processes it starts and
+// keeps the same address under oauthAccount in its global config. Without it a
+// transcript upload names no one, so the session's owner depends on OTEL
+// arriving first.
+func claudeAccountEmail() string {
+	if email := strings.TrimSpace(os.Getenv("CLAUDE_CODE_USER_EMAIL")); validEmail(email) {
+		return email
+	}
+	home, _ := os.UserHomeDir()
+	b, err := os.ReadFile(filepath.Join(firstNonEmpty(os.Getenv("CLAUDE_CONFIG_DIR"), home), ".claude.json"))
+	if err != nil {
+		return ""
+	}
+	var config struct {
+		OAuthAccount struct {
+			EmailAddress string `json:"emailAddress"`
+		} `json:"oauthAccount"`
+	}
+	if json.Unmarshal(b, &config) != nil {
+		return ""
+	}
+	if email := strings.TrimSpace(config.OAuthAccount.EmailAddress); validEmail(email) {
+		return email
 	}
 	return ""
 }

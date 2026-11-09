@@ -6,8 +6,11 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Icon } from "@/components/ui/Icon";
 import { Text } from "@/components/ui/Text";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import {
   invalidateAllMembers,
@@ -19,9 +22,11 @@ import {
 } from "@gram/client/react-query/roles.js";
 import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMemberRoles.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { ConfirmSensitiveAccess } from "./ConfirmSensitiveAccess";
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import { permissionsAddedByRoles } from "./reviewGrants";
+import { RolePermissionPreview } from "./RolePermissionPreview";
 import {
   breadthLabel,
   suggestRolesForScope,
@@ -68,6 +73,12 @@ export function GrantAccessDialog({
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
+  // A role that adds sensitive access is previewed before it is assigned,
+  // and the preview waits for an acknowledgement. The acknowledgement is of
+  // one set of sensitive permissions, keyed by their slugs, so a catalogue
+  // read again that marks more of them sensitive asks again.
+  const [confirming, setConfirming] = useState<Role | null>(null);
+  const [confirmedFor, setConfirmedFor] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const {
     data: membersData,
@@ -132,6 +143,31 @@ export function GrantAccessDialog({
     );
   };
 
+  // What a role adds to what the member's roles already give: a permission
+  // they hold everywhere is not added, one they hold on one project and the
+  // role gives everywhere is. Manage Roles makes the same comparison.
+  const memberRoles = useMemo(() => {
+    const byId = new Map((rolesData?.roles ?? []).map((r) => [r.id, r]));
+    return (member?.roleIds ?? []).flatMap((id) => {
+      const role = byId.get(id);
+      return role ? [role] : [];
+    });
+  }, [rolesData?.roles, member?.roleIds]);
+  const addedBy = (role: Role) =>
+    permissionsAddedByRoles(memberRoles, [...memberRoles, role], catalogue);
+
+  const requestAssign = (role: Role) => {
+    if (addedBy(role).sensitive.length > 0) {
+      setConfirmedFor(null);
+      setConfirming(role);
+      return;
+    }
+    assignRole(role.id);
+  };
+  const confirmingAdds = confirming ? addedBy(confirming) : null;
+  const sensitiveKey = confirmingAdds?.sensitive.join(" ") ?? null;
+  const confirmed = sensitiveKey !== null && confirmedFor === sensitiveKey;
+
   const isLoading = membersLoading || rolesLoading || scopesLoading;
   // Suggestions and sensitivity warnings are read off the catalogue, so a
   // failed catalogue fetch is a failed dialog, not an empty one.
@@ -140,6 +176,7 @@ export function GrantAccessDialog({
   const label = scopeLabel(catalogue, scope);
   const entry = catalogue.get(scope);
   const partOf = tasksNeeding(catalogue, tasks, scope);
+  const labelFor = (slug: string) => scopeLabel(catalogue, slug);
 
   return (
     <Dialog
@@ -186,8 +223,14 @@ export function GrantAccessDialog({
         )}
 
         {isLoading && (
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="text-muted-foreground h-5 w-5 animate-spin" />
+          <div
+            role="status"
+            aria-label="Loading members, roles and permissions"
+            className="space-y-2"
+          >
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
+            <Skeleton className="h-14 w-full" />
           </div>
         )}
 
@@ -253,11 +296,11 @@ export function GrantAccessDialog({
                 scope={scope}
                 label={label}
                 suggestions={suggestions}
-                labelFor={(slug) => scopeLabel(catalogue, slug)}
+                labelFor={labelFor}
                 pendingRoleId={
                   updateMemberRoles.isPending ? assignedRoleId : null
                 }
-                onAssign={assignRole}
+                onAssign={requestAssign}
                 onCreateRole={() => setCreatingRole(true)}
               />
             )}
@@ -290,6 +333,54 @@ export function GrantAccessDialog({
           onRoleCreated={(role) => assignRole(role.id)}
         />
       )}
+
+      {confirming && member && confirmingAdds && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setConfirming(null);
+          }}
+        >
+          <Dialog.Content className="sm:max-w-md">
+            <Dialog.Header>
+              <Dialog.Title>
+                Assign &ldquo;{confirming.name}&rdquo; to {member.name}
+              </Dialog.Title>
+              <Dialog.Description>
+                Check what the role adds before it is assigned.
+              </Dialog.Description>
+            </Dialog.Header>
+            <RolePermissionPreview
+              lead="This role adds"
+              summary={confirmingAdds}
+              labelFor={labelFor}
+            />
+            <ConfirmSensitiveAccess
+              checked={confirmed}
+              onCheckedChange={(next) =>
+                setConfirmedFor(next ? sensitiveKey : null)
+              }
+            >
+              I reviewed the sensitive permissions above and want {member.name}{" "}
+              to have them.
+            </ConfirmSensitiveAccess>
+            <Dialog.Footer>
+              <Button variant="secondary" onClick={() => setConfirming(null)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={!confirmed}
+                onClick={() => {
+                  assignRole(confirming.id);
+                  setConfirming(null);
+                }}
+              >
+                Assign role
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
@@ -310,7 +401,7 @@ function RoleSuggestionList({
   suggestions: RoleSuggestions;
   labelFor: (slug: string) => string;
   pendingRoleId: string | null;
-  onAssign: (roleId: string) => void;
+  onAssign: (role: Role) => void;
   onCreateRole: () => void;
 }): JSX.Element {
   const { exact, broader } = suggestions;
@@ -320,21 +411,20 @@ function RoleSuggestionList({
     { role, breadth }: SuggestedRole,
     extra?: { count: number; sensitive: string[] },
   ) => {
-    const { id: roleId, name, description } = role;
-    const alreadyAssigned = member.roleIds.includes(roleId);
+    const alreadyAssigned = member.roleIds.includes(role.id);
     const reach = breadthLabel(scope, breadth);
     return (
       <li
-        key={roleId}
+        key={role.id}
         className="border-border flex items-center justify-between gap-3 border px-3 py-2"
       >
         <div className="min-w-0 space-y-0.5">
           <Text variant="body" className="text-sm font-medium">
-            <RoleLink roleId={roleId}>{name}</RoleLink>
+            <RoleLink roleId={role.id}>{role.name}</RoleLink>
           </Text>
-          {description && (
+          {role.description && (
             <Text muted small className="truncate">
-              {description}
+              {role.description}
             </Text>
           )}
           {reach && (
@@ -363,12 +453,12 @@ function RoleSuggestionList({
           <Button
             variant={extra ? "secondary" : "primary"}
             size="sm"
-            onClick={() => onAssign(roleId)}
+            onClick={() => onAssign(role)}
             disabled={pendingRoleId !== null}
           >
-            {pendingRoleId === roleId && (
+            {pendingRoleId === role.id && (
               <Button.LeftIcon>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Spinner className="mr-0" />
               </Button.LeftIcon>
             )}
             <Button.Text>Assign</Button.Text>

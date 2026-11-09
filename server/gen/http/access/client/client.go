@@ -89,6 +89,10 @@ type Client struct {
 	// endpoint.
 	ListScopesDoer goahttp.Doer
 
+	// ListAgentPolicyScopes Doer is the HTTP client used to make requests to the
+	// listAgentPolicyScopes endpoint.
+	ListAgentPolicyScopesDoer goahttp.Doer
+
 	// ListMembers Doer is the HTTP client used to make requests to the listMembers
 	// endpoint.
 	ListMembersDoer goahttp.Doer
@@ -231,6 +235,7 @@ func NewClient(
 		GetDirectoryReviewSettingsDoer:           doer,
 		UpdateDirectoryReviewSettingsDoer:        doer,
 		ListScopesDoer:                           doer,
+		ListAgentPolicyScopesDoer:                doer,
 		ListMembersDoer:                          doer,
 		ListGrantsDoer:                           doer,
 		UpdateMemberRolesDoer:                    doer,
@@ -692,6 +697,30 @@ func (c *Client) ListScopes() goa.Endpoint {
 		resp, err := c.ListScopesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("access", "listScopes", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListAgentPolicyScopes returns an endpoint that makes HTTP requests to the
+// access service listAgentPolicyScopes server.
+func (c *Client) ListAgentPolicyScopes() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListAgentPolicyScopesRequest(c.encoder)
+		decodeResponse = DecodeListAgentPolicyScopesResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListAgentPolicyScopesRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListAgentPolicyScopesDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("access", "listAgentPolicyScopes", err)
 		}
 		return decodeResponse(resp)
 	}

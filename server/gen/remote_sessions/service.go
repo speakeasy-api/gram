@@ -87,9 +87,15 @@ type Service interface {
 	// Remove one MCP server's association with an upstream OAuth client. The
 	// client and its associations with other servers are untouched. When the
 	// server is the only consumer of its user session issuer, the association
-	// follows the issuer's client binding and is refused here with a conflict:
-	// turn off User Identity on the server instead. Requires mcp:write on the
-	// server.
+	// follows the issuer's client binding: with upstream auth enforcement off,
+	// detach returns a conflict (409) and you must turn off User Identity on the
+	// server instead; with enforcement on, detach retires only the
+	// backfill-derived typed auth-client link and keeps the association. In this
+	// sole-consumer case, repeating detach returns not found (404). For other
+	// servers, detach removes the association (or records an exclusion for an
+	// unclaimed client bound to the server's issuer) and synchronizes the
+	// backfill-derived typed links. Administrator-owned typed links are untouched.
+	// Requires mcp:write on the server.
 	DetachServerClientAssociation(context.Context, *DetachServerClientAssociationPayload) (err error)
 	// List remote_sessions in the caller's project. Supplying both principal_id
 	// and user_session_issuer_id instead lists only the ordinary human caller's
@@ -194,6 +200,17 @@ type CommitServerIdentityConfigurationPayload struct {
 	// when the provider supports one and falls back to dynamic client
 	// registration; dcr always uses dynamic client registration.
 	RegistrationMethod *string
+	// Replace the selected provider's client already bound to the user session
+	// issuer, rather than reuse it or be refused. Everyone signed in through the
+	// old client must sign in again, on this server and every other server that
+	// uses it. The other servers move to the new client. Refused when a gateway or
+	// a server that is not directly Remote MCP-backed shares the issuer, or when a
+	// server using the client is in another project.
+	ReplaceClient *bool
+	// With replace_client, exactly the other MCP servers that use the client being
+	// replaced, as getServerIdentityImpact listed them. The commit is refused if
+	// they no longer match.
+	ReplaceClientServerIds []string
 }
 
 // CommitServerIdentityConfigurationResult is the result type of the
@@ -393,6 +410,11 @@ type GetServerIdentityImpactPayload struct {
 	ProviderID *string
 	// An existing client being bound. Omit for a new client.
 	ClientID *string
+	// Preview replacing the provider's bound client, as
+	// commitServerIdentityConfiguration's replace_client does. The servers that
+	// use it are listed with the resignin impact, and that list is what the commit
+	// must confirm. Only with change replace and mcp_server_id.
+	ReplaceClient *bool
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service
@@ -453,6 +475,12 @@ type ListServerClientAssociationsPayload struct {
 type ListServerClientAssociationsResult struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociation
+	// The remote_session_client_id of each client bound to the server's user
+	// session issuer that its callers need to sign in through. These are its
+	// associated clients, or when it has none, the bound clients no other server
+	// claims and it has not explicitly detached. Empty when the server requires no
+	// upstream sign-in.
+	RequiredClientIds []string
 }
 
 // PrincipalRemoteSessionBinding is the result type of the remoteSessions
@@ -544,6 +572,13 @@ type ServerIdentityImpactResult struct {
 	// the change touches an organization-level client this counts every such
 	// server on the issuer, affected or not.
 	HiddenServerCount int
+	// With change detach and mcp_server_id, the clients only that server uses,
+	// which leaving User Identity unbinds from the issuer.
+	DetachClientIds []string
+	// With change detach and mcp_server_id, the clients other consumers also use.
+	// They stay bound, and leaving User Identity only removes that server's
+	// association with them.
+	ReleaseClientIds []string
 }
 
 // An MCP server or gateway a proposed binding change affects.

@@ -15,7 +15,9 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -223,8 +225,8 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
-			if len(tools) > 10000 {
-				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+			if len(tools) > toolfilter.MaxTools {
+				return nil, nil, oops.E(oops.CodeRequestTooLarge, errConsentInventoryTooManyTools, "gateway inventory exceeds %d tools", toolfilter.MaxTools)
 			}
 		}
 	}
@@ -254,7 +256,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, err
 	}
-	inventory, unavailable, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
+	// Listing every member's tools names none of them, so it records no
+	// authorization check for any.
+	inventory, unavailable, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, false, nil)
 	if err != nil {
 		return nil, err
 	}

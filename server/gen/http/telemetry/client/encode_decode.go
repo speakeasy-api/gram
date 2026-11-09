@@ -8970,6 +8970,241 @@ func DecodeGetMcpServerActivityResponse(decoder func(*http.Response) goahttp.Dec
 	}
 }
 
+// BuildGetOrgMcpServerActivityRequest instantiates a HTTP request object with
+// method and path set to call the "telemetry" service
+// "getOrgMcpServerActivity" endpoint
+func (c *Client) BuildGetOrgMcpServerActivityRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrgMcpServerActivityTelemetryPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("telemetry", "getOrgMcpServerActivity", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrgMcpServerActivityRequest returns an encoder for requests sent to
+// the telemetry getOrgMcpServerActivity server.
+func EncodeGetOrgMcpServerActivityRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*telemetry.GetOrgMcpServerActivityPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("telemetry", "getOrgMcpServerActivity", "*telemetry.GetOrgMcpServerActivityPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewGetOrgMcpServerActivityRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("telemetry", "getOrgMcpServerActivity", err)
+		}
+		return nil
+	}
+}
+
+// DecodeGetOrgMcpServerActivityResponse returns a decoder for responses
+// returned by the telemetry getOrgMcpServerActivity endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrgMcpServerActivityResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrgMcpServerActivityResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrgMcpServerActivityResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			res := NewGetOrgMcpServerActivityResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrgMcpServerActivityUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrgMcpServerActivityForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrgMcpServerActivityBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrgMcpServerActivityNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrgMcpServerActivityConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrgMcpServerActivityUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrgMcpServerActivityInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrgMcpServerActivityInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+				}
+				err = ValidateGetOrgMcpServerActivityInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+				}
+				return nil, NewGetOrgMcpServerActivityInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrgMcpServerActivityUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+				}
+				err = ValidateGetOrgMcpServerActivityUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+				}
+				return nil, NewGetOrgMcpServerActivityUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("telemetry", "getOrgMcpServerActivity", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrgMcpServerActivityGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			err = ValidateGetOrgMcpServerActivityGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("telemetry", "getOrgMcpServerActivity", err)
+			}
+			return nil, NewGetOrgMcpServerActivityGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("telemetry", "getOrgMcpServerActivity", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListHooksTracesRequest instantiates a HTTP request object with method
 // and path set to call the "telemetry" service "listHooksTraces" endpoint
 func (c *Client) BuildListHooksTracesRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -9853,20 +10088,9 @@ func unmarshalMetaMcpMemberUsageResponseBodyToTelemetryMetaMcpMemberUsage(v *Met
 func unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummary(v *ProjectOverviewSummaryResponseBody) *telemetry.ProjectOverviewSummary {
 	res := &telemetry.ProjectOverviewSummary{
 		TotalChats:         *v.TotalChats,
-		ResolvedChats:      *v.ResolvedChats,
-		FailedChats:        *v.FailedChats,
 		TotalToolCalls:     *v.TotalToolCalls,
 		FailedToolCalls:    *v.FailedToolCalls,
 		ActiveServersCount: *v.ActiveServersCount,
-		ActiveUsersCount:   *v.ActiveUsersCount,
-	}
-	res.TopUsers = make([]*telemetry.TopUser, len(v.TopUsers))
-	for i, val := range v.TopUsers {
-		if val == nil {
-			res.TopUsers[i] = nil
-			continue
-		}
-		res.TopUsers[i] = unmarshalTopUserResponseBodyToTelemetryTopUser(val)
 	}
 	res.TopServers = make([]*telemetry.TopServer, len(v.TopServers))
 	for i, val := range v.TopServers {
@@ -9875,26 +10099,6 @@ func unmarshalProjectOverviewSummaryResponseBodyToTelemetryProjectOverviewSummar
 			continue
 		}
 		res.TopServers[i] = unmarshalTopServerResponseBodyToTelemetryTopServer(val)
-	}
-	res.LlmClientBreakdown = make([]*telemetry.LLMClientUsage, len(v.LlmClientBreakdown))
-	for i, val := range v.LlmClientBreakdown {
-		if val == nil {
-			res.LlmClientBreakdown[i] = nil
-			continue
-		}
-		res.LlmClientBreakdown[i] = unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(val)
-	}
-
-	return res
-}
-
-// unmarshalTopUserResponseBodyToTelemetryTopUser builds a value of type
-// *telemetry.TopUser from a value of type *TopUserResponseBody.
-func unmarshalTopUserResponseBodyToTelemetryTopUser(v *TopUserResponseBody) *telemetry.TopUser {
-	res := &telemetry.TopUser{
-		UserID:        *v.UserID,
-		UserType:      *v.UserType,
-		ActivityCount: *v.ActivityCount,
 	}
 
 	return res
@@ -9911,13 +10115,164 @@ func unmarshalTopServerResponseBodyToTelemetryTopServer(v *TopServerResponseBody
 	return res
 }
 
-// unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage builds a value
-// of type *telemetry.LLMClientUsage from a value of type
-// *LLMClientUsageResponseBody.
-func unmarshalLLMClientUsageResponseBodyToTelemetryLLMClientUsage(v *LLMClientUsageResponseBody) *telemetry.LLMClientUsage {
-	res := &telemetry.LLMClientUsage{
-		ClientName:    *v.ClientName,
-		ActivityCount: *v.ActivityCount,
+// unmarshalQueryResultResponseBodyToTelemetryQueryResult builds a value of
+// type *telemetry.QueryResult from a value of type *QueryResultResponseBody.
+func unmarshalQueryResultResponseBodyToTelemetryQueryResult(v *QueryResultResponseBody) *telemetry.QueryResult {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.QueryResult{
+		GroupBy:         *v.GroupBy,
+		IntervalSeconds: *v.IntervalSeconds,
+	}
+	res.Table = make([]*telemetry.QueryRow, len(v.Table))
+	for i, val := range v.Table {
+		if val == nil {
+			res.Table[i] = nil
+			continue
+		}
+		res.Table[i] = unmarshalQueryRowResponseBodyToTelemetryQueryRow(val)
+	}
+	res.Timeseries = make([]*telemetry.QuerySeries, len(v.Timeseries))
+	for i, val := range v.Timeseries {
+		if val == nil {
+			res.Timeseries[i] = nil
+			continue
+		}
+		res.Timeseries[i] = unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(val)
+	}
+
+	return res
+}
+
+// unmarshalQueryRowResponseBodyToTelemetryQueryRow builds a value of type
+// *telemetry.QueryRow from a value of type *QueryRowResponseBody.
+func unmarshalQueryRowResponseBodyToTelemetryQueryRow(v *QueryRowResponseBody) *telemetry.QueryRow {
+	res := &telemetry.QueryRow{
+		GroupValue: *v.GroupValue,
+	}
+	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
+	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
+	for key, val := range v.DimensionValues {
+		tk := key
+		tv := make([]string, len(val))
+		for i, val := range val {
+			tv[i] = val
+		}
+		res.DimensionValues[tk] = tv
+	}
+
+	return res
+}
+
+// unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures builds a value of
+// type *telemetry.QueryMeasures from a value of type
+// *QueryMeasuresResponseBody.
+func unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v *QueryMeasuresResponseBody) *telemetry.QueryMeasures {
+	res := &telemetry.QueryMeasures{
+		TotalCost:                *v.TotalCost,
+		TotalInputTokens:         *v.TotalInputTokens,
+		TotalOutputTokens:        *v.TotalOutputTokens,
+		TotalTokens:              *v.TotalTokens,
+		CacheReadInputTokens:     *v.CacheReadInputTokens,
+		CacheCreationInputTokens: *v.CacheCreationInputTokens,
+		TotalToolCalls:           *v.TotalToolCalls,
+		TotalChats:               *v.TotalChats,
+		TotalWorkUnits:           *v.TotalWorkUnits,
+		ScoredCost:               *v.ScoredCost,
+		ScoredTokens:             *v.ScoredTokens,
+	}
+
+	return res
+}
+
+// unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries builds a value of
+// type *telemetry.QuerySeries from a value of type *QuerySeriesResponseBody.
+func unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(v *QuerySeriesResponseBody) *telemetry.QuerySeries {
+	res := &telemetry.QuerySeries{
+		GroupValue: *v.GroupValue,
+	}
+	res.Points = make([]*telemetry.QueryPoint, len(v.Points))
+	for i, val := range v.Points {
+		if val == nil {
+			res.Points[i] = nil
+			continue
+		}
+		res.Points[i] = unmarshalQueryPointResponseBodyToTelemetryQueryPoint(val)
+	}
+
+	return res
+}
+
+// unmarshalQueryPointResponseBodyToTelemetryQueryPoint builds a value of type
+// *telemetry.QueryPoint from a value of type *QueryPointResponseBody.
+func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseBody) *telemetry.QueryPoint {
+	res := &telemetry.QueryPoint{
+		BucketTimeUnixNano: *v.BucketTimeUnixNano,
+	}
+	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
+
+	return res
+}
+
+// unmarshalProjectMcpUsageResponseBodyToTelemetryProjectMcpUsage builds a
+// value of type *telemetry.ProjectMcpUsage from a value of type
+// *ProjectMcpUsageResponseBody.
+func unmarshalProjectMcpUsageResponseBodyToTelemetryProjectMcpUsage(v *ProjectMcpUsageResponseBody) *telemetry.ProjectMcpUsage {
+	if v == nil {
+		return nil
+	}
+	res := &telemetry.ProjectMcpUsage{
+		EndUsersCount: *v.EndUsersCount,
+	}
+	res.TopEndUsers = make([]*telemetry.ProjectMcpEndUser, len(v.TopEndUsers))
+	for i, val := range v.TopEndUsers {
+		if val == nil {
+			res.TopEndUsers[i] = nil
+			continue
+		}
+		res.TopEndUsers[i] = unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser(val)
+	}
+	res.TopTools = make([]*telemetry.ProjectMcpToolUsage, len(v.TopTools))
+	for i, val := range v.TopTools {
+		if val == nil {
+			res.TopTools[i] = nil
+			continue
+		}
+		res.TopTools[i] = unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(val)
+	}
+	res.TopFailingTools = make([]*telemetry.ProjectMcpToolUsage, len(v.TopFailingTools))
+	for i, val := range v.TopFailingTools {
+		if val == nil {
+			res.TopFailingTools[i] = nil
+			continue
+		}
+		res.TopFailingTools[i] = unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(val)
+	}
+
+	return res
+}
+
+// unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser builds a
+// value of type *telemetry.ProjectMcpEndUser from a value of type
+// *ProjectMcpEndUserResponseBody.
+func unmarshalProjectMcpEndUserResponseBodyToTelemetryProjectMcpEndUser(v *ProjectMcpEndUserResponseBody) *telemetry.ProjectMcpEndUser {
+	res := &telemetry.ProjectMcpEndUser{
+		UserID:    *v.UserID,
+		ToolCalls: *v.ToolCalls,
+	}
+
+	return res
+}
+
+// unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage
+// builds a value of type *telemetry.ProjectMcpToolUsage from a value of type
+// *ProjectMcpToolUsageResponseBody.
+func unmarshalProjectMcpToolUsageResponseBodyToTelemetryProjectMcpToolUsage(v *ProjectMcpToolUsageResponseBody) *telemetry.ProjectMcpToolUsage {
+	res := &telemetry.ProjectMcpToolUsage{
+		Urn:      *v.Urn,
+		Calls:    *v.Calls,
+		Failures: *v.Failures,
 	}
 
 	return res
@@ -10011,76 +10366,6 @@ func marshalQueryFilterRequestBodyToTelemetryQueryFilter(v *QueryFilterRequestBo
 	} else {
 		res.Values = []string{}
 	}
-
-	return res
-}
-
-// unmarshalQueryRowResponseBodyToTelemetryQueryRow builds a value of type
-// *telemetry.QueryRow from a value of type *QueryRowResponseBody.
-func unmarshalQueryRowResponseBodyToTelemetryQueryRow(v *QueryRowResponseBody) *telemetry.QueryRow {
-	res := &telemetry.QueryRow{
-		GroupValue: *v.GroupValue,
-	}
-	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
-	res.DimensionValues = make(map[string][]string, len(v.DimensionValues))
-	for key, val := range v.DimensionValues {
-		tk := key
-		tv := make([]string, len(val))
-		for i, val := range val {
-			tv[i] = val
-		}
-		res.DimensionValues[tk] = tv
-	}
-
-	return res
-}
-
-// unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures builds a value of
-// type *telemetry.QueryMeasures from a value of type
-// *QueryMeasuresResponseBody.
-func unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v *QueryMeasuresResponseBody) *telemetry.QueryMeasures {
-	res := &telemetry.QueryMeasures{
-		TotalCost:                *v.TotalCost,
-		TotalInputTokens:         *v.TotalInputTokens,
-		TotalOutputTokens:        *v.TotalOutputTokens,
-		TotalTokens:              *v.TotalTokens,
-		CacheReadInputTokens:     *v.CacheReadInputTokens,
-		CacheCreationInputTokens: *v.CacheCreationInputTokens,
-		TotalToolCalls:           *v.TotalToolCalls,
-		TotalChats:               *v.TotalChats,
-		TotalWorkUnits:           *v.TotalWorkUnits,
-		ScoredCost:               *v.ScoredCost,
-		ScoredTokens:             *v.ScoredTokens,
-	}
-
-	return res
-}
-
-// unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries builds a value of
-// type *telemetry.QuerySeries from a value of type *QuerySeriesResponseBody.
-func unmarshalQuerySeriesResponseBodyToTelemetryQuerySeries(v *QuerySeriesResponseBody) *telemetry.QuerySeries {
-	res := &telemetry.QuerySeries{
-		GroupValue: *v.GroupValue,
-	}
-	res.Points = make([]*telemetry.QueryPoint, len(v.Points))
-	for i, val := range v.Points {
-		if val == nil {
-			res.Points[i] = nil
-			continue
-		}
-		res.Points[i] = unmarshalQueryPointResponseBodyToTelemetryQueryPoint(val)
-	}
-
-	return res
-}
-
-// unmarshalQueryPointResponseBodyToTelemetryQueryPoint builds a value of type
-// *telemetry.QueryPoint from a value of type *QueryPointResponseBody.
-func unmarshalQueryPointResponseBodyToTelemetryQueryPoint(v *QueryPointResponseBody) *telemetry.QueryPoint {
-	res := &telemetry.QueryPoint{
-		BucketTimeUnixNano: *v.BucketTimeUnixNano,
-	}
-	res.Measures = unmarshalQueryMeasuresResponseBodyToTelemetryQueryMeasures(v.Measures)
 
 	return res
 }
@@ -10619,6 +10904,25 @@ func unmarshalMcpServerActivityResponseBodyToTelemetryMcpServerActivity(v *McpSe
 		TotalToolCalls:  *v.TotalToolCalls,
 		RecentToolCalls: *v.RecentToolCalls,
 		LastToolCallAt:  v.LastToolCallAt,
+	}
+
+	return res
+}
+
+// unmarshalProjectMcpServerActivityResponseBodyToTelemetryProjectMcpServerActivity
+// builds a value of type *telemetry.ProjectMcpServerActivity from a value of
+// type *ProjectMcpServerActivityResponseBody.
+func unmarshalProjectMcpServerActivityResponseBodyToTelemetryProjectMcpServerActivity(v *ProjectMcpServerActivityResponseBody) *telemetry.ProjectMcpServerActivity {
+	res := &telemetry.ProjectMcpServerActivity{
+		ProjectID: *v.ProjectID,
+	}
+	res.Activity = make([]*telemetry.McpServerActivity, len(v.Activity))
+	for i, val := range v.Activity {
+		if val == nil {
+			res.Activity[i] = nil
+			continue
+		}
+		res.Activity[i] = unmarshalMcpServerActivityResponseBodyToTelemetryMcpServerActivity(val)
 	}
 
 	return res

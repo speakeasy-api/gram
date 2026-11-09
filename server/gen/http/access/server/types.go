@@ -460,6 +460,13 @@ type ListScopesResponseBody struct {
 	Tasks []*ScopeTaskResponseBody `form:"tasks" json:"tasks" xml:"tasks"`
 }
 
+// ListAgentPolicyScopesResponseBody is the type of the "access" service
+// "listAgentPolicyScopes" endpoint HTTP response body.
+type ListAgentPolicyScopesResponseBody struct {
+	// The scopes an agent policy may hold, in catalogue order.
+	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // ListMembersResponseBody is the type of the "access" service "listMembers"
 // endpoint HTTP response body.
 type ListMembersResponseBody struct {
@@ -4148,6 +4155,195 @@ type ListScopesUnexpectedResponseBody struct {
 // ListScopesGatewayErrorResponseBody is the type of the "access" service
 // "listScopes" endpoint HTTP response body for the "gateway_error" error.
 type ListScopesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnauthorizedResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListAgentPolicyScopesUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesForbiddenResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "forbidden" error.
+type ListAgentPolicyScopesForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesBadRequestResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "bad_request" error.
+type ListAgentPolicyScopesBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesNotFoundResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "not_found" error.
+type ListAgentPolicyScopesNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesConflictResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "conflict" error.
+type ListAgentPolicyScopesConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnsupportedMediaResponseBody is the type of the
+// "access" service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListAgentPolicyScopesUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesInvalidResponseBody is the type of the "access" service
+// "listAgentPolicyScopes" endpoint HTTP response body for the "invalid" error.
+type ListAgentPolicyScopesInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesInvariantViolationResponseBody is the type of the
+// "access" service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListAgentPolicyScopesInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesUnexpectedResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "unexpected" error.
+type ListAgentPolicyScopesUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListAgentPolicyScopesGatewayErrorResponseBody is the type of the "access"
+// service "listAgentPolicyScopes" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListAgentPolicyScopesGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -10401,6 +10597,25 @@ func NewListScopesResponseBody(res *access.ListScopesResult) *ListScopesResponse
 	return body
 }
 
+// NewListAgentPolicyScopesResponseBody builds the HTTP response body from the
+// result of the "listAgentPolicyScopes" endpoint of the "access" service.
+func NewListAgentPolicyScopesResponseBody(res *access.ListAgentPolicyScopesResult) *ListAgentPolicyScopesResponseBody {
+	body := &ListAgentPolicyScopesResponseBody{}
+	if res.Scopes != nil {
+		body.Scopes = make([]*ScopeDefinitionResponseBody, len(res.Scopes))
+		for i, val := range res.Scopes {
+			if val == nil {
+				body.Scopes[i] = nil
+				continue
+			}
+			body.Scopes[i] = marshalAccessScopeDefinitionToScopeDefinitionResponseBody(val)
+		}
+	} else {
+		body.Scopes = []*ScopeDefinitionResponseBody{}
+	}
+	return body
+}
+
 // NewListMembersResponseBody builds the HTTP response body from the result of
 // the "listMembers" endpoint of the "access" service.
 func NewListMembersResponseBody(res *access.ListMembersResult) *ListMembersResponseBody {
@@ -13656,6 +13871,156 @@ func NewListScopesUnexpectedResponseBody(res *goa.ServiceError) *ListScopesUnexp
 // result of the "listScopes" endpoint of the "access" service.
 func NewListScopesGatewayErrorResponseBody(res *goa.ServiceError) *ListScopesGatewayErrorResponseBody {
 	body := &ListScopesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesUnauthorizedResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnauthorizedResponseBody {
+	body := &ListAgentPolicyScopesUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesForbiddenResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesForbiddenResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesForbiddenResponseBody {
+	body := &ListAgentPolicyScopesForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesBadRequestResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesBadRequestResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesBadRequestResponseBody {
+	body := &ListAgentPolicyScopesBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesNotFoundResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesNotFoundResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesNotFoundResponseBody {
+	body := &ListAgentPolicyScopesNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesConflictResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesConflictResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesConflictResponseBody {
+	body := &ListAgentPolicyScopesConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listAgentPolicyScopes" endpoint of the
+// "access" service.
+func NewListAgentPolicyScopesUnsupportedMediaResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnsupportedMediaResponseBody {
+	body := &ListAgentPolicyScopesUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesInvalidResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesInvalidResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesInvalidResponseBody {
+	body := &ListAgentPolicyScopesInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listAgentPolicyScopes" endpoint of the
+// "access" service.
+func NewListAgentPolicyScopesInvariantViolationResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesInvariantViolationResponseBody {
+	body := &ListAgentPolicyScopesInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesUnexpectedResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesUnexpectedResponseBody {
+	body := &ListAgentPolicyScopesUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListAgentPolicyScopesGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listAgentPolicyScopes" endpoint of the "access"
+// service.
+func NewListAgentPolicyScopesGatewayErrorResponseBody(res *goa.ServiceError) *ListAgentPolicyScopesGatewayErrorResponseBody {
+	body := &ListAgentPolicyScopesGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -17785,6 +18150,15 @@ func NewListScopesPayload(apikeyToken *string, sessionToken *string) *access.Lis
 	return v
 }
 
+// NewListAgentPolicyScopesPayload builds a access service
+// listAgentPolicyScopes endpoint payload.
+func NewListAgentPolicyScopesPayload(sessionToken *string) *access.ListAgentPolicyScopesPayload {
+	v := &access.ListAgentPolicyScopesPayload{}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListMembersPayload builds a access service listMembers endpoint payload.
 func NewListMembersPayload(apikeyToken *string, sessionToken *string) *access.ListMembersPayload {
 	v := &access.ListMembersPayload{}
@@ -18019,11 +18393,12 @@ func NewRequestAccessPayload(body *RequestAccessRequestBody, apikeyToken *string
 
 // NewListChallengesPayload builds a access service listChallenges endpoint
 // payload.
-func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
+func NewListChallengesPayload(outcome *string, principalUrn *string, scope *string, excludeScopes []string, projectID *string, resolved *bool, ids []string, from *string, to *string, limit int, offset int, apikeyToken *string, sessionToken *string) *access.ListChallengesPayload {
 	v := &access.ListChallengesPayload{}
 	v.Outcome = outcome
 	v.PrincipalUrn = principalUrn
 	v.Scope = scope
+	v.ExcludeScopes = excludeScopes
 	v.ProjectID = projectID
 	v.Resolved = resolved
 	v.Ids = ids
