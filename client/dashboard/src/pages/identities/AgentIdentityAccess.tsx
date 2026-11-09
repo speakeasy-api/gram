@@ -13,7 +13,7 @@ import {
 import { CONNECT_SCOPE } from "@/pages/agents/agentPolicyEdit";
 import {
   AGENT_CREDENTIAL_BLOCK_SCOPE,
-  agentPolicyUnrestrictedLabel,
+  agentPolicyBroadGrantLabel,
   isAgentPolicyConstraint,
   isAgentPolicySelectorUnrestricted,
 } from "@/pages/agents/agent-policy-grants";
@@ -90,17 +90,6 @@ function grantProjectId(
     maps.toolsetMap.get(selector.resourceId)?.projectId ??
     maps.mcpServerMap.get(selector.resourceId)?.projectId
   );
-}
-
-/**
- * What a grant on every resource of its kind reaches. An org grant still
- * narrowed, e.g. to a project, is not the whole organization.
- */
-function wildcardGrantLabel(selector: AgentPolicySelector): string {
-  if (!isAgentPolicySelectorUnrestricted(selector)) {
-    return agentPolicyUnrestrictedLabel(undefined);
-  }
-  return agentPolicyUnrestrictedLabel(selector.resourceKind);
 }
 
 /**
@@ -363,6 +352,8 @@ function ScopeGrants({
         {orderGrants(scope, grants, authNames).map((grant) => {
           const { selector } = grant;
           const projectId = grantProjectId(selector, maps);
+          // The same words the permission editor's list of changes uses.
+          const broad = agentPolicyBroadGrantLabel(selector);
           const narrowing = agentSelectorNarrowing(
             selector,
             // Presence, not truthiness: an empty stored project still narrows.
@@ -375,8 +366,8 @@ function ScopeGrants({
               <div className="inline-flex flex-wrap items-center gap-x-2 gap-y-1 align-top">
                 {selector.resourceKind === "mcp_auth_client" ? (
                   <AuthGrantLabel parts={authGrantParts(selector, authNames)} />
-                ) : selector.resourceId === ANY_RESOURCE ? (
-                  <Text small>{wildcardGrantLabel(selector)}</Text>
+                ) : broad !== undefined ? (
+                  <Text small>{broad}</Text>
                 ) : (
                   <ResourceLink
                     challenge={{
