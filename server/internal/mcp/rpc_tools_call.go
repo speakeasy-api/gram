@@ -481,9 +481,10 @@ func handleToolsCall(
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 		// A call the gateway answered with an error has no tool output, so
-		// the row carries the error's most specific client-safe message.
+		// the row carries the error's most specific client-safe message, the
+		// same text its tool event records.
 		if rw.failure != nil {
-			message := deepestShareableError(rw.failure).Error()
+			message := toolCallFailureMessage(rw.failure)
 			logAttrs[attr.ErrorMessageKey] = message
 			if rw.body.Len() == 0 {
 				logAttrs.RecordResponseBodyContent([]byte(message))
@@ -712,10 +713,6 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
 }
 
-// recordToolCallErrorStatus keeps deferred billing and telemetry metadata in
-// sync with the status represented by an error returned from the MCP boundary.
-// The response writer starts at 200 because successful tool implementations may
-// write only a body, so failures that occur before WriteHeader must update it.
 // deepestShareableError is the innermost ShareableError wrapped by err, or err
 // itself. Every ShareableError's public message is written to be client-safe,
 // and the innermost one names the actionable cause.
@@ -729,6 +726,17 @@ func deepestShareableError(err *oops.ShareableError) *oops.ShareableError {
 	return deepest
 }
 
+// toolCallFailureMessage is what a failed tool call records as its error, on
+// its Tool logs row and its tool event alike: the most specific client-safe
+// message the failure carries.
+func toolCallFailureMessage(failure *oops.ShareableError) string {
+	return deepestShareableError(failure).Error()
+}
+
+// recordToolCallErrorStatus keeps deferred billing and telemetry metadata in
+// sync with the status represented by an error returned from the MCP boundary.
+// The response writer starts at 200 because successful tool implementations may
+// write only a body, so failures that occur before WriteHeader must update it.
 func recordToolCallErrorStatus(ctx context.Context, rw *toolCallResponseWriter, err error) {
 	if shareableErr, ok := errors.AsType[*oops.ShareableError](err); ok {
 		rw.statusCode = shareableErr.HTTPStatus(ctx)

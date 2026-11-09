@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -77,4 +78,32 @@ func TestDescribeToolsMemberArguments_ListsOnlyTheMembersTools(t *testing.T) {
 
 	require.JSONEq(t, `{"tools":["member--ping","member--pong"]}`,
 		string(describeToolsMemberArguments("member", []string{"ping", "pong"})))
+}
+
+// A member's discovery failure row gets a trace of its own even when the
+// tracer ignores trace.WithNewRoot, as the no-op tracer does with OTel
+// tracing off, so it is not summarized into the gateway's discovery call.
+func TestWithOwnTrace_FreshTraceWhenTheTracerKeptTheParent(t *testing.T) {
+	t.Parallel()
+
+	parent := trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{1},
+		SpanID:     trace.SpanID{1},
+		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     true,
+	})
+	kept := trace.ContextWithSpanContext(t.Context(), parent)
+	own := trace.SpanContextFromContext(withOwnTrace(kept, parent))
+	require.True(t, own.IsValid())
+	require.NotEqual(t, parent.TraceID(), own.TraceID())
+
+	renewed := trace.ContextWithSpanContext(t.Context(), trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    trace.TraceID{2},
+		SpanID:     trace.SpanID{2},
+		TraceFlags: trace.FlagsSampled,
+		TraceState: trace.TraceState{},
+		Remote:     false,
+	}))
+	require.Equal(t, trace.TraceID{2}, trace.SpanContextFromContext(withOwnTrace(renewed, parent)).TraceID(), "a real new root keeps its trace")
 }

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"net/http"
 	"time"
@@ -24,6 +25,18 @@ import (
 // attribution, and its URN source stays empty rather than naming a kind the
 // tool may not have.
 const unresolvedToolKind = "unresolved"
+
+// gatewayDiscoveryToolKind is the URN kind of a member's row for a gateway
+// discovery call that could not describe it. Discovery tools belong to the
+// gateway, not the member, so the row must not share a URN, or its stats, with
+// a member tool of the same name.
+const gatewayDiscoveryToolKind = "gatewaydiscovery"
+
+// gatewayDiscoveryToolName names a member's discovery failure row, so the
+// member's tool lists read it as the gateway's call rather than a member tool.
+func gatewayDiscoveryToolName(toolName string) string {
+	return "gateway " + toolName
+}
 
 // metaToolCallAttemptKey carries a gateway member tool call's attempt into
 // handleToolsCall.
@@ -239,11 +252,17 @@ func newMetaMemberFailure(member metaMember, err error, message string, argument
 //     stamped with the gateway, so a stamp would count this call twice.
 //   - It is written on its own trace, linked to the request's. Rows that share
 //     a trace and a project are summarized as one call, and the call's
-//     meta_discovery row would otherwise hide this one from tool logs.
+//     meta_discovery row would otherwise hide this one from tool logs. The
+//     tracer that runs when OTel tracing is off ignores trace.WithNewRoot, so
+//     the row then gets a fresh trace of its own.
+//   - It is named and keyed as the gateway's discovery tool, not a tool of the
+//     member, so it never shares a URN or stats with a member tool.
 func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaGateContext, toolName string, start time.Time, failure metaMemberFailure) {
+	parent := trace.SpanContextFromContext(ctx)
 	ctx, span := s.tracer.Start(ctx, "mcp.meta.member_discovery_failure",
 		trace.WithNewRoot(), trace.WithLinks(trace.LinkFromContext(ctx)))
 	defer span.End()
+	ctx = withOwnTrace(ctx, parent)
 
 	attempt := newMetaToolCallAttempt(start)
 	attempt.member = &failure.member
@@ -253,7 +272,30 @@ func (s *Service) logMetaMemberDiscoveryFailure(ctx context.Context, gate *metaG
 		return
 	}
 	delete(params.Attributes, attr.MetaMcpServerIDKey)
+	params.ToolInfo.Name = gatewayDiscoveryToolName(toolName)
+	params.ToolInfo.URN = "tools:" + gatewayDiscoveryToolKind + ":" + failure.member.serverID.String() + ":" + toolName
 	s.telemLogger.Log(ctx, *params)
+}
+
+// withOwnTrace keeps ctx's trace when it differs from parent's, and otherwise
+// gives ctx a fresh random trace. A span started with trace.WithNewRoot gets a
+// new trace from a real tracer; a no-op tracer keeps the parent's.
+func withOwnTrace(ctx context.Context, parent trace.SpanContext) context.Context {
+	current := trace.SpanContextFromContext(ctx)
+	if !parent.IsValid() || current.TraceID() != parent.TraceID() {
+		return ctx
+	}
+	var traceID trace.TraceID
+	var spanID trace.SpanID
+	_, _ = rand.Read(traceID[:])
+	_, _ = rand.Read(spanID[:])
+	return trace.ContextWithSpanContext(ctx, trace.NewSpanContext(trace.SpanContextConfig{
+		TraceID:    traceID,
+		SpanID:     spanID,
+		TraceFlags: parent.TraceFlags(),
+		TraceState: trace.TraceState{},
+		Remote:     false,
+	}))
 }
 
 // metaMemberToolURN is the synthetic URN of a member tool that failed before
