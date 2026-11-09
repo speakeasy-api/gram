@@ -13,13 +13,18 @@ import { isAuditAction } from "@/lib/audit-actions";
 import { formatAuditActionLabel } from "@/lib/audit-log-format";
 import { HumanizeDateTime } from "@/lib/dates";
 import { useOrgRoutes } from "@/routes";
-import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
+import { useSlugs } from "@/contexts/Sdk";
+import { ResourceLink } from "@/pages/access/ResourceLink";
+import {
+  useResourceLinkMaps,
+  type ResourceLinkMaps,
+} from "@/pages/access/useResourceLinkMaps";
 import { useIdentityWindow } from "./useIdentityQueries";
 import { agentChangeSummary } from "./agent-change-summary";
 import {
   type CheckGroup,
   checkCountLabel,
-  checkResourceLabel,
+  checksFooter,
   groupChecks,
 } from "./agent-checks";
 import {
@@ -149,12 +154,13 @@ export function AgentIdentityAudit({
 }
 
 /**
- * Scopes an agent's checks list leaves out. An agent records one
+ * Scopes left out of the agent's other allowed checks. An agent records one
  * org:hooks_ingest check for every hook event it sends, thousands in a single
- * run, and they buried every check that says what the agent may reach. They
- * are left out on the server, so the total does not count them either.
+ * run, and they buried every check that says what the agent may reach. Only
+ * allowed ones are routine: a denied hook event is a real failure, so the
+ * failed slice keeps them.
  */
-const HIDDEN_AGENT_CHECK_SCOPES = ["org:hooks_ingest"];
+const HIDDEN_ALLOWED_CHECK_SCOPES = ["org:hooks_ingest"];
 
 /** Denied checks fetched to group; the period's own total is counted apart. */
 const FAILED_CHECKS_LIMIT = 200;
@@ -175,35 +181,45 @@ function ChecksHeading({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
+/** A short note under a slice's rows, about how to read them. */
+function ChecksNote({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <p className="border-border text-muted-foreground border-b px-4 py-2 text-xs">
+      {children}
+    </p>
+  );
+}
+
 /** One scope on one resource: what was checked, how often, and when last. */
 function CheckGroupRow({
   group,
   outcome,
-  resourceName,
+  atLeast,
+  maps,
 }: {
   group: CheckGroup;
   outcome: "allow" | "deny";
-  /** The resource's own name, when it is one the dashboard can look up. */
-  resourceName?: string;
+  /** Whether the count is only the fetched checks of a longer slice. */
+  atLeast: boolean;
+  maps: ResourceLinkMaps;
 }): JSX.Element {
+  const { orgSlug } = useSlugs();
   return (
     <IdentityPanelRow
       title={
-        <>
-          <code className="text-xs">{group.scope}</code>
-          <span className="text-muted-foreground">
-            {" · "}
-            {resourceName ? (
-              <span className="text-foreground">{resourceName}</span>
-            ) : (
-              checkResourceLabel(group)
-            )}
+        group.toolListFilter ? (
+          <span className="text-muted-foreground">Tool list filtering</span>
+        ) : (
+          <span className="inline-flex min-w-0 items-center gap-2">
+            <code className="text-xs">{group.scope}</code>
+            {/* Named and linked as the Roles & Permissions page does. */}
+            <ResourceLink challenge={group} orgSlug={orgSlug ?? ""} {...maps} />
           </span>
-        </>
+        )
       }
       detail={
         <>
-          {checkCountLabel(outcome, group.count)} · last{" "}
+          {checkCountLabel(outcome, group.count, atLeast)} · last{" "}
           <HumanizeDateTime date={group.latest} />
         </>
       }
@@ -213,40 +229,74 @@ function CheckGroupRow({
   );
 }
 
+/** One outcome's slice, as read: its rows, how many there were, and its state. */
+type CheckSlice = {
+  groups: CheckGroup[];
+  /** Fetched rows; fewer than `total` when the slice was cut off. */
+  fetched: number;
+  total: number | undefined;
+  /** The read failed and nothing from an earlier read is left to show. */
+  loadFailed: boolean;
+  retry: () => void;
+};
+
 /**
- * One outcome's grouped checks. A slice whose own read failed says so rather
- * than claiming the agent had no such checks; its last loaded rows stay shown
- * under the panel's refresh banner.
+ * One outcome's grouped checks. A slice whose own read failed says so, with a
+ * way to try again, rather than claiming the agent had no such checks.
  */
 function CheckSection({
-  groups,
+  slice,
   outcome,
-  loadFailed,
   emptyText,
   failedText,
-  resourceName,
+  note,
+  maps,
 }: {
-  groups: CheckGroup[];
+  slice: CheckSlice;
   outcome: "allow" | "deny";
-  loadFailed: boolean;
   emptyText: string;
   failedText: string;
-  /** Names a group's resource, when the dashboard can look it up. */
-  resourceName?: (group: CheckGroup) => string | undefined;
+  /** How to read the rows, shown under them when there are any. */
+  note?: ReactNode;
+  maps: ResourceLinkMaps;
 }): JSX.Element {
-  if (loadFailed) return <IdentityPanelEmpty>{failedText}</IdentityPanelEmpty>;
-  if (groups.length === 0)
+  if (slice.loadFailed)
+    return (
+      <IdentityPanelEmpty>
+        {failedText}{" "}
+        <button
+          type="button"
+          onClick={slice.retry}
+          className="hover:text-foreground focus-visible:ring-ring underline underline-offset-2 focus-visible:ring-2 focus-visible:outline-none"
+        >
+          Try again
+        </button>
+      </IdentityPanelEmpty>
+    );
+  if (slice.groups.length === 0)
     return <IdentityPanelEmpty>{emptyText}</IdentityPanelEmpty>;
+  // Grouping only the newest page can undercount a resource, and can leave
+  // out one whose checks are all older.
+  const truncated = slice.total !== undefined && slice.total > slice.fetched;
   return (
     <>
-      {groups.map((group) => (
+      {slice.groups.map((group) => (
         <CheckGroupRow
           key={group.key}
           group={group}
           outcome={outcome}
-          resourceName={resourceName?.(group)}
+          atLeast={truncated}
+          maps={maps}
         />
       ))}
+      {note && <ChecksNote>{note}</ChecksNote>}
+      {truncated && (
+        <ChecksNote>
+          Grouped from the latest {slice.fetched.toLocaleString()} of{" "}
+          {slice.total?.toLocaleString()} checks, so older resources may be
+          missing. Roles & Permissions lists every check.
+        </ChecksNote>
+      )}
     </>
   );
 }
@@ -268,106 +318,102 @@ export function AgentIdentityChallenges({
   // an agent's gateway checks every server on every call, so allowed checks
   // arrive many times faster than denials.
   const failedQuery = useChallenges(
-    slice({ outcome: "deny" }, HIDDEN_AGENT_CHECK_SCOPES, FAILED_CHECKS_LIMIT),
+    slice({ outcome: "deny" }, [], FAILED_CHECKS_LIMIT),
     undefined,
     { throwOnError: false },
   );
-  // The servers the agent reached, below the failures: what it may connect to
-  // matters less than what it was refused, but more than any other check.
+  // The servers the agent was allowed to connect to, below the failures: what
+  // it may connect to matters less than what it was refused, but more than
+  // any other check.
   const connectQuery = useChallenges(
-    slice(
-      { outcome: "allow", scope: MCP_CONNECT },
-      HIDDEN_AGENT_CHECK_SCOPES,
-      ALLOWED_CHECKS_LIMIT,
-    ),
+    slice({ outcome: "allow", scope: MCP_CONNECT }, [], ALLOWED_CHECKS_LIMIT),
     undefined,
     { throwOnError: false },
   );
   const otherQuery = useChallenges(
     slice(
       { outcome: "allow" },
-      [...HIDDEN_AGENT_CHECK_SCOPES, MCP_CONNECT],
+      [...HIDDEN_ALLOWED_CHECK_SCOPES, MCP_CONNECT],
       ALLOWED_CHECKS_LIMIT,
     ),
     undefined,
     { throwOnError: false },
   );
   const queries = [failedQuery, connectQuery, otherQuery];
-  const failedRows = failedQuery.data?.challenges ?? [];
-  const connectRows = connectQuery.data?.challenges ?? [];
-  const otherRows = otherQuery.data?.challenges ?? [];
-  const failed = groupChecks(failedRows);
-  const connected = groupChecks(connectRows);
-  const other = groupChecks(otherRows);
-  const failedTotal = failedQuery.data?.total ?? 0;
-  const allowedTotal =
-    (connectQuery.data?.total ?? 0) + (otherQuery.data?.total ?? 0);
+  const read = (query: typeof failedQuery): CheckSlice => {
+    const rows = query.data?.challenges ?? [];
+    return {
+      groups: groupChecks(rows),
+      fetched: rows.length,
+      total: query.data?.total,
+      loadFailed: query.isError && !query.data,
+      retry: () => void query.refetch(),
+    };
+  };
+  const failed = read(failedQuery);
+  const connected = read(connectQuery);
+  const other = read(otherQuery);
   const loaded = queries.some((query) => !!query.data);
-  const anyFailed = queries.some((query) => query.isError);
-  // Server names come from the org's server lists, read only when a check
-  // names a server.
+  // Resource names come from the org's lists, read only when a check names a
+  // resource.
   const maps = useResourceLinkMaps(
-    [...failed, ...connected].some((group) => group.resourceKind === "mcp"),
+    [...failed.groups, ...connected.groups, ...other.groups].some(
+      (group) => !!group.resourceId,
+    ),
   );
-  const serverName = (group: CheckGroup) =>
-    group.resourceKind === "mcp"
-      ? (maps.toolsetMap.get(group.resourceId)?.name ??
-        maps.mcpServerMap.get(group.resourceId)?.name ??
-        maps.mcpServerMap.get(group.resourceId)?.slug)
-      : undefined;
   const handoffParams = new URLSearchParams({
     identity: principalUrn,
     from: from.toISOString(),
     to: to.toISOString(),
   });
-  const truncated =
-    failedTotal > failedRows.length ||
-    (connectQuery.data?.total ?? 0) > connectRows.length ||
-    (otherQuery.data?.total ?? 0) > otherRows.length;
+  const allowedTotal =
+    connected.total === undefined || other.total === undefined
+      ? undefined
+      : connected.total + other.total;
   return (
     <IdentityPanel
       title="Authorization checks"
       handoffLabel="Roles & Permissions"
       handoffHref={`${routes.access.href()}/challenges?${handoffParams}`}
       loading={queries.some((query) => query.isLoading)}
-      error={anyFailed && !loaded}
-      refreshFailed={anyFailed && loaded}
+      error={queries.some((query) => query.isError) && !loaded}
+      // Only a slice that failed to refresh still shows an earlier result; one
+      // that never loaded says so in its own section, with its own retry.
+      refreshFailed={queries.some((query) => query.isError && !!query.data)}
       onRetry={() => {
         for (const query of queries) void query.refetch();
       }}
-      footer={
-        failedTotal + allowedTotal > 0
-          ? `${failedTotal.toLocaleString()} failed and ${allowedTotal.toLocaleString()} allowed checks in this period, grouped by scope and resource${truncated ? " from the latest ones" : ""}.`
-          : undefined
-      }
+      footer={checksFooter(failed.total, allowedTotal)}
     >
       <ChecksHeading>Failed</ChecksHeading>
       <CheckSection
-        groups={failed}
+        slice={failed}
         outcome="deny"
-        loadFailed={failedQuery.isError && !failedQuery.data}
         emptyText="No failed checks for this agent in this period."
         failedText="Failed checks could not be loaded."
-        resourceName={serverName}
+        note={
+          failed.groups.some((group) => group.scope === MCP_CONNECT) &&
+          "The agent gateway checks every server in the organization on each request and records a denial for each one outside this agent's grants, so a server here may be one the agent never asked for."
+        }
+        maps={maps}
       />
       <ChecksHeading>MCP servers</ChecksHeading>
       <CheckSection
-        groups={connected}
+        slice={connected}
         outcome="allow"
-        loadFailed={connectQuery.isError && !connectQuery.data}
         emptyText="No MCP server connections for this agent in this period."
         failedText="MCP server checks could not be loaded."
-        resourceName={serverName}
+        maps={maps}
       />
-      {(other.length > 0 || (otherQuery.isError && !otherQuery.data)) && (
+      {(other.groups.length > 0 || other.loadFailed) && (
         <>
           <ChecksHeading>Other allowed checks</ChecksHeading>
           <CheckSection
-            groups={other}
+            slice={other}
             outcome="allow"
-            loadFailed={otherQuery.isError && !otherQuery.data}
             emptyText=""
             failedText="Other allowed checks could not be loaded."
+            maps={maps}
           />
         </>
       )}

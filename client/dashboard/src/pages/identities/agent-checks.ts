@@ -10,6 +10,13 @@ export type CheckGroup = {
   scope: string;
   resourceKind: string;
   resourceId: string;
+  /** The project the newest check named, so the resource can be looked up. */
+  projectId?: string;
+  /**
+   * A remote server's tools/list or describe: one filtering pass over its
+   * tools, recorded with no scope and no resource.
+   */
+  toolListFilter: boolean;
   count: number;
   latest: Date;
 };
@@ -24,7 +31,11 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
   for (const check of checks) {
     const resourceKind = check.resourceKind ?? "";
     const resourceId = check.resourceId ?? "";
-    const key = `${check.scope}|${resourceKind}|${resourceId}`;
+    const toolListFilter =
+      check.operation === "filter" && !check.scope && !resourceId;
+    const key = toolListFilter
+      ? "tool-list-filter"
+      : `${check.scope}|${resourceKind}|${resourceId}`;
     const group = groups.get(key);
     if (!group) {
       groups.set(key, {
@@ -32,13 +43,17 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
         scope: check.scope,
         resourceKind,
         resourceId,
+        projectId: check.projectId,
+        toolListFilter,
         count: 1,
         latest: check.timestamp,
       });
       continue;
     }
     group.count += 1;
-    if (check.timestamp > group.latest) group.latest = check.timestamp;
+    if (check.timestamp <= group.latest) continue;
+    group.latest = check.timestamp;
+    group.projectId = check.projectId ?? group.projectId;
   }
   return [...groups.values()].sort(
     (a, b) => b.latest.getTime() - a.latest.getTime(),
@@ -46,23 +61,34 @@ export function groupChecks(checks: readonly AuthzChallenge[]): CheckGroup[] {
 }
 
 /**
- * The resource a check was made on, in a form a reader can match against the
- * Roles & Permissions page: its kind and id. The id stays whole: ids minted
- * close together share their first characters, so a shortened id can name two
- * resources the same.
+ * "Denied 4 times", "Allowed once". A count from a slice cut off at its page
+ * size is only the checks fetched, so it reads as a lower bound.
  */
-export function checkResourceLabel(group: CheckGroup): string {
-  if (!group.resourceId) return group.resourceKind || "No resource";
-  if (!group.resourceKind) return group.resourceId;
-  return `${group.resourceKind} ${group.resourceId}`;
-}
-
-/** "Denied 4 times", "Allowed once". */
 export function checkCountLabel(
   outcome: "allow" | "deny",
   count: number,
+  atLeast = false,
 ): string {
   const verb = outcome === "deny" ? "Denied" : "Allowed";
-  if (count === 1) return `${verb} once`;
-  return `${verb} ${count.toLocaleString()} times`;
+  const bound = atLeast ? "at least " : "";
+  if (count === 1) return `${verb} ${bound}once`;
+  return `${verb} ${bound}${count.toLocaleString()} times`;
+}
+
+/**
+ * The panel footer, counted only from the slices that loaded. A slice that
+ * failed says its count is missing rather than counting as none.
+ */
+export function checksFooter(
+  failedTotal: number | undefined,
+  allowedTotal: number | undefined,
+): string | undefined {
+  if (failedTotal === undefined) {
+    if (allowedTotal === undefined) return undefined;
+    return `${allowedTotal.toLocaleString()} allowed checks in this period. The failed count could not be loaded.`;
+  }
+  if (allowedTotal === undefined)
+    return `${failedTotal.toLocaleString()} failed checks in this period. The allowed count could not be loaded.`;
+  if (failedTotal + allowedTotal === 0) return undefined;
+  return `${failedTotal.toLocaleString()} failed and ${allowedTotal.toLocaleString()} allowed checks in this period, grouped by scope and resource.`;
 }
