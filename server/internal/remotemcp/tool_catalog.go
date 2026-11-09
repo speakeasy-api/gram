@@ -139,7 +139,9 @@ func (r *toolCatalogRefreshes) claim(stripe *atomic.Pointer[toolCatalogRefreshCl
 }
 
 // errToolNotOnUpstream refuses a call for a tool neither the catalog nor the
-// upstream's listing knows about.
+// upstream's listing knows about, or, when another key's cooldown holds the
+// stripe, a tool the catalog lacks, counted on
+// mcp.tool_catalog.lookup_skipped.
 var errToolNotOnUpstream = &proxy.RejectError{
 	Code:    proxy.RejectCodeInvalidParams,
 	Message: "this tool isn't available on this MCP server",
