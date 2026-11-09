@@ -477,6 +477,74 @@
       }
     },
     {
+      "id": "cowork-org-instructions",
+      "name": "Cowork organization instructions",
+      "vendor": "Anthropic",
+      "plans": "Team plans; personal accounts not possible",
+      "facts": {
+        "org": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "role": {
+          "status": "na",
+          "note": "",
+          "verify": false
+        },
+        "session": {
+          "status": "supported",
+          "note": "via transcripts",
+          "verify": false
+        },
+        "session-cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "session-tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "cost": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "tokens": {
+          "status": "unimplemented",
+          "note": "transcripts carry no token counts",
+          "verify": false
+        },
+        "blocking": {
+          "status": "impossible",
+          "note": "no policy enforcement in Cowork",
+          "verify": false
+        },
+        "mcp-redaction": {
+          "status": "impossible",
+          "note": "no policy enforcement in Cowork",
+          "verify": true
+        },
+        "prompt-redaction": {
+          "status": "impossible",
+          "note": "",
+          "verify": false
+        },
+        "shadow-mcp": {
+          "status": "unimplemented",
+          "note": "tool calls are in the transcript",
+          "verify": true
+        },
+        "shadow-ai": {
+          "status": "impossible",
+          "note": "",
+          "verify": true
+        }
+      }
+    },
+    {
       "id": "litellm",
       "name": "LiteLLM",
       "vendor": "Others",
