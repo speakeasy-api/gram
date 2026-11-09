@@ -35,7 +35,7 @@ export const onboardingPresets = [
       "identity-provider",
       "enable-logging",
       "configure-policies",
-      "mcp-distribution",
+      "distribute-servers",
     ],
   },
 ] as const;

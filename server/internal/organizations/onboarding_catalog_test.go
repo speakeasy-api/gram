@@ -159,10 +159,9 @@ func TestOnboardingStepRecordsPlaceGroupsBeforeTheirCards(t *testing.T) {
 		require.Less(t, position[record.Parent], position[record.Slug], "group %q must precede %q", record.Parent, record.Slug)
 		require.Equal(t, setupTaskCompletionChildren, records[position[record.Parent]].Completion)
 	}
-	// A group is visible by default while any of its cards is; every card
-	// but LiteLLM is, so both groups are.
+	// A group is visible by default while any of its cards is.
 	require.False(t, records[position["agent-observability"]].HiddenByDefault)
-	require.False(t, records[position["mcp-distribution"]].HiddenByDefault)
+	require.False(t, records[position["claude-desktop"]].HiddenByDefault)
 }
 
 // The catalog is the wizard's fallback order, so a prerequisite must come

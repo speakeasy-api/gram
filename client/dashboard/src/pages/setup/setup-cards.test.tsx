@@ -40,4 +40,12 @@ describe("setup cards", () => {
     expect(setupTaskKeyForSlug("nope")).toBeUndefined();
     expect(setupTaskKeyForSlug("toString")).toBeUndefined();
   });
+
+  it("sends links to the retired marketplace card and its group to Distribute MCP servers", () => {
+    expect(setupTaskKeyForSlug("create-marketplace")).toBe(
+      "distribute-servers",
+    );
+    expect(setupTaskKeyForSlug("mcp-distribution")).toBe("distribute-servers");
+    expect(SETUP_CARDS).not.toHaveProperty("create-marketplace");
+  });
 });
