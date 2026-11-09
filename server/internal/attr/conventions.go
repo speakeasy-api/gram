@@ -70,7 +70,7 @@ const (
 	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
 	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
 
-	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced.
+	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
 	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
 
 	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
