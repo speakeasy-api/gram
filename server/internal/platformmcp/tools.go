@@ -314,11 +314,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if len(connectionMutations) > 0 {
 		connectionMutationService = connectionMutations[0]
 	}
-	// The card view is served only when a live tool links its results to it.
-	cardViewNeeded := false
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		registerWhoamiTool(reg, NewWhoamiService(postgresReader.db))
-		cardViewNeeded = true
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerAgentIdentityReadTools(reg, postgresReader.agentIdentityReads)
@@ -430,7 +427,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		} else if cursorCodec, err := newCatalogCursorCodec(cursorKeyMaterial); err != nil {
 			registerUnavailableCatalogTools(reg)
 		} else {
-			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding)
+			registerCatalogTools(reg, catalog, registrations.budgets.Catalog, cursorCodec, onboarding, registrations)
 		}
 	}
 	if registrations == nil || registrations.store == nil || !registrations.budgets.Registration.valid() {
@@ -438,7 +435,6 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerUnavailableRemoteRegistrationTool(reg)
 		registerUnavailableIdentityProviderTool(reg)
 	} else {
-		cardViewNeeded = true
 		registerCatalogRegistrationTool(reg, registrations, onboarding)
 		if registrations.directRemoteInspector == nil {
 			registerUnavailableRemoteRegistrationTool(reg)
@@ -447,9 +443,8 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		}
 		registerIdentityProviderTool(reg, registrations)
 	}
-	if cardViewNeeded {
-		registerCardResource(reg)
-	}
+	// Every external tool links its results to the card view.
+	registerCardResource(reg)
 	if registrations == nil || registrations.lifecycleMetadata == nil {
 		registerUnavailableLifecycleMetadataTool(reg)
 	} else {
@@ -596,7 +591,7 @@ func registerUnavailableCatalogTools(reg *Registrar) {
 			Title:       tool.title,
 			Description: tool.description,
 			Annotations: readOnlyOpenWorldAnnotations(),
-		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("catalog"))
+		}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeDefaultable}, unavailableTool("catalog"))
 	}
 }
 

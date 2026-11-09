@@ -8,6 +8,7 @@ import {
 import { Text } from "@/components/ui/Text";
 import { getServerURL } from "@/lib/utils";
 import { openClawInstallMessage } from "./agent-install-message";
+import { OpenClawMaintenance } from "./OpenClawMaintenance";
 import { isCredentialSafe } from "./credentials/gateway";
 import { useState, type JSX } from "react";
 
@@ -301,6 +302,7 @@ export function AgentGatewayInstall({
               {commandError}
             </Text>
           )}
+          <OpenClawMaintenance />
           <Text small className="font-medium">
             API key — shown once
           </Text>

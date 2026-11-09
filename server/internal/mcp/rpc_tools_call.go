@@ -482,6 +482,16 @@ func handleToolsCall(
 		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		// A call the gateway answered with an error has no tool output, so
+		// the row carries the error's most specific client-safe message, the
+		// same text its tool event records.
+		if rw.failure != nil {
+			message := toolCallFailureMessage(rw.failure)
+			logAttrs[attr.ErrorMessageKey] = message
+			if rw.body.Len() == 0 {
+				logAttrs.RecordResponseBodyContent([]byte(message))
+			}
+		}
 
 		if toolCallEnv.GramChatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
@@ -723,6 +733,13 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 	}
 
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// toolCallFailureMessage is what a failed tool call records as its error, on
+// its Tool logs row and its tool event alike: the most specific client-safe
+// message the failure carries.
+func toolCallFailureMessage(failure *oops.ShareableError) string {
+	return oops.Innermost(failure).Error()
 }
 
 // recordToolCallErrorStatus keeps deferred billing and telemetry metadata in

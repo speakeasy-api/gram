@@ -113,12 +113,22 @@ func harnessForClient(clientID string) string {
 
 // discoveryModeFor resolves the surface for one request. Every failure serves
 // the full catalogue, the pre-rollout behaviour.
+//
+// ChatGPT always gets the full catalogue, whatever the flag says. The ChatGPT
+// app directory requires every model-callable operation to be listed upfront
+// as its own tool, so the meta-tools that run other tools by name fail its
+// review. ChatGPT connectors share one client_id per MCP server origin, so the
+// reviewed app cannot be told apart from other ChatGPT connections.
 func (r *Runtime) discoveryModeFor(ctx context.Context, logger *slog.Logger, principal Principal) discoveryMode {
 	if r.discovery.Flags == nil || principal.OrganizationID == "" {
 		return discoveryFull
 	}
+	harness := harnessForClient(principal.ClientID)
+	if harness == chatGPTProductID {
+		return discoveryFull
+	}
 	variant, err := feature.FlagVariantLocal(ctx, r.discovery.Flags, feature.FlagPlatformMCPDiscoveryMode, principal.OrganizationID, nil, map[string]string{
-		"harness":         harnessForClient(principal.ClientID),
+		"harness":         harness,
 		"organization_id": principal.OrganizationID,
 	})
 	if err != nil {
@@ -293,7 +303,7 @@ var (
 	executePlatformCodeSchema  = json.RawMessage(`{"type":"object","properties":{"code":{"type":"string","minLength":1,"maxLength":65536,"description":"Python program; its final JSON-compatible expression is returned."},"tools":{"type":"array","maxItems":10000,"uniqueItems":true,"items":{"type":"string"},"description":"Optional exact platform--<tool> allowlist narrowing this execution. Omit for every permitted tool; [] permits none."}},"required":["code"],"additionalProperties":false}`)
 )
 
-const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper; top-level await works. Each run starts fresh and returns its final expression as JSON.
+const executePlatformCodeDescription = `Run Python against every Platform tool you may use. Await every helper. Each run starts fresh and returns its final expression as JSON.
 
 Search and describe in one run:
 
@@ -305,7 +315,7 @@ Next run, call with the described inputSchema:
     r = await tools.call("platform--search_mcp_catalog", {"query": "linear"})
     r["data"] if r["ok"] else r
 
-Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call (unknown tool, invalid arguments) gives ok False, error "tool_call_rejected" and the reason in content.
+Paths are platform--<tool name>. search(query="", limit=10, cursor=None): an empty query lists every tool, limit is at most 50, page with next_cursor. call returns {ok, data, content, outcome, error?}; check ok. A refused call gives ok False, error "tool_call_rejected" and the reason in content.
 
 Write tools keep their safeguards: preview with confirmed false and make a confirmed call only after the user explicitly agrees. Errors and cancellation never undo writes; on an unknown outcome read the state again, never replay.
 
@@ -315,7 +325,7 @@ Python subset; import asyncio for asyncio.gather. No packages, filesystem, envir
 // The first-run tools listed next to them depend on the caller; for every other
 // tool, what a caller may use is decided when it searches, describes or calls.
 func discoveryTools(mode discoveryMode) []*mcp.Tool {
-	readOnly := &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: new(false)}
+	readOnly := readOnlyAnnotations()
 	tools := []*mcp.Tool{
 		{
 			Name:        searchPlatformToolsName,

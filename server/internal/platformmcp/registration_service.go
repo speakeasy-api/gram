@@ -104,6 +104,7 @@ type RegistrationService struct {
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 	logos                      *cardLogos
+	catalogLogos               *catalogLogos
 	signInLinks                *signInConnectLinks
 }
 

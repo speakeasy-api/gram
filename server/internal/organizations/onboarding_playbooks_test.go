@@ -103,7 +103,7 @@ func TestOnboardingDefaultPlaybookMovesBetweenPlaybooks(t *testing.T) {
 	first, err := organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{UseCaseID: &id, OrganizationID: nil, Name: "First", Description: "", IsDefault: true, StepSlugs: []string{"platform-mcp"}})
 	require.NoError(t, err)
 	require.True(t, first.IsDefault)
-	second, err := organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{UseCaseID: &id, OrganizationID: nil, Name: "Second", Description: "", IsDefault: true, StepSlugs: []string{"mcp-distribution"}})
+	second, err := organizations.CreateOnboardingPlaybook(ctx, ti.conn, organizations.OnboardingPlaybookInput{UseCaseID: &id, OrganizationID: nil, Name: "Second", Description: "", IsDefault: true, StepSlugs: []string{"distribute-servers"}})
 	require.NoError(t, err)
 	require.True(t, second.IsDefault)
 
@@ -236,8 +236,8 @@ func TestOnboardingPlaybookAssignmentFollowsTheStack(t *testing.T) {
 	}
 	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "litellm"})
 	require.NoError(t, err, "LiteLLM belongs to no vendor in particular")
-	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "mcp-distribution"})
-	require.NoError(t, err, "plugins are an Anthropic method and Anthropic is in the stack")
+	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", false, []string{"enable-logging", "distribute-servers"})
+	require.NoError(t, err, "the device agent installs from the marketplace on every stack")
 	_, err = organizations.UpdateOnboardingPlaybook(ctx, ti.conn, mustUUID(t, custom.ID), nil, "Ours", "", true, []string{"enable-logging"})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	mine, err := organizations.ListOnboardingPlaybooks(ctx, ti.conn, &ac.ActiveOrganizationID)

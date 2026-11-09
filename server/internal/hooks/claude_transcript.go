@@ -45,7 +45,7 @@ const (
 	claudeTranscriptSchemaV1 = "claude.transcript.v1"
 
 	// claudeTranscriptOrigin marks rows stored from an uploaded transcript.
-	claudeTranscriptOrigin = "claude-transcript"
+	claudeTranscriptOrigin = chat.OriginClaudeTranscript
 
 	// claudeTranscriptIDPrefix namespaces transcript entry uuids in
 	// external_message_id so they cannot collide with other import sources.

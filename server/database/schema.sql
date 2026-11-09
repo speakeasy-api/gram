@@ -6722,6 +6722,13 @@ CREATE INDEX IF NOT EXISTS chat_messages_inference_identity_idx
 ON chat_messages (project_id, external_message_id)
 WHERE origin = 'anthropic-inference' AND external_message_id IS NOT NULL;
 
+-- Whether a project has stored any message from a Claude transcript upload
+-- (Claude Cowork sessions shipped on Stop). The setup wizard reads it to mark
+-- the Claude organization instructions card done once capture works.
+CREATE INDEX IF NOT EXISTS chat_messages_claude_transcript_project_idx
+ON chat_messages (project_id)
+WHERE origin = 'claude-transcript';
+
 -- Partial index over unanalyzed messages only. Shrinks toward zero at steady
 -- state, making FetchUnanalyzedMessageIDs an index-only scan on a tiny set.
 CREATE INDEX IF NOT EXISTS chat_messages_risk_analyzed_at_null_idx

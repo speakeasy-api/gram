@@ -593,6 +593,7 @@ func (s *Service) metaValidationTarget(
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,
@@ -603,6 +604,7 @@ func (s *Service) metaValidationTarget(
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		// Consent probes never call connection_status.
 		connectURL:        "",
+		agentFix:          nil,
 		skillsOverMCP:     nil,
 		servedCredentials: nil,
 	}
@@ -616,7 +618,7 @@ func (s *Service) metaValidationTarget(
 	}
 	ctx = s.memberAttributionContext(ctx, logger, &gate)
 	// routeMetaMember, not dialMetaMember: a probe is not a dispatch to count.
-	dial, _, err := s.routeMetaMember(ctx, logger, gate, member, gate.callerIdentity())
+	dial, _, err := s.routeMetaMember(ctx, logger, gate, member, gate.callerIdentity(), false)
 	if err != nil {
 		if errors.Is(err, errAmbiguousMemberCredential) {
 			return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
