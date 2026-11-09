@@ -43,7 +43,7 @@ func selfSignedCert(t *testing.T, dnsNames []string, ips []net.IP) (tls.Certific
 	return tls.Certificate{Certificate: [][]byte{der}, PrivateKey: key}, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 }
 
-func probeStatus(t *testing.T, serverCert tls.Certificate, trusted []byte) int {
+func probeStatus(t *testing.T, serverCert tls.Certificate, trusted []byte, dialHost string) int {
 	t.Helper()
 	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -54,6 +54,7 @@ func probeStatus(t *testing.T, serverCert tls.Certificate, trusted []byte) int {
 
 	u, err := url.Parse(srv.URL + "/healthz")
 	require.NoError(t, err)
+	u.Host = net.JoinHostPort(dialHost, u.Port())
 	handler := NewHealthCheckHandler(
 		[]*NamedResource[*HTTPEndpoint]{{Name: "api", Resource: &HTTPEndpoint{URL: u, TLSCertificate: trusted}}},
 		[]*NamedResource[*pgxpool.Pool]{},
@@ -68,18 +69,24 @@ func probeStatus(t *testing.T, serverCert tls.Certificate, trusted []byte) int {
 func TestHealthCheckProbesListenerByIPWithDNSOnlyCertificate(t *testing.T) {
 	t.Parallel()
 	cert, certPEM := selfSignedCert(t, []string{"dev-machine.example.ts.net"}, nil)
-	require.Equal(t, http.StatusOK, probeStatus(t, cert, certPEM))
+	require.Equal(t, http.StatusOK, probeStatus(t, cert, certPEM, "127.0.0.1"))
 }
 
 func TestHealthCheckProbesListenerByIPWithIPCertificate(t *testing.T) {
 	t.Parallel()
 	cert, certPEM := selfSignedCert(t, []string{"localhost"}, []net.IP{net.ParseIP("127.0.0.1")})
-	require.Equal(t, http.StatusOK, probeStatus(t, cert, certPEM))
+	require.Equal(t, http.StatusOK, probeStatus(t, cert, certPEM, "127.0.0.1"))
+}
+
+func TestHealthCheckVerifiesNamedHostAsDialed(t *testing.T) {
+	t.Parallel()
+	cert, certPEM := selfSignedCert(t, []string{"dev-machine.example.ts.net"}, nil)
+	require.Equal(t, http.StatusServiceUnavailable, probeStatus(t, cert, certPEM, "localhost"))
 }
 
 func TestHealthCheckRejectsListenerServingAnotherCertificate(t *testing.T) {
 	t.Parallel()
 	served, _ := selfSignedCert(t, []string{"dev-machine.example.ts.net"}, nil)
 	_, trusted := selfSignedCert(t, []string{"dev-machine.example.ts.net"}, nil)
-	require.Equal(t, http.StatusServiceUnavailable, probeStatus(t, served, trusted))
+	require.Equal(t, http.StatusServiceUnavailable, probeStatus(t, served, trusted, "127.0.0.1"))
 }

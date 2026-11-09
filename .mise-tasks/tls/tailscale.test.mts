@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
   readlinkSync,
   rmSync,
+  symlinkSync,
   statSync,
   utimesSync,
   writeFileSync,
@@ -15,7 +17,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
-import { publish, splitPEM, type CertPair } from "./tailscale.mts";
+import {
+  publish,
+  restartUnderStackLock,
+  splitPEM,
+  type CertPair,
+} from "./tailscale.mts";
 
 const task = fileURLToPath(new URL("./tailscale.mts", import.meta.url));
 const domain = "dev-machine.example.ts.net";
@@ -180,4 +187,55 @@ test("task failure explains how to enable certificates and leaves no files", (t)
   assert.match(result.stderr, /tailscale stderr/);
   assert.match(result.stderr, /HTTPS certificates are enabled/);
   assert.throws(() => statSync(join(root, "local")));
+});
+
+function gitRepo(t: TestContext): { root: string; gitdir: string } {
+  const root = tempDir(t);
+  execFileSync("git", ["init", "-q", root]);
+  return { root, gitdir: join(root, ".git") };
+}
+
+test("restart holds the stack lock while it runs and releases it", async (t) => {
+  const { root, gitdir } = gitRepo(t);
+  const lock = join(gitdir, "gram-stack-lock");
+  let heldDuringRestart = "";
+  const skipped = await restartUnderStackLock(root, async () => {
+    heldDuringRestart = readlinkSync(lock);
+  });
+  assert.equal(skipped, undefined);
+  assert.equal(heldDuringRestart, `${process.pid}:unpause`);
+  assert.equal(existsSync(lock), false);
+});
+
+test("restart is skipped while another lifecycle operation owns the stack", async (t) => {
+  const { root, gitdir } = gitRepo(t);
+  const lock = join(gitdir, "gram-stack-lock");
+  symlinkSync("12345:pause", lock);
+  let restarted = false;
+  const skipped = await restartUnderStackLock(root, async () => {
+    restarted = true;
+  });
+  assert.match(skipped ?? "", /in progress/);
+  assert.equal(restarted, false);
+  assert.equal(readlinkSync(lock), "12345:pause");
+});
+
+test("restart is skipped on a paused stack and releases the lock", async (t) => {
+  const { root, gitdir } = gitRepo(t);
+  writeFileSync(join(gitdir, "gram-stack-paused"), "");
+  let restarted = false;
+  const skipped = await restartUnderStackLock(root, async () => {
+    restarted = true;
+  });
+  assert.match(skipped ?? "", /paused/);
+  assert.equal(restarted, false);
+  assert.equal(existsSync(join(gitdir, "gram-stack-lock")), false);
+});
+
+test("restart reports why it skipped outside a git checkout", async (t) => {
+  const root = tempDir(t);
+  const skipped = await restartUnderStackLock(root, async () => {
+    assert.fail("must not restart");
+  });
+  assert.match(skipped ?? "", /git directory/);
 });

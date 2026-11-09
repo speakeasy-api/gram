@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"time"
@@ -26,8 +27,12 @@ type HTTPEndpoint struct {
 // dials the listener's address, which may be an IP the certificate does not
 // list (a Tailscale certificate names only the machine's DNS name). The pool
 // trusts only this certificate, so verifying it under one of its own DNS names
-// still proves the listener serves it.
+// still proves the listener serves it. Hosts given by name are verified as
+// dialed, so a listener whose certificate does not cover its name still fails.
 func probeServerName(certPEM []byte, host string) string {
+	if net.ParseIP(host) == nil {
+		return ""
+	}
 	block, _ := pem.Decode(certPEM)
 	if block == nil {
 		return ""

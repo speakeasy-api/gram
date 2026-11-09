@@ -53,7 +53,13 @@ if [ "${GRAM_CODE_RUNTIME_PROVIDER:-disabled}" = local ]; then
 fi
 if [ "${GRAM_TLS_PROVIDER:-mkcert}" = tailscale ]; then
   # Renew before the listeners load the certificate; a valid one is a no-op.
-  mise run tls:tailscale || echo "Could not refresh the Tailscale certificate; listeners will use the saved one." >&2
+  if ! mise run tls:tailscale; then
+    if [ ! -s "${GRAM_SSL_CERT_FILE:-}" ] || [ ! -s "${GRAM_SSL_KEY_FILE:-}" ]; then
+      echo "No saved Tailscale certificate to fall back on; fix the error above, or set GRAM_TLS_PROVIDER=mkcert in mise.local.toml and run \`mise run zero:tls\`." >&2
+      exit 1
+    fi
+    echo "Could not refresh the Tailscale certificate; listeners will use the saved one." >&2
+  fi
   pitchfork start tailscale-cert
 fi
 pitchfork start --group default

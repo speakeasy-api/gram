@@ -70,7 +70,8 @@ use_tailscale_cert() {
   local name url host
   # The Tailscale certificate covers only the machine's Tailnet DNS name, so
   # every HTTPS endpoint has to use it.
-  for name in GRAM_SERVER_URL GRAM_SITE_URL GRAM_DEVIDP_EXTERNAL_URL; do
+  for name in GRAM_SERVER_URL GRAM_SITE_URL GRAM_DEVIDP_EXTERNAL_URL \
+    GRAM_ADMIN_SERVER_URL GRAM_ADMIN_BACKEND_URL; do
     url="${!name:-}"
     is_https "$url" || continue
     host="$(extract_hostname "$url")"

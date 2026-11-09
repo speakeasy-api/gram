@@ -327,3 +327,18 @@ test("Tailscale provider still disables TLS for HTTP-only endpoints", (t) => {
     false,
   );
 });
+
+test("Tailscale provider rejects admin endpoints on other hosts", (t) => {
+  const f = fixture(t);
+  const host = "dev-machine.example.ts.net";
+  const { result } = f.runResult({
+    GRAM_TLS_PROVIDER: "tailscale",
+    GRAM_HOST: host,
+    GRAM_SERVER_URL: `https://${host}:8080`,
+    GRAM_SITE_URL: `https://${host}:5173`,
+    GRAM_DEVIDP_EXTERNAL_URL: `https://${host}:35291`,
+    GRAM_ADMIN_BACKEND_URL: "https://localhost:8083",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /GRAM_ADMIN_BACKEND_URL uses localhost/);
+});

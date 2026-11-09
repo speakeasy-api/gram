@@ -755,3 +755,22 @@ test("certificates for another tailnet name do not switch TLS to Tailscale", asy
   assert.equal(f.read().GRAM_TLS_PROVIDER, undefined);
   assert.equal(f.read().GRAM_ASSISTANT_RUNTIME_SERVER_URL, undefined);
 });
+
+test("losing tailnet certificates switches TLS back to mkcert", async (t) => {
+  const f = fixture(t);
+  await setupTailscale({
+    root: f.root,
+    env: { ...f.env, TEST_STATUS: certStatus },
+    prompt: async () => true,
+  });
+  assert.equal(f.read().GRAM_TLS_PROVIDER, "tailscale");
+
+  const prompt = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt });
+  assert.equal(prompt.mock.callCount(), 1);
+  assert.equal(f.read().GRAM_TLS_PROVIDER, "mkcert");
+
+  const repeat = t.mock.fn(async () => true);
+  await setupTailscale({ root: f.root, env: f.env, prompt: repeat });
+  assert.equal(repeat.mock.callCount(), 0);
+});

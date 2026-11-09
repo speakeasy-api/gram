@@ -13,8 +13,10 @@
 //
 // The certificate and key change together on renewal (each issuance gets a new
 // key), so they are written into a fresh directory and published by renaming
-// the `local/ssl/tailscale` symlink. A daemon starting at any moment reads a
-// matching pair through that link.
+// the `local/ssl/tailscale` symlink: the link always names a complete, matching
+// pair. Daemons open the two files separately, so one starting at the instant
+// of a swap could still read one file from each side; renewal is rare, and
+// `--restart` restarts the TLS daemons after a swap, which covers that window.
 
 import { createPrivateKey, randomUUID, X509Certificate } from "node:crypto";
 import {
@@ -23,6 +25,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  readlinkSync,
   renameSync,
   rmSync,
   statSync,
@@ -43,9 +46,11 @@ export const TLS_DAEMONS = [
 
 const LINK = "tailscale";
 const VERSION_PREFIX = "tailscale-";
-// Superseded versions are kept briefly: a concurrent run may have just created
-// one and not yet linked it, and a daemon may be mid-read of the previous one.
-const STALE_AFTER_MS = 60 * 60 * 1000;
+// Daemons only reach a version through the link, and files they already opened
+// survive deletion, so superseded versions can go as soon as the link moves.
+// Recently created ones are kept: they may belong to a concurrent run that has
+// written its version but not linked it yet.
+const IN_FLIGHT_MS = 60 * 60 * 1000;
 
 export interface CertPair {
   cert: string;
@@ -89,7 +94,7 @@ function removeStaleVersions(sslDir: string, current: string): void {
     if (!name.startsWith(VERSION_PREFIX) || name === current) continue;
     const path = join(sslDir, name);
     try {
-      if (now - statSync(path).mtimeMs > STALE_AFTER_MS) {
+      if (now - statSync(path).mtimeMs > IN_FLIGHT_MS) {
         rmSync(path, { recursive: true, force: true });
       }
     } catch {
@@ -145,18 +150,46 @@ export async function fetchPair(
 }
 
 /** True while a pause, wake or start owns this worktree's stack. */
-async function stackBusy(root: string): Promise<boolean> {
+/**
+ * Restarts the TLS daemons while holding this worktree's stack lock, the same
+ * symlink pause, wake and start take, so a restart cannot interleave with a
+ * pause. Returns why it skipped, or undefined after restarting.
+ */
+export async function restartUnderStackLock(
+  root: string,
+  restart: () => Promise<unknown>,
+): Promise<string | undefined> {
   const result = await $({
     cwd: root,
     nothrow: true,
     quiet: true,
   })`git rev-parse --absolute-git-dir`;
-  if (result.exitCode !== 0) return true;
+  if (result.exitCode !== 0) {
+    return `could not find the git directory (${result.stderr.trim()})`;
+  }
   const gitdir = result.stdout.trim();
-  return (
-    existsSync(join(gitdir, "gram-stack-lock")) ||
-    existsSync(join(gitdir, "gram-stack-paused"))
-  );
+  const lock = join(gitdir, "gram-stack-lock");
+  const identity = `${process.pid}:unpause`;
+  try {
+    // Exclusive create: fails while any lifecycle operation owns the stack.
+    symlinkSync(identity, lock);
+  } catch {
+    return "a pause, wake or start is in progress; it starts the daemons with the new certificate";
+  }
+  try {
+    if (existsSync(join(gitdir, "gram-stack-paused"))) {
+      return "the stack is paused; wake loads the new certificate";
+    }
+    await restart();
+    return undefined;
+  } finally {
+    // Only release the lock this process still owns.
+    try {
+      if (readlinkSync(lock) === identity) rmSync(lock);
+    } catch {
+      // Already gone.
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -179,11 +212,15 @@ async function main(): Promise<void> {
   );
 
   if (process.env["usage_restart"] !== "true") return;
-  // A lifecycle operation in progress starts the daemons itself, and they will
-  // read the new certificate then.
-  if (await stackBusy(root)) return;
-  console.log(`Restarting ${TLS_DAEMONS.join(", ")} to load it.`);
-  await $({ stdio: "inherit" })`pitchfork restart ${TLS_DAEMONS}`;
+  const skipped = await restartUnderStackLock(root, async () => {
+    console.log(`Restarting ${TLS_DAEMONS.join(", ")} to load it.`);
+    await $({ stdio: "inherit" })`pitchfork restart ${TLS_DAEMONS}`;
+  });
+  if (skipped) {
+    console.warn(
+      `Did not restart the TLS daemons: ${skipped}. Running daemons keep the previous certificate until they restart.`,
+    );
+  }
 }
 
 if (import.meta.main) {

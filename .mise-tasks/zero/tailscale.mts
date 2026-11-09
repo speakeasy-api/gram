@@ -254,7 +254,11 @@ export async function setupTailscale(
           ? [["GRAM_ASSISTANT_RUNTIME_SERVER_URL", "{{env.GRAM_SERVER_URL}}"]]
           : []),
       ]
-    : [];
+    : // The tailnet stopped issuing certificates for this name: fall back to
+      // mkcert. Machines that never used Tailscale certificates are left alone.
+      local.env?.["GRAM_TLS_PROVIDER"] === "tailscale"
+      ? [["GRAM_TLS_PROVIDER", "mkcert"]]
+      : [];
   if (
     !force &&
     local.env?.["GRAM_HOST"] === hostname &&
