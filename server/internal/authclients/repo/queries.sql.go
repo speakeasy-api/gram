@@ -1044,6 +1044,65 @@ func (q *Queries) ListServerAuthClients(ctx context.Context, arg ListServerAuthC
 	return items, nil
 }
 
+const listServerBackfillAuthClients = `-- name: ListServerBackfillAuthClients :many
+SELECT ac.id, ac.organization_id, ac.project_id, ac.attachment_scope, ac.client_type, ac.source, ac.name, ac.enabled, ac.created_by_user_id, ac.remote_session_client_id, ac.client_attachment_scope, ac.created_at, ac.updated_at, ac.deleted_at, ac.deleted
+FROM mcp_server_auth_clients msac
+JOIN mcp_auth_clients ac
+  ON ac.id = msac.auth_client_id
+ AND ac.organization_id = msac.organization_id
+ AND ac.deleted IS FALSE
+WHERE msac.mcp_server_id = $1
+  AND msac.project_id = $2
+  AND msac.organization_id = $3
+  AND msac.deleted IS FALSE
+  AND msac.source = 'backfill'
+  AND ac.source = 'backfill'
+ORDER BY ac.name, ac.id
+`
+
+type ListServerBackfillAuthClientsParams struct {
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Only links derived by backfill; administrator-owned links are independent.
+func (q *Queries) ListServerBackfillAuthClients(ctx context.Context, arg ListServerBackfillAuthClientsParams) ([]McpAuthClient, error) {
+	rows, err := q.db.Query(ctx, listServerBackfillAuthClients, arg.McpServerID, arg.ProjectID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []McpAuthClient
+	for rows.Next() {
+		var i McpAuthClient
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.AttachmentScope,
+			&i.ClientType,
+			&i.Source,
+			&i.Name,
+			&i.Enabled,
+			&i.CreatedByUserID,
+			&i.RemoteSessionClientID,
+			&i.ClientAttachmentScope,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockAttachableMCPServer = `-- name: LockAttachableMCPServer :one
 SELECT
   ms.id,

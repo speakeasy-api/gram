@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
@@ -317,6 +318,12 @@ func (s *Service) RecordAuthClientPermitCallers() func() []string {
 		defer permitter.mu.Unlock()
 		return slices.Clone(permitter.users)
 	}
+}
+
+// ReloadAuthEnforcement drops the cached enforcement state, as its expiry would
+// after staff change it.
+func (s *Service) ReloadAuthEnforcement() {
+	s.authEnforcement = authenforcement.NewGate(s.db)
 }
 
 // SetAuthClientPermission installs a mutable permit decision in the test binary.

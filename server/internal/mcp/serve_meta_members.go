@@ -44,12 +44,12 @@ const (
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
 	serverID uuid.UUID
-	// configurationHash is loaded with the request's approved member set.
-	configurationHash string
+	// configuration is loaded with the request's approved member set.
+	configuration memberConfiguration
 
-	// otherConfigurationHash is configurationHash with the upstream issuer
-	// from the source the organization's flag does not make authoritative.
-	otherConfigurationHash string
+	// otherConfiguration is configuration with the upstream issuer from the
+	// source the organization's flag does not make authoritative.
+	otherConfiguration memberConfiguration
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -287,8 +287,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			return ctx, nil, hashErr
 		}
 		for i := range members {
-			members[i].configurationHash = hashes[members[i].serverID]
-			members[i].otherConfigurationHash = otherHashes[members[i].serverID]
+			members[i].configuration = hashes[members[i].serverID]
+			members[i].otherConfiguration = otherHashes[members[i].serverID]
 		}
 	}
 	if err == nil && gate.memberChoices != nil {
@@ -558,8 +558,8 @@ func (s *Service) admitMetaMembers(
 
 		member := metaMember{
 			serverID:                       candidate.serverID,
-			configurationHash:              "",
-			otherConfigurationHash:         "",
+			configuration:                  memberConfiguration{hash: "", typedHash: ""},
+			otherConfiguration:             memberConfiguration{hash: "", typedHash: ""},
 			authClient:                     nil,
 			projectID:                      candidate.projectID,
 			projectSlug:                    candidate.projectSlug,

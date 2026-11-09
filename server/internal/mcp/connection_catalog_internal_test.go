@@ -60,13 +60,16 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			m.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 		}, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": false, "auth_client_id_matches": true}},
 		{name: "changed auth client", change: func(_ *metaGateContext, m *metaMember) { m.authClient.clientID = uuid.New() }, reason: "authentication_changed", message: "This server's authentication changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
-		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true}},
-		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true}},
+		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true, "typed_compared": false}},
+		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configuration.hash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true, "typed_compared": false}},
 		{name: "missing approved configuration", change: func(g *metaGateContext, _ *metaMember) {
 			a := g.catalog.Members["source"]
 			a.BackendHash = ""
 			g.catalog.Members["source"] = a
-		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
+		}, reason: "configuration_changed", message: "This server's configuration changed. Reconnect this gateway in your AI app to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false, "typed_compared": false}},
+		{name: "with enforcement off the typed fingerprint decides nothing", change: func(_ *metaGateContext, m *metaMember) {
+			m.configuration.typedHash = "private changed hash"
+		}},
 		{name: "upstream unavailable", change: func(_ *metaGateContext, m *metaMember) { m.upstreamUnavailable = upstreamError }},
 	}
 	for _, tt := range tests {
@@ -76,14 +79,14 @@ func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
 			s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
 			member := metaMember{
 				serverID: uuid.New(), projectID: uuid.New(), slug: "source", name: "private server name",
-				backend: metaMemberBackendProxied, configurationHash: "private configuration hash",
+				backend: metaMemberBackendProxied, configuration: memberConfiguration{hash: "private configuration hash", typedHash: "private typed configuration hash"},
 				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authClient: &authClientResolution{clientID: uuid.New()},
 			}
 			gate := &metaGateContext{
 				projectID: uuid.New(), metaServerID: uuid.New(), discoveryMode: metamcp.DiscoveryModeCode, execute: true, userID: "private user", sessionID: "private session",
 				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},
 				catalog: &connectionCatalog{ID: uuid.New(), ClientID: "private OAuth client", Subject: urn.NewUserSubject("private subject"), Members: map[string]connectionCatalogMember{
-					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configurationHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID}},
+					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configuration.hash, TypedBackendHash: member.configuration.typedHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID}},
 				}},
 			}
 			tt.change(gate, &member)

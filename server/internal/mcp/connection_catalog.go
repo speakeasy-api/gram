@@ -85,9 +85,39 @@ type connectionCatalogMember struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	// BackendHash detects changes to destinations, headers, and server settings.
 	BackendHash string `json:"backend_hash"`
+	// TypedBackendHash detects the same changes without a proxied member's
+	// derived authorization server. It is what the approval is compared on
+	// where typed auth clients choose upstream authentication; an approval
+	// stored before it was recorded has none.
+	TypedBackendHash string `json:"typed_backend_hash,omitempty"`
 	// Auth binds a proxied member's shared-runtime choice; hosted members use
 	// their toolset's authentication and leave this nil.
 	Auth *connectionCatalogAuth `json:"auth,omitempty"`
+}
+
+// configurationChanged reports whether the member's stored configuration
+// differs from the one approved. With typed, the organization chooses
+// upstream authentication through typed auth clients, so an approval that
+// recorded the fingerprint without the derived authorization server is
+// compared on that one.
+func (m connectionCatalogMember) configurationChanged(current memberConfiguration, typed bool) bool {
+	compared := current.forMode(m.typedCompared(typed))
+	return compared == "" || compared != m.approvedHash(typed)
+}
+
+// typedCompared reports whether the member is compared on its typed
+// fingerprint: the organization chooses upstream authentication through typed
+// auth clients and the approval recorded one.
+func (m connectionCatalogMember) typedCompared(typed bool) bool {
+	return typed && m.TypedBackendHash != ""
+}
+
+// approvedHash is the approved fingerprint the member is compared on.
+func (m connectionCatalogMember) approvedHash(typed bool) string {
+	if m.typedCompared(typed) {
+		return m.TypedBackendHash
+	}
+	return m.BackendHash
 }
 
 type connectionCatalogAuth struct {
@@ -244,15 +274,16 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	members := make(map[string]connectionCatalogMember, len(inventory.MemberBindings))
 	for slug, member := range inventory.MemberBindings {
 		if member.ServerID != uuid.Nil {
+			typedCompared := member.typedCompared(typedChoices)
 			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
 				organizationID: endpoint.OrganizationID,
 				serverID:       member.ServerID,
 				site:           upstreamIssuerReconsentSiteCatalogFreeze,
 				consenter:      state.Subject.String(),
-				outcome:        upstreamIssuerReconsent(member.BackendHash, hashes[member.ServerID], otherHashes[member.ServerID], nil),
+				outcome:        upstreamIssuerReconsent(member.approvedHash(typedChoices), hashes[member.ServerID].forMode(typedCompared), otherHashes[member.ServerID].forMode(typedCompared), nil),
 			})
 		}
-		if member.ServerID == uuid.Nil || hashes[member.ServerID] != member.BackendHash {
+		if member.ServerID == uuid.Nil || member.configurationChanged(hashes[member.ServerID], typedChoices) {
 			return nil, errConsentConfigurationChanged
 		}
 		if member.Auth != nil {
@@ -472,16 +503,22 @@ func (s *Service) validateCatalogMember(ctx context.Context, gate *metaGateConte
 				map[string]bool{"auth_recorded": approved.Auth != nil, "registration_id_matches": approved.Auth != nil && approved.Auth.RegistrationID == member.chosenClientID, "auth_client_id_matches": approved.Auth != nil && approved.Auth.ClientID == clientID})
 		}
 	}
+	typedChoices, err := s.consentAuthChoicesEnforced(ctx, gate.organizationID)
+	if err != nil {
+		s.logger.ErrorContext(ctx, "read upstream auth enforcement for an approved member", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
+	}
+	typedCompared := approved.typedCompared(typedChoices)
 	s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
 		organizationID: gate.organizationID,
 		serverID:       member.serverID,
 		site:           upstreamIssuerReconsentSiteCatalogMember,
 		consenter:      gate.userID,
-		outcome:        upstreamIssuerReconsent(approved.BackendHash, member.configurationHash, member.otherConfigurationHash, nil),
+		outcome:        upstreamIssuerReconsent(approved.approvedHash(typedChoices), member.configuration.forMode(typedCompared), member.otherConfiguration.forMode(typedCompared), nil),
 	})
-	if member.configurationHash == "" || member.configurationHash != approved.BackendHash {
+	if approved.configurationChanged(member.configuration, typedChoices) {
 		return s.rejectCatalogMember(ctx, gate, member, consentRejectionConfigurationChanged, "This server's configuration changed. Reconnect this gateway in your AI app to approve it.",
-			map[string]bool{"configuration_hash_present": member.configurationHash != "", "approved_hash_recorded": approved.BackendHash != ""})
+			map[string]bool{"configuration_hash_present": member.configuration.hash != "", "approved_hash_recorded": approved.BackendHash != "", "typed_compared": typedCompared})
 	}
 	return nil
 }
@@ -545,13 +582,30 @@ func needsNewConsent(err error) bool {
 	return stale
 }
 
+// memberConfiguration is one server's stored-configuration fingerprints.
+type memberConfiguration struct {
+	// hash covers the server's upstream issuer.
+	hash string
+
+	// typedHash leaves a proxied server's upstream issuer out.
+	typedHash string
+}
+
+// forMode is the fingerprint compared in one enforcement mode.
+func (c memberConfiguration) forMode(typed bool) string {
+	if typed {
+		return c.typedHash
+	}
+	return c.hash
+}
+
 // catalogMemberConfigurations returns each server's consent configuration
-// hash with its upstream issuer from the source the organization's flag makes
-// authoritative, and the hash from the other source for the re-consent
-// forecast.
-func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, map[uuid.UUID]string, error) {
-	hashes := make(map[uuid.UUID]string, len(ids))
-	others := make(map[uuid.UUID]string, len(ids))
+// fingerprints with its upstream issuer from the source the organization's
+// flag makes authoritative, and the fingerprints from the other source for the
+// re-consent forecast.
+func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]memberConfiguration, map[uuid.UUID]memberConfiguration, error) {
+	hashes := make(map[uuid.UUID]memberConfiguration, len(ids))
+	others := make(map[uuid.UUID]memberConfiguration, len(ids))
 	if len(ids) == 0 {
 		return hashes, others, nil
 	}
@@ -561,9 +615,11 @@ func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationI
 	}
 	fromAssociations := feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID)
 	for _, row := range rows {
-		hashes[row.ID], others[row.ID] = row.ConfigurationHash, row.AssociationConfigurationHash
+		column := memberConfiguration{hash: row.ConfigurationHash, typedHash: row.TypedConfigurationHash}
+		association := memberConfiguration{hash: row.AssociationConfigurationHash, typedHash: row.TypedAssociationConfigurationHash}
+		hashes[row.ID], others[row.ID] = column, association
 		if fromAssociations {
-			hashes[row.ID], others[row.ID] = row.AssociationConfigurationHash, row.ConfigurationHash
+			hashes[row.ID], others[row.ID] = association, column
 		}
 	}
 	return hashes, others, nil
