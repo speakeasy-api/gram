@@ -185,6 +185,9 @@ TUNNEL_GATEWAY_FORWARD_ADDR = ":{{env.TUNNEL_GATEWAY_FORWARD_PORT}}"
 GRAM_AUTHZ_ISSUER_URL = "http://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}"
 ## Remapped per worktree; provider and token are written by zero:code-mode.
 GRAM_CODE_RUNNER_PORT = "18081"
+## Optional fixture ports are remapped with the rest of each worktree's ports.
+GRAM_MCP_FIXTURE_PORT = "18750"
+GRAM_MCP_FIXTURE_CLIENT_PORT = "18751"
 GRAM_CODE_RUNTIME_URL = "http://127.0.0.1:{{env.GRAM_CODE_RUNNER_PORT}}"
 OPENROUTER_DEV_KEY = "unset"
 ## Evaluate local sigint messages when the platform inference key is configured.
