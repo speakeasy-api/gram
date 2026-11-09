@@ -187,6 +187,14 @@ describe("catalogInstances", () => {
     ).toEqual([origin, attached]);
   });
 
+  it("ignores an attachment slug that belongs to another entry", () => {
+    const attached = { id: "a", toolset: { externalMcpSlugs: ["github"] } };
+    const otherEntry = { slug: "github", registryServerSpecifier: "other/mcp" };
+    expect(
+      catalogInstances(github, [attached], noUrls, noUrls, [otherEntry]),
+    ).toEqual([]);
+  });
+
   it("does not match a server whose remote is no longer listed", () => {
     const orphan = { id: "a", remoteMcpServerId: "gone" };
     expect(catalogInstances(github, [orphan], noUrls, noUrls, [])).toEqual([]);

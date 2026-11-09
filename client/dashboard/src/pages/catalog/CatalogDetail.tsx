@@ -405,8 +405,8 @@ function ExistingServers({
       </div>
       <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto pb-2">
         {servers.map(({ server, kind }) => (
-          <div key={server.id} className="w-80 shrink-0 snap-start">
-            <MCPServerCard server={server} kind={kind} />
+          <div key={server.id} className="w-md max-w-full shrink-0 snap-start">
+            <MCPServerCard server={server} kind={kind} showAddressAndStatus />
           </div>
         ))}
       </div>
