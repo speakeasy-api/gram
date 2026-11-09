@@ -199,10 +199,14 @@ type memberConnectionError struct {
 
 func (f memberConnectionError) Unwrap() error { return f.error }
 
-// recordHostedToolsCallRefusal records a refused hosted tools/call. Any other error writes nothing.
-func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcpInputs, err error) {
-	code, ok := toolsCallRefusal(err)
-	if !ok || payload.mcpServerID == nil {
+// recordHostedToolsCallOutcome records a refused hosted tools/call or one whose provider rejected
+// its credential. Any other outcome writes nothing.
+func (s *Service) recordHostedToolsCallOutcome(ctx context.Context, payload *mcpInputs, err error) {
+	code, refused := toolsCallRefusal(err)
+	if !refused {
+		code = payload.upstreamRejection
+	}
+	if code == (mcpconnectionattempts.Code{}) || payload.mcpServerID == nil {
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))

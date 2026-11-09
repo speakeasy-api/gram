@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
@@ -656,7 +657,85 @@ func handleToolsCall(
 		return nil, failure
 	}
 
+	if plan.Kind == gateway.ToolKindHTTP {
+		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, plan.HTTP, toolCallEnv, payload.mcpEnvVariables, payload.oauthTokenInputs)
+	}
 	return bs, nil
+}
+
+// httpToolRejectionHappened says who fixes an HTTP tool call its provider answered with 401 or 403.
+// The zero code means there is nothing to record.
+func httpToolRejectionHappened(status int, plan *gateway.HTTPToolCallPlan, env toolconfig.ToolCallEnv, callerVariables map[string]string, tokens []oauthTokenInputs) mcpconnectionattempts.Code {
+	if plan == nil || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+		return mcpconnectionattempts.Code{}
+	}
+	code, _ := remotemcp.UpstreamFailureHappened(status, httpToolCredentialSent(plan, env, callerVariables, tokens), false, "")
+	return code
+}
+
+// httpToolCredentialSent reports whose credential an HTTP tool call sent. A value the caller
+// passed in a request header is the caller's own and counts as none.
+func httpToolCredentialSent(plan *gateway.HTTPToolCallPlan, env toolconfig.ToolCallEnv, callerVariables map[string]string, tokens []oauthTokenInputs) remotemcp.UpstreamCredentialSent {
+	merged := env.Merged()
+	fromCaller := toolconfig.NewCaseInsensitiveEnv()
+	for k, v := range callerVariables {
+		fromCaller.Set(k, v)
+	}
+	configured := func(key string) bool {
+		return merged.Get(key) != "" && fromCaller.Get(key) == ""
+	}
+
+	var sent remotemcp.UpstreamCredentialSent
+	for _, security := range plan.Security {
+		if token, ok := coveringOAuthToken(security, tokens); ok {
+			if token.shared {
+				sent.Self = true
+			} else {
+				sent.Attached = true
+			}
+			continue
+		}
+		for _, envVar := range security.EnvVariables {
+			if !configured(envVar) {
+				continue
+			}
+			// Client credentials are the organization's own sign-in, not a static key.
+			if slices.Contains(security.OAuthTypes, "client_credentials") && strings.Contains(envVar, "CLIENT_SECRET") {
+				sent.Self = true
+			} else {
+				sent.Configured = true
+			}
+		}
+	}
+	if env.SystemEnv != nil {
+		for key := range env.SystemEnv.All() {
+			if strings.EqualFold(toolconfig.ToHTTPHeader(key), "Authorization") {
+				sent.Configured = true
+			}
+		}
+	}
+	return sent
+}
+
+// coveringOAuthToken is the token dispatch writes into the scheme's access token, the last one that covers it.
+func coveringOAuthToken(security *gateway.HTTPToolSecurity, tokens []oauthTokenInputs) (oauthTokenInputs, bool) {
+	var covering oauthTokenInputs
+	found := false
+	if !slices.ContainsFunc(security.EnvVariables, func(envVar string) bool { return strings.HasSuffix(envVar, "ACCESS_TOKEN") }) {
+		return covering, false
+	}
+	for _, token := range tokens {
+		if oauthTokenCovers(security, token) {
+			covering, found = token, true
+		}
+	}
+	return covering, found && covering.Token != ""
+}
+
+// oauthTokenCovers reports whether dispatch writes token into the scheme's access token variable.
+func oauthTokenCovers(security *gateway.HTTPToolSecurity, token oauthTokenInputs) bool {
+	return (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") &&
+		(len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key))
 }
 
 // toolCallRejection answers a failed tool execution that the caller has to fix
@@ -738,7 +817,7 @@ func resolveUserConfiguration(
 	if plan != nil && plan.Kind == gateway.ToolKindHTTP {
 		for _, security := range plan.HTTP.Security {
 			for _, token := range payload.oauthTokenInputs {
-				if (slices.Contains(security.OAuthTypes, "authorization_code") || security.Type.Value == "openIdConnect") && (len(token.securityKeys) == 0 || slices.Contains(token.securityKeys, security.Key)) {
+				if oauthTokenCovers(security, token) {
 					for _, envVar := range security.EnvVariables {
 						if strings.HasSuffix(envVar, "ACCESS_TOKEN") {
 							userConfig.Set(envVar, token.Token)

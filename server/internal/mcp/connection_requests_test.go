@@ -878,6 +878,117 @@ func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 	require.Len(t, rec.Rows(), 1)
 }
 
+// A hosted HTTP tool whose provider rejects the saved key writes one row naming the admin; the caller still gets the tool's error.
+func TestHostedToolProviderRejectionRecords(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		status int
+		want   mcpconnectionattempts.Code
+	}{
+		{name: "unauthorized", status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "forbidden", status: http.StatusForbidden, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "served", status: http.StatusOK},
+		{name: "not found", status: http.StatusNotFound},
+		{name: "server error", status: http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-reject-"+uuid.NewString()[:8])
+			ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+			upstream := statusUpstream(t, tc.status)
+			ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+
+			resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", nil)
+			require.NoError(t, err)
+			text, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+			require.Equal(t, tc.status != http.StatusOK, isError)
+			require.Contains(t, text, "upstream says "+http.StatusText(tc.status))
+
+			if tc.want == (mcpconnectionattempts.Code{}) {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// A key the caller sent in a request header is the caller's own, so its rejection writes nothing.
+func TestHostedToolCallerKeyRejectionRecordsNothing(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-caller-key-"+uuid.NewString()[:8])
+	ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := statusUpstream(t, http.StatusUnauthorized)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	resp, err := servePublicHTTP(t, t.Context(), ti, ts.McpSlug.String, makeToolsCallBody("test_tool"), "", map[string]string{"Mcp-Test-Api-Key": "caller-key"})
+	require.NoError(t, err)
+	_, isError := metaToolResultText(t, decodeRPCResponse(t, resp))
+	require.True(t, isError)
+	rec.RequireNothing()
+}
+
+// A hosted gateway member whose provider rejects the saved key writes one row for that member.
+func TestGatewayHostedToolProviderRejectionRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "rejecting", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := statusUpstream(t, http.StatusForbidden)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, slug, "", member.slug+"--test_tool"))
+	require.True(t, isError)
+	require.Contains(t, text, "upstream says Forbidden")
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
+// statusUpstream answers every request with status and a short text body.
+func statusUpstream(t *testing.T, status int) *httptest.Server {
+	t.Helper()
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte("upstream says " + http.StatusText(status)))
+	}))
+	t.Cleanup(upstream.Close)
+	return upstream
+}
+
+// savedKeyEnv serves vars as the admin-set system environment.
+type savedKeyEnv struct {
+	toolconfig.EnvironmentLoader
+
+	vars map[string]string
+}
+
+func (e savedKeyEnv) LoadSystemEnv(context.Context, uuid.UUID, uuid.UUID, string, string) (*toolconfig.CaseInsensitiveEnv, error) {
+	env := toolconfig.NewCaseInsensitiveEnv()
+	for k, v := range e.vars {
+		env.Set(k, v)
+	}
+	return env, nil
+}
+
 // failingSystemEnv fails the security check's system environment read.
 type failingSystemEnv struct{ toolconfig.EnvironmentLoader }
 

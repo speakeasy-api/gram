@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -371,6 +372,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
+	if err == nil && inputs.upstreamRejection != (mcpconnectionattempts.Code{}) {
+		s.recordMemberFailure(ctx, gate, member, inputs.upstreamRejection)
+	}
 	if err != nil {
 		if code, ok := toolsCallRefusal(err); ok {
 			s.recordMemberFailure(ctx, gate, member, code)
@@ -597,6 +601,7 @@ func (s *Service) buildMemberDispatch(
 		identityCoverageRecorded: false,
 		toolSelection:            nil,
 		skillsOverMCP:            nil,
+		upstreamRejection:        mcpconnectionattempts.Code{},
 	}
 	return toolset, hosting, inputs, nil
 }

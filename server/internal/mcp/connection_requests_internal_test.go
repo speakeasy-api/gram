@@ -21,6 +21,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -38,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/tunnel/route"
@@ -329,7 +331,7 @@ func TestCallerSubjectPreservesAuthenticatedAgent(t *testing.T) {
 			hosted := mcpconnectionattemptstest.New(t)
 			service := &Service{connections: hosted.Recorder}
 			serverID := uuid.New()
-			service.recordHostedToolsCallRefusal(ctx, &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID}, errRiskPolicyDenied)
+			service.recordHostedToolsCallOutcome(ctx, &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID}, errRiskPolicyDenied)
 			hostedRow := hosted.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodePolicyBlocked)
 			require.Equal(t, urn.NewAgentSubject(agent).String(), hostedRow.SubjectURN)
 
@@ -590,4 +592,83 @@ func TestHostedMemberCredentialLoadFailureRecordsOutcome(t *testing.T) {
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInternalError)
 	require.Equal(t, member.serverID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1)
+}
+
+// A hosted HTTP tool's 401 or 403 names whose credential the provider refused; anything else writes nothing.
+func TestHTTPToolRejectionHappened(t *testing.T) {
+	t.Parallel()
+
+	apiKey := &gateway.HTTPToolSecurity{Key: "api_key", Type: gateway.NullString{Value: "apiKey", Valid: true}, EnvVariables: []string{"API_KEY"}}
+	signIn := &gateway.HTTPToolSecurity{Key: "oauth", Type: gateway.NullString{Value: "oauth2", Valid: true}, OAuthTypes: []string{"authorization_code"}, EnvVariables: []string{"OAUTH_ACCESS_TOKEN"}}
+	clientCredentials := &gateway.HTTPToolSecurity{Key: "machine", Type: gateway.NullString{Value: "oauth2", Valid: true}, OAuthTypes: []string{"client_credentials"}, EnvVariables: []string{"MACHINE_CLIENT_ID", "MACHINE_CLIENT_SECRET"}}
+	none := mcpconnectionattempts.Code{}
+
+	for _, tc := range []struct {
+		name     string
+		status   int
+		security []*gateway.HTTPToolSecurity
+		system   map[string]string
+		user     map[string]string
+		caller   map[string]string
+		tokens   []oauthTokenInputs
+		want     mcpconnectionattempts.Code
+		who      mcpconnectionattempts.WhoFixes
+	}{
+		{name: "person's sign-in", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "person"}, tokens: []oauthTokenInputs{{Token: "person"}}, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "shared sign-in", status: http.StatusForbidden, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "org"}, tokens: []oauthTokenInputs{{Token: "org", shared: true}}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "client credentials", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{clientCredentials}, system: map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "system key", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "environment key", status: http.StatusForbidden, security: []*gateway.HTTPToolSecurity{apiKey}, user: map[string]string{"API_KEY": "key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "system authorization header", status: http.StatusUnauthorized, system: map[string]string{"AUTHORIZATION": "Bearer key"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "caller's own key", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, user: map[string]string{"API_KEY": "caller"}, caller: map[string]string{"api_key": "caller"}, want: none},
+		{name: "no credential", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{apiKey}, want: none},
+		{name: "token for another scheme", status: http.StatusUnauthorized, security: []*gateway.HTTPToolSecurity{signIn}, tokens: []oauthTokenInputs{{Token: "person", securityKeys: []string{"other"}}}, want: none},
+		{name: "served", status: http.StatusOK, security: []*gateway.HTTPToolSecurity{signIn}, user: map[string]string{"OAUTH_ACCESS_TOKEN": "person"}, tokens: []oauthTokenInputs{{Token: "person"}}, want: none},
+		{name: "not found", status: http.StatusNotFound, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: none},
+		{name: "rate limited", status: http.StatusTooManyRequests, security: []*gateway.HTTPToolSecurity{apiKey}, system: map[string]string{"API_KEY": "key"}, want: none},
+		{name: "server error", status: http.StatusInternalServerError, security: []*gateway.HTTPToolSecurity{signIn}, tokens: []oauthTokenInputs{{Token: "person"}}, want: none},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := toolconfig.ToolCallEnv{SystemEnv: toolconfig.NewCaseInsensitiveEnv(), UserConfig: toolconfig.NewCaseInsensitiveEnv()}
+			for k, v := range tc.system {
+				env.SystemEnv.Set(k, v)
+			}
+			for k, v := range tc.user {
+				env.UserConfig.Set(k, v)
+			}
+			got := httpToolRejectionHappened(tc.status, &gateway.HTTPToolCallPlan{Security: tc.security}, env, tc.caller, tc.tokens)
+			require.Equal(t, tc.want, got)
+			if tc.want == none {
+				return
+			}
+			meaning, ok := mcpconnectionattempts.MeaningOf(got.String())
+			require.True(t, ok)
+			require.Equal(t, tc.who, meaning.WhoFixes)
+		})
+	}
+}
+
+// A provider's rejection writes one row for a hosted server; a refusal keeps its own code.
+func TestRecordHostedToolsCallOutcome(t *testing.T) {
+	t.Parallel()
+
+	serverID := uuid.New()
+	payload := func(rejection mcpconnectionattempts.Code) *mcpInputs {
+		return &mcpInputs{organizationID: "org", projectID: uuid.New(), mcpServerID: &serverID, upstreamRejection: rejection}
+	}
+
+	rejected := mcpconnectionattemptstest.New(t)
+	(&Service{connections: rejected.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.CodeStaticKeyRejected), nil)
+	rejected.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Len(t, rejected.Rows(), 1)
+
+	served := mcpconnectionattemptstest.New(t)
+	(&Service{connections: served.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.Code{}), nil)
+	served.RequireNothing()
+
+	failed := mcpconnectionattemptstest.New(t)
+	(&Service{connections: failed.Recorder}).recordHostedToolsCallOutcome(t.Context(), payload(mcpconnectionattempts.Code{}), errors.New("tool execution failed"))
+	failed.RequireNothing()
 }
