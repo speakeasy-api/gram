@@ -84,3 +84,17 @@ func TestDirectConsentPickDoesNotBuildCardsForInapplicableEndpoints(t *testing.T
 		})
 	}
 }
+
+// A direct server with one healthy and one outage service, and no preference, defaults to the healthy one.
+func TestDirectConsentPickSkipsAnOutageServiceWithoutAPreference(t *testing.T) {
+	t.Parallel()
+	serverID := uuid.New()
+	healthy, outage := uuid.New(), uuid.New()
+	endpoint := &ResolvedMcpEndpoint{McpServerID: validUUID(serverID)}
+	cards := []remoteSessionCard{
+		{ClientID: outage.String(), Connected: true, Unavailable: true},
+		{ClientID: healthy.String(), Connected: true},
+	}
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: healthy}, chooseConsentUpstreamClientPicks(endpoint, nil, cards, nil))
+	require.Equal(t, map[uuid.UUID]uuid.UUID{serverID: outage}, chooseConsentUpstreamClientPicks(endpoint, nil, cards, map[uuid.UUID]uuid.UUID{serverID: outage}), "a preference still picks the outage service")
+}

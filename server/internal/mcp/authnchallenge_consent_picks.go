@@ -48,6 +48,7 @@ func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []m
 	picks := map[uuid.UUID]uuid.UUID{}
 	pick := func(serverID uuid.UUID, candidates []remoteSessionCard) {
 		want, hasPreference := preferred[serverID]
+		var healthy []uuid.UUID
 		for _, card := range candidates {
 			clientID, err := uuid.Parse(card.ClientID)
 			if err != nil {
@@ -57,6 +58,13 @@ func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []m
 				picks[serverID] = clientID
 				return
 			}
+			if cardStatus(card) != gatewayServerUnavailable {
+				healthy = append(healthy, clientID)
+			}
+		}
+		// With no preference to follow, the one service not in an outage is the default.
+		if len(healthy) == 1 {
+			picks[serverID] = healthy[0]
 		}
 	}
 	switch {
