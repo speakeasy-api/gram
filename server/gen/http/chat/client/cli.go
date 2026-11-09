@@ -834,6 +834,79 @@ func BuildListSourcesPayload(chatListSourcesSessionToken string, chatListSources
 	return v, nil
 }
 
+// BuildCountByUserPayload builds the payload for the chat countByUser endpoint
+// from CLI flags.
+func BuildCountByUserPayload(chatCountByUserFrom string, chatCountByUserTo string, chatCountByUserLimit string, chatCountByUserSessionToken string, chatCountByUserProjectSlugInput string, chatCountByUserChatSessionsToken string) (*chat.CountByUserPayload, error) {
+	var err error
+	var from *string
+	{
+		if chatCountByUserFrom != "" {
+			from = &chatCountByUserFrom
+			err = goa.MergeErrors(err, goa.ValidateFormat("from", *from, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var to *string
+	{
+		if chatCountByUserTo != "" {
+			to = &chatCountByUserTo
+			err = goa.MergeErrors(err, goa.ValidateFormat("to", *to, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if chatCountByUserLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(chatCountByUserLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if chatCountByUserSessionToken != "" {
+			sessionToken = &chatCountByUserSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatCountByUserProjectSlugInput != "" {
+			projectSlugInput = &chatCountByUserProjectSlugInput
+		}
+	}
+	var chatSessionsToken *string
+	{
+		if chatCountByUserChatSessionsToken != "" {
+			chatSessionsToken = &chatCountByUserChatSessionsToken
+		}
+	}
+	v := &chat.CountByUserPayload{}
+	v.From = from
+	v.To = to
+	v.Limit = limit
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v, nil
+}
+
 // BuildListSessionLinksPayload builds the payload for the chat
 // listSessionLinks endpoint from CLI flags.
 func BuildListSessionLinksPayload(chatListSessionLinksChatIds string, chatListSessionLinksSessionToken string, chatListSessionLinksProjectSlugInput string, chatListSessionLinksChatSessionsToken string) (*chat.ListSessionLinksPayload, error) {

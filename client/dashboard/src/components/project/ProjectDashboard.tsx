@@ -19,6 +19,8 @@ import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { chatCountByUser } from "@gram/client/funcs/chatCountByUser";
+import { unwrapAsync } from "@gram/client/types/fp";
 import type { QueryMeasures } from "@gram/client/models/components/querymeasures.js";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { formatPlatform } from "@/lib/formatPlatform";
@@ -169,34 +171,55 @@ export function ProjectDashboard(): JSX.Element {
       }));
   }, [rankableUserRows, memberByEmail]);
 
-  // Most Agent Sessions by User ranks the same per-email rows by distinct
-  // agent sessions (total_chats = unique gen_ai.conversation.id). Names
-  // resolve via the members list; group keys are emails, so raw auth IDs
-  // never surface.
+  // Session counts come from the captured chats in Postgres (chat.countByUser),
+  // not telemetry conversation ids: the card and the Sessions tile drill into
+  // the Agent Sessions list, and the endpoint shares that list's population
+  // and visibility so the numbers line up. Telemetry also carries ids for
+  // sessions that were never captured (OTel-only clients, Cursor usage
+  // polling, LiteLLM per-request ids), which made the counts disagree.
+  const { data: sessionCountsData, isPending: isSessionCountsPending } =
+    useQuery({
+      queryKey: [
+        "project",
+        "sessionCountsByUser",
+        orgSlug,
+        projectSlug,
+        from.toISOString(),
+        to.toISOString(),
+      ],
+      queryFn: () =>
+        unwrapAsync(
+          chatCountByUser(client, {
+            from,
+            to,
+            limit: 6,
+            gramProject: projectSlug,
+          }),
+        ),
+      enabled: logsEnabled && !!projectSlug && hasHookData,
+      placeholderData: keepPreviousData,
+      throwOnError: false,
+    });
+
+  // Sessions without a Speakeasy user (external users, agent actors) count
+  // toward the total but are not ranked.
   const topUsersBySessions = useMemo(() => {
-    return [...rankableUserRows]
-      .filter((r) => r.measures.totalChats > 0)
-      .sort((a, b) => b.measures.totalChats - a.measures.totalChats)
+    return (sessionCountsData?.users ?? [])
+      .filter((u) => u.userId !== "" && u.count > 0)
       .slice(0, 5)
-      .map((r) => {
-        const member = memberByEmail.get(r.groupValue);
+      .map((u) => {
+        const member = u.email ? memberByEmail.get(u.email) : undefined;
         return {
-          userId: r.groupValue,
-          name: member?.name ?? r.groupValue,
-          initialsSource: r.groupValue,
-          sessions: r.measures.totalChats,
+          userId: u.userId,
+          email: u.email,
+          name: member?.name || u.displayName || u.email || u.userId,
+          initialsSource: u.email || u.userId,
+          sessions: u.count,
         };
       });
-  }, [rankableUserRows, memberByEmail]);
+  }, [sessionCountsData, memberByEmail]);
 
-  // Total agent sessions = sum of per-user distinct sessions. Each session id
-  // (gen_ai.conversation.id) belongs to a single user, so summing per-user
-  // counts gives the project-wide distinct-session total. Includes the
-  // unattributed '' bucket and the "Other" rollup.
-  const totalSessions = (usageByUserRows ?? []).reduce(
-    (sum, r) => sum + r.measures.totalChats,
-    0,
-  );
+  const totalSessions = sessionCountsData?.total ?? 0;
 
   // Total Spend sums per-user cost across every row (including '' and
   // "Other"), matching the Costs page's figure for this project since both
@@ -452,7 +475,9 @@ export function ProjectDashboard(): JSX.Element {
                     tooltip="Distinct external end users that made MCP tool calls in the selected period."
                   />
                 )}
-                {modePending || isOverviewPending ? (
+                {modePending ||
+                isOverviewPending ||
+                (hasHookData && isSessionCountsPending) ? (
                   <StatTileSkeleton />
                 ) : hasHookData ? (
                   <StatTile
@@ -460,7 +485,7 @@ export function ProjectDashboard(): JSX.Element {
                     value={totalSessions}
                     tone="information"
                     icon="message-circle"
-                    tooltip="Distinct agent sessions across project members in the selected period."
+                    tooltip="Agent sessions captured in this project in the selected period. Matches the Agent Sessions list."
                   />
                 ) : (
                   <StatTile
@@ -606,7 +631,7 @@ export function ProjectDashboard(): JSX.Element {
                         </CardActions>
                       }
                     >
-                      {isTopUsersLoading ? (
+                      {isTopUsersLoading || isSessionCountsPending ? (
                         <SkeletonList />
                       ) : topUsersBySessions.length === 0 ? (
                         <EmptyState message="No session activity recorded" />
@@ -632,9 +657,7 @@ export function ProjectDashboard(): JSX.Element {
                                 <p className="truncate text-sm font-medium">
                                   <IdentityLink
                                     identifier={
-                                      user.userId
-                                        ? { email: user.userId }
-                                        : null
+                                      user.email ? { email: user.email } : null
                                     }
                                   >
                                     {user.name}

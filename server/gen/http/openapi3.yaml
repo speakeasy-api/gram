@@ -27157,6 +27157,131 @@ paths:
             x-speakeasy-name-override: search
             x-speakeasy-react-hook:
                 name: SearchBusinessMemories
+    /rpc/chat.countByUser:
+        get:
+            description: Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.
+            operationId: countChatsByUser
+            parameters:
+                - allowEmptyValue: true
+                  description: Count chats last active after this timestamp (ISO 8601)
+                  in: query
+                  name: from
+                  schema:
+                    description: Count chats last active after this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Count chats last active before this timestamp (ISO 8601)
+                  in: query
+                  name: to
+                  schema:
+                    description: Count chats last active before this timestamp (ISO 8601)
+                    format: date-time
+                    type: string
+                - allowEmptyValue: true
+                  description: Maximum number of users to return
+                  in: query
+                  name: limit
+                  schema:
+                    default: 10
+                    description: Maximum number of users to return
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+                - allowEmptyValue: true
+                  description: Chat Sessions token header
+                  in: header
+                  name: Gram-Chat-Session
+                  schema:
+                    description: Chat Sessions token header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CountChatsByUserResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - chat_sessions_token_header_Gram-Chat-Session: []
+            summary: countByUser chat
+            tags:
+                - chat
+            x-speakeasy-name-override: countByUser
+            x-speakeasy-react-hook:
+                name: CountChatsByUser
+                type: query
     /rpc/chat.creditUsage:
         get:
             description: Get the total number of chat credits and usage for the current billing period
@@ -103566,6 +103691,27 @@ components:
                 - tool_calls
                 - tool_results
                 - risk_only
+        ChatUserSessionCount:
+            type: object
+            properties:
+                count:
+                    type: integer
+                    description: Number of sessions; equals the chat.list total when filtered to this user
+                    format: int64
+                display_name:
+                    type: string
+                    description: The user's display name, empty when unknown
+                email:
+                    type: string
+                    description: The user's email, empty when unknown
+                user_id:
+                    type: string
+                    description: Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).
+            required:
+                - user_id
+                - email
+                - display_name
+                - count
         CheckAgentPolicyGrantsForm:
             type: object
             properties:
@@ -104068,6 +104214,21 @@ components:
                     description: The confirmed servers with their new state.
             required:
                 - servers
+        CountChatsByUserResult:
+            type: object
+            properties:
+                total:
+                    type: integer
+                    description: Total sessions across all users; equals the unfiltered chat.list total for the same range
+                    format: int64
+                users:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatUserSessionCount'
+                    description: Users ranked by session count, highest first, truncated to the requested limit
+            required:
+                - users
+                - total
         CountRemoteSessionsResult:
             type: object
             properties:
