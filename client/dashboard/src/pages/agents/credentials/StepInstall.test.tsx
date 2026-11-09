@@ -134,9 +134,24 @@ it("tells an OpenClaw user how to update, reinstall or uninstall", () => {
   );
 
   // Folded away on the one-line tab, where the setup command is.
-  expect(
-    screen.getByText("Need to update, reinstall or uninstall on OpenClaw?"),
-  ).toBeTruthy();
+  const summary = screen.getByText(
+    "Need to update, reinstall or uninstall on OpenClaw?",
+  );
+  const disclosure = summary.closest("details");
+  expect(disclosure?.open).toBe(false);
+  fireEvent.click(summary);
+  expect(disclosure?.open).toBe(true);
+  const guidance = disclosure?.textContent ?? "";
+  // Updating is running a new setup command, which needs a release that can
+  // replace the gateway entry.
+  expect(guidance).toContain(
+    "does not update the Speakeasy hooks plugin on its own",
+  );
+  expect(guidance).toContain("update OpenClaw first");
+  // The uninstall runs in a terminal; a container is restarted instead.
+  expect(guidance).toContain("in a terminal where OpenClaw runs");
+  expect(guidance).toContain("restart the");
+  expect(guidance).toContain("container instead of running");
   fireEvent.click(
     screen.getByRole("button", { name: "Copy Uninstall from OpenClaw" }),
   );
