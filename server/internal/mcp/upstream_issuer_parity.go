@@ -202,6 +202,10 @@ func upstreamIssuerSource(fromAssociations bool, keys upstreamIssuerKeys) string
 	return upstreamIssuerSourceColumn
 }
 
+// resolverModeUnknown labels a comparison whose organization's resolver mode
+// could not be read.
+const resolverModeUnknown = "unknown"
+
 // resolverModeLabel is the recorded name of an organization's typed auth
 // client resolver mode.
 func resolverModeLabel(mode feature.AuthClientResolverMode) string {
@@ -268,7 +272,7 @@ func (s *Service) recordUpstreamIssuerParity(ctx context.Context, logger *slog.L
 		Site:         p.site,
 		Outcome:      string(p.outcome),
 		Source:       upstreamIssuerSource(p.fromAssociations, p.keys),
-		ResolverMode: resolverModeLabel(feature.AuthClientResolver(ctx, s.features, p.organizationID)),
+		ResolverMode: s.resolverModeLabelFor(ctx, p.organizationID),
 	})
 	if p.outcome == upstreamIssuerMatch || p.outcome == upstreamIssuerChoice {
 		return
@@ -535,4 +539,14 @@ func reconsentConsenter(state AuthnChallengeState) string {
 		return state.Subject.String()
 	}
 	return state.ID
+}
+
+// resolverModeLabelFor is the recorded name of the organization's resolver
+// mode as requests use it, enforcement included.
+func (s *Service) resolverModeLabelFor(ctx context.Context, organizationID string) string {
+	mode, err := s.authClientMode(ctx, organizationID)
+	if err != nil {
+		return resolverModeUnknown
+	}
+	return resolverModeLabel(mode)
 }
