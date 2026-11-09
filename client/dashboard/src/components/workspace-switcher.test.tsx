@@ -77,26 +77,27 @@ describe("WorkspaceSwitcher", () => {
     it("says who to ask when the member is in no projects", async () => {
       const user = userEvent.setup();
       projects = [];
-      organizations = [{ id: "org_1" }, { id: "org_2" }];
       render(<WorkspaceSwitcher />);
 
       await user.click(screen.getByRole("button", { name: /Acme/ }));
       expect(
         screen.getByText(/Ask an admin to add you to one/).textContent,
       ).toContain("not in any projects in Acme");
+      expect(
+        screen.queryByRole("button", { name: "Switch organization" }),
+      ).toBeNull();
+    });
 
+    it("switches organization for members of several", async () => {
+      const user = userEvent.setup();
+      organizations = [{ id: "org_1" }, { id: "org_2" }];
+      render(<WorkspaceSwitcher />);
+
+      await user.click(screen.getByRole("button", { name: /Acme/ }));
       await user.click(
         screen.getByRole("button", { name: "Switch organization" }),
       );
       expect(navigate).toHaveBeenCalledWith("/switch-org");
-    });
-
-    it("renders the org name only when there is nothing to switch to", () => {
-      projects = [];
-      render(<WorkspaceSwitcher />);
-
-      expect(screen.getByText("Acme")).toBeTruthy();
-      expect(screen.queryByRole("button")).toBeNull();
     });
   });
 });

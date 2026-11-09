@@ -150,15 +150,6 @@ function OrgSwitcher({ className }: { className?: string }): JSX.Element {
     </>
   );
 
-  const rowClass = cn(
-    "flex w-full items-center gap-2 border px-2 py-1.5 text-sm font-medium group-data-[collapsible=icon]:w-auto group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:border-0 group-data-[collapsible=icon]:p-0",
-    className,
-  );
-
-  if (projects.length === 0 && !isMultiOrg) {
-    return <div className={rowClass}>{content}</div>;
-  }
-
   const goTo = (path: string) => {
     setOpen(false);
     void navigate(path);
