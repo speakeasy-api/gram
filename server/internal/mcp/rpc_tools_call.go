@@ -713,24 +713,11 @@ func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
 }
 
-// deepestShareableError is the innermost ShareableError wrapped by err, or err
-// itself. Every ShareableError's public message is written to be client-safe,
-// and the innermost one names the actionable cause.
-func deepestShareableError(err *oops.ShareableError) *oops.ShareableError {
-	deepest := err
-	for inner := errors.Unwrap(error(err)); inner != nil; inner = errors.Unwrap(inner) {
-		if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
-			deepest = innerShareable
-		}
-	}
-	return deepest
-}
-
 // toolCallFailureMessage is what a failed tool call records as its error, on
 // its Tool logs row and its tool event alike: the most specific client-safe
 // message the failure carries.
 func toolCallFailureMessage(failure *oops.ShareableError) string {
-	return deepestShareableError(failure).Error()
+	return oops.Innermost(failure).Error()
 }
 
 // recordToolCallErrorStatus keeps deferred billing and telemetry metadata in

@@ -384,7 +384,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
 				invocation.rejected = true
 			}
-			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepestShareableError(shareable).Error())
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, oops.Innermost(shareable).Error())
 			attempt.fail(shareable.HTTPStatus(ctx), message)
 			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
