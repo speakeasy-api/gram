@@ -28,6 +28,8 @@ import { Minus, Server as ServerIcon } from "lucide-react";
 import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { Spinner } from "@/components/ui/Spinner";
+import { MCPServerCard } from "@/components/mcp/MCPServerCard";
+import type { ListedMcpServer } from "@/components/mcp/mcp-server-kind";
 
 // Map of server specifiers to their website URLs
 const SERVER_WEBSITE_MAP: Record<string, string> = {
@@ -75,7 +77,8 @@ export default function CatalogDetail(): JSX.Element {
       throwOnError: false,
     });
   const deployment = deploymentResult?.deployment;
-  const { installState, liveExternalMcp } = useCatalogInstallations();
+  const { installState, liveExternalMcp, instances } =
+    useCatalogInstallations();
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
@@ -131,6 +134,7 @@ export default function CatalogDetail(): JSX.Element {
   const install = server ? installState(server) : "unknown";
   const existingExternalMcp =
     server && install === "added" ? liveExternalMcp(server) : undefined;
+  const existingServers = server ? instances(server) : undefined;
 
   if (isLoading) {
     return (
@@ -369,6 +373,9 @@ export default function CatalogDetail(): JSX.Element {
             </div>
           </div>
         </div>
+        {existingServers && existingServers.length > 0 && (
+          <ExistingServers servers={existingServers} />
+        )}
         <AddServerDialog
           openProviderSetup
           servers={[server]}
@@ -380,6 +387,30 @@ export default function CatalogDetail(): JSX.Element {
         />
       </Page.Body>
     </Page>
+  );
+}
+
+/** The project's servers already created from this entry, one card each. */
+function ExistingServers({
+  servers,
+}: {
+  servers: ListedMcpServer[];
+}): JSX.Element {
+  return (
+    <section className="mt-8">
+      <div className="text-eyebrow mb-3">
+        {servers.length === 1
+          ? "1 server in this project"
+          : `${servers.length} servers in this project`}
+      </div>
+      <div className="flex snap-x snap-mandatory gap-6 overflow-x-auto pb-2">
+        {servers.map(({ server, kind }) => (
+          <div key={server.id} className="w-80 shrink-0 snap-start">
+            <MCPServerCard server={server} kind={kind} />
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
 import {
+  catalogInstances,
   catalogServerInstallState,
   externalMcpSlugFromToolUrn,
   liveCatalogExternalMcp,
@@ -143,5 +144,51 @@ describe("catalogServerInstallState", () => {
         referencedExternalMcpSlugs: new Set(["other"]),
       }),
     ).toBe("not-added");
+  });
+});
+
+describe("catalogInstances", () => {
+  const noUrls = new Map<string, string>();
+
+  it("matches a remote server by endpoint URL", () => {
+    const remote = { id: "a", remoteMcpServerId: "r1" };
+    const other = { id: "b", remoteMcpServerId: "r2" };
+    const urls = new Map([
+      ["r1", "https://api.githubcopilot.com/mcp"],
+      ["r2", "https://example.com/mcp"],
+    ]);
+    expect(catalogInstances(github, [remote, other], urls, noUrls, [])).toEqual(
+      [remote],
+    );
+  });
+
+  it("matches an unproxied server by endpoint URL", () => {
+    const unproxied = { id: "a", unproxiedMcpServerId: "u1" };
+    const urls = new Map([["u1", "https://api.githubcopilot.com/mcp/"]]);
+    expect(catalogInstances(github, [unproxied], noUrls, urls, [])).toEqual([
+      unproxied,
+    ]);
+  });
+
+  it("matches an older install by toolset origin or attachment slug", () => {
+    const origin = {
+      id: "a",
+      toolset: {
+        registrySpecifier: github.registrySpecifier,
+        externalMcpSlugs: [],
+      },
+    };
+    const attached = { id: "b", toolset: { externalMcpSlugs: ["github"] } };
+    const unrelated = { id: "c", toolset: { externalMcpSlugs: ["linear"] } };
+    expect(
+      catalogInstances(github, [origin, attached, unrelated], noUrls, noUrls, [
+        attachment,
+      ]),
+    ).toEqual([origin, attached]);
+  });
+
+  it("does not match a server whose remote is no longer listed", () => {
+    const orphan = { id: "a", remoteMcpServerId: "gone" };
+    expect(catalogInstances(github, [orphan], noUrls, noUrls, [])).toEqual([]);
   });
 });
