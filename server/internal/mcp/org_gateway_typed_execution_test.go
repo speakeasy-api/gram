@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -31,6 +32,16 @@ import (
 // consent grant becomes a runtime session. Selecting one must not widen its catalog.
 func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 	t.Parallel()
+	for _, clientType := range []string{authz.AuthClientTypeRemoteSession, authz.AuthClientTypeEMA} {
+		t.Run(clientType, func(t *testing.T) {
+			t.Parallel()
+			testOrganizationGatewayTypedPersonalConsentExecution(t, clientType)
+		})
+	}
+}
+
+func testOrganizationGatewayTypedPersonalConsentExecution(t *testing.T, clientType string) {
+	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	ac, ok := contextvalues.GetAuthContext(ctx)
@@ -55,13 +66,21 @@ func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 		// No registration is attached to the organization issuer.
 		registration := createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "typed-"+uuid.NewString(), "", nil)
 		require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: ac.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: registration}))
-		client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), Name: "Personal choice", ClientType: authz.AuthClientTypeRemoteSession, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + projectID.String())})
+		client, err := clients.CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: conv.ToNullUUID(projectID), Name: "Personal choice", ClientType: clientType, RemoteSessionClientID: conv.ToNullUUID(registration), ClientAttachmentScope: conv.ToPGText("project:" + projectID.String())})
 		require.NoError(t, err)
+		if clientType == authz.AuthClientTypeEMA {
+			require.NoError(t, authclientfixtures.New(ti.conn).SeedAuthClientEMAFixture(ctx, authclientfixtures.SeedAuthClientEMAFixtureParams{AuthClientID: client.ID, Resource: upstream.url}))
+		}
 		_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: ac.ActiveOrganizationID, McpServerID: serverID, AuthClientID: client.ID})
 		require.NoError(t, err)
-		insertQualifiedRemoteSessionToken(t, ctx, ti, fx.issuerID, registration, fx.subject, token, upstream.url)
+		if clientType == authz.AuthClientTypeRemoteSession {
+			insertQualifiedRemoteSessionToken(t, ctx, ti, fx.issuerID, registration, fx.subject, token, upstream.url)
+		}
 		if i == 1 {
 			selectedClient = client.ID
+			if clientType == authz.AuthClientTypeEMA {
+				ti.service.SetIdentityChainer(&singleUpstreamChainer{issuer: clientRemoteIssuerID(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, registration), upstream: upstream.url, usable: true})
+			}
 		}
 	}
 	client, err := usersessionsrepo.New(ti.conn).CreateUserSessionClient(ctx, usersessionsrepo.CreateUserSessionClientParams{UserSessionIssuerID: fx.issuerID, ClientID: "typed-consent-" + uuid.NewString(), ClientName: "Typed consent", RedirectUris: []string{"http://localhost:3000/callback"}, TokenEndpointAuthMethod: "none"})
@@ -126,7 +145,11 @@ func TestOrganizationGatewayTypedPersonalConsentExecution(t *testing.T) {
 			require.Contains(t, text, "pong from ping")
 		}
 	}
-	upstream.requireToolCallAuth(t, "Bearer selected-personal-token")
+	expectedToken := "selected-personal-token"
+	if clientType == authz.AuthClientTypeEMA {
+		expectedToken = chainedMemberToken
+	}
+	upstream.requireToolCallAuth(t, "Bearer "+expectedToken)
 	upstream.requireNeverCarried(t, "Bearer unselected-personal-token")
 	for _, request := range excluded.journal() {
 		require.NotEqual(t, "tools/call", request.rpcMethod, "excluded catalog tool must never execute")

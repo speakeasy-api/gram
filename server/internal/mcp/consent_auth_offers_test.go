@@ -57,24 +57,21 @@ func TestGatewayOfferCapabilityFollowsServingResolver(t *testing.T) {
 		clientType string
 		edit       func(*row)
 		tunneled   bool
-		associated bool
 		headers    []proxy.ConfiguredHeader
 		supported  bool
 	}{
-		{name: "personal without a sign-in link", clientType: authClientTypeRemoteSession, edit: same, supported: true},
-		{name: "shared without a sign-in link", clientType: authClientTypeServiceAccount, edit: same, supported: true},
+		{name: "personal independent of legacy association", clientType: authClientTypeRemoteSession, edit: same, supported: true},
+		{name: "shared", clientType: authClientTypeServiceAccount, edit: same, supported: true},
 		{name: "static", clientType: authClientTypeStaticCredential, edit: same, supported: true},
 		{name: "unknown type", clientType: "unknown", edit: same},
 		{name: "disabled client", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.ClientEnabled.Bool = false }},
 		{name: "deleted registration", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.RegistrationLive = false }},
 		{name: "detached registration", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.RegistrationAttached = false }},
 		{name: "uncovered credential header", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.CredentialHeadersUncovered = true }},
-		{name: "identity provider without a sign-in link", clientType: authClientTypeEMA, edit: same, associated: true, supported: true},
-		{name: "identity provider not associated", clientType: authClientTypeEMA, edit: same, supported: true},
-		{name: "chaining without a sign-in link", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.RegistrationHasEma = true }, associated: true, supported: true},
-		{name: "stale OAuth headers without a sign-in link", clientType: authClientTypeServiceAccount, edit: func(r *row) { r.HeadersStale = true }, associated: true, supported: true},
+		{name: "identity provider", clientType: authClientTypeEMA, edit: same, supported: true},
+		{name: "chaining", clientType: authClientTypeRemoteSession, edit: func(r *row) { r.RegistrationHasEma = true }, supported: true},
+		{name: "stale OAuth headers", clientType: authClientTypeServiceAccount, edit: func(r *row) { r.HeadersStale = true }, supported: true},
 		{name: "stale static headers", clientType: authClientTypeStaticCredential, edit: func(r *row) { r.HeadersStale = true }, supported: true},
-		{name: "stale static headers beside a registration", clientType: authClientTypeStaticCredential, edit: func(r *row) { r.HeadersStale = true }, associated: true, supported: true},
 		{name: "required caller header", clientType: authClientTypeRemoteSession, edit: same, headers: []proxy.ConfiguredHeader{{Name: "X-Key", ValueFromRequestHeader: "X-Key", IsRequired: true}}},
 		{name: "OAuth replaces authorization", clientType: authClientTypeRemoteSession, edit: same, headers: []proxy.ConfiguredHeader{{Name: "Authorization", ValueFromRequestHeader: "Authorization", IsRequired: true}}, supported: true},
 		{name: "static auxiliary header", clientType: authClientTypeRemoteSession, edit: same, headers: []proxy.ConfiguredHeader{{Name: "X-Key", StaticValue: "configured", IsRequired: true}}, supported: true},
@@ -84,8 +81,7 @@ func TestGatewayOfferCapabilityFollowsServingResolver(t *testing.T) {
 		{name: "tunneled static needs no upstream auth", clientType: authClientTypeStaticCredential, edit: func(r *row) { r.RequiresUpstreamAuth = false }, tunneled: true, supported: true},
 		{name: "tunneled static pending setup", clientType: authClientTypeStaticCredential, edit: func(r *row) { r.RequiresUpstreamAuth = false; r.UpstreamAuthPending = true }, tunneled: true},
 		{name: "identity provider with a deleted registration", clientType: authClientTypeEMA, edit: func(r *row) { r.RegistrationLive = false }},
-		{name: "tunneled static beside a registration", clientType: authClientTypeStaticCredential, edit: same, tunneled: true, associated: true},
-		{name: "tunneled identity provider without a sign-in link", clientType: authClientTypeEMA, edit: same, tunneled: true, associated: true, supported: true},
+		{name: "tunneled identity provider", clientType: authClientTypeEMA, edit: same, tunneled: true, supported: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -112,9 +108,6 @@ func TestGatewayOfferCapabilityFollowsServingResolver(t *testing.T) {
 			if tc.tunneled {
 				member = metaMember{serverID: serverID, tunneledServerID: validUUID(uuid.New())}
 			}
-			if tc.associated {
-				member.associatedClients = map[uuid.UUID]bool{registration: true}
-			}
 			offer := configuredAuthOffer{clients: []upstreamclientsrepo.ListServerConsentAuthClientsRow{{
 				AuthClientID: validUUID(clientID),
 				ClientType:   pgtype.Text{String: tc.clientType, Valid: true},
@@ -134,7 +127,7 @@ func TestGatewayOfferCapabilityDropsDeletedRegistration(t *testing.T) {
 	require.NoError(t, err)
 	f := newAuthClientFixture(t, pool)
 	f.oauthClient(authClientTypeRemoteSession)
-	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID), associatedClients: map[uuid.UUID]bool{f.registration: true}}
+	member := metaMember{serverID: f.serverID, remoteServerID: validUUID(f.remoteID)}
 	capability := func() bool {
 		offers, err := f.service.configuredAuthOffers(t.Context(), f.orgID, []uuid.UUID{f.serverID})
 		require.NoError(t, err)
@@ -162,8 +155,6 @@ func TestGatewayOfferCapabilityTunneledHeaderClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, metadata.selections, [2]uuid.UUID{f.serverID, id})
 	require.False(t, gatewayOfferCapability(member, offers[f.serverID], metadata), "a tunnel cannot send the headers required for upstream authentication")
-	member.associatedClients = map[uuid.UUID]bool{f.registration: true}
-	require.False(t, gatewayOfferCapability(member, offers[f.serverID], metadata))
 }
 
 func TestConfiguredAuthOffersMissingIsNotNoAuth(t *testing.T) {

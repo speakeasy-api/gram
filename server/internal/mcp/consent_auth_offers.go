@@ -50,6 +50,16 @@ func (o configuredAuthOffer) personalRegistrations() []uuid.UUID {
 	return ids
 }
 
+const gatewayConfiguredHeaderValue = "configured"
+
+func gatewayHeaderMetadata(name string, required, secret, stored bool, fromRequest string) proxy.ConfiguredHeader {
+	value := ""
+	if stored {
+		value = gatewayConfiguredHeaderValue
+	}
+	return proxy.ConfiguredHeader{Name: name, IsRequired: required, IsSecret: secret, ValueFromRequestHeader: fromRequest, StaticValue: value}
+}
+
 // Discovery needs header presence and source metadata, so it can avoid decrypting secrets.
 func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID][]proxy.ConfiguredHeader, error) {
 	rows, err := authclientsrepo.New(s.db).ListAuthClientHeaders(ctx, authclientsrepo.ListAuthClientHeadersParams{OrganizationID: organizationID, AuthClientIds: ids})
@@ -58,11 +68,7 @@ func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID 
 	}
 	headers := make(map[uuid.UUID][]proxy.ConfiguredHeader)
 	for _, row := range rows {
-		value := ""
-		if row.HasStoredValue {
-			value = "configured"
-		}
-		headers[row.AuthClientID] = append(headers[row.AuthClientID], proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, IsSecret: row.IsSecret, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value})
+		headers[row.AuthClientID] = append(headers[row.AuthClientID], gatewayHeaderMetadata(row.Name, row.IsRequired, row.IsSecret, row.HasStoredValue, row.ValueFromRequestHeader.String))
 	}
 	return headers, nil
 }
@@ -110,11 +116,7 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 		return metadata, fmt.Errorf("list gateway source header metadata: %w", err)
 	}
 	for _, row := range rows {
-		value := ""
-		if row.HasStoredValue {
-			value = "configured"
-		}
-		header := proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, IsSecret: row.IsSecret, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value}
+		header := gatewayHeaderMetadata(row.Name, row.IsRequired, row.IsSecret, row.HasStoredValue, row.ValueFromRequestHeader.String)
 		metadata.source[row.RemoteMcpServerID] = append(metadata.source[row.RemoteMcpServerID], header)
 		if !proxy.IsCredentialHeader(row.Name, row.IsSecret, row.ValueFromRequestHeader.String != "") {
 			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)

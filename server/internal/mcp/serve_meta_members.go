@@ -400,8 +400,8 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
+		offer, known := offers[member.serverID]
 		if offers != nil && member.backend == metaMemberBackendProxied {
-			offer, known := offers[member.serverID]
 			if !known {
 				continue
 			}
@@ -416,14 +416,14 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			}
 		}
 		var supported, needsOAuth bool
-		if offer, known := offers[member.serverID]; known && !offer.pending && member.backend == metaMemberBackendProxied {
+		if known && !offer.pending && member.backend == metaMemberBackendProxied {
 			// Check detached offers against legacy source headers without decrypting credentials.
 			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
 		} else {
 			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
-		}
-		if err != nil {
-			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
+			if err != nil {
+				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
+			}
 		}
 		if !supported {
 			continue

@@ -32,21 +32,23 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 		required                                bool
 		pending, bound, detached                bool
 		noLegacyAssociation                     bool
+		clientHeader                            string // empty, static, or fromRequest
+		visibleLegacy, visibleEnforced          bool
 	}{
-		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
-		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession},
-		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession},
-		{name: "legacy_pending_bound", pending: true, bound: true},
-		{name: "legacy_pending_unbound", pending: true},
-		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession},
-		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount},
-		{name: "static_offer", clientType: authz.AuthClientTypeStaticCredential},
-		{name: "static_without_legacy_association", clientType: authz.AuthClientTypeStaticCredential, noLegacyAssociation: true},
-		{name: "admin_header_override", clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
-		{name: "authorization_from_token", clientType: authz.AuthClientTypeRemoteSession, header: "Authorization", source: "Authorization", required: true},
-		{name: "required_caller_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", source: "X-API-Key", required: true},
-		{name: "optional_caller_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", source: "X-API-Key"},
-		{name: "static_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", value: "configured-key", required: true},
+		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
+		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
+		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
+		{name: "legacy_pending_bound", pending: true, bound: true, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
+		{name: "legacy_pending_unbound", pending: true, clientHeader: "", visibleLegacy: false, visibleEnforced: false},
+		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
+		{name: "shared_pending", clientType: authz.AuthClientTypeServiceAccount, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
+		{name: "static_offer", clientType: authz.AuthClientTypeStaticCredential, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
+		{name: "static_without_legacy_association", clientType: authz.AuthClientTypeStaticCredential, noLegacyAssociation: true, clientHeader: "static", visibleLegacy: false, visibleEnforced: true},
+		{name: "admin_header_override", clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "static", visibleLegacy: false, visibleEnforced: true},
+		{name: "authorization_from_token", clientType: authz.AuthClientTypeRemoteSession, header: "Authorization", source: "Authorization", required: true, clientHeader: "", visibleLegacy: false, visibleEnforced: true},
+		{name: "required_caller_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", source: "X-API-Key", required: true, clientHeader: "fromRequest", visibleLegacy: false, visibleEnforced: false},
+		{name: "optional_caller_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", source: "X-API-Key", clientHeader: "", visibleLegacy: false, visibleEnforced: true},
+		{name: "static_header", clientType: authz.AuthClientTypeRemoteSession, header: "X-API-Key", value: "configured-key", required: true, clientHeader: "", visibleLegacy: true, visibleEnforced: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -76,12 +78,9 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 				}
 				client, err := clients.CreateAuthClient(ctx, clientParams)
 				require.NoError(t, err)
-				if tc.noLegacyAssociation {
-					require.NoError(t, clients.CreateAuthClientHeader(ctx, authclientsrepo.CreateAuthClientHeaderParams{AuthClientID: client.ID, OrganizationID: ac.ActiveOrganizationID, Name: "X-API-Key", IsRequired: true, Value: conv.ToPGText("configured-client-key")}))
-				}
-				if tc.name == "required_caller_header" || tc.name == "admin_header_override" || tc.name == "detached_required_caller_header" {
+				if tc.clientHeader != "" {
 					header := authclientsrepo.CreateAuthClientHeaderParams{AuthClientID: client.ID, OrganizationID: ac.ActiveOrganizationID, Name: "X-API-Key", IsRequired: true}
-					if tc.name == "admin_header_override" {
+					if tc.clientHeader == "static" {
 						header.Value = conv.ToPGText("configured-client-key")
 					} else {
 						header.ValueFromRequestHeader = conv.ToPGText("X-API-Key")
@@ -135,7 +134,10 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
 					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
 					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
-					visible := (tc.bound && tc.name != "detached_required_caller_header") || tc.name == "static_header" || (!tc.pending && !tc.detached && mode == "enforced" && tc.name != "required_caller_header")
+					visible := tc.visibleLegacy
+					if mode == "enforced" {
+						visible = tc.visibleEnforced
+					}
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())
