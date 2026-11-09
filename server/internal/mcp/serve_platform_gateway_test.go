@@ -6,15 +6,20 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -202,6 +207,13 @@ func TestCallPlatformGatewayTool_ServesWithSeveralOrganizationIssuers(t *testing
 	result := callPlatformGateway(t, ctx, ti, organizationID, fx.subject.ID, metamcp.ToolListServers, map[string]any{})
 
 	require.False(t, result.IsError, result.Content)
+	var listed metamcp.ListServersResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+	slugs := make([]string, 0, len(listed.Servers))
+	for _, server := range listed.Servers {
+		slugs = append(slugs, server.Slug)
+	}
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, slugs)
 }
 
 // One search ranks tools across every server the caller reaches and never
@@ -232,4 +244,35 @@ func TestCallPlatformGatewayTool_SearchesReachableServers(t *testing.T) {
 
 	denied := callPlatformGateway(t, ctx, ti, authCtx.ActiveOrganizationID, fx.subject.ID, mcp.PlatformGatewaySearchTools, map[string]any{"query": "", "server": fx.denied})
 	require.True(t, denied.IsError)
+}
+
+// Platform MCP serves an organization without an organization issuer through
+// the organization gateway, which still leaves out toolsets with Platform
+// tools.
+func TestCallPlatformGatewayTool_WithoutAnIssuerExcludesPlatformToolsets(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, err := usersessionsrepo.New(ti.conn).DeleteOrganizationUserSessionIssuer(ctx, usersessionsrepo.DeleteOrganizationUserSessionIssuerParams{ID: fx.issuerID, OrganizationID: auth.ActiveOrganizationID})
+	require.NoError(t, err)
+	slug := "platform-member-" + uuid.NewString()[:8]
+	toolset := createPublicMCPToolset(t, ctx, ti, auth, slug)
+	_, err = mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: *auth.ProjectID, Name: conv.ToPGText("platform member"), Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPublic})
+	require.NoError(t, err)
+	_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: toolset.ID, Version: 1, ToolUrns: []urn.Tool{urn.NewTool(urn.ToolKindPlatform, "slack", "add_reaction")}, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+	require.NoError(t, err)
+	callerCtx := platformCallerContext(t, ti, auth.ActiveOrganizationID, fx.organizationSlug, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID))
+
+	result := callPlatformGateway(t, callerCtx, ti, auth.ActiveOrganizationID, fx.subject.ID, metamcp.ToolListServers, map[string]any{})
+
+	require.False(t, result.IsError, result.Content)
+	var listed metamcp.ListServersResult
+	require.NoError(t, json.Unmarshal(result.StructuredContent, &listed))
+	slugs := make([]string, 0, len(listed.Servers))
+	for _, server := range listed.Servers {
+		slugs = append(slugs, server.Slug)
+	}
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, slugs)
 }

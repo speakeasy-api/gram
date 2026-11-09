@@ -25,7 +25,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
@@ -99,28 +98,12 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		return platformGatewayResult(marshalToolErrorResult(ctx, logger, id, "Your organization's gateway is not available ("+string(unavailable)+"); ask an organization administrator to review the Organization Gateway on the MCP Servers page.", serverInfoMetaServer))
 	}
 	resolved := NewResolvedMcpEndpointFromMetaMcpServer(endpoint, metaServer, organization.ID, mcproute.OrganizationGateway)
-	hasIssuer := resolved.UserSessionIssuerID != uuid.Nil
-	if hasIssuer {
-		if err := s.RequireUserSessionIssuer(ctx, resolved); err != nil {
-			return nil, fmt.Errorf("load organization gateway issuer: %w", err)
-		}
-	}
 
 	// Platform MCP holds no gateway connection to record credential choices
-	// on, so each proxied member is decided by what it offers the caller once
-	// the organization enforces. Without one organization issuer there are no
-	// issuer-bound clients to route through, so members are decided that way
-	// before enforcement too; their use keeps the connect-equivalent rule
-	// until the organization enforces. With an issuer and no enforcement,
-	// members route through their project's clients bound to it.
-	mode, err := s.authClientMode(ctx, organization.ID)
-	if err != nil {
-		return nil, fmt.Errorf("load upstream auth enforcement: %w", err)
-	}
-	var choices *memberChoices
-	if mode == feature.AuthClientResolverEnforced || !hasIssuer {
-		choices = s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
-	}
+	// on and signs nobody in through an organization issuer, so each proxied
+	// member is decided by what it offers the caller. Before the organization
+	// enforces, use of the decided client keeps the connect-equivalent rule.
+	choices := s.unchosenMemberChoices(resolved, urn.NewUserSubject(userID))
 
 	connectRoot, connectURL := "", ""
 	if root, err := resolved.RootURL(requestorigin.BaseURL(ctx, s.serverURL.String())); err != nil {
@@ -182,20 +165,15 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	return platformGatewayResult(body, err)
 }
 
-// platformGatewayAvailability is orggateway.PlatformAvailability without the
-// organization issuer requirement. That issuer signs people in to the
-// gateway's own URL; Platform MCP has already signed its caller in, so an
-// organization with no organization issuer, or more than one, is served with
-// none.
+// platformGatewayAvailability is the organization gateway's availability as
+// Platform MCP serves it: without an issuer, which only signs people in to the
+// gateway's own URL.
 func platformGatewayAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error) {
-	issuerID, unavailable, err := orggateway.PlatformAvailability(ctx, db, organization)
+	unavailable, err := orggateway.PlatformServed(ctx, db, organization)
 	if err != nil {
 		return uuid.Nil, unavailable, fmt.Errorf("platform gateway availability: %w", err)
 	}
-	if unavailable.LacksSingleIssuer() {
-		return uuid.Nil, orggateway.UnavailabilityNone, nil
-	}
-	return issuerID, unavailable, nil
+	return uuid.Nil, unavailable, nil
 }
 
 // platformGatewayResult unwraps the tools/call result from a JSON-RPC response.
