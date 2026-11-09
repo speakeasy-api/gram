@@ -63,7 +63,7 @@ describe("getAgentPlatforms", () => {
     });
   });
 
-  it("has Cowork admins allow Speakeasy through network egress before the organization instruction", () => {
+  it("has Cowork admins allow Speakeasy through network egress before turning on monitoring", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
@@ -75,11 +75,11 @@ describe("getAgentPlatforms", () => {
     expect(titles.indexOf("Set access for your MCP plugins")).toBe(
       titles.indexOf("Mark the observability plugin as Required") + 1,
     );
-    expect(index).toBe(titles.indexOf("Add the organization instruction") - 1);
-    expect(titles.indexOf("Enable OTEL export")).toBe(
-      titles.indexOf("Add the organization instruction") + 1,
-    );
-    expect(titles.at(-1)).toBe("Check it in a new conversation");
+    expect(titles.indexOf("Enable OTEL export")).toBe(index + 1);
+    expect(titles.at(-1)).toBe("Verify in a new Cowork session");
+    // The Team-only organization instruction lives on its setup card only.
+    expect(titles).not.toContain("Add the organization instruction");
+    expect(titles).not.toContain("Check it in a new conversation");
 
     const step = steps[index]!;
     expect(step.description).toContain(
@@ -90,7 +90,7 @@ describe("getAgentPlatforms", () => {
     expect(step.description).toContain("no other domain is needed");
     expect(step.description).toContain("the plugin does not");
     expect(step.description).toContain(
-      "The organization instruction also needs Code execution",
+      "On Claude Team, the organization instruction also needs Code execution",
     );
     expect(step.helpLink?.url).toBe(
       "https://claude.ai/admin-settings/capabilities",
@@ -101,17 +101,19 @@ describe("getAgentPlatforms", () => {
     ]);
     expect(step.afterFields).toContain("new Cowork sessions only");
 
-    const check = JSON.stringify(steps.at(-1));
-    expect(check).toContain("Agent Sessions");
-    expect(check).toContain("Claude runs a short command before replying");
+    const verify = JSON.stringify(steps.at(-1));
+    expect(verify).toContain("Agent Sessions");
+    expect(verify).not.toContain("Claude runs a short command");
+
+    const { check } = getCoworkTeamSteps("https://app.getgram.ai");
+    expect(check.description).toContain("Agent Sessions");
+    expect(check.description).toContain(
+      "Claude runs a short command before replying",
+    );
   });
 
   it("has Cowork admins paste the organization instruction verbatim", () => {
-    const step = AGENT_PLATFORMS.find(
-      ({ id }) => id === "claude-cowork",
-    )!.setupSteps.find(
-      ({ title }) => title === "Add the organization instruction",
-    )!;
+    const step = getCoworkTeamSteps("https://app.getgram.ai").instruction;
     // Pinned independently of the constant (DNO-1523's wording), so a change
     // to what admins paste fails here first and gets checked in a live Claude
     // Team organization.
@@ -150,16 +152,20 @@ describe("getAgentPlatforms", () => {
     const platformSteps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
-    const { registration, instruction, monitoring, check } = getCoworkTeamSteps(
-      "https://app.getgram.ai",
-    );
-    // The first step is the plan check; the rest is the Team rollout.
+    const { registration, instruction, monitoring, check, verify } =
+      getCoworkTeamSteps("https://app.getgram.ai");
+    // The first step is the plan check; the rest is the Team and Enterprise
+    // rollout. The Team-only organization instruction and its check stay on
+    // their setup card, since these pages can't tell Team from Enterprise.
     expect(platformSteps.slice(1)).toEqual([
       ...registration,
-      instruction,
       monitoring,
-      check,
+      verify,
     ]);
+    expect(platformSteps).not.toContain(instruction);
+    expect(platformSteps).not.toContain(check);
+    expect(verify.description).toContain("Agent Sessions");
+    expect(verify.description).toContain("On Claude Team");
     expect(registration.at(-1)?.title).toBe(
       "Allow Speakeasy in Claude's network egress settings",
     );
