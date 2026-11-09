@@ -32,7 +32,7 @@ func personFix(url string) func() memberFix {
 // project, or fail with err, which it logs.
 func testAgentGate(t *testing.T, err error) metaGateContext {
 	t.Helper()
-	return metaGateContext{agentID: uuid.New(), agentOwner: &agentOwnerReconnect{
+	return metaGateContext{agentID: uuid.New(), agentFix: &agentFixLinks{
 		agent:    func() (string, error) { return "default", err },
 		projects: map[uuid.UUID]string{},
 		link:     func(string) memberFix { return testAgentFix() },
@@ -98,11 +98,6 @@ func TestMemberAuthFailure_AgentAsksAnEditor(t *testing.T) {
 	require.NotContains(t, err.Error(), "owner")
 	_, credential := errors.AsType[memberCredentialError](err)
 	require.True(t, credential, "a person fixes it; a retry does not")
-
-	err = memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: true, fix: fix}, http.StatusUnauthorized)
-	require.ErrorContains(t, err, "this agent has no connection to it")
-	require.ErrorContains(t, err, "and connect it, then retry")
-	require.NotContains(t, err.Error(), "for this user", "the agent's editors open the page, not the agent")
 
 	// Without a page to send anyone to, the generic wording stands.
 	noPage := func() memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
@@ -170,7 +165,7 @@ func TestAgentSharedCredential_IsTheServers(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := gate.agentUnroutedError(member, tc.tokens)
+			err := gate.agentUnroutedError(member, tc.tokens, nil)
 			require.ErrorContains(t, err, tc.want)
 			require.NotContains(t, err.Error(), testAgentSignIn)
 			require.NotContains(t, err.Error(), "re-authentication")
@@ -179,13 +174,12 @@ func TestAgentSharedCredential_IsTheServers(t *testing.T) {
 		})
 	}
 
-	own := gate.agentUnroutedError(member, map[uuid.UUID]remotesessions.UpstreamToken{issuer: personal})
+	own := gate.agentUnroutedError(member, map[uuid.UUID]remotesessions.UpstreamToken{issuer: personal}, nil)
 	require.ErrorContains(t, own, "needs re-authentication", "the agent's own connection is still reconnected at its sign-in step")
 	require.ErrorContains(t, own, testAgentSignIn)
 
-	skipped := gate
-	skipped.skippedClientFailure = agentServerAccessError(member.slug)
-	require.Equal(t, skipped.skippedClientFailure, skipped.agentUnroutedError(member, map[uuid.UUID]remotesessions.UpstreamToken{issuer: personal}), "a client that failed is the cause")
+	skipped := gate.agentReconnectError(gatewayTestMember("maps", "Maps", uuid.New(), uuid.New()))
+	require.Equal(t, skipped, gate.agentUnroutedError(member, map[uuid.UUID]remotesessions.UpstreamToken{issuer: personal}, skipped), "a client left out is the cause")
 
 	// A service account rejected upstream after it was sent names the same admin.
 	rejected := memberAuthFailure(member, memberDial{clientCredential: true, fix: testAgentFix}, http.StatusUnauthorized)
@@ -197,28 +191,27 @@ func TestAgentSharedCredential_IsTheServers(t *testing.T) {
 // member an agent reached with no connection of its own, or only with a
 // service account's token, has nothing to connect there, whether or not
 // the server has a sign-in of its own.
-func TestMemberOAuthSignIn_AgentNeedsAPersonalConnection(t *testing.T) {
+func TestAgentOAuthSignIn_NeedsAPersonalConnection(t *testing.T) {
 	t.Parallel()
 
 	agent := testAgentGate(t, nil)
-	person := metaGateContext{userID: "user-1"}
 	member := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
 	shared := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "shared", CredentialOwner: remotesessions.CredentialOwnerSelf}}
 	own := map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): {Token: "own", CredentialOwner: remotesessions.CredentialOwnerSubject}}
 
-	require.False(t, memberOAuthSignIn(agent, member, true, nil), "an API key server with a sign-in of its own")
-	require.False(t, memberOAuthSignIn(agent, member, true, shared), "a service account")
-	require.True(t, memberOAuthSignIn(agent, member, true, own))
-	require.True(t, memberOAuthSignIn(person, member, true, nil), "a person signs in through the server's sign-in")
-	require.False(t, memberOAuthSignIn(person, member, false, nil))
+	require.False(t, agentOAuthSignIn(member, nil), "an API key server, with or without a sign-in of its own")
+	require.False(t, agentOAuthSignIn(member, shared), "a service account")
+	require.True(t, agentOAuthSignIn(member, own))
 	noAuth := member
 	noAuth.upstreamNoAuth = true
-	require.False(t, memberOAuthSignIn(agent, noAuth, true, own))
+	require.False(t, agentOAuthSignIn(noAuth, own))
 
-	missing := memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: memberOAuthSignIn(agent, member, true, nil), fix: testAgentFix}, http.StatusUnauthorized)
+	missing := memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: agentOAuthSignIn(member, nil), fix: testAgentFix}, http.StatusUnauthorized)
 	require.ErrorContains(t, missing, "Ask an admin of the server's project to add or fix the server's credential")
 	require.NotContains(t, missing.Error(), testAgentSignIn)
-	require.False(t, notConnectedRow(&agent, memberOAuthSignIn(agent, member, true, nil)).Reconnect, "the sign-in step cannot add an API key")
+	row := notConnectedRow(&agent, agentOAuthSignIn(member, nil))
+	require.False(t, row.Reconnect, "the sign-in step cannot add an API key")
+	require.Equal(t, agentDetailConfiguredOnServer, row.Detail, "the row names who fixes it")
 }
 
 // A missing or unusable connection asks for a reconnect; a refused use asks
@@ -236,7 +229,6 @@ func TestWithAgentMemberFix_SeparatesBrokenConnectionsFromRefusedAccess(t *testi
 	require.Equal(t, refusal, none.withAgentMemberFix(member, refusal), "only an agent gateway rewrites it")
 	denied := agentServerAccessError(member.slug)
 	require.Equal(t, denied, none.withAgentMemberFix(member, denied), "only an agent gateway rewrites it")
-	require.Equal(t, refusal.Error(), denied.Error(), "other surfaces read the same as before")
 	require.NoError(t, none.withAgentMemberFix(member, nil))
 	require.ErrorContains(t, none.agentReconnectError(member), "unavailable or not permitted; reconnect it before retrying", "no link keeps the generic wording")
 
@@ -253,7 +245,7 @@ func TestWithAgentMemberFix_SeparatesBrokenConnectionsFromRefusedAccess(t *testi
 
 	// Without a permissions link, a refusal still says reconnecting does not help.
 	noLink := testAgentGate(t, nil)
-	noLink.agentOwner.link = func(string) memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
+	noLink.agentFix.link = func(string) memberFix { return memberFix{agent: true, url: "", accessURL: ""} }
 	unlinked := noLink.withAgentMemberFix(member, denied)
 	require.ErrorContains(t, unlinked, "reconnecting does not change that. Ask someone who can edit this agent to review its permissions in Speakeasy, then retry")
 	require.NotContains(t, unlinked.Error(), "reconnect it before retrying")
@@ -261,7 +253,6 @@ func TestWithAgentMemberFix_SeparatesBrokenConnectionsFromRefusedAccess(t *testi
 	// A server no auth client serves is fixed in the server's auth clients,
 	// not in the agent's permissions.
 	gap := agentServerGapError(member.slug)
-	require.Equal(t, denied.Error(), gap.Error(), "other surfaces read the same as before")
 	unserved := agent.withAgentMemberFix(member, gap)
 	require.ErrorContains(t, unserved, "Ask an admin of the server's project to check the server's auth clients, then retry")
 	require.NotContains(t, unserved.Error(), testAgentAccess)

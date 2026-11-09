@@ -603,11 +603,10 @@ func (s *Service) metaValidationTarget(
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		// Consent probes never call connection_status.
-		connectURL:           "",
-		agentOwner:           nil,
-		skillsOverMCP:        nil,
-		servedCredentials:    nil,
-		skippedClientFailure: nil,
+		connectURL:        "",
+		agentFix:          nil,
+		skillsOverMCP:     nil,
+		servedCredentials: nil,
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

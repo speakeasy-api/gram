@@ -163,6 +163,12 @@ func TestConnectionStatusView_PreservesOutageAndConsentHints(t *testing.T) {
 	require.Contains(t, ConnectionStatusHTML, "hint.hidden = !consented && !needsConsent && needs === 0 && unavailable === 0;")
 	require.Contains(t, ConnectionStatusHTML, `: needs > 0 ? "After signing in, ask again to refresh this list."`)
 	require.Contains(t, ConnectionStatusHTML, `: "Ask again shortly to refresh this list."`)
+	// An agent cannot sign in itself, so with no row to reconnect it is not
+	// told to sign in, and a server not signed in shows who fixes it.
+	agentHint := strings.Index(ConnectionStatusHTML, `: needs > 0 && agent ? "This agent cannot fix these servers itself.`)
+	require.Positive(t, agentHint)
+	require.Less(t, agentHint, strings.Index(ConnectionStatusHTML, `: needs > 0 ? "After signing in`), "the agent branch comes before the caller's")
+	require.Contains(t, ConnectionStatusHTML, `(s.detail ? "Not signed in · " + s.detail : "Not signed in")`)
 }
 
 // An agent cannot sign in itself: its gateway sends it to someone who can
@@ -193,13 +199,21 @@ func TestConnectionStatusText_AgentEditorReconnects(t *testing.T) {
 	require.Contains(t, text, "Ask someone who can edit this agent to check them in Speakeasy")
 	require.NotContains(t, text, "administrator")
 
-	// An agent with nothing a reconnect fixes reads each server's own detail.
+	// An agent with nothing a reconnect fixes reads each server's own detail,
+	// and a server that names no one goes to an admin of its project.
 	result.ConnectURL = link
 	result.Servers[0].Reconnect = false
+	result.Servers = append(result.Servers,
+		ConnectionStatusServer{Slug: "weather", Name: "Weather", Status: SignInNotConnected, Detail: "needs a credential configured for it in Speakeasy; ask an admin of the server's project"},
+		ConnectionStatusServer{Slug: "docs", Name: "Docs", Status: SignInError, Detail: "could not check this server"},
+	)
 	text = result.Text()
-	require.Contains(t, text, "This agent cannot fix these servers itself. Each server above says who can")
+	require.Contains(t, text, "This agent cannot fix these servers itself. Ask whoever each server above names, or an admin of the server's project where it names no one, then call connection_status again to refresh.")
+	require.Contains(t, text, "- Weather: not signed in (needs a credential configured for it in Speakeasy; ask an admin of the server's project)")
+	require.NotContains(t, text, "Each server above says who can")
 	require.NotContains(t, text, link)
 	require.NotContains(t, text, "administrator")
+	result.Servers = result.Servers[:1]
 
 	result.Audience = ConnectionStatusAudienceCaller
 	result.ConnectURL = ""

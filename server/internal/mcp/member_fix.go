@@ -23,6 +23,7 @@ import (
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
@@ -34,7 +35,7 @@ const agentEditSignInStep = "2"
 // agentEditors is who an agent sends to fix its connection. The owner is one
 // of them, but anyone allowed to edit the agent may reconnect a server or
 // change its access, so the message names no one.
-const agentEditors = "someone who can edit this agent"
+const agentEditors = metamcp.AgentEditors
 
 // memberFix is who fixes a member's missing or broken connection, and where.
 // The zero value has no page: an administrator fixes it.
@@ -56,8 +57,8 @@ type memberFix struct {
 // memberFix resolves who fixes member on this gateway, and where. On an
 // agent gateway it reads the agent's project once per request.
 func (g metaGateContext) memberFix(member metaMember) memberFix {
-	if g.agentOwner != nil {
-		return g.agentOwner.forMember(member)
+	if g.agentFix != nil {
+		return g.agentFix.forMember(member)
 	}
 	// The Platform gateway has no authentication here and serves only people.
 	// Agents and workloads elsewhere have no page to reconnect on.
@@ -77,16 +78,16 @@ func (f memberFix) callerURL() string {
 	return f.url
 }
 
-// askEditor is the instruction an agent passes on: who opens the sign-in
-// step, and what they do there.
-func (f memberFix) askEditor(action string) string {
-	return fmt.Sprintf("Ask %s to open %s and %s it, then retry", agentEditors, f.url, action)
+// askEditorToReconnect is the instruction an agent passes on: who opens the
+// sign-in step to reconnect the server.
+func (f memberFix) askEditorToReconnect() string {
+	return fmt.Sprintf("Ask %s to open %s and reconnect it, then retry", agentEditors, f.url)
 }
 
 // memberCallerURL is the page the caller opens to fix member itself. An agent
 // cannot, so on an agent gateway it is empty and its links are never built.
 func (g metaGateContext) memberCallerURL(member metaMember) string {
-	if g.agentOwner != nil {
+	if g.agentFix != nil {
 		return ""
 	}
 	return g.memberFix(member).callerURL()
@@ -122,18 +123,15 @@ func sharedCredentialError(member metaMember, tokens map[uuid.UUID]remotesession
 	return serverCredentialMissing(member.slug)
 }
 
-// memberOAuthSignIn reports whether the caller connects member through an
-// upstream OAuth sign-in of its own. A person signs in through the server's
-// sign-in. An agent reaches a member only with the credentials its own
-// connections resolved, so a member it holds no such connection for, or
-// only a service account's token, offers nothing the agent's sign-in step
-// connects: its credential, if any, is configured on the server.
-func memberOAuthSignIn(gate metaGateContext, member metaMember, serverSignIn bool, tokens map[uuid.UUID]remotesessions.UpstreamToken) bool {
+// agentOAuthSignIn reports whether an agent reached member through an
+// upstream OAuth connection of its own, which its sign-in step connects. An
+// agent reaches a member only with the credentials its own connections
+// resolved, so a member it holds no such connection for, or only a service
+// account's token, offers nothing the sign-in step connects: its credential,
+// if any, is configured on the server.
+func agentOAuthSignIn(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken) bool {
 	if member.upstreamNoAuth {
 		return false
-	}
-	if gate.agentID == uuid.Nil {
-		return serverSignIn || len(tokens) != 0
 	}
 	for _, token := range tokens {
 		if token.CredentialOwner != remotesessions.CredentialOwnerSelf {
@@ -144,12 +142,13 @@ func memberOAuthSignIn(gate metaGateContext, member metaMember, serverSignIn boo
 }
 
 // agentUnroutedError is an agent gateway member none of whose resolved
-// credentials serve it. A client that failed while another stood in for it
-// is the cause; a service account's credential is the server's to fix;
-// otherwise the agent's own connection needs reconnecting.
-func (g metaGateContext) agentUnroutedError(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken) error {
-	if g.skippedClientFailure != nil {
-		return g.skippedClientFailure
+// credentials serve it. skipped, a client left out for a missing connection
+// while another stood in for it, is the cause; a service account's
+// credential is the server's to fix; otherwise the agent's own connection
+// needs reconnecting.
+func (g metaGateContext) agentUnroutedError(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken, skipped error) error {
+	if skipped != nil {
+		return skipped
 	}
 	if err := sharedCredentialError(member, tokens); err != nil {
 		return err
@@ -165,7 +164,7 @@ func (g metaGateContext) agentReconnectError(member metaMember) error {
 	if !fix.agent || fix.url == "" {
 		return agentServerCredentialError(member.slug)
 	}
-	return agentCredentialError{&metaMemberError{message: fmt.Sprintf("server %q needs re-authentication: this agent's connection to it is missing or can no longer be used, and the agent cannot sign in itself. %s", member.slug, fix.askEditor("reconnect"))}}
+	return agentCredentialError{&metaMemberError{message: fmt.Sprintf("server %q needs re-authentication: this agent's connection to it is missing or can no longer be used, and the agent cannot sign in itself. %s", member.slug, fix.askEditorToReconnect())}}
 }
 
 // withAgentMemberFix replaces an agent refusal from the shared authorization
@@ -175,7 +174,7 @@ func (g metaGateContext) agentReconnectError(member metaMember) error {
 // the server's project. Any other error, and any gateway that is not an
 // agent's, passes through.
 func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error {
-	if err == nil || g.agentOwner == nil {
+	if err == nil || g.agentFix == nil {
 		return err
 	}
 	if _, ok := errors.AsType[agentCredentialError](err); ok {
@@ -196,10 +195,10 @@ func (g metaGateContext) withAgentMemberFix(member metaMember, err error) error 
 	return &metaMemberError{message: fmt.Sprintf(refused+"Ask %s to review its permissions at %s, then retry", member.slug, agentEditors, fix.accessURL)}
 }
 
-// agentOwnerReconnect builds an agent gateway's fix links. It reads the agent
+// agentFixLinks builds an agent gateway's fix links. It reads the agent
 // and the projects once, on the first failure that needs them, so a request
 // whose members all work never reads them.
-type agentOwnerReconnect struct {
+type agentFixLinks struct {
 	// agent is the slug of the agent's own project, empty when it has none.
 	agent func() (string, error)
 
@@ -211,9 +210,9 @@ type agentOwnerReconnect struct {
 	ctx      context.Context //nolint:containedctx // request-scoped, built per agent gateway request
 }
 
-// newAgentOwnerReconnect returns the fix links for one agent gateway request,
+// newAgentFixLinks returns the fix links for one agent gateway request,
 // or nil when the request is no agent's.
-func (s *Service) newAgentOwnerReconnect(ctx context.Context, logger *slog.Logger, organizationID string, agentID uuid.UUID) *agentOwnerReconnect {
+func (s *Service) newAgentFixLinks(ctx context.Context, logger *slog.Logger, organizationID string, agentID uuid.UUID) *agentFixLinks {
 	if agentID == uuid.Nil || organizationID == "" || s.siteURL == nil {
 		return nil
 	}
@@ -233,7 +232,7 @@ func (s *Service) newAgentOwnerReconnect(ctx context.Context, logger *slog.Logge
 		}
 		return row.Slug, nil
 	}
-	return &agentOwnerReconnect{
+	return &agentFixLinks{
 		agent: sync.OnceValues(func() (string, error) {
 			agent, err := agentsrepo.New(s.db).GetAgentByID(ctx, agentsrepo.GetAgentByIDParams{OrganizationID: organizationID, ID: agentID})
 			if err != nil {
@@ -262,7 +261,7 @@ func (s *Service) newAgentOwnerReconnect(ctx context.Context, logger *slog.Logge
 // the page; an agent not yet scoped to a project uses the member's, since
 // agent pages read the same from any project in the organization. Without a
 // project it has no links.
-func (r *agentOwnerReconnect) forMember(member metaMember) memberFix {
+func (r *agentFixLinks) forMember(member metaMember) memberFix {
 	none := memberFix{agent: true, url: "", accessURL: ""}
 	slug, err := r.agent()
 	if err != nil {
@@ -282,7 +281,7 @@ func (r *agentOwnerReconnect) forMember(member metaMember) memberFix {
 	return r.link(slug)
 }
 
-func (r *agentOwnerReconnect) memberProject(projectID uuid.UUID) (string, error) {
+func (r *agentFixLinks) memberProject(projectID uuid.UUID) (string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if slug, ok := r.projects[projectID]; ok {

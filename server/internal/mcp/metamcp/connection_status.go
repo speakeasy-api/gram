@@ -109,6 +109,11 @@ const (
 	ConnectionStatusAudienceAgentEditors ConnectionStatusAudience = "agent_editors"
 )
 
+// AgentEditors is who an agent sends to fix a server it cannot fix itself.
+// The owner is one of them, but anyone allowed to edit the agent may
+// reconnect a server or change its access, so messages name no one.
+const AgentEditors = "someone who can edit this agent"
+
 // ConnectionStatusResult is the structuredContent payload of a
 // connection_status call. ConnectURL is the gateway's connect page, or on an
 // agent gateway the agent's MCP sign-in step; it is empty when there is no
@@ -173,6 +178,10 @@ func (r ConnectionStatusResult) Text() string {
 			fmt.Fprintf(&b, "- %s: no sign-in needed\n", label)
 		case SignInNotConnected:
 			needsConnect = true
+			if s.Detail != "" {
+				fmt.Fprintf(&b, "- %s: not signed in (%s)\n", label, s.Detail)
+				continue
+			}
 			fmt.Fprintf(&b, "- %s: not signed in\n", label)
 		case SignInActionRequired:
 			fmt.Fprintf(&b, "- %s: needs attention (%s)\n", label, s.Detail)
@@ -214,14 +223,14 @@ func (r ConnectionStatusResult) signInHint() string {
 // The owner is not the only person who may reconnect an agent's servers, so
 // the hint names no one. Each server's line says what is wrong; a server
 // never signed in, or one that failed for another reason, is not necessarily
-// a broken sign-in.
+// a broken sign-in. A line can name no one, such as a server that could not
+// be checked, so without a row to reconnect the hint names who fixes those.
 func (r ConnectionStatusResult) agentEditorsHint() string {
-	const who = "someone who can edit this agent"
 	if !slices.ContainsFunc(r.Servers, func(s ConnectionStatusServer) bool { return s.Reconnect }) {
-		return fmt.Sprintf("\nThis agent cannot fix these servers itself. Each server above says who can, then call %s again to refresh.\n", ToolConnectionStatus)
+		return fmt.Sprintf("\nThis agent cannot fix these servers itself. Ask whoever each server above names, or an admin of the server's project where it names no one, then call %s again to refresh.\n", ToolConnectionStatus)
 	}
 	if r.ConnectURL == "" {
-		return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to check them in Speakeasy, then call %s again to refresh.\n", who, ToolConnectionStatus)
+		return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to check them in Speakeasy, then call %s again to refresh.\n", AgentEditors, ToolConnectionStatus)
 	}
-	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", who, r.ConnectURL, ToolConnectionStatus)
+	return fmt.Sprintf("\nThese servers need attention that this agent cannot give itself. Ask %s to open %s and connect or reconnect them, then call %s again to refresh.\n", AgentEditors, r.ConnectURL, ToolConnectionStatus)
 }

@@ -652,7 +652,7 @@ func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
 // The tool error and connection_status send it to someone who can edit it,
 // with the agent's MCP sign-in page, and never to a gateway administrator.
 // They name no one and hand the agent no credential.
-func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
+func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 	t.Parallel()
 	ctx, seeded := seedOwnerAttachedMember(t)
 	ti, fx := seeded.ti, seeded.fx
@@ -671,7 +671,7 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	}
 	require.NotEmpty(t, projectSlug)
 	link := fmt.Sprintf("/%s/projects/%s/identities/agents/%s/edit?step=2", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
-	owner := "Ask someone who can edit this agent"
+	editors := "Ask someone who can edit this agent"
 
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
 	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
@@ -679,7 +679,7 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
 	require.True(t, isError, text)
 	require.Contains(t, text, fmt.Sprintf("server %q needs re-authentication", fx.granted))
-	require.Contains(t, text, owner+" to open ")
+	require.Contains(t, text, editors+" to open ")
 	require.Contains(t, text, link+" and reconnect it, then retry")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "owner-assigned-token")
@@ -690,7 +690,7 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	rpc := decodeRPCResponse(t, response)
 	text, isError = metaToolResultText(t, rpc)
 	require.False(t, isError, text)
-	require.Contains(t, text, "that this agent cannot give itself. "+owner+" to open ")
+	require.Contains(t, text, "that this agent cannot give itself. "+editors+" to open ")
 	require.NotContains(t, text, "administrator")
 	require.NotContains(t, text, "sign-in page")
 	require.NotContains(t, text, "its owner")
@@ -705,6 +705,38 @@ func TestServeAgentGateway_BrokenConnectionLinksOwnerReconnect(t *testing.T) {
 	require.True(t, result.StructuredContent.Servers[row].Reconnect, "the agent's sign-in step fixes the broken connection")
 	require.Equal(t, "needs re-authentication", result.StructuredContent.Servers[row].Detail)
 	seeded.upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
+}
+
+// A server with no OAuth sign-in whose upstream refuses the call needs a
+// credential configured on the server. Routing finds the agent no connection
+// of its own for it (agentOAuthSignIn), so the refusal asks an admin of the
+// server's project, never the agent's sign-in step.
+func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(upstream.Close)
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.URL})
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), Visibility: mcpservers.VisibilityPrivate})
+	require.NoError(t, err)
+
+	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, call)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.True(t, isError, text)
+	require.Contains(t, text, fmt.Sprintf("server %q needs a credential configured for it in Speakeasy", fx.granted))
+	require.Contains(t, text, "Ask an admin of the server's project to add or fix the server's credential, then retry")
+	require.NotContains(t, text, "/edit?step=2", "the agent's sign-in step cannot add a server's credential")
+	require.NotContains(t, text, "re-authentication")
+	require.NotContains(t, text, "administrator")
 }
 
 // A platform tool runs in its server's project, but the agent gateway is

@@ -125,9 +125,9 @@ type metaGateContext struct {
 	protocolVersion mcpversions.Resolution
 	// connectURL is the gateway's browser connect page; empty when ungated.
 	connectURL string
-	// agentOwner, on an agent gateway, builds the link the agent's owner
-	// opens to reconnect a member the agent cannot use; nil elsewhere.
-	agentOwner *agentOwnerReconnect
+	// agentFix, on an agent gateway, builds the links someone who can edit
+	// the agent opens to fix a member the agent cannot use; nil elsewhere.
+	agentFix *agentFixLinks
 	// skillsOverMCP memoizes the Skills extension flag for this request once
 	// it is evaluated; see metaSkillsEnabled.
 	skillsOverMCP *bool
@@ -135,10 +135,6 @@ type metaGateContext struct {
 	// connection each registration's agent credential was authorized for,
 	// keyed by registration. Nil outside a dial, which records nothing.
 	servedCredentials map[uuid.UUID]contextvalues.UpstreamCredential
-	// skippedClientFailure is, for one agent member dial, why one of the
-	// member's clients failed while another client's credential stood in.
-	// It names the cause when no credential serves the member after all.
-	skippedClientFailure error
 }
 
 // metaMembership names where a meta request's members come from. The zero
@@ -916,12 +912,11 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 		apiKeyID:            "",
 		// Member dispatch carries this InEffect verbatim; nothing on the
 		// tools/call path reads it (upstream dials pin their own version).
-		protocolVersion:      request.resolution,
-		connectURL:           connectURL,
-		agentOwner:           s.newAgentOwnerReconnect(ctx, logger, metaServer.OrganizationID, membership.agentID),
-		skillsOverMCP:        nil,
-		servedCredentials:    nil,
-		skippedClientFailure: nil,
+		protocolVersion:   request.resolution,
+		connectURL:        connectURL,
+		agentFix:          s.newAgentFixLinks(ctx, logger, metaServer.OrganizationID, membership.agentID),
+		skillsOverMCP:     nil,
+		servedCredentials: nil,
 	}
 	if gatePolicy != nil {
 		gate.catalogRef = gatePolicy.Catalog

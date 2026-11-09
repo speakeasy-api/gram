@@ -68,7 +68,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 	}
 
 	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Audience: metamcp.ConnectionStatusAudienceCaller, Servers: servers}
-	if gate.agentOwner != nil {
+	if gate.agentFix != nil {
 		payload.Audience = metamcp.ConnectionStatusAudienceAgentEditors
 		payload.ConnectURL = agentConnectURL(*gate, members, servers)
 	}
@@ -124,11 +124,23 @@ func signInRow(status, detail string, outage *metamcp.ConnectionStatusOutage) me
 	return metamcp.ConnectionStatusServer{Slug: "", Name: "", Status: status, Detail: detail, Reconnect: false, Outage: outage}
 }
 
+// agentDetailConfiguredOnServer is the row detail of an agent's member that
+// needs a credential configured on the server, which the agent's sign-in
+// step does not set (serverCredentialMissing).
+const agentDetailConfiguredOnServer = "needs a credential configured for it in Speakeasy; ask an admin of the server's project"
+
 // notConnectedRow is a member the caller holds no credential for. On an
-// agent gateway, the agent's sign-in step connects one with an OAuth sign-in.
+// agent gateway, the agent's sign-in step connects one with an OAuth sign-in;
+// any other is the server's to fix, which the row says.
 func notConnectedRow(gate *metaGateContext, oauthSignIn bool) metamcp.ConnectionStatusServer {
 	row := signInRow(metamcp.SignInNotConnected, "", nil)
-	row.Reconnect = gate.agentOwner != nil && oauthSignIn
+	if gate.agentFix == nil {
+		return row
+	}
+	row.Reconnect = oauthSignIn
+	if !oauthSignIn {
+		row.Detail = agentDetailConfiguredOnServer
+	}
 	return row
 }
 
@@ -244,7 +256,7 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 func memberFailureSignIn(gate metaGateContext, member metaMember, err error) metamcp.ConnectionStatusServer {
 	unavailable, ok := errors.AsType[memberUnavailableError](err)
 	if !ok {
-		if _, reconnect := errors.AsType[agentCredentialError](err); reconnect && gate.agentOwner != nil {
+		if _, reconnect := errors.AsType[agentCredentialError](err); reconnect && gate.agentFix != nil {
 			row := signInRow(metamcp.SignInError, agentDetailNeedsReauth, nil)
 			row.Reconnect = true
 			return row

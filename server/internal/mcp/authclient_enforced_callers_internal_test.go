@@ -835,7 +835,8 @@ func (r registrationTokens) ResolveClientAccessTokens(_ context.Context, _ remot
 // An agent key's member that offers a service account beside a personal
 // client: a service account the agent cannot use is the server's to fix, and
 // a personal client the agent has no connection for does not fail the member
-// the service account serves.
+// the service account serves, on the agent gateway or the server's own
+// endpoint.
 func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 	t.Parallel()
 
@@ -866,12 +867,34 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		serviceToken := remotesessions.UpstreamToken{Token: "service-token", CredentialOwner: remotesessions.CredentialOwnerSelf, Resource: "https://mcp.example.com"}
 		f.service.upstreamTokens = registrationTokens{shared: {tokens: map[uuid.UUID]remotesessions.UpstreamToken{shared: serviceToken}, err: nil}}
 
-		tokens, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients)
+		tokens, skipped, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients)
 		require.NoError(t, err, "the service account serves the member")
 		require.Equal(t, "service-token", tokens[shared].Token)
-		require.Error(t, gate.skippedClientFailure, "the personal client's failure is kept for routing")
-		_, reconnect := errors.AsType[agentCredentialError](gate.skippedClientFailure)
+		require.Error(t, skipped, "the personal client's failure is kept for routing")
+		_, reconnect := errors.AsType[agentCredentialError](skipped)
 		require.True(t, reconnect)
+	})
+
+	t.Run("the server's own endpoint leaves out the same personal client", func(t *testing.T) {
+		t.Parallel()
+		f, gate, _, _, shared := seed(t)
+		authentication := f.authentication(urn.NewAgentSubject(gate.agentID))
+		choice, err := f.service.authorizeDirectAgentKey(t.Context(), authentication, gate.agentID)
+		require.NoError(t, err, "a personal client with no connection does not refuse the key")
+		require.Equal(t, validUUID(shared), choice.clientID, "the service account is the sole served registration")
+		require.Len(t, authentication.agentKeyClients, 1)
+	})
+
+	// Only a missing connection is left out. A refused use refuses the server
+	// on both surfaces, whichever client it is.
+	t.Run("a refused use is not left out", func(t *testing.T) {
+		t.Parallel()
+		_, gate, member, _, _ := seed(t)
+		require.True(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerCredentialError(member.slug))))
+		require.True(t, agentConnectionMissing(memberConnectionError{gate.agentReconnectError(member), resolveFailureHappened(errors.New("boom"))}))
+		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerAccessError(member.slug))))
+		require.False(t, agentConnectionMissing(gate.withAgentMemberFix(member, agentServerGapError(member.slug))))
+		require.False(t, agentConnectionMissing(agentServerAccessError(member.slug)), "the server's own endpoint sees the shared refusal")
 	})
 
 	t.Run("a service account the agent cannot use asks an admin of the server's project", func(t *testing.T) {
@@ -879,7 +902,7 @@ func TestEnforcedAgentKeyServiceAccountMember(t *testing.T) {
 		f, gate, member, clients, shared := seed(t)
 		f.service.upstreamTokens = registrationTokens{shared: {tokens: nil, err: remotesessions.ErrClientCredentialMisconfigured}}
 
-		_, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients[1:])
+		_, _, err := f.service.agentMemberTokens(t.Context(), &gate, member, f.signIn, clients[1:])
 		require.ErrorContains(t, err, `server "maps" has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry`)
 		require.NotContains(t, err.Error(), "re-authentication")
 		require.NotContains(t, err.Error(), testAgentSignIn)

@@ -108,7 +108,9 @@
       } else {
         needs++;
         state.className = "warn";
-        state.textContent = s.status === "not_connected" ? "Not signed in" : (s.detail || "Needs attention");
+        state.textContent = s.status === "not_connected"
+          ? (s.detail ? "Not signed in · " + s.detail : "Not signed in")
+          : (s.detail || "Needs attention");
         li.append(state);
         // An agent cannot sign in itself: someone who can edit it reconnects on the agent's
         // page, which fixes only the rows the server marks.
@@ -130,6 +132,7 @@
     hint.textContent = needsConsent ? "Reconnect this gateway in your AI app to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
       : needs > 0 && reconnect ? "This agent cannot sign in itself. Someone who can edit it reconnects these servers."
+      : needs > 0 && agent ? "This agent cannot fix these servers itself. Each server says who can, or ask an admin of the server's project."
       : needs > 0 ? "After signing in, ask again to refresh this list."
       : "Ask again shortly to refresh this list.";
     hint.hidden = !consented && !needsConsent && needs === 0 && unavailable === 0;

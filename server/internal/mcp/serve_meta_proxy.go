@@ -145,9 +145,10 @@ type memberDial struct {
 	// rejection needs it; nil reads as the zero memberFix.
 	fix func() memberFix
 
-	// oauthSignIn reports that the member signs in through an upstream OAuth
-	// sign-in, which a person connects. Without one, its credential is
-	// configured on the server, or it needs none. See memberOAuthSignIn.
+	// oauthSignIn reports, on an agent gateway, that the agent reached the
+	// member through an OAuth connection of its own, which its sign-in step
+	// connects. Without one, its credential is configured on the server, or
+	// it needs none. Only agent paths read it. See agentOAuthSignIn.
 	oauthSignIn bool
 
 	// sessionKey fingerprints the route and credential the build sends, so
@@ -209,16 +210,16 @@ func memberAuthFailure(member metaMember, dial memberDial, status int) error {
 	// the server's.
 	case agent && dial.anonymous && dial.configuredHeaders:
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected the credential configured for it in Speakeasy, such as an API key. This agent cannot change it. Ask an admin of the server's project to update the server's credential, then retry", member.slug)}}
+	// An agent with a connection of its own never dials anonymously: routing
+	// refuses the member first (agentUnroutedError).
 	case agent && dial.anonymous && !dial.oauthSignIn:
 		return memberCredentialError{serverCredentialMissing(member.slug)}
-	case agent && fix.url != "" && dial.anonymous:
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q requires authentication and this agent has no connection to it. %s", member.slug, fix.askEditor("connect"))}}
 	// A 403 to a credential the upstream accepted is the upstream account's
 	// permissions. Signing in again as the same account does not change them.
 	case agent && fix.url != "" && status == http.StatusForbidden:
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q answered 403 Forbidden: the upstream account this agent's connection signs in as may not do this, and signing in again as the same account does not change that. Ask %s to check which account it connects with at %s, or to get that account access upstream, then retry", member.slug, agentEditors, fix.url)}}
 	case agent && fix.url != "":
-		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected this agent's connection, so it needs re-authentication. %s", member.slug, fix.askEditor("reconnect"))}}
+		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q rejected this agent's connection, so it needs re-authentication. %s", member.slug, fix.askEditorToReconnect())}}
 	case dial.anonymous && page != "":
 		return memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q is not connected for this user. Ask the user to open %s to connect it, then retry", member.slug, page)}}
 	case dial.anonymous:
@@ -355,7 +356,7 @@ func (s *Service) routeMetaMember(
 	// Collect what an agent's member authorization served, so the routed
 	// token can be named on the call's log row.
 	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
-	tokens, err := s.resolveMemberTokens(ctx, &gate, member)
+	tokens, skipped, err := s.resolveMemberTokensSkipping(ctx, &gate, member)
 	if err != nil {
 		return memberDial{}, "", err
 	}
@@ -385,7 +386,7 @@ func (s *Service) routeMetaMember(
 		// not permission to dial it anonymously. Header/no-auth members have
 		// no token map and retain their existing path.
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
-			return memberDial{}, "remote", gate.agentUnroutedError(member, tokens)
+			return memberDial{}, "remote", gate.agentUnroutedError(member, tokens, skipped)
 		}
 		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, remoteServer.Url, routed, terr)
 		if terr != nil {
@@ -399,7 +400,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: memberOAuthSignIn(gate, member, serverRow.UserSessionIssuerID.Valid, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: serverHeadersHaveCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: serverHeadersHaveCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -417,7 +418,7 @@ func (s *Service) routeMetaMember(
 		// not permission to dial it anonymously. Header/no-auth members have
 		// no token map and retain their existing path.
 		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
-			return memberDial{}, "tunneled", gate.agentUnroutedError(member, tokens)
+			return memberDial{}, "tunneled", gate.agentUnroutedError(member, tokens, skipped)
 		}
 		routed, upstreamToken, terr = chainMetaMember(ctx, gate, member, member.tunneledResourceIdentifier, routed, terr)
 		if terr != nil {
@@ -426,7 +427,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: memberOAuthSignIn(gate, member, serverRow.UserSessionIssuerID.Valid, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: true, configuredHeaders: false, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
