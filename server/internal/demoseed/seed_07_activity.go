@@ -154,9 +154,6 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		}
 		return nil
 	}
-	insertMessages := func(chatID uuid.UUID, msgs []activityMessage) error {
-		return s.activityInsertMessages(ctx, chatID, msgs)
-	}
 
 	// A signed inference hook archives the conversation before the next model call.
 	chatID := s.det("anthropic-inference-chat")
@@ -164,7 +161,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	chatSrc, model := activityText("claude-chat"), activityText(activityModel)
-	if err := insertMessages(chatID, []activityMessage{
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
 		{"anthropic-inference-prompt", "user", "Summarize the release checklist.",
 			activityTextRaw("Summarize the release checklist."), nil, chatSrc, model, activityMinutes(20), activityNull},
 		{"anthropic-inference-reply", "assistant", "The checklist covers tests, rollout, and rollback readiness.",
@@ -185,7 +182,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		return err
 	}
 	tagSrc := activityText("claude-tag")
-	if err := insertMessages(chatID, []activityMessage{
+	if err := s.activityInsertMessages(ctx, chatID, []activityMessage{
 		{"claude-tag-prompt", "user", activityClaudeTagPrompt, nil, nil, activityText("Claude In Slack"), model, activityMinutes(10), activityNull},
 		{"claude-tag-reply", "assistant", "", nil, []byte(activityClaudeTagReplyCalls), tagSrc, model, activityMinutes(9), activityNull},
 		{"claude-tag-ack", "assistant", "Replied in the thread.", nil, nil, tagSrc, model, activityMinutes(9), activityNull},
@@ -218,7 +215,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	if err := insertChat(helperID, amara, "Release checklist helper", tagSrc, releaseAgent, activityMinutes(6), activityMinutes(5)); err != nil {
 		return err
 	}
-	if err := insertMessages(helperID, []activityMessage{
+	if err := s.activityInsertMessages(ctx, helperID, []activityMessage{
 		{"claude-tag-helper-reply", "assistant", "The rollback checklist is ready for review.", nil, nil, tagSrc, model, activityMinutes(5), activityNull},
 	}); err != nil {
 		return err
@@ -254,7 +251,7 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 		if m.role == "assistant" {
 			age = activityMinutes(39)
 		}
-		if err := insertMessages(s.det("assistant-session-"+m.fixture), []activityMessage{
+		if err := s.activityInsertMessages(ctx, s.det("assistant-session-"+m.fixture), []activityMessage{
 			{"assistant-session-" + m.fixture + "-" + m.role, m.role, m.content, nil, nil, activityNull, activityNull, age, activityNull},
 		}); err != nil {
 			return err

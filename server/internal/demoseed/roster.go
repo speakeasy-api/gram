@@ -38,8 +38,19 @@ var demoUsers = []demoUser{
 
 // demoAgentOwner is a member outside the directory roster who owns one agent
 // and holds no organization-wide chat or log scope, so what they can inspect
-// of sessions and tool logs comes from that ownership alone.
-var demoAgentOwner = demoUser{"kwame", "Kwame Mensah", "R&D", "Platform Engineering", "Developer Productivity Engineer", "full-time", "CC-ENG-2200", "Developer Experience", "kwame-mbp.local"}
+// of sessions and tool logs comes from that ownership alone. No directory
+// profile or device backs them, so only the handle and name are set.
+var demoAgentOwner = demoUser{
+	handle:     "kwame",
+	name:       "Kwame Mensah",
+	division:   "",
+	department: "",
+	title:      "",
+	empType:    "",
+	costCenter: "",
+	team:       "",
+	hostname:   "",
+}
 
 // demoMembers is everyone with a membership: the roster plus the agent owner.
 func demoMembers() []demoUser { return slices.Concat(demoUsers, []demoUser{demoAgentOwner}) }
