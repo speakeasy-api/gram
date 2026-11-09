@@ -3320,6 +3320,43 @@ func BuildUpdateSignupOfferPayload(adminUpdateSignupOfferBody string, adminUpdat
 	return v, nil
 }
 
+// BuildListPlatformMcpFeedbackPayload builds the payload for the admin
+// listPlatformMcpFeedback endpoint from CLI flags.
+func BuildListPlatformMcpFeedbackPayload(adminListPlatformMcpFeedbackLimit string, adminListPlatformMcpFeedbackAdminSessionToken string) (*admin.ListPlatformMcpFeedbackPayload, error) {
+	var err error
+	var limit int
+	{
+		if adminListPlatformMcpFeedbackLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListPlatformMcpFeedbackLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 500 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 500, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListPlatformMcpFeedbackAdminSessionToken != "" {
+			adminSessionToken = &adminListPlatformMcpFeedbackAdminSessionToken
+		}
+	}
+	v := &admin.ListPlatformMcpFeedbackPayload{}
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildGetStripeSubscriptionCandidatePayload builds the payload for the admin
 // getStripeSubscriptionCandidate endpoint from CLI flags.
 func BuildGetStripeSubscriptionCandidatePayload(adminGetStripeSubscriptionCandidateOrganizationID string, adminGetStripeSubscriptionCandidateStripeSubscriptionID string, adminGetStripeSubscriptionCandidateAdminSessionToken string) (*admin.GetStripeSubscriptionCandidatePayload, error) {

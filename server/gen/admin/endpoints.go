@@ -111,6 +111,7 @@ type Endpoints struct {
 	ListSignupOffers                        goa.Endpoint
 	CreateSignupOffer                       goa.Endpoint
 	UpdateSignupOffer                       goa.Endpoint
+	ListPlatformMcpFeedback                 goa.Endpoint
 	GetStripeSubscriptionCandidate          goa.Endpoint
 	SetStripeSubscription                   goa.Endpoint
 	ListCustomerUsage                       goa.Endpoint
@@ -242,6 +243,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSignupOffers:                        NewListSignupOffersEndpoint(s, a.APIKeyAuth),
 		CreateSignupOffer:                       NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
 		UpdateSignupOffer:                       NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                   NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ListCustomerUsage:                       NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
@@ -353,6 +355,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSignupOffers = m(e.ListSignupOffers)
 	e.CreateSignupOffer = m(e.CreateSignupOffer)
 	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
+	e.ListPlatformMcpFeedback = m(e.ListPlatformMcpFeedback)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 	e.ListCustomerUsage = m(e.ListCustomerUsage)
@@ -2493,6 +2496,29 @@ func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 			return nil, err
 		}
 		return s.UpdateSignupOffer(ctx, p)
+	}
+}
+
+// NewListPlatformMcpFeedbackEndpoint returns an endpoint function that calls
+// the method "listPlatformMcpFeedback" of service "admin".
+func NewListPlatformMcpFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformMcpFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformMcpFeedback(ctx, p)
 	}
 }
 
