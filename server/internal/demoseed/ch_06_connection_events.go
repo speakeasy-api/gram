@@ -242,12 +242,12 @@ func (s *seeder) connectionScopes() []mcpconnectionattempts.Scope {
 	return []mcpconnectionattempts.Scope{
 		s.connectionServerScope(),
 		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
-		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), mcpconnectionattempts.AppOf(demoConnectionApp)),
+		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted)),
 	}
 }
 
 func (s *seeder) connectionServerScope() mcpconnectionattempts.Scope {
-	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp))
+	return mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppOf(demoConnectionApp, mcpconnectionattempts.ClientIDAdmitted))
 }
 
 func (s *seeder) setConnectionClient(row *mcpconnectionattempts.Row, key string) {
