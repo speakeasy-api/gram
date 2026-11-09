@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -718,7 +719,10 @@ func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	projectID := *authCtx.ProjectID
+	// Counted, so the test proves the upstream's own 401 led to the advice.
+	var refusals atomic.Int32
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		refusals.Add(1)
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	t.Cleanup(upstream.Close)
@@ -737,6 +741,7 @@ func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
 	require.NotContains(t, text, "/edit?step=2", "the agent's sign-in step cannot add a server's credential")
 	require.NotContains(t, text, "re-authentication")
 	require.NotContains(t, text, "administrator")
+	require.Positive(t, refusals.Load(), "the upstream answered the call with its 401")
 }
 
 // A platform tool runs in its server's project, but the agent gateway is
