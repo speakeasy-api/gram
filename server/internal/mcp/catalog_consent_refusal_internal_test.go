@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -250,4 +251,32 @@ func TestCatalogConsentFailedLookupRecordsOurError(t *testing.T) {
 	require.Equal(t, string(consentRejectionAuthenticationChanged), row.SubReason)
 	require.Equal(t, string(mcpconnectionattempts.WhoSpeakeasy), row.WhoFixes)
 	require.Zero(t, f.service.staleChoiceConsent.Len(), "a retry must look again")
+}
+
+// Under enforcement, a changed member that needs no upstream sign-in is fixed by a new consent, not an administrator.
+func TestCatalogConsentNoSignInMemberReconnectsUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_catalog_consent_no_auth")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.service.features = new(feature.InMemory)
+	f.service.staleChoiceConsent = expirable.NewLRU[string, bool](10, nil, time.Minute)
+	f.enforce()
+	rec := mcpconnectionattemptstest.New(t)
+	f.service.connections = rec.Recorder
+	f.service.staleNoAuthLog = newOnceLog()
+	f.service.telemLogger = noTelemetryLogs(t)
+	subject := urn.NewUserSubject("user_1")
+	gate := &metaGateContext{
+		organizationID: f.orgID, projectID: f.projectID, metaServerID: uuid.New(), userSessionIssuerID: uuid.New(),
+		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: subject},
+		memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: subject, byServer: map[uuid.UUID]*memberTokens{}},
+	}
+	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied}
+
+	body := callChangedMember(t, f.service, gate, member, false)
+	require.Contains(t, body, `The settings for the \"db\" server changed since you approved it. Reconnect this gateway in your AI app and approve it again.`)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeConsentNotApproved)
+	require.Equal(t, string(consentRejectionConfigurationChanged), row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }

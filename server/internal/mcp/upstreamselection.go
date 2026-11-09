@@ -1070,7 +1070,11 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 			return false, err
 		}
 		auth := choices[member.serverID]
-		if auth == nil || auth.Status != consentAuthChoose {
+		switch {
+		case auth != nil && auth.Status == consentAuthNoAuth:
+			// Consent approves a member needing no upstream sign-in as it is.
+			return true, nil
+		case auth == nil || auth.Status != consentAuthChoose:
 			return false, nil
 		}
 		associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
