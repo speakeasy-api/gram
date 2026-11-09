@@ -580,6 +580,51 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.getByText("Checks tool results.")).toBeTruthy();
   });
 
+  it("reads as recommended again after a surface is toggled off and back on", () => {
+    renderEditor(policy());
+
+    openInspectRows();
+    const typed = screen.getByRole("checkbox", {
+      name: "Secrets: What people type",
+    });
+    fireEvent.click(typed);
+    expect(screen.getByText("Custom")).toBeTruthy();
+    fireEvent.click(typed);
+
+    expect(screen.queryByText("Custom")).toBeNull();
+    expect(screen.queryByText(/changed from recommended/)).toBeNull();
+    expect(screen.getByText("Checks tool results.")).toBeTruthy();
+  });
+
+  it("keeps an invalid row open after its first surface is selected", () => {
+    renderEditor(
+      policy({
+        detectionScopes: [
+          {
+            category: "secrets",
+            scopeInclude: 'kind == "user_message"',
+            scopeExempt: "",
+          },
+        ],
+      }),
+    );
+
+    fireEvent.click(screen.getByText("Specific MCP servers"));
+    expect(
+      screen.getByText("Select tool calls, tool results or both."),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "Secrets: Tool calls" }),
+    );
+
+    expect(
+      screen.queryByText("Select tool calls, tool results or both."),
+    ).toBeNull();
+    expect(
+      screen.getByRole("checkbox", { name: "Secrets: Tool calls" }),
+    ).toBeTruthy();
+  });
+
   it("keeps the final inspection surface selected", () => {
     renderEditor(policy());
 

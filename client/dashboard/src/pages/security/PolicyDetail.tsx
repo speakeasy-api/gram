@@ -1349,6 +1349,24 @@ function scopeSurfaceStates(
   return out;
 }
 
+// Same scope: identical expressions, or ones that admit the same surfaces.
+function sameScope(a: ScopeOverride, b: ScopeOverride): boolean {
+  if (
+    a.scopeInclude.trim() === b.scopeInclude.trim() &&
+    a.scopeExempt.trim() === b.scopeExempt.trim()
+  ) {
+    return true;
+  }
+  const left = surfacesFromScope(a.scopeInclude, a.scopeExempt);
+  const right = surfacesFromScope(b.scopeInclude, b.scopeExempt);
+  return (
+    left !== null &&
+    right !== null &&
+    left.size === right.size &&
+    [...left].every((kind) => right.has(kind))
+  );
+}
+
 // One plain sentence for a collapsed row, e.g. "Checks what people type and
 // tool results."
 function inspectSummary(
@@ -1425,17 +1443,24 @@ function InspectRow({
   const expanded = open || invalid;
   const custom = override !== undefined;
 
+  // A scope that matches the recommendation is stored as no override, so the
+  // row reads Recommended again after toggling a surface off and back on.
+  const setOverride = (next: ScopeOverride) =>
+    onOverrideChange(sameScope(next, recommendedScope) ? null : next);
+
   const toggleSurface = (kind: ScopeSurfaceKind) => {
     const nextOn = states[kind] !== "in";
     if (!nextOn && activeCount <= 1) return;
+    // An invalid row is open only while invalid; keep it open once fixed.
+    setOpen(true);
     if (activeSurfaces) {
       const next = new Set(activeSurfaces);
       if (nextOn) next.add(kind);
       else next.delete(kind);
-      onOverrideChange(scopeFromSurfaces(next));
+      setOverride(scopeFromSurfaces(next));
       return;
     }
-    onOverrideChange(scopeWithSurface(activeScope, kind, nextOn));
+    setOverride(scopeWithSurface(activeScope, kind, nextOn));
   };
 
   return (
@@ -1587,12 +1612,7 @@ function InspectRow({
                   <button
                     type="button"
                     className="text-foreground text-xs underline"
-                    onClick={() => {
-                      if (override === undefined) {
-                        onOverrideChange({ ...activeScope });
-                      }
-                      setEditing((value) => !value);
-                    }}
+                    onClick={() => setEditing((value) => !value)}
                   >
                     {editing ? "Close editor" : "Edit expression"}
                   </button>
@@ -1607,7 +1627,7 @@ function InspectRow({
                     <CelExpressionField
                       value={activeScope.scopeInclude}
                       onChange={(value) =>
-                        onOverrideChange({
+                        setOverride({
                           ...activeScope,
                           scopeInclude: value,
                         })
@@ -1622,7 +1642,7 @@ function InspectRow({
                     <CelExpressionField
                       value={activeScope.scopeExempt}
                       onChange={(value) =>
-                        onOverrideChange({
+                        setOverride({
                           ...activeScope,
                           scopeExempt: value,
                         })
