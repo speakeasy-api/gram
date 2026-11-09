@@ -22,7 +22,7 @@ func TestSupportMatrixPersistence(t *testing.T) {
 	snapshot, err := svc.GetSupportMatrix(ctx, nil)
 	require.NoError(t, err)
 	require.Len(t, snapshot.Methods, 12)
-	require.Len(t, snapshot.Products, 24)
+	require.Len(t, snapshot.Products, 25)
 	require.Len(t, snapshot.Capabilities, 12)
 	require.Empty(t, snapshot.Draft.Mappings)
 	require.Equal(t, "supported", snapshot.Draft.References["device"]["org"].Status)

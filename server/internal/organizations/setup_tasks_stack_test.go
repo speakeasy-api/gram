@@ -136,3 +136,28 @@ func TestService_ListSetupTasksAppliesTheStackOverAnAssignedPlaybook(t *testing.
 	recordStack(ctx, t, ti, ac.ActiveOrganizationID, [2]string{"Cursor", "cursor-teams"})
 	require.Equal(t, []string{"enable-logging"}, listedSetupTaskKeys(ctx, t, ti))
 }
+
+func TestService_ListSetupTasksShowsLiteLLMOnlyToLiteLLMStacks(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestOrganizationsService(t)
+	seedOnboardingCatalog(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	platformAuth := *authCtx
+	platformAuth.IsAdmin = true
+	platformCtx := contextvalues.SetAuthContext(ctx, &platformAuth)
+
+	// Staff turn the optional LiteLLM card on.
+	visible := false
+	_, err := ti.service.UpdateSetupTask(platformCtx, &gen.UpdateSetupTaskPayload{TaskKey: "litellm", Hidden: &visible})
+	require.NoError(t, err)
+	require.Contains(t, listedSetupTaskKeys(ctx, t, ti), "litellm", "without a recorded stack nothing is hidden")
+
+	recordStack(ctx, t, ti, authCtx.ActiveOrganizationID, [2]string{"Anthropic", "anthropic-team"})
+	require.NotContains(t, listedSetupTaskKeys(ctx, t, ti), "litellm", "the stack has no LiteLLM")
+
+	// LiteLLM sells no plans, so it is recorded without one.
+	recordStack(ctx, t, ti, authCtx.ActiveOrganizationID, [2]string{"Anthropic", "anthropic-team"}, [2]string{"LiteLLM", ""})
+	require.Contains(t, listedSetupTaskKeys(ctx, t, ti), "litellm")
+}

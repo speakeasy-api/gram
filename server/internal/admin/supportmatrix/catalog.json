@@ -479,7 +479,7 @@
     {
       "id": "litellm",
       "name": "LiteLLM",
-      "vendor": "Others",
+      "vendor": "LiteLLM",
       "plans": "Source lists MDM under team plans; eligibility needs clarification",
       "facts": {
         "org": {
@@ -985,6 +985,13 @@
       "family": "GitHub Copilot",
       "surface": "App",
       "name": "GitHub Copilot"
+    },
+    {
+      "id": "litellm-gateway",
+      "vendor": "LiteLLM",
+      "family": "LiteLLM",
+      "surface": "Gateway",
+      "name": "LiteLLM Gateway"
     }
   ],
   "capabilities": [

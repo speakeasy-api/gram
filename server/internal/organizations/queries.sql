@@ -1416,15 +1416,15 @@ ORDER BY ps.position, s.slug;
 -- name: ListOnboardingStepMethodApplicability :many
 SELECT s.slug AS step_slug, m.slug AS method_slug, m.vendor AS method_vendor,
   -- Over the stack's platforms of the method's own vendor, or of every vendor
-  -- for a method that belongs to none, so an unrelated vendor in the stack
-  -- never changes the verdict. A platform the matrix does not map the method
-  -- to is unknown, which is not the same as not applicable.
+  -- for a cross-platform method, so an unrelated vendor in the stack never
+  -- changes the verdict. A platform the matrix does not map the method to is
+  -- unknown, which is not the same as not applicable.
   coalesce((
     SELECT bool_and(mp.platform_id IS NOT NULL AND mp.applicability = 'na')
     FROM support_matrix_platforms p
     LEFT JOIN support_matrix_method_platforms mp ON mp.platform_id = p.id AND mp.integration_method_id = m.id AND mp.deleted_at IS NULL
     WHERE p.deleted_at IS NULL AND p.vendor = ANY(@vendors::text[])
-      AND (m.vendor IN ('Cross-platform', 'Others') OR p.vendor = m.vendor)
+      AND (m.vendor = 'Cross-platform' OR p.vendor = m.vendor)
   ), false)::boolean AS not_applicable_everywhere
 FROM onboarding_step_methods sm
 JOIN onboarding_steps s ON s.id = sm.step_id AND s.deleted_at IS NULL

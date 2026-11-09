@@ -2850,9 +2850,21 @@ const seedSupportMethods = `-- name: SeedSupportMethods :exec
 INSERT INTO support_matrix_integration_methods (slug, name, vendor, plan_notes, sort_order)
 SELECT value->>'id', value->>'name', value->>'vendor', value->>'plans', ordinality::integer
 FROM jsonb_array_elements($1::jsonb->'methods') WITH ORDINALITY
-ON CONFLICT (slug) DO NOTHING
+ON CONFLICT (slug) DO UPDATE SET
+    name = EXCLUDED.name,
+    vendor = EXCLUDED.vendor,
+    plan_notes = EXCLUDED.plan_notes,
+    sort_order = EXCLUDED.sort_order,
+    updated_at = clock_timestamp()
+WHERE support_matrix_integration_methods.name IS DISTINCT FROM EXCLUDED.name
+   OR support_matrix_integration_methods.vendor IS DISTINCT FROM EXCLUDED.vendor
+   OR support_matrix_integration_methods.plan_notes IS DISTINCT FROM EXCLUDED.plan_notes
+   OR support_matrix_integration_methods.sort_order IS DISTINCT FROM EXCLUDED.sort_order
 `
 
+// The catalog owns a method's name, vendor, plan notes and order, so those
+// follow the file on every start; staff edit a method's facts and platform
+// mappings, never the method itself.
 func (q *Queries) SeedSupportMethods(ctx context.Context, catalog []byte) error {
 	_, err := q.db.Exec(ctx, seedSupportMethods, catalog)
 	return err
