@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -569,6 +571,17 @@ func handleToolsCall(
 	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// A call the shutdown drain abandoned is answered before any other
+		// classification, which would log it as a gateway failure.
+		if errors.Is(err, shutdowndrain.ErrInterrupted) {
+			interruption := interruptedAtShutdown(ctx, logger, metrics, logAttrs, mcpversions.MethodToolsCall, string(plan.Kind), err)
+			rw.statusCode = http.StatusServiceUnavailable
+			// Whatever the tool wrote before the interrupt is incomplete, so
+			// it is not logged as the call's response.
+			rw.body.Reset()
+			rw.failure = interruption.Failure
+			return nil, interruption.Response
+		}
 		// The proxy refused a body it could not decode before contacting the
 		// tool's server, so a Code Mode program can fix it and call again.
 		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {

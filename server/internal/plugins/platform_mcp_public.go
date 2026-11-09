@@ -227,6 +227,11 @@ func platformMCPMarketplaceReadme(marketplaceRepoURL string, mode platformMCPMar
 	b.WriteString("codex plugin marketplace add " + marketplaceRepoURL + "\n")
 	b.WriteString("```\n\n")
 	b.WriteString("Then open `/plugins` and install `" + platformMCPCodexPluginName + "`.\n\n")
+	b.WriteString("Codex does not open the sign-in page for a plugin's MCP server on its own. Sign in once with:\n\n")
+	b.WriteString("```\n")
+	b.WriteString("codex mcp login " + platformMCPServerName + "\n")
+	b.WriteString("```\n\n")
+	b.WriteString("Or ask the agent to sign you in; the plugin's `platform-sign-in` skill walks it through the same step.\n\n")
 
 	b.WriteString("## Cursor\n\n")
 	b.WriteString("In the Cursor dashboard for a team you administer, go to Settings → Plugins → Import and paste:\n\n")

@@ -136,7 +136,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return nil, err
 	}
-	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host, ConsentOrigin: "", Handoff: "", BoundAt: time.Time{}}
 	phase, callbackHash := "bootstrap", ""
 	if origin.Scheme == target.Scheme && origin.Host == target.Host {
 		phase, callbackHash = "ready", state.Browser.OriginHash

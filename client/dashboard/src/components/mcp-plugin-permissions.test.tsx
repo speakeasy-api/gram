@@ -35,6 +35,7 @@ const state = vi.hoisted(() => ({
     },
   })),
   settings: vi.fn(() => ({ data: { effectiveName: "example-marketplace" } })),
+  resourceAudience: vi.fn(() => ({ data: undefined })),
   mutation: vi.fn(() => ({ isPending: false, mutateAsync: vi.fn() })),
   mcpServer: { id: "server-a", name: "Server" } as {
     id: string;
@@ -80,6 +81,9 @@ vi.mock("@gram/client/react-query/removePluginServer", () => ({
 }));
 vi.mock("@gram/client/react-query/publishPlugins", () => ({
   usePublishPluginsMutation: state.mutation,
+}));
+vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
+  useResourceAudience: state.resourceAudience,
 }));
 vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
   useMarketplaceSettings: state.settings,
@@ -411,6 +415,11 @@ describe("MCP plugin permission boundaries", () => {
         expect.objectContaining({ refetchInterval: 5000 }),
       );
       expect(state.mutation).toHaveBeenCalled();
+      expect(state.resourceAudience).toHaveBeenCalledWith(
+        { resourceKind: "mcp", resourceId: "server-a" },
+        undefined,
+        expect.objectContaining({ enabled: grant === "org:admin" }),
+      );
       if (grant === "org:admin") {
         expect(screen.getByRole("button", { name: "Install" })).toBeTruthy();
       } else {

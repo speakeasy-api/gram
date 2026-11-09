@@ -8792,6 +8792,9 @@ func EncodeListChallengesRequest(encoder func(*http.Request) goahttp.Encoder) fu
 		if p.Scope != nil {
 			values.Add("scope", *p.Scope)
 		}
+		for _, value := range p.ExcludeScopes {
+			values.Add("exclude_scopes", value)
+		}
 		if p.ProjectID != nil {
 			values.Add("project_id", *p.ProjectID)
 		}

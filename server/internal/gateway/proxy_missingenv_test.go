@@ -75,6 +75,7 @@ func callFunctionToolWithEnvAndBody(t *testing.T, runnerStatus int, runnerBody s
 			onRequest: nil,
 		},
 		nil,
+		nil,
 	)
 
 	user := toolconfig.NewCaseInsensitiveEnv()

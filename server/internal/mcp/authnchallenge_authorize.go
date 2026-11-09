@@ -438,7 +438,6 @@ func authorizationErrorPage(client *usersessions_repo.UserSessionClient, clientI
 		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
-		Approval:       false,
 		ErrorID:        "",
 		CallbackURL:    "",
 		Code:           "",

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strconv"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 const (
@@ -88,6 +90,12 @@ func (c toolCall) record(end time.Time, statusCode int, resultIsError bool, fail
 	if failure != nil {
 		// The same text the call's Tool logs row records.
 		attrs = append(attrs, attr.ErrorMessage(toolCallFailureMessage(failure)))
+		// A call abandoned at shutdown failed because of a deploy, not the
+		// tool, so the record names the interrupt the way the telemetry log
+		// does.
+		if errors.Is(failure, shutdowndrain.ErrInterrupted) {
+			attrs = append(attrs, attr.ToolCallInterruptReason(string(oops.MCPErrorDataReasonServerShutdown)))
+		}
 	}
 
 	var record log.Record

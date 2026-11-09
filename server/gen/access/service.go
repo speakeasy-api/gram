@@ -999,6 +999,8 @@ type ListChallengesPayload struct {
 	PrincipalUrn *string
 	// Filter by scope.
 	Scope *string
+	// Leave out checks of these scopes, from the rows and from the total.
+	ExcludeScopes []string
 	// Filter to a specific project.
 	ProjectID *string
 	// Filter by resolution state. True = only resolved, false = only unresolved.
