@@ -76,6 +76,8 @@ type ListForOrgResponseBody struct {
 	Destinations []*DestinationResponseBody `form:"destinations" json:"destinations" xml:"destinations"`
 	// Active data export routes across the active organization.
 	Routes []*DataExportRouteResponseBody `form:"routes" json:"routes" xml:"routes"`
+	// Whether this organization can add routes for MCP connection logs.
+	McpConnectionLogsAvailable *bool `form:"mcp_connection_logs_available,omitempty" json:"mcp_connection_logs_available,omitempty" xml:"mcp_connection_logs_available,omitempty"`
 }
 
 // CreateDestinationResponseBody is the type of the "dataExports" service
@@ -1952,7 +1954,9 @@ func NewListDestinationsResponseBody(res *dataexports.ListDestinationsResult) *L
 // NewListForOrgResponseBody builds the HTTP response body from the result of
 // the "listForOrg" endpoint of the "dataExports" service.
 func NewListForOrgResponseBody(res *dataexports.ListDataExportsForOrgResult) *ListForOrgResponseBody {
-	body := &ListForOrgResponseBody{}
+	body := &ListForOrgResponseBody{
+		McpConnectionLogsAvailable: res.McpConnectionLogsAvailable,
+	}
 	if res.Destinations != nil {
 		body.Destinations = make([]*DestinationResponseBody, len(res.Destinations))
 		for i, val := range res.Destinations {

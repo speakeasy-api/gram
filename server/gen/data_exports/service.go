@@ -181,6 +181,8 @@ type ListDataExportsForOrgResult struct {
 	Destinations []*Destination
 	// Active data export routes across the active organization.
 	Routes []*DataExportRoute
+	// Whether this organization can add routes for MCP connection logs.
+	McpConnectionLogsAvailable *bool
 }
 
 // ListDestinationsPayload is the payload type of the dataExports service

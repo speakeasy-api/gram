@@ -446,3 +446,35 @@ func TestErrorTypeLooksThroughWrappingForANamedType(t *testing.T) {
 	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", namedError{})))
 	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", namedError{}))))
 }
+
+func connectionRecordWith(key string) log.Record {
+	var record log.Record
+	record.SetEventName("speakeasy.mcp_connection")
+	record.SetTimestamp(time.Unix(1_700_000_000, 0))
+	record.AddAttributes(log.String(key, "value"))
+	return record
+}
+
+func TestLogAllowsTheExportedConnectionKeys(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+
+	require.NoError(t, testLogger(publisher).Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")))
+	require.Len(t, *published, 1)
+	require.Equal(t, "value", attributeValue((*published)[0], "speakeasy.mcp_connection.outcome"))
+}
+
+func TestLogRefusesForgedTenancyKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"speakeasy.project.id", "speakeasy.organization.id", "speakeasy.api_key.id", "speakeasy.user.roles", "speakeasy.original_instrumentation_scope.name"} {
+		publisher, published := capture(t, gcp.NewSuccessPublishResult())
+		ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+
+		err := testLogger(publisher).Log(ctx, connectionRecordWith(key))
+		require.ErrorContains(t, err, "reserved namespace", key)
+		require.Empty(t, *published, key)
+	}
+}

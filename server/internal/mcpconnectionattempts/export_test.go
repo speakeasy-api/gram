@@ -3,13 +3,17 @@ package mcpconnectionattempts
 import (
 	"context"
 	"errors"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/log"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -29,17 +33,27 @@ type publishedLog struct {
 }
 
 type fakeSink struct {
-	enabled bool
-	err     error
+	enabled    bool
+	enabledErr error
+	err        error
+	panics     atomic.Int64
+	block      chan struct{}
 
 	mu        sync.Mutex
 	published []publishedLog
 	closed    int
 }
 
-func (s *fakeSink) Enabled(context.Context, string) bool { return s.enabled }
+func (s *fakeSink) Enabled(context.Context, string) (bool, error) { return s.enabled, s.enabledErr }
 
 func (s *fakeSink) Publish(_ context.Context, organizationID, projectID, recordID string, record log.Record) error {
+	if s.block != nil {
+		<-s.block
+	}
+	if s.panics.Add(-1) >= 0 {
+		panic("sink panicked")
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -62,12 +76,18 @@ func (s *fakeSink) snapshot() []publishedLog {
 	return append([]publishedLog(nil), s.published...)
 }
 
-func newExportRecorder(t *testing.T, conn driver.Conn, sink ExportSink) testRecorder {
+func (s *fakeSink) closes() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closed
+}
+
+func newExportRecorder(t *testing.T, conn driver.Conn, sink ExportSink, opts ...RecorderOption) testRecorder {
 	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	recorder := newRecorder(testenv.NewLogger(t), provider, conn, logsOn, testConfig(), WithExport(sink))
+	recorder := newRecorder(testenv.NewLogger(t), provider, conn, logsOn, testConfig(), append([]RecorderOption{WithExport(sink)}, opts...)...)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -76,7 +96,15 @@ func newExportRecorder(t *testing.T, conn driver.Conn, sink ExportSink) testReco
 	return testRecorder{Recorder: recorder, reader: reader}
 }
 
-func exportSkipped(t *testing.T, r testRecorder, reason string) int64 {
+func withExportDrain(budget time.Duration) RecorderOption {
+	return func(r *Recorder) { r.exporter.drain = budget }
+}
+
+func withExportQueue(size int) RecorderOption {
+	return func(r *Recorder) { r.exporter.queue = make(chan Row, size) }
+}
+
+func notExported(t *testing.T, r testRecorder, reason notExportedReason) int64 {
 	t.Helper()
 
 	var collected metricdata.ResourceMetrics
@@ -84,14 +112,14 @@ func exportSkipped(t *testing.T, r testRecorder, reason string) int64 {
 	var total int64
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != meterExportSkipped {
+			if m.Name != meterNotExported {
 				continue
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
 			require.True(t, ok)
 			for _, point := range sum.DataPoints {
 				value, _ := point.Attributes.Value(attr.ReasonKey)
-				if value.AsString() == reason {
+				if value.AsString() == string(reason) {
 					total += point.Value
 				}
 			}
@@ -123,7 +151,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	user := urn.NewUserSubject("user-secret-id")
 	memberID := uuid.New()
 	row := exportTestRow(t, CodeIDPUnavailable, true,
-		Provider("https://provider.example.test/oauth"),
+		Provider("https://provider.example.test:8443/oauth"),
 		Member(memberID),
 		Retries(2),
 		Grant("refresh_token"),
@@ -146,37 +174,90 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	require.True(t, known)
 	require.Equal(t, log.SeverityError, record.Severity())
 	require.Equal(t, "ERROR", record.SeverityText())
-	require.Equal(t, exportEventName, record.EventName())
-	require.Equal(t, "MCP connection failed", record.Body().AsString())
-	require.NotContains(t, record.Body().AsString(), meaning.WhatHappened, "plain text belongs in attributes")
+	require.Equal(t, "speakeasy.mcp_connection", record.EventName())
+	require.True(t, record.Body().Empty(), "a string body is redacted on destinations that exclude sensitive data")
 
 	got := recordAttributes(record)
-	require.Equal(t, row.AttemptID.String(), got[string(attr.ConnectionAttemptIDKey)].AsString())
-	require.Equal(t, "failed", got[string(attr.ConnectionOutcomeKey)].AsString())
-	require.Equal(t, CodeIDPUnavailable.String(), got[string(attr.ConnectionReasonKey)].AsString())
+	require.Equal(t, []string{
+		"error.type",
+		"server.address",
+		"server.port",
+		"speakeasy.mcp_connection.attempt_id",
+		"speakeasy.mcp_connection.client_name",
+		"speakeasy.mcp_connection.client_version",
+		"speakeasy.mcp_connection.duration",
+		"speakeasy.mcp_connection.final",
+		"speakeasy.mcp_connection.grant_type",
+		"speakeasy.mcp_connection.member_id",
+		"speakeasy.mcp_connection.outcome",
+		"speakeasy.mcp_connection.repeated_failures",
+		"speakeasy.mcp_connection.server_id",
+		"speakeasy.mcp_connection.server_kind",
+		"speakeasy.mcp_connection.step",
+		"speakeasy.mcp_connection.step_result",
+		"speakeasy.mcp_connection.subject_kind",
+		"speakeasy.mcp_connection.user_message",
+		"speakeasy.mcp_connection.user_next_step",
+		"speakeasy.mcp_connection.who_fixes",
+	}, slices.Sorted(maps.Keys(got)))
+
+	require.Equal(t, row.AttemptID.String(), got[string(attr.ExtMcpConnectionAttemptIDKey)].AsString())
+	require.True(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
+	require.Equal(t, "failed", got[string(attr.ExtMcpConnectionOutcomeKey)].AsString())
 	require.Equal(t, CodeIDPUnavailable.String(), got[string(attr.ErrorTypeKey)].AsString())
-	require.Equal(t, meaning.WhatHappened, got[string(attr.ErrorMessageKey)].AsString())
-	require.Equal(t, meaning.WhatToDo, got[string(attr.ConnectionWhatToDoKey)].AsString())
-	require.Equal(t, string(meaning.WhoFixes), got[string(attr.ConnectionWhoFixesKey)].AsString())
-	require.Equal(t, StepProviderToken.String(), got[string(attr.ConnectionStepKey)].AsString())
-	require.Equal(t, row.ServerKind, got[string(attr.ConnectionServerKindKey)].AsString())
-	require.Equal(t, row.ServerID, got[string(attr.ConnectionServerIDKey)].AsString())
-	require.Equal(t, memberID.String(), got[string(attr.ConnectionMemberIDKey)].AsString())
+	require.Equal(t, meaning.WhatHappened, got[string(attr.ExtMcpConnectionUserMessageKey)].AsString())
+	require.Equal(t, meaning.WhatToDo, got[string(attr.ExtMcpConnectionUserNextStepKey)].AsString())
+	require.Equal(t, string(meaning.WhoFixes), got[string(attr.ExtMcpConnectionWhoFixesKey)].AsString())
+	require.Equal(t, StepProviderToken.String(), got[string(attr.ExtMcpConnectionStepKey)].AsString())
+	require.Equal(t, row.StepResult, got[string(attr.ExtMcpConnectionStepResultKey)].AsString())
+	require.Equal(t, row.ServerKind, got[string(attr.ExtMcpConnectionServerKindKey)].AsString())
+	require.Equal(t, row.ServerID, got[string(attr.ExtMcpConnectionServerIDKey)].AsString())
+	require.Equal(t, memberID.String(), got[string(attr.ExtMcpConnectionMemberIDKey)].AsString())
 	require.Equal(t, "provider.example.test", got[string(attr.ServerAddressKey)].AsString())
-	require.Equal(t, "refresh_token", got[string(attr.ConnectionGrantTypeKey)].AsString())
-	require.Equal(t, "claude_code", got[string(attr.McpClientNameKey)].AsString())
-	require.Equal(t, "2.1.0", got[string(attr.McpClientVersionKey)].AsString())
-	require.Equal(t, "user", got[string(attr.ConnectionSubjectKindKey)].AsString())
-	require.Equal(t, int64(4), got[string(attr.ConnectionRepeatsKey)].AsInt64())
-	require.Equal(t, int64(2), got[string(attr.ConnectionRetriesKey)].AsInt64())
-	require.InDelta(t, 1.5, got[string(attr.ConnectionDurationKey)].AsFloat64(), 0.001)
+	require.Equal(t, int64(8443), got[string(attr.ServerPortKey)].AsInt64())
+	require.Equal(t, "refresh_token", got[string(attr.ExtMcpConnectionGrantTypeKey)].AsString())
+	require.Equal(t, "claude_code", got[string(attr.ExtMcpConnectionClientNameKey)].AsString())
+	require.Equal(t, "2.1.0", got[string(attr.ExtMcpConnectionClientVersionKey)].AsString())
+	require.Equal(t, "user", got[string(attr.ExtMcpConnectionSubjectKindKey)].AsString())
+	require.Equal(t, int64(4), got[string(attr.ExtMcpConnectionRepeatedFailuresKey)].AsInt64())
+	require.InDelta(t, 1.5, got[string(attr.ExtMcpConnectionDurationKey)].AsFloat64(), 0.001)
 
 	for key, value := range got {
-		require.False(t, strings.HasPrefix(key, "speakeasy.") || strings.HasPrefix(key, "directory."), "otelpub refuses %s", key)
-		require.False(t, strings.HasPrefix(key, "user."), "no user identity in v0: %s", key)
 		for _, secret := range []string{"user-secret-id", "device-secret", row.AuthClientID, row.UserSessionID, row.RemoteSessionID, row.RemoteSessionIssuerID, row.UserSessionIssuerID} {
 			require.NotContains(t, value.String(), secret, key)
 		}
+	}
+}
+
+func TestExportRecord_OneRowAttemptHasNoDuration(t *testing.T) {
+	t.Parallel()
+
+	row := exportTestRow(t, CodeIDPUnavailable, true)
+	row.EventTime = row.AttemptStartedAt.Add(200 * time.Nanosecond)
+
+	record, ok := exportRecord(row)
+	require.True(t, ok)
+	require.NotContains(t, recordAttributes(record), string(attr.ExtMcpConnectionDurationKey))
+}
+
+func TestSplitProviderHost(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name, provider, address string
+		port                    int
+	}{
+		{name: "no port", provider: "https://provider.example.test", address: "provider.example.test", port: 0},
+		{name: "ipv6", provider: "https://[2001:db8::1]/", address: "2001:db8::1", port: 0},
+		{name: "ipv6 port", provider: "https://[2001:db8::1]:8443/", address: "2001:db8::1", port: 8443},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			address, port := splitProviderHost(NormalizeProviderHost(tc.provider))
+			require.Equal(t, tc.address, address)
+			require.Equal(t, tc.port, port)
+		})
 	}
 }
 
@@ -191,28 +272,82 @@ func TestWithRowTrace_UsesTheRowTraceID(t *testing.T) {
 	require.False(t, trace.SpanContextFromContext(withRowTrace(t.Context(), row)).TraceID().IsValid())
 }
 
-func TestExportSeverity_ByOutcome(t *testing.T) {
+func TestExportSeverity_ByCatalogOutcome(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name     string
 		code     Code
+		final    bool
 		severity log.Severity
 		text     string
 	}{
-		{name: "failed", code: CodeIDPUnavailable, severity: log.SeverityError, text: "ERROR"},
-		{name: "blocked", code: CodeNoServerAccess, severity: log.SeverityWarn, text: "WARN"},
-		{name: "declined", code: CodeCanceled, severity: log.SeverityInfo, text: "INFO"},
+		{name: "failed", code: CodeIDPUnavailable, final: true, severity: log.SeverityError, text: "ERROR"},
+		{name: "blocked", code: CodeNoServerAccess, final: true, severity: log.SeverityWarn, text: "WARN"},
+		{name: "declined", code: CodeCanceled, final: true, severity: log.SeverityInfo, text: "INFO"},
+		{name: "non-final failed", code: CodeProviderOAuthInvalidClient, final: false, severity: log.SeverityError, text: "ERROR"},
+		{name: "non-final blocked", code: CodeNoServerAccess, final: false, severity: log.SeverityWarn, text: "WARN"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			severity, text, ok := exportSeverity(exportTestRow(t, tc.code, true))
+			severity, text, ok := exportSeverity(exportTestRow(t, tc.code, tc.final))
 			require.True(t, ok)
 			require.Equal(t, tc.severity, severity)
 			require.Equal(t, tc.text, text)
 		})
 	}
+}
+
+func TestExportSeverity_LeavesOutNonFinalRowsNoAdminCanFix(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		what Happened
+	}{
+		{name: "person", what: CodeNeedsSignIn},
+		{name: "app", what: CodeRegistrationInvalid},
+		{name: "success", what: ResultAccepted},
+		{name: "connected with a reason", what: CodeRefreshedUnverified},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, _, ok := exportSeverity(exportTestRow(t, tc.what, false))
+			require.False(t, ok)
+		})
+	}
+}
+
+func TestExportRecord_NonFinalRowSaysSoAndHasNoOutcome(t *testing.T) {
+	t.Parallel()
+
+	row := exportTestRow(t, CodeUpstreamSignInNotSetUp, false)
+	record, ok := exportRecord(row)
+	require.True(t, ok)
+
+	got := recordAttributes(record)
+	require.Contains(t, got, string(attr.ExtMcpConnectionFinalKey))
+	require.False(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
+	require.NotContains(t, got, string(attr.ExtMcpConnectionOutcomeKey))
+	require.Equal(t, log.SeverityError, record.Severity())
+}
+
+func TestExportRecordID_KeepsAnAttemptsRowsApart(t *testing.T) {
+	t.Parallel()
+
+	attempt := Begin(testScope())
+	at := time.Now()
+	firstMember, err := RowAt(attempt, StepDiscoveryMember, CodeUpstreamSignInNotSetUp, false, at, Member(uuid.New()))
+	require.NoError(t, err)
+	secondMember, err := RowAt(attempt, StepDiscoveryMember, CodeUpstreamSignInNotSetUp, false, at, Member(uuid.New()))
+	require.NoError(t, err)
+	repeated := firstMember
+	repeated.EventTime = at.Add(time.Second)
+
+	require.NotEqual(t, exportRecordID(firstMember), exportRecordID(secondMember))
+	require.NotEqual(t, exportRecordID(firstMember), exportRecordID(repeated))
 }
 
 func TestExportRows_LeavesOutWhatDidNotFail(t *testing.T) {
@@ -224,7 +359,7 @@ func TestExportRows_LeavesOutWhatDidNotFail(t *testing.T) {
 	recorder.exportRows([]Row{
 		exportTestRow(t, ResultSignedIn, true),
 		exportTestRow(t, ResultAccepted, false),
-		exportTestRow(t, CodeIDPUnavailable, false),
+		exportTestRow(t, CodeNeedsSignIn, false),
 	})
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
@@ -243,17 +378,20 @@ func TestExportRows_NoProjectIsSkippedAndCounted(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Empty(t, sink.snapshot())
-	require.Equal(t, int64(1), exportSkipped(t, recorder, exportSkipNoProject))
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedNoProject))
 }
 
 func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
 	t.Parallel()
 
-	recorder := newTestRecorder(t, &scriptedConn{}, testConfig())
-	queue := make(chan Row, 1)
-	recorder.exporter = &exporter{sink: &fakeSink{enabled: true}, queue: queue, workers: sync.WaitGroup{}, skipped: nil}
+	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportQueue(1))
+	t.Cleanup(func() { close(sink.block) })
 
-	rows := []Row{exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true)}
+	rows := make([]Row, 0, 10)
+	for range 10 {
+		rows = append(rows, exportTestRow(t, CodeIDPUnavailable, true))
+	}
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -265,8 +403,8 @@ func TestExportRows_FullQueueCountsAndNeverBlocks(t *testing.T) {
 		require.Fail(t, "exportRows blocked on a full queue")
 	}
 
-	require.Len(t, queue, 1)
-	require.Equal(t, int64(1), recorder.dropped(t, dropExportQueueFull))
+	require.GreaterOrEqual(t, notExported(t, recorder, notExportedQueueFull), int64(7))
+	require.Zero(t, recorder.droppedTotal(t), "the rows were stored")
 }
 
 func TestExport_PublishesUnderTheRowTenantAfterAStoredInsert(t *testing.T) {
@@ -284,8 +422,8 @@ func TestExport_PublishesUnderTheRowTenantAfterAStoredInsert(t *testing.T) {
 	require.Len(t, published, 1)
 	require.Equal(t, scope.organizationID, published[0].organizationID)
 	require.Equal(t, scope.projectID.String(), published[0].projectID)
-	require.Equal(t, attempt.ID().String()+":"+StepProviderToken.String()+":"+CodeIDPUnavailable.String(), published[0].recordID)
-	require.Equal(t, 1, sink.closed)
+	require.True(t, strings.HasPrefix(published[0].recordID, attempt.ID().String()+":"+StepProviderToken.String()+":"+CodeIDPUnavailable.String()+":"))
+	require.Equal(t, 1, sink.closes())
 }
 
 func TestExport_FailedInsertExportsNothing(t *testing.T) {
@@ -316,6 +454,37 @@ func TestExport_LogsOffExportsNothing(t *testing.T) {
 	require.Empty(t, sink.snapshot())
 }
 
+func TestExport_OnceAndHeldBackRepeatsCarryTheirCount(t *testing.T) {
+	t.Parallel()
+
+	const attempts = 12
+	sink := &fakeSink{enabled: true}
+	recorder := newExportRecorder(t, clickhouseConn(t), sink)
+	scope := testScope()
+
+	for range attempts {
+		recorder.Once(t.Context(), scope, StepMCPRequest, CodeProviderUnavailable)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	published := sink.snapshot()
+	require.Less(t, len(published), attempts, "repeats fold into the held-back row")
+	recordIDs := make(map[string]struct{}, len(published))
+	var stood int64
+	var folded bool
+	for _, item := range published {
+		recordIDs[item.recordID] = struct{}{}
+		got := recordAttributes(item.record)
+		require.NotContains(t, got, string(attr.ExtMcpConnectionDurationKey), "a Once row has no span")
+		repeats := got[string(attr.ExtMcpConnectionRepeatedFailuresKey)].AsInt64()
+		folded = folded || repeats > 0
+		stood += 1 + repeats
+	}
+	require.True(t, folded)
+	require.Equal(t, int64(attempts), stood)
+	require.Len(t, recordIDs, len(published))
+}
+
 func TestExport_FlagOffExportsNothing(t *testing.T) {
 	t.Parallel()
 
@@ -326,10 +495,24 @@ func TestExport_FlagOffExportsNothing(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Empty(t, sink.snapshot())
-	require.Equal(t, 1, sink.closed)
+	require.Zero(t, notExported(t, recorder, notExportedFlag))
+	require.Equal(t, 1, sink.closes())
 }
 
-func TestExport_PublishFailureIsCounted(t *testing.T) {
+func TestExport_UnknownFlagIsCounted(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{enabled: false, enabledErr: errors.New("flag unknown")}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink)
+
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Empty(t, sink.snapshot())
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedFlag))
+}
+
+func TestExport_PublishFailureIsNotAStorageLoss(t *testing.T) {
 	t.Parallel()
 
 	sink := &fakeSink{enabled: true, err: errors.New("pubsub down")}
@@ -338,5 +521,70 @@ func TestExport_PublishFailureIsCounted(t *testing.T) {
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(1), recorder.dropped(t, dropExportFailed))
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedFailed))
+	require.Zero(t, recorder.droppedTotal(t))
 }
+
+func TestExport_PanickingSinkIsCountedAndWorkersSurvive(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{enabled: true}
+	sink.panics.Store(1)
+	recorder := newExportRecorder(t, &scriptedConn{}, sink)
+
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true)})
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Len(t, sink.snapshot(), 1)
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedPanic))
+	require.Zero(t, recorder.droppedTotal(t))
+}
+
+func TestExport_DrainStopsAtItsBudget(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportDrain(20*time.Millisecond))
+	t.Cleanup(func() { close(sink.block) })
+
+	rows := make([]Row, 0, 6)
+	for range 6 {
+		rows = append(rows, exportTestRow(t, CodeIDPUnavailable, true))
+	}
+	recorder.exportRows(rows)
+
+	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
+	defer cancel()
+	require.NoError(t, recorder.Shutdown(ctx), "the export budget ends before the caller's deadline")
+	require.GreaterOrEqual(t, notExported(t, recorder, notExportedShutdown), int64(4))
+}
+
+func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{enabled: true, block: make(chan struct{})}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink)
+
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true)})
+
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = recorder.ShutdownAndWait(ctx)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		require.Fail(t, "ShutdownAndWait waited on a stuck export publish")
+	}
+
+	close(sink.block)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, 1, sink.closes())
+	}, 10*time.Second, 10*time.Millisecond)
+}
+
+// PipelineInfra lets the external pipeline test reach this package's containers.
+func PipelineInfra() *testenv.Environment { return infra }

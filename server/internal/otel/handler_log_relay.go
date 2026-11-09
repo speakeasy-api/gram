@@ -35,6 +35,9 @@ const (
 	logRelayExportConcurrency = 32
 
 	gramLogPrivateFieldStart protowire.Number = 1000
+
+	// minConnectionLogSeverity is the lowest severity an mcp_connection_logs route receives.
+	minConnectionLogSeverity = otelv1.LogRecord_SEVERITY_NUMBER_ERROR
 )
 
 type LogRelayHandler struct {
@@ -126,9 +129,12 @@ func (h *LogRelayHandler) HandleBatchWithResult(
 }
 
 func (h *LogRelayHandler) handleBatch(ctx context.Context, messages []logRelayMessage) error {
-	telemetry, connectionLogs, excluded := splitLogRelayMessages(messages)
+	telemetry, connectionLogs, excluded, belowSeverity := splitLogRelayMessages(messages)
 	if excluded > 0 {
 		h.recordDroppedLogs(ctx, excluded, relayReasonExcluded)
+	}
+	if belowSeverity > 0 {
+		h.recordDroppedLogs(ctx, belowSeverity, relayReasonBelowSeverity)
 	}
 	return errors.Join(h.deliver(ctx, h.relay, telemetry), h.deliver(ctx, h.connectionLogRelay, connectionLogs))
 }
@@ -261,19 +267,23 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 // splitLogRelayMessages separates connection logs, which go to their own route,
 // from product telemetry. It drops gateway tool call records: the tool-call log
 // relay off telemetry_logs already delivers those calls, until DNO-1310.
-func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded int) {
+func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded, belowSeverity int) {
 	telemetry = messages[:0]
 	for _, message := range messages {
 		switch logOriginalScopeName(message.record) {
 		case dialect.GatewayLogScope:
 			excluded++
 		case dialect.ConnectionLogScope:
+			if message.record.GetSeverityNumber() < minConnectionLogSeverity {
+				belowSeverity++
+				continue
+			}
 			connectionLogs = append(connectionLogs, message)
 		default:
 			telemetry = append(telemetry, message)
 		}
 	}
-	return telemetry, connectionLogs, excluded
+	return telemetry, connectionLogs, excluded, belowSeverity
 }
 
 // logOriginalScopeName is the producer's scope as the transform preserved it.

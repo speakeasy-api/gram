@@ -325,6 +325,7 @@ var ListDestinationsResult = Type("ListDestinationsResult", func() {
 var ListDataExportsForOrgResult = Type("ListDataExportsForOrgResult", func() {
 	Attribute("destinations", ArrayOf(Destination), "Active data export destinations across the active organization.")
 	Attribute("routes", ArrayOf(DataExportRoute), "Active data export routes across the active organization.")
+	Attribute("mcp_connection_logs_available", Boolean, "Whether this organization can add routes for MCP connection logs.")
 	Required("destinations", "routes")
 })
 

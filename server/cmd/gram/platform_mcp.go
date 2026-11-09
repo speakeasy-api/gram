@@ -558,7 +558,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).
 		WithDataExports(config.Encryption, config.DashboardURL).
-		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
+		WithDataExportMutations(config.AuditLogger, config.DashboardURL, config.FeatureFlags).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).
@@ -1342,7 +1342,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).
 		WithDataExports(config.Encryption, config.DashboardURL).
-		WithDataExportMutations(config.AuditLogger, config.DashboardURL).
+		WithDataExportMutations(config.AuditLogger, config.DashboardURL, config.FeatureFlags).
 		WithDataExportRouteToggle(newPlatformMCPDataExportRouteToggle(config, authorizer, limitStore)).
 		WithRecentToolCalls(config.RecentToolCalls, config.DashboardURL).
 		WithMCPNetworkTraffic(config.NetworkTraffic, config.LogsEnabled).

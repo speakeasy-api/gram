@@ -297,6 +297,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Shutdown funcs run concurrently, so everything publishing through
 	// psbroker stops in order inside its close.
 	var drainRisk func(context.Context) error
+	var shutdownConnections func(context.Context) error
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
@@ -305,6 +306,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
+		}
+		if shutdownConnections != nil {
+			errs = append(errs, shutdownConnections(ctx))
 		}
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}
@@ -365,8 +369,8 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(logger, publishers.OTELLogs, featureFlags))
-	shutdown.funcs = append(shutdown.funcs, connectionRecorder.Shutdown)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs, featureFlags))
+	shutdownConnections = connectionRecorder.Shutdown
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
 		return err

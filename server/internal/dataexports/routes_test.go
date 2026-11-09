@@ -1,6 +1,8 @@
 package dataexports_test
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -10,7 +12,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 )
@@ -316,4 +320,78 @@ func TestRouteCreateRollsBackWhenAuditInsertFails(t *testing.T) {
 	rows, err := repo.New(ti.conn).ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
 	require.Empty(t, rows)
+}
+
+func createConnectionLogsRoute(ctx context.Context, ti *testInstance) (*gen.DataExportRoute, error) {
+	route, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: dataexports.DataSourceMCPConnectionLogs, Enabled: false, OtelDestinationID: nil})
+	if err != nil {
+		return nil, fmt.Errorf("create route: %w", err)
+	}
+	return route, nil
+}
+
+func activeOrganizationID(ctx context.Context, t *testing.T) string {
+	t.Helper()
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	return authCtx.ActiveOrganizationID
+}
+
+func TestRouteRejectsConnectionLogsWithoutTheFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	_, err := createConnectionLogsRoute(ctx, ti)
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	listed, err := ti.service.ListForOrg(ctx, &gen.ListForOrgPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.NotNil(t, listed.McpConnectionLogsAvailable)
+	require.False(t, *listed.McpConnectionLogsAvailable)
+}
+
+func TestRouteAllowsConnectionLogsWithTheFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	ti.flags.SetFlag(feature.FlagMCPConnectionLogExport, activeOrganizationID(ctx, t), true)
+
+	created, err := createConnectionLogsRoute(ctx, ti)
+	require.NoError(t, err)
+	require.Equal(t, dataexports.DataSourceMCPConnectionLogs, created.DataSource)
+
+	listed, err := ti.service.ListForOrg(ctx, &gen.ListForOrgPayload{SessionToken: nil})
+	require.NoError(t, err)
+	require.True(t, *listed.McpConnectionLogsAvailable)
+}
+
+func TestRouteExistingConnectionLogsKeepsWorkingWhenTheFlagTurnsOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	organizationID := activeOrganizationID(ctx, t)
+	ti.flags.SetFlag(feature.FlagMCPConnectionLogExport, organizationID, true)
+	created, err := createConnectionLogsRoute(ctx, ti)
+	require.NoError(t, err)
+	destination := createDestination(t, ctx, ti, "https://collector.example.test", "exclude")
+	ti.flags.SetFlag(feature.FlagMCPConnectionLogExport, organizationID, false)
+
+	updated, err := ti.service.UpdateRoute(ctx, &gen.UpdateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: created.ID, DataSource: dataexports.DataSourceMCPConnectionLogs, Enabled: true, OtelDestinationID: &destination.ID})
+	require.NoError(t, err)
+	require.True(t, updated.Enabled)
+}
+
+func TestRouteCannotMoveOntoConnectionLogsWithoutTheFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateRoute(ctx, &gen.CreateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		DataSource: "product_telemetry", Enabled: false, OtelDestinationID: nil})
+	require.NoError(t, err)
+
+	_, err = ti.service.UpdateRoute(ctx, &gen.UpdateRoutePayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil,
+		ID: created.ID, DataSource: dataexports.DataSourceMCPConnectionLogs, Enabled: false, OtelDestinationID: nil})
+	requireOopsCode(t, err, oops.CodeInvalid)
 }

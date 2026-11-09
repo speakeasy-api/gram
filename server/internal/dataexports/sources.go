@@ -1,6 +1,11 @@
 package dataexports
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/speakeasy-api/gram/server/internal/feature"
+)
 
 const (
 	DataSourceProductTelemetry = "product_telemetry"
@@ -27,4 +32,17 @@ func NormalizeDataSource(value string) (string, error) {
 		return "", fmt.Errorf("unsupported data source %q", value)
 	}
 	return value, nil
+}
+
+// DataSourceAvailable reports whether an organization can add a route for a data
+// source. It fails closed. Routes that already exist are not checked.
+func DataSourceAvailable(ctx context.Context, flags feature.Provider, organizationID, dataSource string) (bool, error) {
+	if dataSource != DataSourceMCPConnectionLogs {
+		return true, nil
+	}
+	evaluation, err := feature.EvaluateFlag(ctx, flags, feature.FlagMCPConnectionLogExport, organizationID, nil)
+	if err != nil {
+		return false, fmt.Errorf("evaluate %s availability: %w", dataSource, err)
+	}
+	return evaluation == feature.EvaluationEnabled, nil
 }

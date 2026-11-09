@@ -79,25 +79,34 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 type connectionLogExport struct {
 	logs     *otelpub.Logger
 	features feature.Provider
-	logger   *slog.Logger
 }
 
-func newConnectionLogExport(logger *slog.Logger, publisher gcp.Publisher[*otelv1.InboundLogRecord], features feature.Provider) mcpconnectionattempts.RecorderOption {
+var errConnectionLogExportFlagUnknown = errors.New("connection log export flag could not be evaluated")
+
+func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord], features feature.Provider) mcpconnectionattempts.RecorderOption {
 	return mcpconnectionattempts.WithExport(&connectionLogExport{
 		logs: otelpub.NewLogger(publisher,
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 			dialect.ConnectionLogScope),
 		features: features,
-		logger:   logger,
 	})
 }
 
-func (e *connectionLogExport) Enabled(ctx context.Context, organizationID string) bool {
+func (e *connectionLogExport) Enabled(ctx context.Context, organizationID string) (bool, error) {
 	evaluation, err := feature.EvaluateFlag(ctx, e.features, feature.FlagMCPConnectionLogExport, organizationID, nil)
 	if err != nil {
-		e.logger.WarnContext(ctx, "evaluate connection log export flag", attr.SlogError(err))
+		return false, fmt.Errorf("evaluate connection log export flag: %w", err)
 	}
-	return evaluation == feature.EvaluationEnabled
+	switch evaluation {
+	case feature.EvaluationEnabled:
+		return true, nil
+	case feature.EvaluationDisabled:
+		return false, nil
+	case feature.EvaluationIndeterminate:
+		return false, errConnectionLogExportFlagUnknown
+	default:
+		return false, errConnectionLogExportFlagUnknown
+	}
 }
 
 func (e *connectionLogExport) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) error {

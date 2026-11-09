@@ -3,4 +3,4 @@
 "dashboard": minor
 ---
 
-Add a new "MCP connection logs" data export. When enabled, failed, blocked, and declined MCP connection attempts are sent to the project's OTEL destination with what happened, what to do, and the attempt id. Rollout is gated per organization.
+Add an "MCP connection logs" data export for organizations with early access. When enabled, failed MCP connections and server problems an admin or service provider needs to fix are sent to the project's OTEL destination as `speakeasy.mcp_connection` events. Blocked or declined connections and connections through organization gateways are not included.

@@ -15,7 +15,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
-	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func newTestConnectionLogExport(t *testing.T, organizationID string, enabled bool) (*connectionLogExport, *[]*otelv1.InboundLogRecord) {
@@ -37,17 +36,15 @@ func newTestConnectionLogExport(t *testing.T, organizationID string, enabled boo
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
 			dialect.ConnectionLogScope),
 		features: features,
-		logger:   testenv.NewLogger(t),
 	}, published
 }
 
 func connectionLogTestRecord() log.Record {
 	var record log.Record
-	record.SetEventName("gram.mcp_connection")
+	record.SetEventName("speakeasy.mcp_connection")
 	record.SetTimestamp(time.Now())
 	record.SetSeverity(log.SeverityError)
-	record.SetBody(log.StringValue("MCP connection failed"))
-	record.AddAttributes(log.String("error.type", "idp_unavailable"), log.Float64("gram.connection.duration", 1.5), log.Int64("gram.connection.repeats", 2))
+	record.AddAttributes(log.String("error.type", "idp_unavailable"), log.Float64("speakeasy.mcp_connection.duration", 1.5), log.Int64("speakeasy.mcp_connection.repeated_failures", 2), log.Bool("speakeasy.mcp_connection.final", true))
 	return record
 }
 
@@ -69,6 +66,21 @@ func TestConnectionLogExport_FlagIsPerOrganization(t *testing.T) {
 	t.Parallel()
 
 	export, _ := newTestConnectionLogExport(t, "org-on", true)
-	require.True(t, export.Enabled(t.Context(), "org-on"))
-	require.False(t, export.Enabled(t.Context(), "org-off"))
+	enabled, err := export.Enabled(t.Context(), "org-on")
+	require.NoError(t, err)
+	require.True(t, enabled)
+
+	export, _ = newTestConnectionLogExport(t, "org-off", false)
+	enabled, err = export.Enabled(t.Context(), "org-off")
+	require.NoError(t, err)
+	require.False(t, enabled)
+}
+
+func TestConnectionLogExport_UnknownFlagIsAnError(t *testing.T) {
+	t.Parallel()
+
+	export, _ := newTestConnectionLogExport(t, "org-on", true)
+	enabled, err := export.Enabled(t.Context(), "org-without-an-entry")
+	require.ErrorIs(t, err, errConnectionLogExportFlagUnknown)
+	require.False(t, enabled)
 }

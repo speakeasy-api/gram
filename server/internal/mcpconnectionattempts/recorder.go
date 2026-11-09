@@ -82,9 +82,6 @@ const (
 	dropRateLimited  dropReason = "rate_limited"
 	dropQueueReserve dropReason = "queue_reserved"
 	dropRepeatsLost  dropReason = "repeats_lost"
-
-	dropExportQueueFull dropReason = "export_queue_full"
-	dropExportFailed    dropReason = "export_failed"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -390,9 +387,6 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropRateLimited:  {},
 		dropQueueReserve: {},
 		dropRepeatsLost:  {},
-
-		dropExportQueueFull: {},
-		dropExportFailed:    {},
 	}
 }
 
@@ -677,6 +671,7 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 // ShutdownAndWait drains until ctx ends, then cancels in-flight I/O and drops
 // the backlog. It joins the writer before returning so its datastore can close.
 // The logs callback and datastore driver must honor their operation contexts.
+// A connection log export still publishing is not joined; it never touches the datastore.
 func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	err := r.Shutdown(ctx)
 	if r != nil && r.cancelWriter != nil {

@@ -76,6 +76,8 @@ type ListForOrgResponseBody struct {
 	Destinations []*DestinationResponseBody `form:"destinations,omitempty" json:"destinations,omitempty" xml:"destinations,omitempty"`
 	// Active data export routes across the active organization.
 	Routes []*DataExportRouteResponseBody `form:"routes,omitempty" json:"routes,omitempty" xml:"routes,omitempty"`
+	// Whether this organization can add routes for MCP connection logs.
+	McpConnectionLogsAvailable *bool `form:"mcp_connection_logs_available,omitempty" json:"mcp_connection_logs_available,omitempty" xml:"mcp_connection_logs_available,omitempty"`
 }
 
 // CreateDestinationResponseBody is the type of the "dataExports" service
@@ -2161,7 +2163,9 @@ func NewListDestinationsGatewayError(body *ListDestinationsGatewayErrorResponseB
 // NewListForOrgListDataExportsForOrgResultOK builds a "dataExports" service
 // "listForOrg" endpoint result from a HTTP "OK" response.
 func NewListForOrgListDataExportsForOrgResultOK(body *ListForOrgResponseBody) *dataexports.ListDataExportsForOrgResult {
-	v := &dataexports.ListDataExportsForOrgResult{}
+	v := &dataexports.ListDataExportsForOrgResult{
+		McpConnectionLogsAvailable: body.McpConnectionLogsAvailable,
+	}
 	v.Destinations = make([]*dataexports.Destination, len(body.Destinations))
 	for i, val := range body.Destinations {
 		if val == nil {

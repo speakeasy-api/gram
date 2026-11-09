@@ -116,12 +116,20 @@ func IsAgentKey(key string) bool {
 const (
 	pipelineKeyPrefix  = "speakeasy."
 	directoryKeyPrefix = "directory."
+
+	// exportedConnectionKeyPrefix holds the attributes on exported MCP connection
+	// logs. The pipeline writes nothing there, and they describe the record only.
+	exportedConnectionKeyPrefix = "speakeasy.mcp_connection."
 )
 
 // IsPipelineKey reports whether a key is in a namespace the pipeline owns,
 // speakeasy or directory. The transform drops what a producer sends there
 // before it writes its own, so a producer cannot classify its own record,
 // claim another tenant, pose as another scope or give a person a group.
+// speakeasy.mcp_connection is the one exception, and anything new under speakeasy stays reserved.
 func IsPipelineKey(key string) bool {
+	if strings.HasPrefix(key, exportedConnectionKeyPrefix) {
+		return false
+	}
 	return strings.HasPrefix(key, pipelineKeyPrefix) || strings.HasPrefix(key, directoryKeyPrefix)
 }

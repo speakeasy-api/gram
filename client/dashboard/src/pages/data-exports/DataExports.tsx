@@ -141,7 +141,7 @@ function renderDataSourceDescription(
   }
 
   if (dataSource === DataSource.McpConnectionLogs) {
-    return "OTLP logs for MCP connections that failed, were blocked, or were declined. Each log says what happened and what to do next.";
+    return "OTLP logs for failed MCP connections, including server problems an admin or service provider needs to fix. Blocked or declined connections, and connections through organization gateways, are not included.";
   }
 
   return "OTLP data";
@@ -298,6 +298,12 @@ function DataExportsInner(): JSX.Element {
     };
   });
 
+  // Only for adding a route: a route that already exists keeps its label and settings.
+  const addableDataSources = DATA_SOURCE_OPTIONS.filter(
+    (source) =>
+      source.value !== DataSource.McpConnectionLogs ||
+      exportsQuery.data?.mcpConnectionLogsAvailable === true,
+  );
   const orderedProjectExports = projectExports.toSorted(
     (left, right) =>
       Number(right.exports.length > 0) - Number(left.exports.length > 0),
@@ -310,7 +316,7 @@ function DataExportsInner(): JSX.Element {
     (state) =>
       !state.pending &&
       !state.error &&
-      DATA_SOURCE_OPTIONS.some(
+      addableDataSources.some(
         (source) =>
           !state.routes.some((route) => route.dataSource === source.value),
       ),
@@ -359,6 +365,7 @@ function DataExportsInner(): JSX.Element {
       )
     : linkedDataSourceOptions.filter(
         (source) =>
+          addableDataSources.some((item) => item.value === source.value) &&
           !configureState?.routes.some(
             (route) => route.dataSource === source.value,
           ),

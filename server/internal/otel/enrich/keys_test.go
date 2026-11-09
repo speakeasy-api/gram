@@ -19,6 +19,13 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		string(AgentEventTypeKey),
 		string(OriginalInstrumentationScopeNameKey),
 		string(OrganizationIDKey),
+		string(OrganizationSlugKey),
+		string(ProjectIDKey),
+		string(ProjectSlugKey),
+		string(APIKeyIDKey),
+		"speakeasy.connection.outcome",
+		"speakeasy.mcp_connections",
+		"speakeasy.future.key",
 		string(TokensCountKey),
 		string(TokensCodecKey),
 		string(GramUserRolesKey),
@@ -35,6 +42,8 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		"gram.session.id",
 		"directory",
 		"speakeasy",
+		"speakeasy.mcp_connection.outcome",
+		"speakeasy.mcp_connection.user_message",
 	} {
 		require.False(t, IsPipelineKey(key), "%s is the producer's", key)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -27,20 +28,22 @@ var (
 	ErrDataExportConfirmationRequired = errors.New("data export creation requires confirmation")
 	ErrDataExportInvalidInput         = errors.New("invalid data export input")
 	ErrDataExportRouteConflict        = errors.New("a data export route already exists for this source")
+	ErrDataExportSourceUnavailable    = errors.New("data source is not available for this organization")
 )
 
 type dataExportMutationService struct {
 	db           *pgxpool.Pool
 	audit        *audit.Logger
 	dashboardURL *url.URL
+	flags        feature.Provider
 }
 
 // WithDataExportMutations enables creation after the read dependencies have
 // been configured. Secret headers remain dashboard-only.
-func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dashboardURL *url.URL) *PostgresReader {
+func (r *PostgresReader) WithDataExportMutations(auditLogger *audit.Logger, dashboardURL *url.URL, flags feature.Provider) *PostgresReader {
 	if auditLogger != nil && validDashboardURL(dashboardURL) {
 		copyURL := *dashboardURL
-		r.dataExportMutations = &dataExportMutationService{db: r.db, audit: auditLogger, dashboardURL: &copyURL}
+		r.dataExportMutations = &dataExportMutationService{db: r.db, audit: auditLogger, dashboardURL: &copyURL, flags: flags}
 	}
 	return r
 }
@@ -97,6 +100,13 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 	dataSource, err := dataexports.NormalizeDataSource(input.DataSource)
 	if err != nil {
 		return CreateDataExportOutput{}, fmt.Errorf("%w: validate data_source: %w", ErrDataExportInvalidInput, err)
+	}
+	available, err := dataexports.DataSourceAvailable(ctx, r.dataExportMutations.flags, principal.OrganizationID, dataSource)
+	if err != nil {
+		return CreateDataExportOutput{}, fmt.Errorf("%w: %w", ErrDataExportSourceUnavailable, err)
+	}
+	if !available {
+		return CreateDataExportOutput{}, ErrDataExportSourceUnavailable
 	}
 	enabled := true
 	if input.Enabled != nil {
@@ -196,7 +206,7 @@ func registerDataExportMutationTool(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "create_data_export",
 		Title:       "Create a Data Export",
-		Description: "Create one OTEL destination and connect one project's product telemetry or risk findings to it. Before calling, show the user the exact project, endpoint, data source, enabled state, and whether sensitive fields are included, then obtain explicit confirmation. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed.",
+		Description: "Create one OTEL destination and connect one project's product telemetry, risk findings, tool call logs, or MCP connection logs to it. Before calling, show the user the exact project, endpoint, data source, enabled state, and whether sensitive fields are included, then obtain explicit confirmation. Constraints: header secrets are never accepted in chat; the destination is created without headers and the returned management URL is where the user securely adds any required authentication. One route per project and data source is allowed. MCP connection logs are only available to organizations with early access, and leave out organization gateways.",
 		Annotations: createDataExportAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input CreateDataExportInput) (*mcp.CallToolResult, CreateDataExportOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -232,6 +242,8 @@ func dataExportMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 	switch {
 	case errors.Is(err, ErrDataExportConfirmationRequired):
 		refusal = dataExportMutationRefusal{Code: "confirmation_required", Message: "Show the exact project, endpoint, data source, enabled state, and sensitive-data policy, then ask the user to confirm before creating the export."}
+	case errors.Is(err, ErrDataExportSourceUnavailable):
+		refusal = dataExportMutationRefusal{Code: "source_unavailable", Message: "MCP connection logs are not available for this organization yet. Choose another data source."}
 	case errors.Is(err, ErrDataExportRouteConflict):
 		refusal = dataExportMutationRefusal{Code: "conflict", Message: "This project already has an export route for that data source. Read the current exports and manage the existing route instead."}
 	case errors.Is(err, ErrDataExportInvalidInput):

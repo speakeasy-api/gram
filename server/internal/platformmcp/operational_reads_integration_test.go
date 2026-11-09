@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
@@ -163,7 +164,7 @@ func TestCreateDataExportRequiresExplicitConfirmation(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"), &feature.InMemory{})
 
 	_, err = reader.CreateDataExport(ctx, principal, CreateDataExportInput{
 		ProjectID:     project.ID.String(),
@@ -199,7 +200,7 @@ func TestCreateDataExportCommitsDestinationRouteAndAuditAtomically(t *testing.T)
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"), &feature.InMemory{})
 
 	destinationAuditBefore, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionOtelDestinationCreate)
 	require.NoError(t, err)
@@ -275,7 +276,7 @@ func TestCreateDataExportReturnsStructuredRecoverableRefusals(t *testing.T) {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	reader := NewPostgresReader(testenv.NewLogger(t), conn).
-		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"))
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"), &feature.InMemory{})
 
 	base := CreateDataExportInput{
 		ProjectID:     project.ID.String(),
@@ -701,4 +702,55 @@ func alwaysEnabledFeature(context.Context, string) (bool, error) {
 
 func alwaysDisabledFeature(context.Context, string) (bool, error) {
 	return false, nil
+}
+
+func createConnectionLogsExport(ctx context.Context, reader *PostgresReader, principal Principal, projectID string) (CreateDataExportOutput, error) {
+	output, err := reader.CreateDataExport(ctx, principal, CreateDataExportInput{
+		ProjectID:     projectID,
+		Name:          "Connection logs collector",
+		EndpointURL:   "https://otel.example.test/v1",
+		DataSource:    "mcp_connection_logs",
+		SensitiveData: "exclude",
+		Enabled:       nil,
+		Confirmed:     true,
+	})
+	if err != nil {
+		return output, fmt.Errorf("create export: %w", err)
+	}
+	return output, nil
+}
+
+func TestCreateDataExportRefusesConnectionLogsWithoutTheFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_unavailable")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"), &feature.InMemory{})
+
+	_, err = createConnectionLogsExport(ctx, reader, principal, project.ID.String())
+	require.ErrorIs(t, err, ErrDataExportSourceUnavailable)
+
+	routes, err := dataexportsrepo.New(conn).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{OrganizationID: principal.OrganizationID, ProjectID: project.ID})
+	require.NoError(t, err)
+	require.Empty(t, routes)
+}
+
+func TestCreateDataExportCreatesConnectionLogsWithTheFlag(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_create_export_connection_logs")
+	require.NoError(t, err)
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagMCPConnectionLogExport, principal.OrganizationID, true)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).
+		WithDataExportMutations(audit.NewLogger(), mustParseURL(t, "https://app.getgram.test"), flags)
+
+	output, err := createConnectionLogsExport(ctx, reader, principal, project.ID.String())
+	require.NoError(t, err)
+	require.Equal(t, "mcp_connection_logs", output.Route.DataSource)
 }
