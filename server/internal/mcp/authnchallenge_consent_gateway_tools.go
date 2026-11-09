@@ -237,7 +237,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, err
 	}
 	captured := map[string]*memberCatalog{}
-	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
+	// Listing every member's tools for the consent page names none of them,
+	// so it records no authorization check for any.
+	inventory, unavailableMembers, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}

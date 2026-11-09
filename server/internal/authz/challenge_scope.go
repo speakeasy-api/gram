@@ -21,11 +21,14 @@ type challengeScope struct {
 	recorded *recordedChallenges
 }
 
-// recordedChallenges remembers, per scope and resource, whether a request has
-// recorded an allowed and a denied check.
+// recordedChallenges remembers which decisions a request has recorded.
 type recordedChallenges struct {
-	mu      sync.Mutex
-	outcome map[challengeResource]challengeOutcomes
+	mu sync.Mutex
+	// decided holds every scope and resource with a recorded decision.
+	decided map[challengeResource]struct{}
+	// denied holds every recorded denial by the tool and disposition it
+	// refused, so each distinct refusal on a resource is recorded once.
+	denied map[challengeDenial]struct{}
 }
 
 type challengeResource struct {
@@ -33,23 +36,27 @@ type challengeResource struct {
 	resourceID string
 }
 
-type challengeOutcomes struct {
-	allowed bool
-	denied  bool
+// challengeDenial is the refusal of one tool and disposition on a resource. A
+// check that names no tool, such as connecting to the server, has both empty.
+type challengeDenial struct {
+	resource    challengeResource
+	tool        string
+	disposition string
 }
 
 // WithOneChallengePerResource returns a context under which the engine records
 // at most one check per scope and resource for the rest of the request: the
-// first decision, and later a denial when only an allow was recorded. A gateway
-// request checks the server it names several times (the server, then the tool
-// it calls), and every one of those would otherwise be its own row.
+// first decision, and later each distinct denial (by tool and disposition) not
+// recorded yet. A gateway request checks the server it names several times
+// (the server, then the tool it calls), and every one of those would otherwise
+// be its own row.
 func WithOneChallengePerResource(ctx context.Context) context.Context {
 	if scope, ok := ctx.Value(challengeScopeKey{}).(*challengeScope); ok && scope.recorded != nil {
 		return ctx
 	}
 	return context.WithValue(ctx, challengeScopeKey{}, &challengeScope{
 		silent:   false,
-		recorded: &recordedChallenges{mu: sync.Mutex{}, outcome: map[challengeResource]challengeOutcomes{}},
+		recorded: &recordedChallenges{mu: sync.Mutex{}, decided: map[challengeResource]struct{}{}, denied: map[challengeDenial]struct{}{}},
 	})
 }
 
@@ -94,27 +101,32 @@ func claimChallenge(ctx context.Context, l challengeLogger) bool {
 
 	scope.recorded.mu.Lock()
 	defer scope.recorded.mu.Unlock()
-	seen := scope.recorded.outcome[key]
+	_, decided := scope.recorded.decided[key]
 	if batch {
-		return !seen.allowed && !seen.denied
+		return !decided
 	}
 	switch l.Outcome {
 	case authzrepo.OutcomeAllow:
-		if seen.allowed || seen.denied {
+		if decided {
 			return false
 		}
-		seen.allowed = true
 	case authzrepo.OutcomeDeny:
 		// A denial after an allow is still recorded: connecting was allowed
-		// but this tool or disposition was not, and that refusal is real.
-		if seen.denied {
+		// but this tool or disposition was not, and that refusal is real. Two
+		// different refused tools on one server are two refusals.
+		denial := challengeDenial{
+			resource:    key,
+			tool:        focus.Dimensions[SelectorKeyTool],
+			disposition: focus.Dimensions[SelectorKeyDisposition],
+		}
+		if _, seen := scope.recorded.denied[denial]; seen {
 			return false
 		}
-		seen.denied = true
+		scope.recorded.denied[denial] = struct{}{}
 	default:
 		// Errors are always recorded: they are not a decision about access.
 		return true
 	}
-	scope.recorded.outcome[key] = seen
+	scope.recorded.decided[key] = struct{}{}
 	return true
 }

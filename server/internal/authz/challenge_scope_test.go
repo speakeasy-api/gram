@@ -37,7 +37,7 @@ func challengeScopeFixture(t *testing.T) (context.Context, *Engine, *pgxpool.Poo
 	return ctx, NewEngine(testenv.NewLogger(t), conn, staticChallengeLogging(true), workos.NewStubClient()), conn, granted
 }
 
-// recordedChallenges reads back the resource and outcome of every recorded
+// recordedChallengeOutcomes reads back the resource and outcome of every recorded
 // check, in order.
 func recordedChallengeOutcomes(t *testing.T, conn *pgxpool.Pool) [][2]string {
 	t.Helper()
@@ -87,6 +87,57 @@ func TestWithOneChallengePerResource_recordsADenialAfterAnAllow(t *testing.T) {
 	require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, MCPToolCallDimensions{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""})))
 
 	require.Equal(t, [][2]string{{granted, "allow"}, {granted, "deny"}}, recordedChallengeOutcomes(t, conn))
+}
+
+// A Code Mode run shares one record across its callbacks, so a program that
+// calls two refused tools on one server must still record both refusals,
+// while refusing the same tool again records nothing new.
+func TestWithOneChallengePerResource_recordsEachRefusedToolOnce(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		calls []MCPToolCallDimensions
+		want  int
+	}{
+		{
+			name:  "two tools",
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "drop", Disposition: DispositionDestructive, ProjectID: ""}},
+			want:  2,
+		},
+		{
+			name:  "one tool twice",
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}},
+			want:  1,
+		},
+		{
+			name:  "one tool under two dispositions",
+			calls: []MCPToolCallDimensions{{Tool: "delete", Disposition: DispositionDestructive, ProjectID: ""}, {Tool: "delete", Disposition: DispositionOpenWorld, ProjectID: ""}},
+			want:  2,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, engine, conn, granted := challengeScopeFixture(t)
+			ctx = GrantsToContext(ctx, []Grant{{
+				PrincipalUrn: "user:user_scope",
+				Scope:        ScopeMCPConnect,
+				Selector:     Selector{SelectorKeyResourceKind: ResourceKindMCP, SelectorKeyResourceID: granted, SelectorKeyDisposition: DispositionReadOnly},
+			}})
+			ctx = WithOneChallengePerResource(ctx)
+
+			for _, call := range tc.calls {
+				require.Error(t, engine.Require(ctx, MCPToolCallCheck(granted, call)))
+			}
+
+			want := make([][2]string, 0, tc.want)
+			for range tc.want {
+				want = append(want, [2]string{granted, "deny"})
+			}
+			require.Equal(t, want, recordedChallengeOutcomes(t, conn))
+		})
+	}
 }
 
 func TestWithoutChallenges_recordsNothing(t *testing.T) {
