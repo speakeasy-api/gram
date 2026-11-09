@@ -4682,6 +4682,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getOrganizationStats
+  /admin/platformMcpFeedback.list:
+    get:
+      description: List the newest Platform MCP feedback reports across every organization.
+      operationId: adminListPlatformMcpFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: Maximum number of reports to return.
+          in: query
+          name: limit
+          schema:
+            default: 200
+            description: Maximum number of reports to return.
+            format: int64
+            maximum: 500
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPlatformMcpFeedbackResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listPlatformMcpFeedback admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listPlatformMcpFeedback
   /admin/project.get:
     get:
       tags:
@@ -10441,6 +10522,67 @@ components:
         - tum_cost_usd
         - other_inference_spend_usd
         - estimated_total_usd
+    AdminPlatformMCPFeedback:
+      type: object
+      properties:
+        category:
+          type: string
+          description: The feedback category.
+        created_at:
+          type: string
+          description: When the feedback was sent.
+          format: date-time
+        delivery_state:
+          type: string
+          description: The delivery state of the stored row.
+        expires_at:
+          type: string
+          description: When the stored row is deleted.
+          format: date-time
+        failure_category:
+          type: string
+          description: The optional failure or readiness category.
+        id:
+          type: string
+          description: The feedback ID.
+          format: uuid
+        note:
+          type: string
+          description: The optional free-form note.
+        organization_id:
+          type: string
+          description: The organization ID.
+        organization_name:
+          type: string
+          description: The organization name. Absent when the organization no longer exists.
+        organization_slug:
+          type: string
+          description: The organization slug. Absent when the organization no longer exists.
+        rating:
+          type: integer
+          description: The optional rating from 1 through 5.
+          format: int64
+        subject_urn:
+          type: string
+          description: The session subject that sent the feedback.
+        success:
+          type: boolean
+          description: The optional success outcome.
+        tool_name:
+          type: string
+          description: The optional Platform MCP tool the feedback is about.
+        user_email:
+          type: string
+          description: The email of the user who sent the feedback. Absent when the user no longer exists.
+      description: One feedback report a user sent through the Platform MCP send_platform_mcp_feedback tool.
+      required:
+        - id
+        - organization_id
+        - subject_urn
+        - category
+        - delivery_state
+        - created_at
+        - expires_at
     AdminProject:
       type: object
       properties:
@@ -12334,6 +12476,16 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListPlatformMcpFeedbackResponseBody:
+      type: object
+      properties:
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPlatformMCPFeedback'
+          description: Feedback reports, newest first.
+      required:
+        - feedback
     ListSignupOffersResponseBody:
       type: object
       properties:

@@ -115,6 +115,7 @@ type Server struct {
 	ListSignupOffers                        http.Handler
 	CreateSignupOffer                       http.Handler
 	UpdateSignupOffer                       http.Handler
+	ListPlatformMcpFeedback                 http.Handler
 	GetStripeSubscriptionCandidate          http.Handler
 	SetStripeSubscription                   http.Handler
 	ListCustomerUsage                       http.Handler
@@ -250,6 +251,7 @@ func New(
 			{"ListSignupOffers", "GET", "/admin/signupOffers"},
 			{"CreateSignupOffer", "POST", "/admin/signupOffers.create"},
 			{"UpdateSignupOffer", "POST", "/admin/signupOffers.update"},
+			{"ListPlatformMcpFeedback", "GET", "/admin/platformMcpFeedback.list"},
 			{"GetStripeSubscriptionCandidate", "GET", "/admin/organization.stripeSubscriptionCandidate"},
 			{"SetStripeSubscription", "POST", "/admin/organization.setStripeSubscription"},
 			{"ListCustomerUsage", "GET", "/admin/organizations.customerUsage"},
@@ -357,6 +359,7 @@ func New(
 		ListSignupOffers:                        NewListSignupOffersHandler(e.ListSignupOffers, mux, decoder, encoder, errhandler, formatter),
 		CreateSignupOffer:                       NewCreateSignupOfferHandler(e.CreateSignupOffer, mux, decoder, encoder, errhandler, formatter),
 		UpdateSignupOffer:                       NewUpdateSignupOfferHandler(e.UpdateSignupOffer, mux, decoder, encoder, errhandler, formatter),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackHandler(e.ListPlatformMcpFeedback, mux, decoder, encoder, errhandler, formatter),
 		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateHandler(e.GetStripeSubscriptionCandidate, mux, decoder, encoder, errhandler, formatter),
 		SetStripeSubscription:                   NewSetStripeSubscriptionHandler(e.SetStripeSubscription, mux, decoder, encoder, errhandler, formatter),
 		ListCustomerUsage:                       NewListCustomerUsageHandler(e.ListCustomerUsage, mux, decoder, encoder, errhandler, formatter),
@@ -471,6 +474,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListSignupOffers = m(s.ListSignupOffers)
 	s.CreateSignupOffer = m(s.CreateSignupOffer)
 	s.UpdateSignupOffer = m(s.UpdateSignupOffer)
+	s.ListPlatformMcpFeedback = m(s.ListPlatformMcpFeedback)
 	s.GetStripeSubscriptionCandidate = m(s.GetStripeSubscriptionCandidate)
 	s.SetStripeSubscription = m(s.SetStripeSubscription)
 	s.ListCustomerUsage = m(s.ListCustomerUsage)
@@ -584,6 +588,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListSignupOffersHandler(mux, h.ListSignupOffers)
 	MountCreateSignupOfferHandler(mux, h.CreateSignupOffer)
 	MountUpdateSignupOfferHandler(mux, h.UpdateSignupOffer)
+	MountListPlatformMcpFeedbackHandler(mux, h.ListPlatformMcpFeedback)
 	MountGetStripeSubscriptionCandidateHandler(mux, h.GetStripeSubscriptionCandidate)
 	MountSetStripeSubscriptionHandler(mux, h.SetStripeSubscription)
 	MountListCustomerUsageHandler(mux, h.ListCustomerUsage)
@@ -5640,6 +5645,60 @@ func NewUpdateSignupOfferHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "updateSignupOffer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListPlatformMcpFeedbackHandler configures the mux to serve the "admin"
+// service "listPlatformMcpFeedback" endpoint.
+func MountListPlatformMcpFeedbackHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/platformMcpFeedback.list", f)
+}
+
+// NewListPlatformMcpFeedbackHandler creates a HTTP handler which loads the
+// HTTP request and calls the "admin" service "listPlatformMcpFeedback"
+// endpoint.
+func NewListPlatformMcpFeedbackHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListPlatformMcpFeedbackRequest(mux, decoder)
+		encodeResponse = EncodeListPlatformMcpFeedbackResponse(encoder)
+		encodeError    = EncodeListPlatformMcpFeedbackError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listPlatformMcpFeedback")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

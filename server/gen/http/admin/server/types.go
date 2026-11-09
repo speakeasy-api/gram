@@ -2778,6 +2778,13 @@ type UpdateSignupOfferResponseBody struct {
 	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// ListPlatformMcpFeedbackResponseBody is the type of the "admin" service
+// "listPlatformMcpFeedback" endpoint HTTP response body.
+type ListPlatformMcpFeedbackResponseBody struct {
+	// Feedback reports, newest first.
+	Feedback []*AdminPlatformMCPFeedbackResponseBody `form:"feedback" json:"feedback" xml:"feedback"`
+}
+
 // GetStripeSubscriptionCandidateResponseBody is the type of the "admin"
 // service "getStripeSubscriptionCandidate" endpoint HTTP response body.
 type GetStripeSubscriptionCandidateResponseBody struct {
@@ -20977,6 +20984,196 @@ type UpdateSignupOfferGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// ListPlatformMcpFeedbackUnauthorizedResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListPlatformMcpFeedbackUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackForbiddenResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "forbidden" error.
+type ListPlatformMcpFeedbackForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackBadRequestResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "bad_request" error.
+type ListPlatformMcpFeedbackBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackNotFoundResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "not_found" error.
+type ListPlatformMcpFeedbackNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackConflictResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "conflict" error.
+type ListPlatformMcpFeedbackConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackUnsupportedMediaResponseBody is the type of the
+// "admin" service "listPlatformMcpFeedback" endpoint HTTP response body for
+// the "unsupported_media" error.
+type ListPlatformMcpFeedbackUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackInvalidResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "invalid" error.
+type ListPlatformMcpFeedbackInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackInvariantViolationResponseBody is the type of the
+// "admin" service "listPlatformMcpFeedback" endpoint HTTP response body for
+// the "invariant_violation" error.
+type ListPlatformMcpFeedbackInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackUnexpectedResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "unexpected" error.
+type ListPlatformMcpFeedbackUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListPlatformMcpFeedbackGatewayErrorResponseBody is the type of the "admin"
+// service "listPlatformMcpFeedback" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListPlatformMcpFeedbackGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // GetStripeSubscriptionCandidateUnavailableResponseBody is the type of the
 // "admin" service "getStripeSubscriptionCandidate" endpoint HTTP response body
 // for the "unavailable" error.
@@ -24468,6 +24665,42 @@ type AdminSignupOfferResponseBody struct {
 	UpdatedAt             string `form:"updated_at" json:"updated_at" xml:"updated_at"`
 }
 
+// AdminPlatformMCPFeedbackResponseBody is used to define fields on response
+// body types.
+type AdminPlatformMCPFeedbackResponseBody struct {
+	// The feedback ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name. Absent when the organization no longer exists.
+	OrganizationName *string `form:"organization_name,omitempty" json:"organization_name,omitempty" xml:"organization_name,omitempty"`
+	// The organization slug. Absent when the organization no longer exists.
+	OrganizationSlug *string `form:"organization_slug,omitempty" json:"organization_slug,omitempty" xml:"organization_slug,omitempty"`
+	// The session subject that sent the feedback.
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// The email of the user who sent the feedback. Absent when the user no longer
+	// exists.
+	UserEmail *string `form:"user_email,omitempty" json:"user_email,omitempty" xml:"user_email,omitempty"`
+	// The feedback category.
+	Category string `form:"category" json:"category" xml:"category"`
+	// The optional rating from 1 through 5.
+	Rating *int `form:"rating,omitempty" json:"rating,omitempty" xml:"rating,omitempty"`
+	// The optional success outcome.
+	Success *bool `form:"success,omitempty" json:"success,omitempty" xml:"success,omitempty"`
+	// The optional Platform MCP tool the feedback is about.
+	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
+	// The optional failure or readiness category.
+	FailureCategory *string `form:"failure_category,omitempty" json:"failure_category,omitempty" xml:"failure_category,omitempty"`
+	// The optional free-form note.
+	Note *string `form:"note,omitempty" json:"note,omitempty" xml:"note,omitempty"`
+	// The delivery state of the stored row.
+	DeliveryState string `form:"delivery_state" json:"delivery_state" xml:"delivery_state"`
+	// When the feedback was sent.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the stored row is deleted.
+	ExpiresAt string `form:"expires_at" json:"expires_at" xml:"expires_at"`
+}
+
 // AdminCustomerUsageResponseBody is used to define fields on response body
 // types.
 type AdminCustomerUsageResponseBody struct {
@@ -27236,6 +27469,25 @@ func NewUpdateSignupOfferResponseBody(res *admin.AdminSignupOffer) *UpdateSignup
 		Enabled:               res.Enabled,
 		CreatedAt:             res.CreatedAt,
 		UpdatedAt:             res.UpdatedAt,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackResponseBody builds the HTTP response body from
+// the result of the "listPlatformMcpFeedback" endpoint of the "admin" service.
+func NewListPlatformMcpFeedbackResponseBody(res *admin.ListPlatformMcpFeedbackResult) *ListPlatformMcpFeedbackResponseBody {
+	body := &ListPlatformMcpFeedbackResponseBody{}
+	if res.Feedback != nil {
+		body.Feedback = make([]*AdminPlatformMCPFeedbackResponseBody, len(res.Feedback))
+		for i, val := range res.Feedback {
+			if val == nil {
+				body.Feedback[i] = nil
+				continue
+			}
+			body.Feedback[i] = marshalAdminAdminPlatformMCPFeedbackToAdminPlatformMCPFeedbackResponseBody(val)
+		}
+	} else {
+		body.Feedback = []*AdminPlatformMCPFeedbackResponseBody{}
 	}
 	return body
 }
@@ -41557,6 +41809,156 @@ func NewUpdateSignupOfferGatewayErrorResponseBody(res *goa.ServiceError) *Update
 	return body
 }
 
+// NewListPlatformMcpFeedbackUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+func NewListPlatformMcpFeedbackUnauthorizedResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackUnauthorizedResponseBody {
+	body := &ListPlatformMcpFeedbackUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackForbiddenResponseBody builds the HTTP response
+// body from the result of the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+func NewListPlatformMcpFeedbackForbiddenResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackForbiddenResponseBody {
+	body := &ListPlatformMcpFeedbackForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackBadRequestResponseBody builds the HTTP response
+// body from the result of the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+func NewListPlatformMcpFeedbackBadRequestResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackBadRequestResponseBody {
+	body := &ListPlatformMcpFeedbackBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackNotFoundResponseBody builds the HTTP response body
+// from the result of the "listPlatformMcpFeedback" endpoint of the "admin"
+// service.
+func NewListPlatformMcpFeedbackNotFoundResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackNotFoundResponseBody {
+	body := &ListPlatformMcpFeedbackNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackConflictResponseBody builds the HTTP response body
+// from the result of the "listPlatformMcpFeedback" endpoint of the "admin"
+// service.
+func NewListPlatformMcpFeedbackConflictResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackConflictResponseBody {
+	body := &ListPlatformMcpFeedbackConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "listPlatformMcpFeedback" endpoint of
+// the "admin" service.
+func NewListPlatformMcpFeedbackUnsupportedMediaResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackUnsupportedMediaResponseBody {
+	body := &ListPlatformMcpFeedbackUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackInvalidResponseBody builds the HTTP response body
+// from the result of the "listPlatformMcpFeedback" endpoint of the "admin"
+// service.
+func NewListPlatformMcpFeedbackInvalidResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackInvalidResponseBody {
+	body := &ListPlatformMcpFeedbackInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "listPlatformMcpFeedback" endpoint of
+// the "admin" service.
+func NewListPlatformMcpFeedbackInvariantViolationResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackInvariantViolationResponseBody {
+	body := &ListPlatformMcpFeedbackInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackUnexpectedResponseBody builds the HTTP response
+// body from the result of the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+func NewListPlatformMcpFeedbackUnexpectedResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackUnexpectedResponseBody {
+	body := &ListPlatformMcpFeedbackUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListPlatformMcpFeedbackGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "listPlatformMcpFeedback" endpoint of the
+// "admin" service.
+func NewListPlatformMcpFeedbackGatewayErrorResponseBody(res *goa.ServiceError) *ListPlatformMcpFeedbackGatewayErrorResponseBody {
+	body := &ListPlatformMcpFeedbackGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewGetStripeSubscriptionCandidateUnavailableResponseBody builds the HTTP
 // response body from the result of the "getStripeSubscriptionCandidate"
 // endpoint of the "admin" service.
@@ -44664,6 +45066,16 @@ func NewUpdateSignupOfferPayload(body *UpdateSignupOfferRequestBody, adminSessio
 		ID:                    *body.ID,
 		Enabled:               *body.Enabled,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListPlatformMcpFeedbackPayload builds a admin service
+// listPlatformMcpFeedback endpoint payload.
+func NewListPlatformMcpFeedbackPayload(limit int, adminSessionToken *string) *admin.ListPlatformMcpFeedbackPayload {
+	v := &admin.ListPlatformMcpFeedbackPayload{}
+	v.Limit = limit
 	v.AdminSessionToken = adminSessionToken
 
 	return v

@@ -1425,6 +1425,7 @@ var _ = Service("admin", func() {
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
 		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")

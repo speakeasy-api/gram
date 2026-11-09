@@ -22555,6 +22555,240 @@ func DecodeUpdateSignupOfferResponse(decoder func(*http.Response) goahttp.Decode
 	}
 }
 
+// BuildListPlatformMcpFeedbackRequest instantiates a HTTP request object with
+// method and path set to call the "admin" service "listPlatformMcpFeedback"
+// endpoint
+func (c *Client) BuildListPlatformMcpFeedbackRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListPlatformMcpFeedbackAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "listPlatformMcpFeedback", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListPlatformMcpFeedbackRequest returns an encoder for requests sent to
+// the admin listPlatformMcpFeedback server.
+func EncodeListPlatformMcpFeedbackRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.ListPlatformMcpFeedbackPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "listPlatformMcpFeedback", "*admin.ListPlatformMcpFeedbackPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListPlatformMcpFeedbackResponse returns a decoder for responses
+// returned by the admin listPlatformMcpFeedback endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListPlatformMcpFeedbackResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListPlatformMcpFeedbackResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListPlatformMcpFeedbackResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			res := NewListPlatformMcpFeedbackResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListPlatformMcpFeedbackUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListPlatformMcpFeedbackForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListPlatformMcpFeedbackBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListPlatformMcpFeedbackNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListPlatformMcpFeedbackConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListPlatformMcpFeedbackUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListPlatformMcpFeedbackInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListPlatformMcpFeedbackInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+				}
+				err = ValidateListPlatformMcpFeedbackInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+				}
+				return nil, NewListPlatformMcpFeedbackInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListPlatformMcpFeedbackUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+				}
+				err = ValidateListPlatformMcpFeedbackUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+				}
+				return nil, NewListPlatformMcpFeedbackUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "listPlatformMcpFeedback", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListPlatformMcpFeedbackGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "listPlatformMcpFeedback", err)
+			}
+			err = ValidateListPlatformMcpFeedbackGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "listPlatformMcpFeedback", err)
+			}
+			return nil, NewListPlatformMcpFeedbackGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "listPlatformMcpFeedback", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetStripeSubscriptionCandidateRequest instantiates a HTTP request
 // object with method and path set to call the "admin" service
 // "getStripeSubscriptionCandidate" endpoint
@@ -27017,6 +27251,31 @@ func unmarshalAdminSignupOfferResponseBodyToAdminAdminSignupOffer(v *AdminSignup
 		Enabled:               *v.Enabled,
 		CreatedAt:             *v.CreatedAt,
 		UpdatedAt:             *v.UpdatedAt,
+	}
+
+	return res
+}
+
+// unmarshalAdminPlatformMCPFeedbackResponseBodyToAdminAdminPlatformMCPFeedback
+// builds a value of type *admin.AdminPlatformMCPFeedback from a value of type
+// *AdminPlatformMCPFeedbackResponseBody.
+func unmarshalAdminPlatformMCPFeedbackResponseBodyToAdminAdminPlatformMCPFeedback(v *AdminPlatformMCPFeedbackResponseBody) *admin.AdminPlatformMCPFeedback {
+	res := &admin.AdminPlatformMCPFeedback{
+		ID:               *v.ID,
+		OrganizationID:   *v.OrganizationID,
+		OrganizationName: v.OrganizationName,
+		OrganizationSlug: v.OrganizationSlug,
+		SubjectUrn:       *v.SubjectUrn,
+		UserEmail:        v.UserEmail,
+		Category:         *v.Category,
+		Rating:           v.Rating,
+		Success:          v.Success,
+		ToolName:         v.ToolName,
+		FailureCategory:  v.FailureCategory,
+		Note:             v.Note,
+		DeliveryState:    *v.DeliveryState,
+		CreatedAt:        *v.CreatedAt,
+		ExpiresAt:        *v.ExpiresAt,
 	}
 
 	return res

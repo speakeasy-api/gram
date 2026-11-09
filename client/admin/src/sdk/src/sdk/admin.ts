@@ -65,6 +65,7 @@ import { adminListOrganizationActivity } from "../funcs/adminListOrganizationAct
 import { adminListOrganizationMembers } from "../funcs/adminListOrganizationMembers.js";
 import { adminListOrganizationProjects } from "../funcs/adminListOrganizationProjects.js";
 import { adminListOrganizations } from "../funcs/adminListOrganizations.js";
+import { adminListPlatformMcpFeedback } from "../funcs/adminListPlatformMcpFeedback.js";
 import { adminListProjectMcpServers } from "../funcs/adminListProjectMcpServers.js";
 import { adminListRegistryEntries } from "../funcs/adminListRegistryEntries.js";
 import { adminListRegistryOktaUnmapped } from "../funcs/adminListRegistryOktaUnmapped.js";
@@ -180,6 +181,7 @@ import { FetchIssuerMetadataRequestBody } from "../models/components/fetchissuer
 import { GetRegistryPromotionCandidateRequestBody } from "../models/components/getregistrypromotioncandidaterequestbody.js";
 import { GlobalRemoteSessionIssuer } from "../models/components/globalremotesessionissuer.js";
 import { IssuerMigratePreflight } from "../models/components/issuermigratepreflight.js";
+import { ListPlatformMcpFeedbackResponseBody } from "../models/components/listplatformmcpfeedbackresponsebody.js";
 import { ListSignupOffersResponseBody } from "../models/components/listsignupoffersresponsebody.js";
 import { MarkEnterpriseTrialConvertedRequestBody } from "../models/components/markenterprisetrialconvertedrequestbody.js";
 import { MarkEnterpriseTrialConvertedResult } from "../models/components/markenterprisetrialconvertedresult.js";
@@ -265,6 +267,7 @@ import {
   AdminListOrganizationsRequest,
   AdminListOrganizationsResponse,
 } from "../models/operations/adminlistorganizations.js";
+import { AdminListPlatformMcpFeedbackRequest } from "../models/operations/adminlistplatformmcpfeedback.js";
 import { AdminListProjectMcpServersRequest } from "../models/operations/adminlistprojectmcpservers.js";
 import { AdminListRegistryEntriesRequest } from "../models/operations/adminlistregistryentries.js";
 import { AdminListRegistryPromotionCandidatesRequest } from "../models/operations/adminlistregistrypromotioncandidates.js";
@@ -1164,6 +1167,23 @@ export class Admin extends ClientSDK {
   ): Promise<AdminOrganizationStats> {
     return unwrapAsync(adminGetOrganizationStats(
       this,
+      options,
+    ));
+  }
+
+  /**
+   * listPlatformMcpFeedback admin
+   *
+   * @remarks
+   * List the newest Platform MCP feedback reports across every organization.
+   */
+  async listPlatformMcpFeedback(
+    request?: AdminListPlatformMcpFeedbackRequest | undefined,
+    options?: RequestOptions,
+  ): Promise<ListPlatformMcpFeedbackResponseBody> {
+    return unwrapAsync(adminListPlatformMcpFeedback(
+      this,
+      request,
       options,
     ));
   }
