@@ -27,3 +27,44 @@ func TestInnermost(t *testing.T) {
 	require.Same(t, inner, oops.Innermost(joined), "a ShareableError under errors.Join is found")
 	require.Same(t, inner, oops.Innermost(errors.Join(errors.New("plain"), outer)))
 }
+
+// synthesizingCause has an As hook that answers every *ShareableError target
+// with a new ShareableError wrapping itself, so following causes never ends.
+type synthesizingCause struct{}
+
+func (synthesizingCause) Error() string { return "synthesizing" }
+
+func (c synthesizingCause) As(target any) bool {
+	shareable, ok := target.(**oops.ShareableError)
+	if !ok {
+		return false
+	}
+	*shareable = oops.E(oops.CodeUnexpected, c, "synthesized")
+	return true
+}
+
+// cyclicCause answers every *ShareableError target with the same error.
+type cyclicCause struct{ self **oops.ShareableError }
+
+func (cyclicCause) Error() string { return "cyclic" }
+
+func (c cyclicCause) As(target any) bool {
+	shareable, ok := target.(**oops.ShareableError)
+	if !ok {
+		return false
+	}
+	*shareable = *c.self
+	return true
+}
+
+// A cause whose As hook keeps producing ShareableErrors ends the walk instead
+// of looping forever.
+func TestInnermost_StopsOnACauseThatNeverEnds(t *testing.T) {
+	t.Parallel()
+
+	require.NotNil(t, oops.Innermost(synthesizingCause{}))
+
+	var self *oops.ShareableError
+	self = oops.E(oops.CodeUnexpected, cyclicCause{self: &self}, "cyclic")
+	require.Same(t, self, oops.Innermost(self))
+}
