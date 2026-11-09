@@ -976,6 +976,7 @@ SELECT
     m.toolset_id,
     m.unproxied_mcp_server_id,
     m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -4229,3 +4230,18 @@ UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 se
 -- name: PingPlatformMCPDatabaseFixture :exec
 -- Test fixture: proves a pooled connection is still healthy.
 SELECT 1;
+
+-- name: ListPlatformMCPServerNamesByResourceIDs :many
+-- Names the MCP servers that authorization checks name by resource ID: a
+-- server's own ID, which its endpoint checks, or the toolset ID the
+-- organization gateway checks for a toolset-backed server. A toolset's
+-- canonical server comes first, then the oldest, so it names the toolset.
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = @organization_id
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY(@resource_ids::uuid[]) OR m.toolset_id = ANY(@resource_ids::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id;

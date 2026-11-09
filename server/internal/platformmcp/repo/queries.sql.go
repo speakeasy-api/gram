@@ -5548,6 +5548,7 @@ SELECT
     m.toolset_id,
     m.unproxied_mcp_server_id,
     m.builtin_backend,
+    m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
     COALESCE(registration.source_kind, '') AS source_kind,
@@ -5675,6 +5676,7 @@ type ListPlatformMCPInventoryRow struct {
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
 	BuiltinBackend                  pgtype.Text
+	UserSessionIssuerID             uuid.NullUUID
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -5731,6 +5733,7 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
 			&i.BuiltinBackend,
+			&i.UserSessionIssuerID,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
 			&i.SourceKind,
@@ -7266,6 +7269,53 @@ func (q *Queries) ListPlatformMCPServerIdentities(ctx context.Context, arg ListP
 			&i.PluginSlug,
 			&i.PluginDisplayName,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlatformMCPServerNamesByResourceIDs = `-- name: ListPlatformMCPServerNamesByResourceIDs :many
+SELECT m.id AS mcp_server_id, m.toolset_id, COALESCE(m.name, m.slug, '')::text AS name
+FROM mcp_servers AS m
+JOIN projects AS project
+  ON project.id = m.project_id
+ AND project.organization_id = $1
+ AND project.deleted IS FALSE
+WHERE m.deleted IS FALSE
+  AND (m.id = ANY($2::uuid[]) OR m.toolset_id = ANY($2::uuid[]))
+ORDER BY (m.id = m.toolset_id) DESC NULLS LAST, m.created_at, m.id
+`
+
+type ListPlatformMCPServerNamesByResourceIDsParams struct {
+	OrganizationID string
+	ResourceIds    []uuid.UUID
+}
+
+type ListPlatformMCPServerNamesByResourceIDsRow struct {
+	McpServerID uuid.UUID
+	ToolsetID   uuid.NullUUID
+	Name        string
+}
+
+// Names the MCP servers that authorization checks name by resource ID: a
+// server's own ID, which its endpoint checks, or the toolset ID the
+// organization gateway checks for a toolset-backed server. A toolset's
+// canonical server comes first, then the oldest, so it names the toolset.
+func (q *Queries) ListPlatformMCPServerNamesByResourceIDs(ctx context.Context, arg ListPlatformMCPServerNamesByResourceIDsParams) ([]ListPlatformMCPServerNamesByResourceIDsRow, error) {
+	rows, err := q.db.Query(ctx, listPlatformMCPServerNamesByResourceIDs, arg.OrganizationID, arg.ResourceIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlatformMCPServerNamesByResourceIDsRow
+	for rows.Next() {
+		var i ListPlatformMCPServerNamesByResourceIDsRow
+		if err := rows.Scan(&i.McpServerID, &i.ToolsetID, &i.Name); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

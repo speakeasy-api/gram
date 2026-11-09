@@ -33,3 +33,27 @@ func TestDeriveLifecycle(t *testing.T) {
 		})
 	}
 }
+
+func TestOwnsUnblocked(t *testing.T) {
+	t.Parallel()
+
+	latched := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+	tests := []struct {
+		name     string
+		userID   string
+		owner    string
+		latch    pgtype.Timestamptz
+		expected bool
+	}{
+		{name: "owner", userID: "user_1", owner: "user_1", latch: pgtype.Timestamptz{}, expected: true},
+		{name: "another user", userID: "user_2", owner: "user_1", latch: pgtype.Timestamptz{}, expected: false},
+		{name: "owner awaiting reassignment", userID: "user_1", owner: "user_1", latch: latched, expected: false},
+		{name: "no user", userID: "", owner: "", latch: pgtype.Timestamptz{}, expected: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tt.expected, OwnsUnblocked(tt.userID, tt.owner, tt.latch))
+		})
+	}
+}

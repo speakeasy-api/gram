@@ -372,6 +372,7 @@ type PostgresReader struct {
 	inboundEMATrust           *InboundEMATrustService
 	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
+	agentIdentityReads        *AgentIdentityReadService
 	dataExports               *DataExportReadService
 	dataExportMutations       *dataExportMutationService
 	dataExportRouteToggle     *DataExportRouteToggleService
@@ -418,6 +419,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		inboundEMATrust:           nil,
 		gatewayProxy:              nil,
 		gatewaySessions:           nil,
+		agentIdentityReads:        nil,
 		dataExports:               nil,
 		dataExportMutations:       nil,
 		dataExportRouteToggle:     nil,
@@ -1166,6 +1168,15 @@ func (r *PostgresReader) WithGatewayProxy(proxy GatewayProxy, flags feature.Prov
 func (r *PostgresReader) WithGatewaySessions(service GatewaySessionManagement) *PostgresReader {
 	if r != nil {
 		r.gatewaySessions = service
+	}
+	return r
+}
+
+// WithAgentIdentityReads serves an agent identity's MCP servers and
+// authorization checks.
+func (r *PostgresReader) WithAgentIdentityReads(service *AgentIdentityReadService) *PostgresReader {
+	if r != nil {
+		r.agentIdentityReads = service
 	}
 	return r
 }
