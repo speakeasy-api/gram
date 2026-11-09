@@ -180,7 +180,9 @@ describe("AnthropicAdminControlsStep", () => {
       screen.getByText(/Cowork conversations don't appear in this list/),
     ).toBeTruthy();
     expect(
-      screen.getByText(/look for it in Agent Sessions after the first reply/),
+      screen.getByText(
+        /Look for them in Agent Sessions after Claude's first reply/,
+      ),
     ).toBeTruthy();
   });
 

@@ -74,7 +74,7 @@ export function AnthropicAdminControlsStep({
           index={4}
           slug="connect-cowork"
           title="Turn on Cowork monitoring"
-          description="Cowork's native monitoring sends usage, tokens and cost to Speakeasy. The conversations themselves arrive from the plugin, which Set up Claude Desktop registers."
+          description="Sends Cowork usage, tokens and cost to Speakeasy."
         >
           <PlatformStepList
             platformId="claude-cowork"
@@ -95,10 +95,10 @@ export function AnthropicAdminControlsStep({
 
         <ConfirmTrafficSection
           index={6}
-          description="Run any tool in Claude Code and confirm its events arrive here; installation alone does not prove delivery. Cowork conversations don't appear in this list."
+          description="Run a tool in Claude Code and check its events arrive here."
           callout={{
             title: "Check Cowork in Agent Sessions",
-            body: "Inside Cowork, the plugin uploads the session transcript when Claude finishes a reply instead of sending events as they happen, so Cowork never shows in this list. Start a new conversation in Claude Desktop and look for it in Agent Sessions after the first reply.",
+            body: "Cowork conversations don't appear in this list. Look for them in Agent Sessions after Claude's first reply.",
           }}
           matchesSource={isAnthropicSource}
         />

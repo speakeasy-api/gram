@@ -107,7 +107,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
           code: "{{GRAM_CLAUDE_PLUGIN_NAME}}",
           fallback: "the observability plugin",
         },
-        ` in the plugin list and set Default access → Required. That pre-installs it for org members and prevents disabling or removal. Claude Desktop only runs plugins registered here; a copy the device agent installs on a laptop isn't used. Required installation does not prove hook execution or event delivery; verify both in a new conversation. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
+        ` in the plugin list and set Default access → Required. That pre-installs it for org members and prevents disabling or removal. Required installation does not prove hook execution or event delivery; verify both in a new conversation. ${PERSONAL_ACCOUNT_GOVERNANCE_NOTE}`,
       ],
       screenshot: {
         src: "/setup/claude-cowork-set-required.png",
@@ -119,7 +119,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
     {
       title: "Set access for your MCP plugins",
       description:
-        "Set Default access on the plugins that carry your distributed MCP servers. Required installs them for everyone; Installed by default lets people remove them.",
+        "Set Default access on your MCP server plugins: Required installs them for everyone; Installed by default lets people remove them.",
     },
     {
       title: "Allow Speakeasy in Claude's network egress settings",
@@ -138,7 +138,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
   const instruction: PlatformSetupStep = {
     title: "Add the organization instruction",
     description:
-      "In Claude Desktop, every conversation starts in Chat and moves into Cowork only when it needs to run something, and the observability plugin runs only in Cowork. This instruction has Claude run one harmless command before every reply, which moves each conversation into Cowork from its first message. As an Owner or Primary Owner, open Organization settings → Organization on Claude.ai, paste the text below into Organization instructions, and save. It needs Code execution and file creation, which the network egress step turns on.",
+      "As an Owner or Primary Owner, open Organization settings → Organization on Claude.ai, paste the text below into Organization instructions, and save. It has Claude run one short command per reply, which moves the conversation into Cowork. Needs Code execution and file creation, from the egress step.",
     helpLink: {
       url: "https://claude.ai/admin-settings/organization",
       linkLabel: "Organization settings",
@@ -151,7 +151,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
   const monitoring: PlatformSetupStep = {
     title: "Enable OTEL export",
     description:
-      "Native monitoring requires Team or Enterprise and Claude Desktop 1.1.4173 or later. Open Admin settings → Cowork → Monitoring and enter the values below. This is separate from the plugin's session uploads, and it's where Cowork token usage and cost come from: uploaded transcripts carry no token counts. Verify the endpoint, project, and headers against actual received events.",
+      "Native monitoring requires Team or Enterprise and Claude Desktop 1.1.4173 or later. Open Admin settings → Cowork → Monitoring and enter the values below. This is where Cowork usage and cost come from; plugin uploads carry no token counts. Verify the endpoint, project, and headers against actual received events.",
     fields: [
       {
         label: "OTLP endpoint",
@@ -176,7 +176,7 @@ const coworkTeamStepGroups = (origin: string, egressHosts: string[]) => {
   const check: PlatformSetupStep = {
     title: "Check it in a new conversation",
     description:
-      "Start a new conversation in Claude Desktop and send any message. Claude runs a short command before replying. When the reply finishes, the conversation appears in Agent Sessions under the signed-in Claude account. If Claude doesn't run the command, check that the instruction is saved and Code execution and file creation is on. If it runs but no session appears, check that the observability plugin is synced and set to Required in Claude.ai, then that every domain from the network egress step is listed under Additional allowed domains as a bare hostname.",
+      "Start a new conversation and send any message. Claude runs a short command before replying, and the conversation appears in Agent Sessions once the reply finishes. No command? Check the instruction is saved and Code execution is on. No session? Check the plugin is Required and the egress domains are added.",
   };
   return { registration, instruction, monitoring, check };
 };
