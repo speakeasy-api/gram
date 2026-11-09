@@ -5,12 +5,14 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	skillsrepo "github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -71,13 +73,15 @@ func seedSkill(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	t.Helper()
 
 	projectID := seedProject(t, ctx, conn, organizationID)
-	skillID := uuid.New()
-	_, err := conn.Exec(ctx,
-		`INSERT INTO skills (id, project_id, name, display_name) VALUES ($1, $2, $3, $4)`,
-		skillID, projectID, "skill-"+skillID.String()[:8], "Skill "+skillID.String()[:8],
-	)
+	suffix := uuid.NewString()[:8]
+	skill, err := skillsrepo.New(conn).CreateSkill(ctx, skillsrepo.CreateSkillParams{
+		ProjectID:   projectID,
+		Name:        "skill-" + suffix,
+		DisplayName: "Skill " + suffix,
+		Summary:     pgtype.Text{String: "", Valid: false},
+	})
 	require.NoError(t, err)
-	return skillID.String()
+	return skill.ID.String()
 }
 
 func listedSkillIDs(result *gen.ListIdentityAccessResult) []string {
