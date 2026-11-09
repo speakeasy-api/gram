@@ -22,7 +22,11 @@ const (
 	DNSConfigurationWrongTarget DNSConfigurationStatus = "wrong_target"
 	// DNSConfigurationUnconfirmed includes proxy and flattened targets we cannot identify.
 	DNSConfigurationUnconfirmed DNSConfigurationStatus = "unconfirmed"
-	// DNSConfigurationNotFound means the queried hostname does not exist in DNS.
+	// DNSConfigurationNotFound means the hostname resolves to no addresses: it
+	// does not exist, it has only non-address records (such as the ownership
+	// TXT record under it, which makes it an empty non-terminal), or its alias
+	// chain ends at a name that resolves to nothing. No proxy can hide a target
+	// behind such a name, so this is definite rather than unconfirmed.
 	DNSConfigurationNotFound DNSConfigurationStatus = "not_found"
 	// DNSConfigurationCheckFailed means the observer could not complete its lookup.
 	DNSConfigurationCheckFailed DNSConfigurationStatus = "check_failed"
@@ -83,9 +87,7 @@ func ObserveDNS(ctx context.Context, resolver dns.Resolver, domain string, targe
 		if err != nil {
 			var dnsErr *net.DNSError
 			if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
-				if !hadAlias {
-					result.Status = DNSConfigurationNotFound
-				}
+				result.Status = DNSConfigurationNotFound
 				return result, nil
 			}
 			return fail(fmt.Errorf("observe custom domain CNAME: %w", err))
@@ -113,6 +115,7 @@ func ObserveDNS(ctx context.Context, resolver dns.Resolver, domain string, targe
 	if err != nil {
 		var dnsErr *net.DNSError
 		if errors.As(err, &dnsErr) && dnsErr.IsNotFound {
+			result.Status = DNSConfigurationNotFound
 			return result, nil
 		}
 		return fail(fmt.Errorf("observe custom domain addresses: %w", err))

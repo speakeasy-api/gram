@@ -62,6 +62,45 @@ func TestObserveDNS(t *testing.T) {
 	}
 }
 
+func TestObserveDNSHostnameWithoutAddresses(t *testing.T) {
+	t.Parallel()
+	notFound := &net.DNSError{Err: "no such host", IsNotFound: true}
+	for _, tc := range []struct {
+		name     string
+		aliases  map[string]string
+		aliasErr map[string]error
+	}{
+		// The ownership TXT record at _gram.<host> makes <host> an empty
+		// non-terminal: it exists, so the CNAME lookup is not NXDOMAIN, but it
+		// has no address records.
+		{name: "ownership TXT only", aliases: nil, aliasErr: nil},
+		{name: "dangling alias", aliases: map[string]string{"domain.example.": "gone.example."}, aliasErr: map[string]error{"gone.example.": notFound}},
+		{name: "alias to a name without addresses", aliases: map[string]string{"domain.example.": "empty.example."}, aliasErr: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			resolver := dns.NewMockResolver(dns.MockResolverConfig{
+				LookupCNAMERecordFunc: func(_ context.Context, host string) (string, error) {
+					return tc.aliases[host], tc.aliasErr[host]
+				},
+				LookupCNAMEFunc: func(context.Context, string) (string, error) {
+					return "", errors.New("canonical name lookup must not be used")
+				},
+				LookupNetIPFunc: func(_ context.Context, _, host string) ([]netip.Addr, error) {
+					if host == "domain.example." {
+						return nil, notFound
+					}
+					return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
+				},
+			})
+
+			got, err := ObserveDNS(t.Context(), resolver, "domain.example", DNSRoutingTargets{SharedCNAME: "shared.example", DomainTarget: "abcdefghij.domains.example", TargetSuffix: "domains.example", ARecords: nil})
+			require.NoError(t, err)
+			require.Equal(t, DNSObservation{Status: DNSConfigurationNotFound, Method: DNSRoutingMethodUnknown}, got)
+		})
+	}
+}
+
 func TestObserveDNSWithoutTargetSuffix(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
