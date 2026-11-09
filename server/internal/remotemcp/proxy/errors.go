@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 )
 
 // ErrBodyTooLarge is returned when a buffered JSON body (either the inbound
@@ -41,10 +42,10 @@ var ErrUpstreamTimedOut = errors.New("upstream timed out")
 // error chain so the caller distinguishes via the timer's Stop() return.
 func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bool) error {
 	switch {
-	case forwardInterrupted(ctx):
+	case shutdowndrain.Interrupted(ctx):
 		// The shutdown drain gave up on this call. The caller answers the
 		// request itself, so this is not logged as a failure here.
-		return fmt.Errorf("forward request: %w", errShutdownInterrupt)
+		return fmt.Errorf("forward request: %w", shutdowndrain.ErrInterrupted)
 	case timedOut:
 		return oops.E(oops.CodeGatewayError, fmt.Errorf("%w: %w", ErrUpstreamTimedOut, err), "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):

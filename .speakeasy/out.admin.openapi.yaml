@@ -4682,6 +4682,87 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: getOrganizationStats
+  /admin/platformMcpFeedback.list:
+    get:
+      description: List the newest Platform MCP feedback reports across every organization.
+      operationId: adminListPlatformMcpFeedback
+      parameters:
+        - allowEmptyValue: true
+          description: Maximum number of reports to return.
+          in: query
+          name: limit
+          schema:
+            default: 200
+            description: Maximum number of reports to return.
+            format: int64
+            maximum: 500
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListPlatformMcpFeedbackResponseBody'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listPlatformMcpFeedback admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listPlatformMcpFeedback
   /admin/project.get:
     get:
       tags:
@@ -5076,6 +5157,248 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listProjectMcpServers
+  /admin/project.redeploy:
+    post:
+      description: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.
+      operationId: adminRedeployProject
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RedeployProjectRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProjectRedeployResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: redeployProject admin
+      tags:
+        - admin
+      x-speakeasy-name-override: redeployProject
+      x-speakeasy-react-hook:
+        name: AdminRedeployProject
+  /admin/project.redeployPreview:
+    get:
+      description: Returns what redeploying a project would act on, for review before redeployProject.
+      operationId: adminGetProjectRedeployPreview
+      parameters:
+        - allowEmptyValue: true
+          description: Exact organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: Exact organization ID.
+            type: string
+        - allowEmptyValue: true
+          description: Exact project ID.
+          in: query
+          name: project_id
+          required: true
+          schema:
+            description: Exact project ID.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminProjectRedeployPreview'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getProjectRedeployPreview admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getProjectRedeployPreview
+      x-speakeasy-react-hook:
+        name: AdminGetProjectRedeployPreview
+  /admin/project.setMcpServerScopePin:
+    post:
+      description: Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.
+      operationId: adminSetMcpServerScopePin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetMcpServerScopePinRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpServerResourceScopes'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setMcpServerScopePin admin
+      tags:
+        - admin
+      x-speakeasy-name-override: setMcpServerScopePin
+      x-speakeasy-react-hook:
+        name: AdminSetMcpServerScopePin
   /admin/registry.create:
     post:
       description: Staff-only registry administration.
@@ -7269,7 +7592,7 @@ paths:
       x-speakeasy-name-override: updateSignupOffer
   /admin/supportCoverage.get:
     get:
-      description: 'Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.'
+      description: 'Observed support coverage for one organization: per-surface evidence for activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Speakeasy''s MCP gateway and each consuming agent surface.'
       operationId: adminGetSupportCoverage
       parameters:
         - allowEmptyValue: true
@@ -9087,6 +9410,8 @@ components:
           enum:
             - external_oauth
             - gram_private
+        resource_scopes:
+          $ref: '#/components/schemas/AdminMcpServerResourceScopes'
         server:
           $ref: '#/components/schemas/AdminMcpServerHealthServer'
         upstream_auth:
@@ -9511,6 +9836,87 @@ components:
         - distinct_subjects_ever
         - distinct_subjects_in_window
         - live
+    AdminMcpServerResourceScopeClient:
+      type: object
+      properties:
+        client_id:
+          type: string
+          description: The remote session client ID.
+        pin_would_decide:
+          type: boolean
+          description: 'Whether a pin, if set, decides this client''s request: the client owns the resource and neither its own scopes nor a challenge outranks the pin.'
+        requested_scopes:
+          type: array
+          items:
+            type: string
+          description: The scopes a login would request.
+        scope_source:
+          type: string
+          description: Which source decides the client's requested scopes.
+          enum:
+            - client_scope
+            - challenge_scope
+            - resource_pin
+            - live_resource
+            - cached_resource
+            - issuer_override
+            - issuer_omitted
+            - issuer_catalogue
+            - none
+        unadvertised_pinned_scopes:
+          type: array
+          items:
+            type: string
+          description: Pinned scopes the MCP server does not advertise. They are still requested.
+      description: What a login through one remote session client bound to the server would request now.
+      required:
+        - client_id
+        - scope_source
+        - requested_scopes
+        - unadvertised_pinned_scopes
+        - pin_would_decide
+    AdminMcpServerResourceScopes:
+      type: object
+      properties:
+        advertised_scopes:
+          type: array
+          items:
+            type: string
+          description: The RFC 9728 scopes_supported the resource advertises. Absent when unknown.
+        advertised_scopes_known:
+          type: boolean
+          description: Whether the resource's advertised scopes are known from a fresh RFC 9728 read.
+        challenge_scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes named by the resource's last WWW-Authenticate challenge.
+        clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerResourceScopeClient'
+          description: Remote session clients bound to the server's user session issuer.
+        pinned_scopes:
+          type: array
+          items:
+            type: string
+          description: Scopes pinned on the resource. Empty when there is no pin.
+        resource_url:
+          type: string
+          description: The upstream URL the protected resource is keyed by.
+          format: uri
+        shared_server_count:
+          type: integer
+          description: Other live MCP servers in the project with the same upstream URL. A pin applies to all of them.
+          format: int64
+      description: The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing.
+      required:
+        - resource_url
+        - pinned_scopes
+        - advertised_scopes_known
+        - challenge_scopes
+        - shared_server_count
+        - clients
     AdminMcpServerToolCallBucket:
       type: object
       properties:
@@ -10116,6 +10522,67 @@ components:
         - tum_cost_usd
         - other_inference_spend_usd
         - estimated_total_usd
+    AdminPlatformMCPFeedback:
+      type: object
+      properties:
+        category:
+          type: string
+          description: The feedback category.
+        created_at:
+          type: string
+          description: When the feedback was sent.
+          format: date-time
+        delivery_state:
+          type: string
+          description: The delivery state of the stored row.
+        expires_at:
+          type: string
+          description: When the stored row is deleted.
+          format: date-time
+        failure_category:
+          type: string
+          description: The optional failure or readiness category.
+        id:
+          type: string
+          description: The feedback ID.
+          format: uuid
+        note:
+          type: string
+          description: The optional free-form note.
+        organization_id:
+          type: string
+          description: The organization ID.
+        organization_name:
+          type: string
+          description: The organization name. Absent when the organization no longer exists.
+        organization_slug:
+          type: string
+          description: The organization slug. Absent when the organization no longer exists.
+        rating:
+          type: integer
+          description: The optional rating from 1 through 5.
+          format: int64
+        subject_urn:
+          type: string
+          description: The session subject that sent the feedback.
+        success:
+          type: boolean
+          description: The optional success outcome.
+        tool_name:
+          type: string
+          description: The optional Platform MCP tool the feedback is about.
+        user_email:
+          type: string
+          description: The email of the user who sent the feedback. Absent when the user no longer exists.
+      description: One feedback report a user sent through the Platform MCP send_platform_mcp_feedback tool.
+      required:
+        - id
+        - organization_id
+        - subject_urn
+        - category
+        - delivery_state
+        - created_at
+        - expires_at
     AdminProject:
       type: object
       properties:
@@ -10151,6 +10618,9 @@ components:
     AdminProjectDetail:
       type: object
       properties:
+        active_deployment_id:
+          type: string
+          description: The deployment the project currently serves. Absent when no deployment has completed.
         api_key_count:
           type: integer
           description: Number of active API keys in the project.
@@ -10213,6 +10683,64 @@ components:
         - assistant_count
         - created_at
         - updated_at
+    AdminProjectRedeployPreview:
+      type: object
+      properties:
+        active_deployment_id:
+          type: string
+          description: Deployment a redeploy would clone. Send it back as expected_active_deployment_id.
+        external_mcps:
+          type: integer
+          description: External MCP sources the new deployment would drop.
+          format: int64
+        function_assets:
+          type: integer
+          description: Function sources whose runners would be deployed again.
+          format: int64
+        openapi_assets:
+          type: integer
+          description: OpenAPI sources that would be processed again.
+          format: int64
+        organization_id:
+          type: string
+          description: Organization that owns the project.
+        packages:
+          type: integer
+          description: Packages carried into the new deployment.
+          format: int64
+        project_id:
+          type: string
+          description: Project ID.
+        project_name:
+          type: string
+          description: Project name.
+      description: What redeploying a project would act on.
+      required:
+        - organization_id
+        - project_id
+        - project_name
+        - active_deployment_id
+        - openapi_assets
+        - function_assets
+        - packages
+        - external_mcps
+    AdminProjectRedeployResult:
+      type: object
+      properties:
+        deployment_id:
+          type: string
+          description: New deployment. It becomes active only if processing succeeds.
+        project_id:
+          type: string
+          description: Project ID.
+        source_deployment_id:
+          type: string
+          description: Deployment that was cloned.
+      description: The deployment a redeploy created. Processing continues after this returns.
+      required:
+        - project_id
+        - source_deployment_id
+        - deployment_id
     AdminRegistryEntry:
       type: object
       properties:
@@ -11948,6 +12476,16 @@ components:
       description: Result type for the platform-administrator convergence-candidate listing.
       required:
         - items
+    ListPlatformMcpFeedbackResponseBody:
+      type: object
+      properties:
+        feedback:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminPlatformMCPFeedback'
+          description: Feedback reports, newest first.
+      required:
+        - feedback
     ListSignupOffersResponseBody:
       type: object
       properties:
@@ -12197,6 +12735,22 @@ components:
       required:
         - id
         - days
+    RedeployProjectRequestBody:
+      type: object
+      properties:
+        expected_active_deployment_id:
+          type: string
+          description: active_deployment_id from getProjectRedeployPreview.
+        organization_id:
+          type: string
+          description: Exact organization ID.
+        project_id:
+          type: string
+          description: Exact project ID.
+      required:
+        - organization_id
+        - project_id
+        - expected_active_deployment_id
     RemoteSessionIssuer:
       type: object
       properties:
@@ -12662,6 +13216,30 @@ components:
         - organization_id
         - key_type
         - monthly_credits
+    SetMcpServerScopePinRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: The mcp_servers row ID.
+          format: uuid
+        organization_id:
+          type: string
+          description: Organization the project must belong to. A project outside it is reported as not found.
+        project_id:
+          type: string
+          description: Project ID.
+          format: uuid
+        scopes:
+          type: array
+          items:
+            type: string
+          description: The new pin. Trimmed and de-duplicated; an empty list clears the pin.
+      required:
+        - organization_id
+        - project_id
+        - mcp_server_id
+        - scopes
     SetOrganizationChatAnalysisSettingsRequestBody:
       type: object
       properties:
@@ -12902,21 +13480,26 @@ components:
           format: date-time
         status:
           type: string
-          description: Whether evidence was found, absent, or not answerable yet.
+          description: Whether evidence was found, absent, not answerable yet, or impossible for this pair.
           enum:
             - observed
             - none
             - pending
+            - na
         surface:
           type: string
-          description: Consuming surface the cell reports on.
+          description: 'Surface the cell reports on: Speakeasy''s own MCP gateway, or a consuming agent surface.'
           enum:
+            - mcp_gateway
             - claude_code
             - claude_chat
             - cowork
             - codex
             - cursor
             - other
+        unit:
+          type: string
+          description: Singular noun the value counts, when the capability's own unit does not apply. The gateway is measured in tool calls where an agent surface is measured in sessions. Empty when the capability's default unit stands.
         value:
           type: integer
           description: 'Primary measure: sessions, tokens, blocks, attributed sessions or distinct shadow servers depending on the capability. Zero unless observed.'
@@ -12927,6 +13510,7 @@ components:
         - surface
         - status
         - value
+        - unit
         - detail
     SupportCoverageResult:
       type: object

@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -46,7 +47,8 @@ type metaMemberError struct {
 func (e *metaMemberError) Error() string { return e.message }
 
 // handleMetaDescribeServerCall: one member's catalog as qualified names and
-// descriptions, without schemas (describe_tools' job).
+// descriptions, without schemas (describe_tools' job). A member that cannot be
+// described is answered as an isError result and returned as the failure.
 func (s *Service) handleMetaDescribeServerCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -54,29 +56,33 @@ func (s *Service) handleMetaDescribeServerCall(
 	members []metaMember,
 	req *rawRequest,
 	argsRaw json.RawMessage,
-) (json.RawMessage, error) {
+) (json.RawMessage, *metaMemberFailure, error) {
 	var args struct {
 		Server string `json:"server"`
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid describe_server arguments").LogWarn(ctx, logger)
 		}
 	}
 	if args.Server == "" {
-		return nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "server is required").LogWarn(ctx, logger)
 	}
 
-	member, ok := findMetaMember(members, args.Server)
+	member, ok := s.findNamedMember(ctx, gate, members, args.Server)
 	if !ok {
-		return nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
+		return nil, nil, unknownMetaMemberError(ctx, logger, gate, args.Server)
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, s.memberFailureMessage(ctx, logger, gate, member, err))
+			// describe_server names one member, so its arguments are all this
+			// member's.
+			failure := newMetaMemberFailure(member, err, s.memberFailureMessage(ctx, logger, gate, member, err), argsRaw)
+			body, marshalErr := marshalMetaToolError(ctx, logger, req.ID, failure.message)
+			return body, &failure, marshalErr
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	described := make([]metamcp.DescribedTool, 0, len(catalog.entries))
@@ -97,13 +103,15 @@ func (s *Service) handleMetaDescribeServerCall(
 		Tools: described,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_server result").LogError(ctx, logger)
 	}
-	return marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	body, err := marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	return body, nil, err
 }
 
 // handleMetaDescribeToolsCall: full input schemas for the requested
-// qualified names; misses land in not_found rather than being dropped.
+// qualified names; misses land in not_found rather than being dropped. Members
+// that cannot be described land in failed and are returned as failures.
 func (s *Service) handleMetaDescribeToolsCall(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -111,17 +119,17 @@ func (s *Service) handleMetaDescribeToolsCall(
 	members []metaMember,
 	req *rawRequest,
 	argsRaw json.RawMessage,
-) (json.RawMessage, error) {
+) (json.RawMessage, []metaMemberFailure, error) {
 	var args struct {
 		Tools []string `json:"tools"`
 	}
 	if len(argsRaw) > 0 {
 		if err := json.Unmarshal(argsRaw, &args); err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid describe_tools arguments").LogWarn(ctx, logger)
 		}
 	}
 	if len(args.Tools) == 0 {
-		return nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "tools is required").LogWarn(ctx, logger)
 	}
 
 	// Group by member so each toolset is described once.
@@ -130,7 +138,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 		toolNames []string
 	}
 	if len(args.Tools) > metamcp.MaxDescribeTools {
-		return nil, oops.E(oops.CodeInvalid, nil, "tools accepts at most %d names per call", metamcp.MaxDescribeTools).LogWarn(ctx, logger)
+		return nil, nil, oops.E(oops.CodeInvalid, nil, "tools accepts at most %d names per call", metamcp.MaxDescribeTools).LogWarn(ctx, logger)
 	}
 
 	requestsBySlug := map[string]*memberRequest{}
@@ -146,9 +154,9 @@ func (s *Service) handleMetaDescribeToolsCall(
 		seen[qualified] = struct{}{}
 		serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 		if err != nil {
-			return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 		}
-		member, ok := findMetaMember(members, serverSlug)
+		member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 		if !ok {
 			notFound = append(notFound, qualified)
 			continue
@@ -164,6 +172,7 @@ func (s *Service) handleMetaDescribeToolsCall(
 
 	described := []metamcp.SchemaTool{}
 	failed := []metamcp.FailedServer{}
+	var failures []metaMemberFailure
 	for _, slug := range order {
 		mr := requestsBySlug[slug]
 		catalog, err := s.describeMetaMember(ctx, logger, gate, mr.member)
@@ -171,10 +180,13 @@ func (s *Service) handleMetaDescribeToolsCall(
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
 			if _, ok := errors.AsType[*metaMemberError](err); ok {
-				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: s.memberFailureMessage(ctx, logger, gate, mr.member, err)})
+				failure := newMetaMemberFailure(mr.member, err, s.memberFailureMessage(ctx, logger, gate, mr.member, err), describeToolsMemberArguments(mr.member.slug, mr.toolNames))
+				failures = append(failures, failure)
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: failure.message})
 				continue
 			}
-			return nil, err
+			// Members already found unreachable keep their failed rows.
+			return nil, failures, err
 		}
 		for _, toolName := range mr.toolNames {
 			entry, ok := catalog.byName[toolName]
@@ -202,9 +214,25 @@ func (s *Service) handleMetaDescribeToolsCall(
 		Failed:   failed,
 	})
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
+		return nil, nil, oops.E(oops.CodeUnexpected, err, "serialize describe_tools result").LogError(ctx, logger)
 	}
-	return marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	body, err := marshalMetaToolCallResult(ctx, logger, req.ID, structured)
+	return body, failures, err
+}
+
+// describeToolsMemberArguments is the describe_tools arguments narrowed to the
+// names of one member, so a failed row on that member lists only its own
+// tools.
+func describeToolsMemberArguments(slug string, toolNames []string) []byte {
+	qualified := make([]string, 0, len(toolNames))
+	for _, toolName := range toolNames {
+		qualified = append(qualified, metamcp.QualifyName(slug, toolName))
+	}
+	arguments, err := json.Marshal(map[string][]string{"tools": qualified})
+	if err != nil {
+		return nil
+	}
+	return arguments
 }
 
 // handleMetaExecuteToolCall routes into the member's hosted dispatch. The
@@ -250,6 +278,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
 	}
+	// Resolved before the cached-view check so the named server's check is
+	// recorded on both paths; an unknown server is still refused after it.
+	member, ok := s.findNamedMember(ctx, gate, members, serverSlug)
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		found := false
 		for _, tool := range gate.catalog.Tools {
@@ -265,7 +296,6 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
-	member, ok := findMetaMember(members, serverSlug)
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
@@ -273,7 +303,7 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 		s.recordConsentRefusal(ctx, gate, member, err)
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			message := s.memberFailureMessage(ctx, logger, gate, member, err)
+			message := s.callFailureMessage(ctx, logger, gate, member, err)
 			attempt.fail(metaMemberErrorStatus(err), message)
 			return marshalMetaMemberFailure(ctx, logger, req.ID, err, message)
 		}
@@ -347,25 +377,17 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
-		// a gateway fault. Internal faults — unexpected errors and server
-		// invariant violations — keep the error envelope. The innermost
-		// shareable message carries the actionable cause (every
-		// ShareableError public is written to be client-safe).
+		// a gateway fault. Internal faults (unexpected errors and server
+		// invariant violations) keep the error envelope.
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok &&
 			shareable.Code != oops.CodeUnexpected && shareable.Code != oops.CodeInvariantViolation {
-			deepest := shareable
-			for inner := errors.Unwrap(error(deepest)); inner != nil; inner = errors.Unwrap(inner) {
-				if innerShareable, ok := errors.AsType[*oops.ShareableError](inner); ok {
-					deepest = innerShareable
-				}
-			}
 			// An unknown tool or invalid call refused before dispatch is one
 			// the program can correct.
 			if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && !invocation.dispatched &&
 				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
 				invocation.rejected = true
 			}
-			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error())
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, oops.Innermost(shareable).Error())
 			attempt.fail(shareable.HTTPStatus(ctx), message)
 			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
@@ -511,7 +533,7 @@ func (s *Service) buildMemberDispatch(
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberReconnectURL(member))
+		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberCallerURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {
@@ -655,26 +677,25 @@ func (s *Service) loadMemberToolset(
 
 // memberToolsetConnectAllowed applies a non-public toolset's own mcp:connect
 // gate, matching ServeToolsetResolved's connection check. Grants context was
-// prepared when the member snapshot was resolved.
+// prepared when the member snapshot was resolved. Whether the check is
+// recorded follows ctx: admission and listings pass authz.WithoutChallenges,
+// and a call that named a private member already recorded the same check, so
+// the request keeps one.
 func (s *Service) memberToolsetConnectAllowed(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, authenticated bool, toolset *toolsets_repo.Toolset, public bool) (bool, error) {
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, toolset.ID.String(), toolset.ProjectID.String())
+	visibility := mcpservers.VisibilityPrivate
 	if public {
-		shadow.recordServer(ctx, shadowSurface, true, authz.MandatoryServerPublic, connect)
-		return true, nil
+		visibility = mcpservers.VisibilityPublic
 	}
-	if !authenticated {
+	if !public && !authenticated {
 		shadow.recordServer(ctx, shadowSurface, false, authz.MandatoryServerPrivate, connect)
 		return false, nil
 	}
-	err := s.authz.Require(ctx, connect)
-	shadow.shadowRequireServer(ctx, shadowSurface, err, authz.MandatoryServerPrivate, connect)
+	refusal, err := s.memberConnectDecision(ctx, shadow, shadowSurface, visibility, connect)
 	if err != nil {
-		if oopsErr, ok := errors.AsType[*oops.ShareableError](err); ok && oopsErr.Code == oops.CodeForbidden {
-			return false, nil
-		}
 		return false, fmt.Errorf("check toolset-level authz: %w", err)
 	}
-	return true, nil
+	return refusal == nil, nil
 }
 
 // marshalMetaToolCallResult wraps structuredContent in the meta MCP's

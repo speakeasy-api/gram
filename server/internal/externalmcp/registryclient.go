@@ -324,6 +324,7 @@ type serverDetailsEntry struct {
 
 type serverDetailsJSON struct {
 	Name        string             `json:"name"`
+	Title       *string            `json:"title"`
 	Description string             `json:"description"`
 	Version     string             `json:"version"`
 	Remotes     []serverRemoteJSON `json:"remotes"`
@@ -697,7 +698,10 @@ type ServerDetails struct {
 	// AuthSetup distinguishes unknown evidence from manual setup.
 	AuthSetup string
 
-	Name          string
+	Name string
+	// Title is the registry's human-readable name, such as "Linear" for
+	// app.linear/mcp; empty when the registry gives none.
+	Title         string
 	Description   string
 	Version       string
 	RemoteURL     string
@@ -785,6 +789,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string) *ServerDetails {
 	details := &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          record.Server.Name,
+		Title:         conv.PtrValOr(record.Server.Title, ""),
 		Description:   record.Server.Description,
 		Version:       record.Server.Version,
 		RemoteURL:     "",

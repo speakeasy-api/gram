@@ -3,7 +3,10 @@ package authz
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/url"
+	"slices"
+	"strings"
 )
 
 // Selector is a set of key-value constraints attached to a grant or check.
@@ -368,6 +371,42 @@ func (s Selector) IsRestricted() bool {
 		return true
 	}
 	return kind != WildcardResource || id != WildcardResource
+}
+
+// CoversEveryResource reports whether the selector names every resource of
+// its kind: a wildcard resource id and no narrowing dimension such as a
+// project, tool or server URL. Unlike IsRestricted, a wildcard confined to one
+// resource kind still counts, since that is how an unrestricted grant of a
+// scope is stored.
+func (s Selector) CoversEveryResource() bool {
+	for selectorKey, value := range s {
+		switch selectorKey {
+		case SelectorKeyResourceKind:
+		case SelectorKeyResourceID:
+			if value != WildcardResource {
+				return false
+			}
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// Key is a canonical text form of the selector: two selectors that name the
+// same resource the same way have the same key, whatever order their
+// dimensions were set in.
+func (s Selector) Key() string {
+	var b strings.Builder
+	for i, key := range slices.Sorted(maps.Keys(s)) {
+		if i > 0 {
+			b.WriteByte(';')
+		}
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(s[key])
+	}
+	return b.String()
 }
 
 // SelectorFromRow parses the selectors JSONB column into a Selector.

@@ -160,7 +160,7 @@ func registerCardResource(reg *Registrar) {
 		URI:         cardResourceURI,
 		Name:        "platform-card",
 		Title:       "Speakeasy result card",
-		Description: "Inline card for MCP servers added to a project, for sign-in steps, and for who a session is connected as.",
+		Description: "Inline card for MCP servers added to a project, for sign-in steps, for who a session is connected as, and a carousel of catalog search results.",
 		MIMEType:    cardMIMEType,
 		// No csp: the card loads nothing from the network, so the host's
 		// restrictive default applies.

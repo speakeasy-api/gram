@@ -494,6 +494,27 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListScopes"}`)
 	})
 
+	Method("listAgentPolicyScopes", func() {
+		Description("List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+		})
+
+		Result(ListAgentPolicyScopesResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listAgentPolicyScopes")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-name-override", "listAgentPolicyScopes")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListAgentPolicyScopes"}`)
+	})
+
 	Method("listMembers", func() {
 		Description("List all team members with their role assignments.")
 		Security(security.ByKey, func() {
@@ -1033,6 +1054,9 @@ var _ = Service("access", func() {
 			})
 			Attribute("principal_urn", String, "Filter by principal URN.")
 			Attribute("scope", String, "Filter by scope.")
+			Attribute("exclude_scopes", ArrayOf(String), "Leave out checks of these scopes, from the rows and from the total.", func() {
+				MaxLength(20)
+			})
 			Attribute("project_id", String, "Filter to a specific project.")
 			Attribute("resolved", Boolean, "Filter by resolution state. True = only resolved, false = only unresolved.")
 			Attribute("ids", ArrayOf(String), "Fetch specific challenges by ID. When set, other filters and pagination are ignored.")
@@ -1064,6 +1088,7 @@ var _ = Service("access", func() {
 			Param("outcome")
 			Param("principal_urn")
 			Param("scope")
+			Param("exclude_scopes")
 			Param("project_id")
 			Param("resolved")
 			Param("ids")
@@ -1439,6 +1464,11 @@ var ListScopesResult = Type("ListScopesResult", func() {
 	Required("scopes", "tasks")
 	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
 	Attribute("tasks", ArrayOf(ScopeTaskModel), "Tasks that need more than one scope, so a missing scope can be explained in context.")
+})
+
+var ListAgentPolicyScopesResult = Type("ListAgentPolicyScopesResult", func() {
+	Required("scopes")
+	Attribute("scopes", ArrayOf(ScopeModel), "The scopes an agent policy may hold, in catalogue order.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {

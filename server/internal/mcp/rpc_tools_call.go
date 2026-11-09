@@ -34,6 +34,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
@@ -50,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/rag"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/toolsets"
@@ -480,6 +482,16 @@ func handleToolsCall(
 		logAttrs.RecordAuthenticatedActor(ctx)
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
+		// A call the gateway answered with an error has no tool output, so
+		// the row carries the error's most specific client-safe message, the
+		// same text its tool event records.
+		if rw.failure != nil {
+			message := toolCallFailureMessage(rw.failure)
+			logAttrs[attr.ErrorMessageKey] = message
+			if rw.body.Len() == 0 {
+				logAttrs.RecordResponseBodyContent([]byte(message))
+			}
+		}
 
 		if toolCallEnv.GramChatID != "" {
 			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
@@ -559,6 +571,17 @@ func handleToolsCall(
 	}
 	err = toolProxy.Do(ctx, rw, bytes.NewReader(params.Arguments), toolCallEnv, plan, logAttrs)
 	if err != nil {
+		// A call the shutdown drain abandoned is answered before any other
+		// classification, which would log it as a gateway failure.
+		if errors.Is(err, shutdowndrain.ErrInterrupted) {
+			interruption := interruptedAtShutdown(ctx, logger, metrics, logAttrs, mcpversions.MethodToolsCall, string(plan.Kind), err)
+			rw.statusCode = http.StatusServiceUnavailable
+			// Whatever the tool wrote before the interrupt is incomplete, so
+			// it is not logged as the call's response.
+			rw.body.Reset()
+			rw.failure = interruption.Failure
+			return nil, interruption.Response
+		}
 		// The proxy refused a body it could not decode before contacting the
 		// tool's server, so a Code Mode program can fix it and call again.
 		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok && errors.Is(err, gateway.ErrToolInputRejected) {
@@ -695,12 +718,28 @@ func handleToolsCall(
 // client can emit hundreds an hour, enough at error level to hold this
 // component's error-rate monitors at their threshold and mask a genuine
 // regression for a whole alert window.
+//
+// When the failure carries a ShareableError, the rejection answers with the
+// innermost one's code and message, which name what the caller has to change
+// (every ShareableError public message is written to be client-safe).
+// Otherwise it answers with a generic rejection.
 func toolCallRejection(ctx context.Context, logger *slog.Logger, err error, args ...slog.Attr) (*oops.ShareableError, bool) {
 	if !oops.IsClientFault(err) {
 		return nil, false
 	}
 
+	if inner := oops.Innermost(err); inner != nil {
+		return oops.E(inner.Code, err, "%s", inner.Error()).LogWarn(ctx, logger, args...), true
+	}
+
 	return oops.E(oops.CodeBadRequest, err, "tool call was rejected as invalid or not permitted").LogWarn(ctx, logger, args...), true
+}
+
+// toolCallFailureMessage is what a failed tool call records as its error, on
+// its Tool logs row and its tool event alike: the most specific client-safe
+// message the failure carries.
+func toolCallFailureMessage(failure *oops.ShareableError) string {
+	return oops.Innermost(failure).Error()
 }
 
 // recordToolCallErrorStatus keeps deferred billing and telemetry metadata in

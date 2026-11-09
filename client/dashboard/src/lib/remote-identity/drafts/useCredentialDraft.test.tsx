@@ -1,5 +1,5 @@
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader.js";
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { encodeBasicCredential } from "../model/credential";
 import { useAgentCredentialFields } from "./useCredentialDraft";
@@ -44,5 +44,29 @@ describe("useAgentCredentialFields", () => {
     expect(result.current.format).toBe("bearer");
     expect(result.current.token).toBe("");
     expect(result.current.isValid).toBe(false);
+  });
+
+  it("keeps what was typed when a refetch returns the same credential", () => {
+    const { result, rerender } = renderHook(
+      (saved) => useAgentCredentialFields(saved),
+      { initialProps: header("Bearer saved") },
+    );
+    act(() => result.current.setToken("typed"));
+
+    rerender(header("Bearer saved"));
+
+    expect(result.current.token).toBe("typed");
+  });
+
+  it("moves to the saved credential when it changes", () => {
+    const { result, rerender } = renderHook(
+      (saved) => useAgentCredentialFields(saved),
+      { initialProps: header("Bearer saved") },
+    );
+    act(() => result.current.setToken("typed"));
+
+    rerender(header("Bearer rotated"));
+
+    expect(result.current.token).toBe("rotated");
   });
 });

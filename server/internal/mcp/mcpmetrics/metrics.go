@@ -215,6 +215,13 @@ type Metrics struct {
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
+
+	// shutdownInterruptedCounter counts tool calls and resource reads the
+	// gateway was running when the shutdown drain abandoned them, by MCP
+	// method and tool kind. It carries no per-organization, per-server or
+	// per-tool dimension: the question it answers is how often deploys cut
+	// calls short, and the warning log names each one.
+	shutdownInterruptedCounter metric.Int64Counter
 }
 
 // NewMetrics constructs every instrument the mcp service publishes. Each
@@ -412,6 +419,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create tunnel public rejected counter", attr.SlogError(err))
 	}
 
+	shutdownInterruptedCounter, err := meter.Int64Counter(
+		"mcp.tool_call.shutdown_interrupted",
+		metric.WithDescription("Tool calls and resource reads abandoned by the shutdown drain, by MCP method and tool kind"),
+		metric.WithUnit("{call}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create shutdown interrupted counter", attr.SlogError(err))
+	}
+
 	return &Metrics{
 		mcpToolCallCounter:                   mcpToolCallCounter,
 		mcpRequestDuration:                   mcpRequestDuration,
@@ -437,7 +453,22 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
 		oauthIDJAGReleaseFailedCounter:       oauthIDJAGReleaseFailedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
+		shutdownInterruptedCounter:           shutdownInterruptedCounter,
 	}
+}
+
+// RecordShutdownInterrupted counts one tool call or resource read the
+// shutdown drain abandoned. method is the MCP method that ran it and toolKind
+// the kind of tool or resource the gateway was calling.
+func (m *Metrics) RecordShutdownInterrupted(ctx context.Context, method string, toolKind string) {
+	if m == nil || m.shutdownInterruptedCounter == nil {
+		return
+	}
+
+	m.shutdownInterruptedCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpMethod(method),
+		attr.ToolCallKind(toolKind),
+	))
 }
 
 // TunnelPublicRejectReason is the closed set of pre-proxy rejection causes on

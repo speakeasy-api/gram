@@ -2935,6 +2935,75 @@ describe("Editing an agent that already exists", () => {
     ).toEqual(["toolset_one", "toolset_two"]);
   });
 
+  it("keeps hook ingestion on a key issued for an agent that holds it", async () => {
+    // Reinstalling OpenClaw's hooks plugin with a new setup command issues a
+    // key here. Without the agent's hooks grant on it, the plugin can no
+    // longer send events.
+    const hooksGrant = {
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: { resourceKind: "org", resourceId: "org_example" },
+    };
+    mocks.listDelegableGrants.mockImplementation(
+      async (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds ? [grant] : [hooksGrant],
+    );
+    editing({
+      grants: [
+        ...(grants as never[]),
+        {
+          id: "grant_hooks",
+          ...hooksGrant,
+          selector: { ...hooksGrant.selector, projectId: "project_one" },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Agent sign-in/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toContainEqual({
+      ...hooksGrant,
+      selector: { ...hooksGrant.selector, projectId: "project_one" },
+    });
+    // Its policy is left as it is: issuing a key writes no grant.
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("does not ask a key for hook ingestion an existing agent lacks", async () => {
+    mocks.listDelegableGrants.mockImplementation(
+      async (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds
+          ? [grant]
+          : [
+              {
+                effect: "allow",
+                scope: "org:hooks_ingest",
+                selector: { resourceKind: "org", resourceId: "org_example" },
+              },
+            ],
+    );
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Agent sign-in/ }),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    const scopes = (
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants ?? []
+    ).map((form: { scope: string }) => form.scope);
+    expect(scopes).not.toContain("org:hooks_ingest");
+  });
+
   it("issues an All servers key with the wildcard, so it reaches servers added later", async () => {
     // A key reaches only what it stores. Today's servers listed out would
     // leave every server added after this key unreachable.

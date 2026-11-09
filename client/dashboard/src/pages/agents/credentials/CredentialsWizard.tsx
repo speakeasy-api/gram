@@ -619,6 +619,14 @@ export function CredentialsWizard({
     null,
   );
   const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
+  // An existing agent that already holds hook ingestion keeps it on a key
+  // issued here, or reinstalling its hooks plugin with a new setup command
+  // leaves the plugin unable to send events. Its policy is not changed.
+  const existingHookEvents =
+    existing &&
+    (grants ?? []).some(
+      (grant) => grant.effect === "allow" && grant.scope === HOOKS_INGEST_SCOPE,
+    );
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -1671,9 +1679,10 @@ export function CredentialsWizard({
       );
       // Hook ingestion names the organization rather than a server, so only
       // discovery that names no server returns it. Asked for only when the
-      // agent was created with it, and bounded to the agent's project.
+      // agent was created with it or already holds it, and bounded to the
+      // agent's project.
       const hookGrants =
-        hookEvents && scopedProjectID
+        (hookEvents || existingHookEvents) && scopedProjectID
           ? hooksIngestKeyGrants(
               await discoverUnscopedGrants(
                 sdk.agents,

@@ -1632,10 +1632,14 @@ func seedModernConsentChallenge(
 	return stateID, csrfToken
 }
 
-func consentGetPageWithContext(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID string) string {
+// consentGetPageWithContext renders the consent page with the browser's cookies.
+func consentGetPageWithContext(t *testing.T, ctx context.Context, ti *testInstance, mcpSlug, stateID string, cookies ...*http.Cookie) string {
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+mcpSlug+"/connect?state="+stateID, nil)
+	for _, cookie := range cookies {
+		req.AddCookie(cookie)
+	}
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", mcpSlug)
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))

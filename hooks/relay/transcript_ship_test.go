@@ -714,3 +714,21 @@ func TestCoworkModeFollowsHookEnvironment(t *testing.T) {
 		require.Equal(t, ships, len(uploads) == 1, "CLAUDE_CODE_ENTRYPOINT=%q", entrypoint)
 	}
 }
+
+// The first upload of a session names the signed-in Claude account, so the
+// server can give the chat an owner without waiting on OTEL.
+func TestCoworkUploadNamesTheClaudeAccount(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	cfg := coworkConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	t.Setenv("CLAUDE_CODE_USER_EMAIL", "cowork@example.com")
+	appendTranscript(t, transcript, transcriptUser+transcriptAssistant)
+
+	res := invokeClaude(t, cfg, claudeStop(transcript))
+	require.Equal(t, 0, res.ExitCode, res.Stderr)
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 1)
+	require.Equal(t, "cowork@example.com", uploads[0].UserEmail)
+}

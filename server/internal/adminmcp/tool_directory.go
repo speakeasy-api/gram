@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -27,10 +26,7 @@ const (
 	// directoryRead identifies tools that do not change state.
 	directoryRead directoryAccess = "read"
 
-	// directoryApproval identifies preparation and execution in the browser-approved flow.
-	directoryApproval directoryAccess = "approval"
-
-	// directoryWrite identifies direct writes outside the proposal flow.
+	// directoryWrite identifies tools that change state.
 	directoryWrite directoryAccess = "write"
 )
 
@@ -45,7 +41,7 @@ type directoryTool struct {
 	// Description explains the registered behavior and safeguards.
 	Description string `json:"description"`
 
-	// Access distinguishes reads, approval flows, and direct writes.
+	// Access distinguishes reads from writes.
 	Access directoryAccess `json:"access"`
 }
 
@@ -114,10 +110,7 @@ func (r *Runtime) toolDirectory(ctx context.Context) (toolDirectory, error) {
 			return toolDirectory{}, fmt.Errorf("list registered admin tools: %w", err)
 		}
 		access := directoryWrite
-		switch {
-		case strings.HasPrefix(tool.Name, "prepare_") || tool.Name == "execute_admin_proposal":
-			access = directoryApproval
-		case tool.Annotations != nil && tool.Annotations.ReadOnlyHint:
+		if tool.Annotations != nil && tool.Annotations.ReadOnlyHint {
 			access = directoryRead
 		}
 		result.Tools = append(result.Tools, directoryTool{Name: tool.Name, Title: tool.Title, Description: tool.Description, Access: access})

@@ -154,6 +154,14 @@ type AdminMcpWriteEvent struct {
 	// @access: restricted
 	RequestID pgtype.Text
 	// @access: confidential
+	Operation pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	ResourceKind pgtype.Text
+	// @access: restricted
+	ResourceID pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

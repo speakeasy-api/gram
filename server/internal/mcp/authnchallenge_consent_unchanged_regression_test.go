@@ -138,7 +138,7 @@ func outageConsentFixture(t *testing.T, name string) (context.Context, consentAc
 	ctx, fx, metaID, clientID, issuerID := metaConsent(t, name)
 	fx = focusClaimingMember(t, ctx, firstPartyConsent(t, ctx, fx), metaID, issuerID, name+"-member")
 	advertise(t, ctx, fx, issuerID, []string{"read"})
-	grantScoped(t, ctx, fx, clientID, []string{"read"})
+	grantScopedTo(t, ctx, fx, clientID, []string{"read"}, "urn:gram:tunnel:"+fx.server)
 	markVerified(t, ctx, fx, clientID)
 	return ctx, fx, clientID
 }
@@ -214,7 +214,7 @@ func TestServeConsent_RecordedOutageTellsTheTruthThenReconnectClears(t *testing.
 	require.Contains(t, listPage, "0 of 1")
 	require.NotContains(t, listPage, "data-auto-close")
 
-	grantScoped(t, ctx, fx, clientID, []string{"read"})
+	grantScopedTo(t, ctx, fx, clientID, []string{"read"}, "urn:gram:tunnel:"+fx.server)
 	markVerified(t, ctx, fx, clientID)
 	expectFirstPartyAutoClose(t, fx)
 }

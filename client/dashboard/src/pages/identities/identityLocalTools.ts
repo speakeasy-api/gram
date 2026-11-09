@@ -1,10 +1,5 @@
 import { useCallback } from "react";
 import { useSearchParams } from "react-router";
-import {
-  TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS,
-  toTargetTypes,
-} from "@/components/observe/observeTargetFilters";
-import type { GetToolUsageSummaryPayload } from "@gram/client/models/components/gettoolusagesummarypayload";
 
 /**
  * Whether an identity page counts the identity's local tool calls in its
@@ -41,34 +36,4 @@ export function useShowLocalTools(): [boolean, (show: boolean) => void] {
     [setParams],
   );
   return [showsLocalTools(params), setShow];
-}
-
-/**
- * The body an agent's Tool calls card sends to the usage endpoints. With
- * local tools hidden it names every other target type, so the chart, the
- * call count and the top sources all leave them out together.
- */
-export function agentToolUsagePayload({
-  agentId,
-  from,
-  to,
-  includeLocalTools,
-}: {
-  agentId: string;
-  from: Date;
-  to: Date;
-  includeLocalTools: boolean;
-}): GetToolUsageSummaryPayload {
-  // The agent's bare id, not its `agent:` urn: the telemetry filter takes the
-  // principal's id and builds the urn itself.
-  const payload: GetToolUsageSummaryPayload = {
-    from,
-    to,
-    userFilters: [{ kind: "agent_id", key: agentId }],
-  };
-  if (includeLocalTools) return payload;
-  return {
-    ...payload,
-    targetTypes: toTargetTypes(TOOL_USAGE_TYPES_WITHOUT_LOCAL_TOOLS),
-  };
 }

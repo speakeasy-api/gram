@@ -2,6 +2,9 @@ package mcp
 
 import (
 	"bytes"
+	"net/http"
+	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -211,15 +214,15 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	member := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
 	connectURL := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 
-	err := memberAuthFailure(member, memberDial{anonymous: true, connectURL: connectURL})
+	err := memberAuthFailure(member, memberDial{anonymous: true, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, `server "github" is not connected for this user`)
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL})
+	err = memberAuthFailure(member, memberDial{anonymous: false, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "rejected the user's credential")
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: true})
+	err = memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "Ask your administrator to connect it")
 }
 
@@ -408,4 +411,22 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `aria-label="Sign in to Source as"`)
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
+}
+
+func TestGatewayInlineConnectPostsExactMember(t *testing.T) {
+	t.Parallel()
+	issuer, projectA, projectB := uuid.New(), uuid.New(), uuid.New()
+	members := []metaMember{gatewayTestMember("member-a", "Member A", issuer, projectA), gatewayTestMember("member-b", "Member B", issuer, projectB)}
+	cards := []remoteSessionCard{gatewayTestCard("registration-a", issuer, uuid.NullUUID{UUID: projectA, Valid: true}), gatewayTestCard("registration-b", issuer, uuid.NullUUID{UUID: projectB, Valid: true})}
+	page := renderGatewayConsent(t, gatewayTemplateData(gatewayServersView(members, cards), nil))
+	seen := 0
+	for _, form := range regexp.MustCompile(`(?s)<form[^>]*>.*?</form>`).FindAllString(page, -1) {
+		for _, pair := range []struct{ client, member string }{{"registration-a", "member-a"}, {"registration-b", "member-b"}} {
+			if strings.Contains(form, `name="client_id" value="`+pair.client+`"`) {
+				seen++
+				require.Contains(t, form, `name="server" value="`+pair.member+`"`)
+			}
+		}
+	}
+	require.Equal(t, 2, seen, "each project-qualified client must have its own member handback")
 }

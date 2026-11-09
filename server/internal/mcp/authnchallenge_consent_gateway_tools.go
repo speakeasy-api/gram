@@ -164,6 +164,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -174,6 +175,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}
@@ -190,8 +192,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if organizationGateway && len(members) == 0 {
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
-	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
-	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
+	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards, view.memberCards)
+	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards, view.memberCards)
 	if err != nil {
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}
@@ -238,7 +240,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		return nil, nil, nil, err
 	}
 	captured := map[string]*memberCatalog{}
-	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
+	// Listing every member's tools for the consent page names none of them,
+	// so it records no authorization check for any.
+	inventory, unavailableMembers, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}

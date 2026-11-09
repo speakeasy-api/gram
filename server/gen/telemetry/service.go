@@ -514,6 +514,9 @@ type GetProjectOverviewPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, mcp_usage) in the same response
+	IncludeUsage bool
 }
 
 // GetProjectOverviewResult is the result type of the telemetry service
@@ -521,10 +524,18 @@ type GetProjectOverviewPayload struct {
 type GetProjectOverviewResult struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummary
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummary
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResult
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResult
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
+	McpUsage *ProjectMcpUsage
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -1359,14 +1370,6 @@ type HooksUserSummary struct {
 	FailureRate float64
 }
 
-// Usage breakdown by LLM client/agent
-type LLMClientUsage struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
-}
-
 // ListAttributeKeysPayload is the payload type of the telemetry service
 // listAttributeKeys method.
 type ListAttributeKeysPayload struct {
@@ -1645,6 +1648,14 @@ type ObservabilitySummary struct {
 	AvgLatencyMs float64
 }
 
+// Tool calls made by one external end user
+type ProjectMcpEndUser struct {
+	// External end user ID
+	UserID string
+	// Number of tool calls
+	ToolCalls int64
+}
+
 // Recent MCP server activity for one project
 type ProjectMcpServerActivity struct {
 	// The project the activity belongs to
@@ -1654,29 +1665,41 @@ type ProjectMcpServerActivity struct {
 	Activity []*McpServerActivity
 }
 
+// Calls and failures for one tool made by external end users
+type ProjectMcpToolUsage struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string
+	// Number of calls
+	Calls int64
+	// Number of failed calls
+	Failures int64
+}
+
+// External end user and MCP tool usage for a project in a time period
+type ProjectMcpUsage struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUser
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsage
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsage
+}
+
 // Aggregated project-level summary metrics for a time period
 type ProjectOverviewSummary struct {
 	// Total number of chat sessions
 	TotalChats int64
-	// Number of resolved chat sessions
-	ResolvedChats int64
-	// Number of failed chat sessions
-	FailedChats int64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
 	FailedToolCalls int64
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUser
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServer
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsage
 }
 
 // Aggregated metrics
@@ -2669,16 +2692,6 @@ type TopServer struct {
 	ServerName string
 	// Total number of tool calls
 	ToolCallCount int64
-}
-
-// Top user by activity
-type TopUser struct {
-	// User ID (internal or external depending on availability)
-	UserID string
-	// Type of user ID
-	UserType string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
 }
 
 // Per-dimension billed token breakdown for the usage details table

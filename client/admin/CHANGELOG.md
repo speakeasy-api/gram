@@ -1,5 +1,24 @@
 # admin
 
+## 0.11.0
+
+### Minor Changes
+
+- ccfb531: Add an MCP Gateway column to the observed coverage matrix on each organization's record in the staff admin app.
+  
+  Every other column is an agent surface folded from a `hook_source`. The gateway is Speakeasy itself, so its evidence is read from the traffic it served rather than from what an agent reported: session activity counts non-hook `trace_summaries` traces carrying a toolset slug or a meta MCP server id, matching how the tool-usage reads classify hosted and gateway MCP servers; identity counts the calls bound to a person, stating calls bound only to a managed agent separately; policy enforcement counts distinct mediated executions a risk policy stopped, read from `risk_findings` rows with a non-empty `mediation_surface`.
+  
+  Two cells can never report for the gateway — it brokers tool calls rather than model calls, and shadow servers are by definition reached around it — so cells carry a new `na` status that reads as inapplicable rather than as a gap an integration could close. Cells also carry a `unit`, letting a column name what it counts when the capability's own unit does not fit: the gateway is measured in tool calls where an agent surface is measured in sessions.
+
+### Patch Changes
+
+- 8caefb9: Catalogue promotion no longer files a setup-guide request when the guide repository already has a guide for the promoted slug, or an open pull request changing it. Staff see "Guide already exists" or "Guide in review" with a link in the admin dashboard and Admin MCP. An open guide pull request is rechecked daily and flagged for staff after 14 days.
+- 81c7576: The catalogue promotion review form now warns when the setup guide slug already belongs to a published guide, and suggests the existing guide's slug when the server's endpoint matches one. The Admin MCP promotion preview shows the same check. Publishing is unchanged.
+- dbddb5a: The External MCP migration page and its admin API are gone from the admin dashboard now that the migration is finished. Past migrations still show correctly in audit logs, and deleting a toolset whose server was migrated still leaves that server working.
+- 5aa992b: Make onboarding customization accessible from each organization's sidebar and Overview. Configure wizard steps and apply shared templates in a tenant-scoped workspace, with explicit save behavior and a separate recorded stack section.
+  
+  Allow organization-scoped updates only for the owning organization. Deploy the API before the Admin SPA. Do not roll back the server alone while the newer SPA is served.
+
 ## 0.10.0
 
 ### Minor Changes

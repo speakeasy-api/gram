@@ -347,7 +347,9 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			if len(values) > 0 {
 				disposition = values[0]
 			}
-			if rerr := s.authz.Require(ctx, authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
+			// Listing the tools names none of them, as in tools/list
+			// (filterToolsByMCPConnect), so no check is recorded per tool.
+			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
 				Tool:        base.Name,
 				Disposition: disposition,
 				ProjectID:   endpoint.ProjectID.String(),

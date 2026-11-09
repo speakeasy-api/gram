@@ -294,6 +294,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 	if err != nil {
 		// Reconnect routing stays an empty token; only the already-recorded fact travels.
 		zero.refreshFailureRecorded = RefreshFailureRecorded(err)
+		zero.refreshStepRecorded = RefreshStepRecorded(err)
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
 		// logging every retry here would turn one stale session into noise.
@@ -321,11 +322,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 			outage := &SessionOutageError{err: err}
 			return unavailableSessionCredential(selectedID, clientID, selectedResource, outage), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
-			if RefreshFailureRecorded(err) {
-				// Keep the bare remedy; only the already-recorded fact travels.
-				return zero, errors.Join(ErrRemoteSessionMisconfigured, errRefreshFailureRecorded)
-			}
-			return zero, ErrRemoteSessionMisconfigured
+			// Keep the bare remedy; only the already-recorded facts travel.
+			return zero, withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
 		}
 		return zero, nil
 	}
@@ -346,6 +344,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		ClientCredentialErr:                nil,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}, nil
 }
 
@@ -477,14 +476,24 @@ type UpstreamToken struct {
 
 	// refreshFailureRecorded marks an empty entry whose failed refresh already wrote its row.
 	refreshFailureRecorded bool
+
+	// refreshStepRecorded marks an empty entry whose failed refresh already wrote its step on a carried attempt.
+	refreshStepRecorded bool
 }
 
-// noTokenError is ErrNoValidToken, keeping whether a refresh already wrote its row.
-func noTokenError(refreshRecorded bool) error {
-	if refreshRecorded {
-		return errors.Join(ErrNoValidToken, errRefreshFailureRecorded)
+// withRecordedRefresh is remedy, keeping whether the empty entry's failed refresh already wrote its row or step.
+func withRecordedRefresh(remedy error, entry UpstreamToken) error {
+	errs := []error{remedy}
+	if entry.refreshFailureRecorded {
+		errs = append(errs, errRefreshFailureRecorded)
 	}
-	return ErrNoValidToken
+	if entry.refreshStepRecorded {
+		errs = append(errs, errRefreshStepRecorded)
+	}
+	if len(errs) == 1 {
+		return remedy
+	}
+	return errors.Join(errs...)
 }
 
 // clientCredentialRenewal is what replacing a self credential needs: the
@@ -827,10 +836,10 @@ func (m *ChallengeManager) resolveClientTokens(
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
 			if skipUnusable {
-				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, ErrNoValidToken)
+				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, withRecordedRefresh(ErrNoValidToken, resolved))
 				continue
 			}
-			return nil, noTokenError(resolved.refreshFailureRecorded)
+			return nil, withRecordedRefresh(ErrNoValidToken, resolved)
 		default:
 			tokens[c.RemoteSessionIssuerID] = resolved
 		}
@@ -885,6 +894,7 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		ClientCredentialErr:                err,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}
 }
 
@@ -901,6 +911,7 @@ func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string
 		ClientCredentialErr:                outage,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}
 }
 

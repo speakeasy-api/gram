@@ -78,6 +78,7 @@ type Endpoints struct {
 	UpdateSupportMatrix                     goa.Endpoint
 	GetSupportCoverage                      goa.Endpoint
 	DescribeMcpServerHealth                 goa.Endpoint
+	SetMcpServerScopePin                    goa.Endpoint
 	GetMcpServerToolCalls                   goa.Endpoint
 	GetHookClients                          goa.Endpoint
 	ListRegistryPromotionCandidates         goa.Endpoint
@@ -110,6 +111,7 @@ type Endpoints struct {
 	ListSignupOffers                        goa.Endpoint
 	CreateSignupOffer                       goa.Endpoint
 	UpdateSignupOffer                       goa.Endpoint
+	ListPlatformMcpFeedback                 goa.Endpoint
 	GetStripeSubscriptionCandidate          goa.Endpoint
 	SetStripeSubscription                   goa.Endpoint
 	ListCustomerUsage                       goa.Endpoint
@@ -120,6 +122,8 @@ type Endpoints struct {
 	DisableUpstreamAuthEnforcement          goa.Endpoint
 	BackfillMcpAuthGrants                   goa.Endpoint
 	BackfillMcpConnectGrants                goa.Endpoint
+	GetProjectRedeployPreview               goa.Endpoint
+	RedeployProject                         goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -206,6 +210,7 @@ func NewEndpoints(s Service) *Endpoints {
 		UpdateSupportMatrix:                     NewUpdateSupportMatrixEndpoint(s, a.APIKeyAuth),
 		GetSupportCoverage:                      NewGetSupportCoverageEndpoint(s, a.APIKeyAuth),
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthEndpoint(s, a.APIKeyAuth),
+		SetMcpServerScopePin:                    NewSetMcpServerScopePinEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
 		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
@@ -238,6 +243,7 @@ func NewEndpoints(s Service) *Endpoints {
 		ListSignupOffers:                        NewListSignupOffersEndpoint(s, a.APIKeyAuth),
 		CreateSignupOffer:                       NewCreateSignupOfferEndpoint(s, a.APIKeyAuth),
 		UpdateSignupOffer:                       NewUpdateSignupOfferEndpoint(s, a.APIKeyAuth),
+		ListPlatformMcpFeedback:                 NewListPlatformMcpFeedbackEndpoint(s, a.APIKeyAuth),
 		GetStripeSubscriptionCandidate:          NewGetStripeSubscriptionCandidateEndpoint(s, a.APIKeyAuth),
 		SetStripeSubscription:                   NewSetStripeSubscriptionEndpoint(s, a.APIKeyAuth),
 		ListCustomerUsage:                       NewListCustomerUsageEndpoint(s, a.APIKeyAuth),
@@ -248,6 +254,8 @@ func NewEndpoints(s Service) *Endpoints {
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
+		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
+		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -314,6 +322,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateSupportMatrix = m(e.UpdateSupportMatrix)
 	e.GetSupportCoverage = m(e.GetSupportCoverage)
 	e.DescribeMcpServerHealth = m(e.DescribeMcpServerHealth)
+	e.SetMcpServerScopePin = m(e.SetMcpServerScopePin)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
 	e.GetHookClients = m(e.GetHookClients)
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
@@ -346,6 +355,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.ListSignupOffers = m(e.ListSignupOffers)
 	e.CreateSignupOffer = m(e.CreateSignupOffer)
 	e.UpdateSignupOffer = m(e.UpdateSignupOffer)
+	e.ListPlatformMcpFeedback = m(e.ListPlatformMcpFeedback)
 	e.GetStripeSubscriptionCandidate = m(e.GetStripeSubscriptionCandidate)
 	e.SetStripeSubscription = m(e.SetStripeSubscription)
 	e.ListCustomerUsage = m(e.ListCustomerUsage)
@@ -356,6 +366,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
 	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
+	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
+	e.RedeployProject = m(e.RedeployProject)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1727,6 +1739,29 @@ func NewDescribeMcpServerHealthEndpoint(s Service, authAPIKeyFn security.AuthAPI
 	}
 }
 
+// NewSetMcpServerScopePinEndpoint returns an endpoint function that calls the
+// method "setMcpServerScopePin" of service "admin".
+func NewSetMcpServerScopePinEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetMcpServerScopePinPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.SetMcpServerScopePin(ctx, p)
+	}
+}
+
 // NewGetMcpServerToolCallsEndpoint returns an endpoint function that calls the
 // method "getMcpServerToolCalls" of service "admin".
 func NewGetMcpServerToolCallsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2464,6 +2499,29 @@ func NewUpdateSignupOfferEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFun
 	}
 }
 
+// NewListPlatformMcpFeedbackEndpoint returns an endpoint function that calls
+// the method "listPlatformMcpFeedback" of service "admin".
+func NewListPlatformMcpFeedbackEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListPlatformMcpFeedbackPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListPlatformMcpFeedback(ctx, p)
+	}
+}
+
 // NewGetStripeSubscriptionCandidateEndpoint returns an endpoint function that
 // calls the method "getStripeSubscriptionCandidate" of service "admin".
 func NewGetStripeSubscriptionCandidateEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2692,5 +2750,51 @@ func NewBackfillMcpConnectGrantsEndpoint(s Service, authAPIKeyFn security.AuthAP
 			return nil, err
 		}
 		return s.BackfillMcpConnectGrants(ctx, p)
+	}
+}
+
+// NewGetProjectRedeployPreviewEndpoint returns an endpoint function that calls
+// the method "getProjectRedeployPreview" of service "admin".
+func NewGetProjectRedeployPreviewEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetProjectRedeployPreviewPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetProjectRedeployPreview(ctx, p)
+	}
+}
+
+// NewRedeployProjectEndpoint returns an endpoint function that calls the
+// method "redeployProject" of service "admin".
+func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*RedeployProjectPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.RedeployProject(ctx, p)
 	}
 }

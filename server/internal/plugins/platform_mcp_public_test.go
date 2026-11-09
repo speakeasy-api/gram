@@ -175,3 +175,58 @@ func TestLocalPlatformMCPFilesTargetsLocalServer(t *testing.T) {
 	require.Len(t, claude.Plugins, 1)
 	require.Equal(t, platformMCPPluginName, claude.Plugins[0].Name)
 }
+
+// Codex does not open the sign-in page for a plugin's MCP server on its own,
+// so the model sees the skills but no Platform tools and no reason why. The
+// sign-in skill gives it the per-client sign-in steps, and the workflows that
+// start with list_projects point at it instead of a vague "repair OAuth".
+func TestPublicPlatformMCPFilesShipSignInWorkflow(t *testing.T) {
+	t.Parallel()
+
+	files, err := PublicPlatformMCPFiles("https://app.getgram.ai", "17")
+	require.NoError(t, err)
+
+	const path = "skills/platform-sign-in/SKILL.md"
+	content := files["speakeasy/"+path]
+	require.NotEmpty(t, content)
+	require.Equal(t, content, files["agent-plugins/speakeasy/"+path])
+	require.Equal(t, content, files["speakeasy-codex/"+path], "the Codex package is the one that needs the sign-in steps")
+	workflow := string(content)
+	for _, required := range []string{
+		"name: platform-sign-in",
+		"codex mcp login platform",
+		"/Applications/Codex.app/Contents/Resources/codex mcp login platform",
+		"codex mcp list",
+		"Never run it without asking",
+		"`/mcp`",
+		"call `list_projects` again",
+		"start a new conversation or restart the client",
+		"is not a sign-in problem",
+	} {
+		require.Contains(t, workflow, required)
+	}
+	for _, forbidden := range []string{"Gram", "paste the token", "bearer_token"} {
+		require.NotContains(t, workflow, forbidden)
+	}
+
+	for _, skill := range []string{
+		"add-mcp-from-catalog",
+		"add-mcp-from-remote-url",
+		"expose-tools-on-mcp",
+		"migrate-mcp-between-projects",
+		"create-guardrail-from-description",
+		"summarize-critical-watchdog-findings",
+		"share-coding-session",
+	} {
+		body := string(files["speakeasy/skills/"+skill+"/SKILL.md"])
+		require.Contains(t, body, "follow the `platform-sign-in` workflow", skill)
+		require.NotContains(t, body, "repair AICP OAuth", skill)
+	}
+
+	readme := string(files["README.md"])
+	codexAt := strings.Index(readme, "## Codex")
+	cursorAt := strings.Index(readme, "## Cursor")
+	require.Positive(t, codexAt)
+	require.Greater(t, cursorAt, codexAt)
+	require.Contains(t, readme[codexAt:cursorAt], "codex mcp login "+platformMCPServerName)
+}

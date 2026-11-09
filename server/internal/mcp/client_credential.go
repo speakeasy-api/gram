@@ -157,7 +157,7 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential right now. Retry shortly. If it keeps happening, ask your administrator to check its sign-in provider, then contact Speakeasy support", member.slug), nil)
 	}
 
-	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
+	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected. Ask an admin of the server's project to fix the server's credential, then retry", member.slug)}
 }
 
 // outageWaitWords is when to retry, in words: a provider can ask for minutes.

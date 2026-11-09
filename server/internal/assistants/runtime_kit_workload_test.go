@@ -16,11 +16,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/gen/types"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
-	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	securityrepo "github.com/speakeasy-api/gram/server/internal/audit/securityevent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -181,72 +181,81 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.Equal(t, identity.AgentID, assignments[0].AgentID)
 }
 
-// A runtime admitting and withdrawing its own workload on every start and
-// teardown is machine access, so those entries go to the security log.
-// Registering the cluster issuer happens once per project and is a
-// configuration change. Both are attributed to the assistant's agent rather
-// than to an anonymous system component.
-func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
+// A runtime admits and withdraws its own workload on every start and teardown,
+// which tracks runtime churn rather than anything a person decided, so neither
+// log records it. Registering the cluster issuer happens once per project and
+// is a configuration change.
+func TestKitWorkloadDBAuditLog(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-	configurationAdmits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
-	require.NoError(t, err)
-	configurationWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
-	require.NoError(t, err)
+	counts := func() [4]int64 {
+		t.Helper()
+		var out [4]int64
+		for i, count := range []func() (int64, error){
+			func() (int64, error) {
+				return audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+			},
+			func() (int64, error) {
+				return audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+			},
+			func() (int64, error) {
+				return audittest.SecurityAuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+			},
+			func() (int64, error) {
+				return audittest.SecurityAuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+			},
+		} {
+			n, err := count()
+			require.NoError(t, err)
+			out[i] = n
+		}
+		return out
+	}
+	before := counts()
 
 	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
 
-	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
-	agent, err := agents.ResolvePrincipal(t.Context(), db, identity.OrganizationID, agentPrincipal)
-	require.NoError(t, err)
-
 	// The project's shared issuer belongs to the runtime, not to whichever
 	// agent's start created it; that agent is kept as provenance.
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
 	issuerCreate, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadIssuerCreate)
 	require.NoError(t, err)
 	require.Equal(t, string(urn.PrincipalTypeSystem), issuerCreate.ActorType)
 	require.Equal(t, "kit-runtime", issuerCreate.ActorID)
 	require.JSONEq(t, `{"triggered_by":"`+agentPrincipal.String()+`"}`, string(issuerCreate.Metadata))
 
-	admit, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
-	require.NoError(t, err)
-	require.Equal(t, binding.Subject, admit.SubjectDisplay)
-	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
-	require.Equal(t, identity.AgentID.String(), admit.ActorID)
-	require.Equal(t, agent.Name, admit.ActorDisplay, "the entry names the agent, so it stays readable after the agent is gone")
-
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
-	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
-	require.NoError(t, err)
-	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
-	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
-	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
-	require.Equal(t, agent.Name, withdraw.ActorDisplay)
-
-	admits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
-	require.NoError(t, err)
-	require.Equal(t, configurationAdmits, admits, "the runtime's admit stays out of the configuration log")
-	withdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
-	require.NoError(t, err)
-	require.Equal(t, configurationWithdrawals, withdrawals, "the runtime's withdrawal stays out of the configuration log")
+	require.Equal(t, before, counts(), "a runtime's own admit and withdraw are not recorded in either log")
 }
 
-// A runtime is withdrawn after its agent is deleted too, and the entry still
-// names the agent.
-func TestKitWorkloadDBWithdrawalNamesADeletedAgent(t *testing.T) {
+// A runtime started before its admits stopped being audited has an admit in the
+// security log; its teardown still closes it with a withdraw.
+func TestKitWorkloadDBClosesLegacySecurityAdmit(t *testing.T) {
 	t.Parallel()
 	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
-
 	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
 	require.NoError(t, err)
-	agent, err := agentrepo.New(db).DeleteAgent(t.Context(), agentrepo.DeleteAgentParams{OrganizationID: identity.OrganizationID, ID: identity.AgentID})
+	admissions, err := workloadrepo.New(db).ListWorkloadAdmissions(t.Context(), workloadrepo.ListWorkloadAdmissionsParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}})
+	require.NoError(t, err)
+	runtime, _ := kitWorkloadPartitionAdmissions(admissions, binding.IssuerID)
+	require.Len(t, runtime, 1)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	_, err = securityrepo.New(db).InsertSecurityAuditLog(t.Context(), securityrepo.InsertSecurityAuditLogParams{IsInternal: false, OrganizationID: identity.OrganizationID, ActorID: identity.AgentID.String(), ActorType: string(urn.PrincipalTypeAgent), Action: string(audit.ActionWorkloadAdmissionAdmit), SubjectID: runtime[0].ID.String(), SubjectType: audit.SubjectTypeWorkloadAdmission})
 	require.NoError(t, err)
 
 	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+
+	withdrawals, err := audittest.SecurityAuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), withdrawals)
 	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
 	require.NoError(t, err)
-	require.Equal(t, agent.Name, withdraw.ActorDisplay)
+	require.Equal(t, runtime[0].ID.String(), withdraw.SubjectID)
+	require.Equal(t, agentPrincipal.ID, withdraw.ActorID)
+	configWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Zero(t, configWithdrawals)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
