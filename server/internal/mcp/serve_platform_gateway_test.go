@@ -16,6 +16,7 @@ import (
 	featuresrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	testrepo "github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // platformCallerContext is the context Platform MCP admission hands a tool:
@@ -152,6 +153,55 @@ func TestCallPlatformGatewayTool_GatewayIsOnUntilTurnedOff(t *testing.T) {
 	result = callPlatformGateway(t, ctx, ti, organizationID, fx.subject.ID, metamcp.ToolListServers, map[string]any{})
 	require.True(t, result.IsError)
 	require.Contains(t, result.Content[0].Text, "turned_off")
+}
+
+// Platform MCP has already signed its caller in, so an organization with no
+// organization issuer still serves the servers the caller reaches.
+func TestCallPlatformGatewayTool_ServesWithoutAnOrganizationIssuer(t *testing.T) {
+	t.Parallel()
+	seedCtx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, seedCtx, ti)
+	authCtx, _ := contextvalues.GetAuthContext(seedCtx)
+	organizationID := authCtx.ActiveOrganizationID
+	_, err := usersessionsrepo.New(ti.conn).DeleteOrganizationUserSessionIssuer(seedCtx, usersessionsrepo.DeleteOrganizationUserSessionIssuerParams{ID: fx.issuerID, OrganizationID: organizationID})
+	require.NoError(t, err)
+	ctx := platformCallerContext(t, ti, organizationID, fx.organizationSlug, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID))
+
+	listed := callPlatformGateway(t, ctx, ti, organizationID, fx.subject.ID, metamcp.ToolListServers, map[string]any{})
+	require.False(t, listed.IsError, listed.Content)
+	var servers metamcp.ListServersResult
+	require.NoError(t, json.Unmarshal(listed.StructuredContent, &servers))
+	slugs := make([]string, 0, len(servers.Servers))
+	for _, server := range servers.Servers {
+		slugs = append(slugs, server.Slug)
+	}
+	require.ElementsMatch(t, []string{fx.granted, fx.open}, slugs)
+
+	// Executing a tool reaches the member: the fixture's upstream is not live,
+	// so the member fails on its own rather than the gateway refusing.
+	executed := callPlatformGateway(t, ctx, ti, organizationID, fx.subject.ID, metamcp.ToolExecuteTool, map[string]any{
+		"name":      metamcp.QualifyName(fx.granted, "anything"),
+		"arguments": map[string]any{},
+	})
+	require.True(t, executed.IsError)
+	require.NotEmpty(t, executed.Content)
+	require.NotContains(t, executed.Content[0].Text, "no_organization_issuer")
+}
+
+// An organization with several organization issuers has none to pick for the
+// gateway's URL, which does not matter to an already signed-in caller.
+func TestCallPlatformGatewayTool_ServesWithSeveralOrganizationIssuers(t *testing.T) {
+	t.Parallel()
+	seedCtx, ti := newTestMCPService(t)
+	fx := seedOrganizationGateway(t, seedCtx, ti)
+	authCtx, _ := contextvalues.GetAuthContext(seedCtx)
+	organizationID := authCtx.ActiveOrganizationID
+	createOrganizationIssuer(t, seedCtx, ti, organizationID)
+	ctx := platformCallerContext(t, ti, organizationID, fx.organizationSlug, urn.NewPrincipal(urn.PrincipalTypeUser, fx.subject.ID))
+
+	result := callPlatformGateway(t, ctx, ti, organizationID, fx.subject.ID, metamcp.ToolListServers, map[string]any{})
+
+	require.False(t, result.IsError, result.Content)
 }
 
 // One search ranks tools across every server the caller reaches and never

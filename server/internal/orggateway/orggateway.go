@@ -64,6 +64,13 @@ const (
 	UnavailabilityTurnedOff Unavailability = "turned_off"
 )
 
+// LacksSingleIssuer reports whether u is only that the organization does not
+// own exactly one organization-level issuer. A caller that has already
+// signed the user in needs no issuer, so it can serve the gateway anyway.
+func (u Unavailability) LacksSingleIssuer() bool {
+	return u == UnavailabilityNoOrganizationIssuer || u == UnavailabilityMultipleOrganizationIssuers
+}
+
 // Availability returns the issuer an organization's gateway signs users in
 // through, or why the organization is not served one. Every surface that
 // offers the gateway asks this, so none offers a URL the gateway refuses.
