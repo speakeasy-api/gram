@@ -394,6 +394,11 @@ type Proxy struct {
 	// response interceptor refused. See [ToolsCallRefusalInterceptor].
 	ToolsCallRefusalInterceptors []ToolsCallRefusalInterceptor
 
+	// RequestFailureInterceptors run once for a forwarded request other than
+	// "tools/call" that the remote MCP server answered with a non-2xx status.
+	// See [RequestFailureInterceptor].
+	RequestFailureInterceptors []RequestFailureInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -892,6 +897,9 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	upstreamHeader = upstreamResp.Header
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
+		if !toolsCallForwarded {
+			p.runRequestFailureInterceptors(ctx, &RequestFailure{Method: jsonrpcMethod, StatusCode: upstreamStatus, Header: upstreamHeader})
+		}
 	}
 	span.SetAttributes(attr.RemoteMCPProxyRemoteStatusCode(upstreamStatus))
 
@@ -1895,6 +1903,17 @@ func (p *Proxy) runToolsCallFailureInterceptors(ctx context.Context, failure *To
 		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallFailureInterceptor",
 			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
 		interceptor.InterceptToolsCallFailure(iterCtx, failure)
+		span.End()
+	}
+}
+
+// runRequestFailureInterceptors invokes each configured
+// RequestFailureInterceptor in order. They observe only.
+func (p *Proxy) runRequestFailureInterceptors(ctx context.Context, failure *RequestFailure) {
+	for _, interceptor := range p.RequestFailureInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.RequestFailureInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptRequestFailure(iterCtx, failure)
 		span.End()
 	}
 }

@@ -531,6 +531,7 @@ func (f *ProxyManager) BuildTarget(
 		// nothing to bill, scan, or record as a selected use.
 		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsCallRefusalInterceptors: connections.refusals(),
+		RequestFailureInterceptors:   connections.requestFailures(),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},

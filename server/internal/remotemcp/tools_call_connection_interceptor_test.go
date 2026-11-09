@@ -39,6 +39,7 @@ func serveToolsCall(ctx context.Context, t *testing.T, connections *toolsCallCon
 	p := newKillswitchTestProxy(t, server.URL, NewToolsCallKillswitchInterceptor(checkpoint, "organization-id", "server-id", testenv.NewLogger(t)))
 	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
 	p.ToolsCallRefusalInterceptors = connections.refusals()
+	p.RequestFailureInterceptors = connections.requestFailures()
 
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
 	req.Header.Set("Content-Type", "application/json")
@@ -507,4 +508,124 @@ func TestToolsCallConnections_TunnelCapacityAndCheck(t *testing.T) {
 			require.Equal(t, tc.who, rows[0].WhoFixes)
 		})
 	}
+}
+
+const (
+	connectionInitialize = `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`
+	connectionToolsList  = `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
+)
+
+// serveRequest posts body through a proxy carrying every connection interceptor and returns what the client got.
+func serveRequest(t *testing.T, connections *toolsCallConnections, upstreamURL, body string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	p := newKillswitchTestProxy(t, upstreamURL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "organization-id", "server-id", testenv.NewLogger(t)))
+	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+	p.ToolsCallRefusalInterceptors = connections.refusals()
+	p.RequestFailureInterceptors = connections.requestFailures()
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	return rr
+}
+
+func rejectingUpstream(t *testing.T, status int) string {
+	t.Helper()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		w.WriteHeader(status)
+	}))
+	t.Cleanup(server.Close)
+	return server.URL
+}
+
+// A provider rejecting the credential at connect time is recorded like a rejected tool call.
+func TestRequestConnections_CredentialRejected(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name         string
+		body         string
+		status       int
+		upstreamAuth string
+		self         bool
+		headers      []proxy.ConfiguredHeader
+		want         mcpconnectionattempts.Code
+		who          mcpconnectionattempts.WhoFixes
+	}{
+		{name: "initialize 401", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "tools/list 401", body: connectionToolsList, status: http.StatusUnauthorized, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "tools/list 403", body: connectionToolsList, status: http.StatusForbidden, upstreamAuth: "token", want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "shared credential", body: connectionInitialize, status: http.StatusUnauthorized, upstreamAuth: "token", self: true, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "static key", body: connectionToolsList, status: http.StatusUnauthorized, headers: []proxy.ConfiguredHeader{{Name: "X-Api-Key", IsSecret: true, StaticValue: "key"}}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := mcpconnectionattemptstest.New(t)
+			connections := newToolsCallConnections(&ConnectionAttribution{
+				Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+				Details:          nil,
+				UpstreamFailures: true,
+				SelfCredential:   tc.self,
+				Request:          nil,
+			}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", tc.upstreamAuth, tc.headers)
+
+			rr := serveRequest(t, connections, rejectingUpstream(t, tc.status), tc.body)
+			require.Equal(t, tc.status, rr.Code, "the client gets the upstream's answer")
+
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, string(tc.who), row.WhoFixes)
+			require.Equal(t, "provider.example.com", row.ProviderHost)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
+}
+
+// Only a rejected credential is recorded off tools/call; a served or otherwise failed handshake writes nothing.
+func TestRequestConnections_OtherStatusesRecordNothing(t *testing.T) {
+	t.Parallel()
+
+	ok := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":"2025-06-18","capabilities":{},"serverInfo":{"name":"upstream","version":"1.0.0"}}}`))
+	}))
+	t.Cleanup(ok.Close)
+
+	for _, tc := range []struct {
+		name, upstream, body string
+	}{
+		{name: "initialize 200", upstream: ok.URL, body: connectionInitialize},
+		{name: "initialize 500", upstream: rejectingUpstream(t, http.StatusInternalServerError), body: connectionInitialize},
+		{name: "tools/list 404", upstream: rejectingUpstream(t, http.StatusNotFound), body: connectionToolsList},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			rec := mcpconnectionattemptstest.New(t)
+			serveRequest(t, recordingConnections(rec, "token"), tc.upstream, tc.body)
+			rec.RequireNothing()
+		})
+	}
+
+	// The sign-in challenge to an anonymous caller is not a rejected credential.
+	rec := mcpconnectionattemptstest.New(t)
+	serveRequest(t, recordingConnections(rec, ""), rejectingUpstream(t, http.StatusUnauthorized), connectionInitialize)
+	rec.RequireNothing()
+}
+
+// A gateway member records its handshake from the gateway's own classification.
+func TestRequestConnections_GatewayMemberRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	connections := recordingConnections(rec, "token")
+	connections.UpstreamFailures = false
+	require.Nil(t, connections.requestFailures())
+	serveRequest(t, connections, rejectingUpstream(t, http.StatusUnauthorized), connectionInitialize)
+	rec.RequireNothing()
 }

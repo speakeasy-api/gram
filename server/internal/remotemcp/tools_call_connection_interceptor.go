@@ -33,7 +33,7 @@ type ConnectionAttribution struct {
 	Request *http.Request
 }
 
-// toolsCallConnections records refused and failed tool calls; nil adds no interceptor.
+// toolsCallConnections records refused and failed tool calls, and rejected credentials on other requests; nil adds no interceptor.
 type toolsCallConnections struct {
 	ConnectionAttribution
 
@@ -87,7 +87,15 @@ func (c *toolsCallConnections) withFailures(interceptors []proxy.ToolsCallFailur
 	return append(interceptors, c)
 }
 
-// Name implements both interceptor interfaces.
+// requestFailures records credential rejections on requests other than tools/call.
+func (c *toolsCallConnections) requestFailures() []proxy.RequestFailureInterceptor {
+	if c == nil || !c.UpstreamFailures {
+		return nil
+	}
+	return []proxy.RequestFailureInterceptor{c}
+}
+
+// Name implements the interceptor interfaces.
 func (c *toolsCallConnections) Name() string {
 	return "tools-call-connection-attempts"
 }
@@ -105,6 +113,18 @@ func (c *toolsCallConnections) InterceptToolsCallFailure(ctx context.Context, fa
 		return
 	}
 	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader), failure.Err); ok {
+		c.record(ctx, code)
+	}
+}
+
+// InterceptRequestFailure implements [proxy.RequestFailureInterceptor]. Only a
+// rejected credential is recorded: other statuses on these requests say less
+// about the connection than a failed tool call does.
+func (c *toolsCallConnections) InterceptRequestFailure(ctx context.Context, failure *proxy.RequestFailure) {
+	if failure.StatusCode != http.StatusUnauthorized && failure.StatusCode != http.StatusForbidden {
+		return
+	}
+	if code, ok := UpstreamFailureHappened(failure.StatusCode, UpstreamCredentialSent{Attached: c.upstreamAuth, Self: c.SelfCredential, Configured: c.configuredCredential}, c.tunneled, failure.Header.Get(tunnelrouting.ErrorHeader)); ok {
 		c.record(ctx, code)
 	}
 }

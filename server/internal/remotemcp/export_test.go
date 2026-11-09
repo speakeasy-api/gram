@@ -1,6 +1,11 @@
 package remotemcp
 
-import "time"
+import (
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+)
 
 // SetBeforeClaim runs f between the claim's list and re-read, inside the locked update transaction.
 func (s *Service) SetBeforeClaim(f func(holderPID uint32, previousURL string)) { s.beforeClaim = f }
@@ -24,4 +29,9 @@ func (f *ProxyManager) SetAfterProtectedResourceProbe(fn func()) {
 // SetProtectedResourceProbeClock replaces the clock the on-use probe reads.
 func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
 	f.protectedResources.SetClock(now)
+}
+
+// RequestFailureConnections is the interceptor a direct server's proxy records rejected handshakes with.
+func RequestFailureConnections(attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamURL, upstreamAuth string) []proxy.RequestFailureInterceptor {
+	return newToolsCallConnections(&attribution, recorder, proxy.ServerIdentity{}, upstreamURL, upstreamAuth, nil).requestFailures()
 }
