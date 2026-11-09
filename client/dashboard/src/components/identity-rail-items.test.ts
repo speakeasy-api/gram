@@ -59,8 +59,8 @@ describe("identityRailItems", () => {
     // render a panel whose only content was a sentence saying it had none.
     expect(keys("agent")).toEqual([
       "overview",
-      "permissions",
       "mcp-sign-in",
+      "permissions",
       "sessions",
       "audit-trail",
       "sign-in",

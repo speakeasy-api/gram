@@ -1,6 +1,5 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
-  Link,
   Navigate,
   useLocation,
   useNavigate,

@@ -37,18 +37,19 @@ export function identityRailItems(
         active: detail.overview.active,
       },
       {
-        key: "permissions",
-        title: "Permissions",
-        href: `${detail.permissions.href(encodedUrn)}${search}`,
-        active: detail.permissions.active,
-      },
-      {
-        // Where the agent's servers and their sign-in are changed. It sits
-        // beside Permissions because the two answer what the agent may reach.
+        // Where the agent's servers and their sign-in are changed. Second,
+        // because it is what is most often changed on an agent: a server
+        // added, or an expired connection signed in again.
         key: "mcp-sign-in",
         title: "MCP sign-in",
         href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
         active: detail.mcpSignIn.active,
+      },
+      {
+        key: "permissions",
+        title: "Permissions",
+        href: `${detail.permissions.href(encodedUrn)}${search}`,
+        active: detail.permissions.active,
       },
       {
         key: "sessions",
