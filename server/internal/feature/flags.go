@@ -237,6 +237,15 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagMandatoryAuthzShadow Flag = "mandatory-authz-shadow"
 
+	// FlagUpstreamIssuerFromAssociations makes an MCP server's upstream
+	// clients the source of its upstream issuer for an organization: the one
+	// provider among the server's live client associations routes its
+	// credentials and is hashed into its consent evidence, in place of the
+	// denormalized mcp_servers.remote_session_issuer_id. Off, the column
+	// keeps serving and is the rollback. Either way both values are compared
+	// on every request. Targeted the same way as FlagAuthClientResolver.
+	FlagUpstreamIssuerFromAssociations Flag = "upstream-issuer-from-associations"
+
 	// FlagAuthClientUpstreamSelectorWrites lets an organization write grants
 	// whose selector names upstream_client: such grants, connection owner
 	// blocks, agent keys copying them and the attachment backfill. Replicas
