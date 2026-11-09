@@ -59,7 +59,7 @@ func TestRenderCardGallery(t *testing.T) {
 		}
 		note := ""
 		switch descriptor.Name {
-		case "whoami", "register_catalog_mcp", "register_remote_mcp", "attach_platform_mcp_identity_provider":
+		case "whoami", "register_catalog_mcp", "register_remote_mcp", "attach_platform_mcp_identity_provider", "search_mcp_catalog":
 			note = "builds its own card on success; this is the generic fallback"
 		}
 		if descriptor.output == unavailable {
