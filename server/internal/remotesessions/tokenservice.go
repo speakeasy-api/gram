@@ -285,6 +285,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 	if err != nil {
 		// Reconnect routing stays an empty token; only the already-recorded fact travels.
 		zero.refreshFailureRecorded = RefreshFailureRecorded(err)
+		zero.refreshStepRecorded = RefreshStepRecorded(err)
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
 		// logging every retry here would turn one stale session into noise.
@@ -312,11 +313,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 			outage := &SessionOutageError{err: err}
 			return unavailableSessionCredential(selectedID, clientID, selectedResource, outage), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
-			if RefreshFailureRecorded(err) {
-				// Keep the bare remedy; only the already-recorded fact travels.
-				return zero, errors.Join(ErrRemoteSessionMisconfigured, errRefreshFailureRecorded)
-			}
-			return zero, ErrRemoteSessionMisconfigured
+			// Keep the bare remedy; only the already-recorded facts travel.
+			return zero, withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
 		}
 		return zero, nil
 	}
@@ -337,6 +335,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		ClientCredentialErr:                nil,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}, nil
 }
 
@@ -468,14 +467,24 @@ type UpstreamToken struct {
 
 	// refreshFailureRecorded marks an empty entry whose failed refresh already wrote its row.
 	refreshFailureRecorded bool
+
+	// refreshStepRecorded marks an empty entry whose failed refresh already wrote its step on a carried attempt.
+	refreshStepRecorded bool
 }
 
-// noTokenError is ErrNoValidToken, keeping whether a refresh already wrote its row.
-func noTokenError(refreshRecorded bool) error {
-	if refreshRecorded {
-		return errors.Join(ErrNoValidToken, errRefreshFailureRecorded)
+// withRecordedRefresh is remedy, keeping whether the empty entry's failed refresh already wrote its row or step.
+func withRecordedRefresh(remedy error, entry UpstreamToken) error {
+	errs := []error{remedy}
+	if entry.refreshFailureRecorded {
+		errs = append(errs, errRefreshFailureRecorded)
 	}
-	return ErrNoValidToken
+	if entry.refreshStepRecorded {
+		errs = append(errs, errRefreshStepRecorded)
+	}
+	if len(errs) == 1 {
+		return remedy
+	}
+	return errors.Join(errs...)
 }
 
 // clientCredentialRenewal is what replacing a self credential needs: the
@@ -571,9 +580,10 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution Re
 // client belongs to another server, or the server explicitly detached the rest,
 // it has no upstream credential to require, which is what a session records as a
 // no-auth choice for it.
-func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, error) {
+func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, ServerAssociationIssuer, error) {
+	var association ServerAssociationIssuer
 	if len(clientIDs) == 0 {
-		return nil, nil
+		return nil, association, nil
 	}
 	uses, err := q.DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
 		McpServerID:            mcpServerID,
@@ -582,10 +592,11 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 		RemoteSessionClientIds: clientIDs,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("describe bound client use: %w", err)
+		return nil, association, fmt.Errorf("describe bound client use: %w", err)
 	}
 	var own, unclaimed []uuid.UUID
 	for _, use := range uses {
+		association = AssociationIssuerFromProviders(use.AssociationProviderIds)
 		switch {
 		case use.AssociatedWithMcpServer:
 			own = append(own, use.RemoteSessionClientID)
@@ -594,9 +605,9 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 		}
 	}
 	if len(own) == 0 {
-		return unclaimed, nil
+		return unclaimed, association, nil
 	}
-	return own, nil
+	return own, association, nil
 }
 
 // clientUnclaimed reports that nothing says whether a bound client is the
@@ -604,6 +615,42 @@ func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, 
 // server has not explicitly detached it.
 func clientUnclaimed(use remotesessions_repo.DescribeBoundClientUseRow) bool {
 	return !use.AssociatedWithMcpServer && len(use.OtherMcpServerIds) == 0 && !use.DetachedFromMcpServer
+}
+
+// ServerAssociationIssuer is the upstream issuer an MCP server's live client
+// associations give, read alongside the clients its callers need.
+type ServerAssociationIssuer struct {
+	// Known reports that the associations were read. They are read with the
+	// issuer's bound clients, so this is false when the issuer binds none.
+	Known bool
+
+	// Providers is how many distinct live providers the associations name.
+	Providers int64
+
+	// Provider is that provider when Providers is 1.
+	Provider uuid.NullUUID
+}
+
+// AssociationIssuerFromProviders is the upstream issuer a server's live client
+// associations give, from the distinct providers they name: the provider when
+// there is exactly one, and none when there are several or none. It is the one
+// place that rule is applied to providers read from the database.
+func AssociationIssuerFromProviders(providerIDs []uuid.UUID) ServerAssociationIssuer {
+	association := ServerAssociationIssuer{Known: true, Providers: int64(len(providerIDs)), Provider: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	if len(providerIDs) == 1 {
+		association.Provider = uuid.NullUUID{UUID: providerIDs[0], Valid: true}
+	}
+	return association
+}
+
+// ServerAccessTokens is a caller's credentials for one proxied MCP server and
+// the upstream issuer its associations give.
+type ServerAccessTokens struct {
+	// Tokens are the credentials keyed by remote session issuer.
+	Tokens map[uuid.UUID]UpstreamToken
+
+	// Association is the server's upstream issuer as its associations give it.
+	Association ServerAssociationIssuer
 }
 
 // ResolveServerAccessTokens resolves the caller's credentials for one proxied
@@ -620,29 +667,32 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	subject urn.SessionSubject,
 	mcpServerID uuid.UUID,
 	skipUnusable bool,
-) (map[uuid.UUID]UpstreamToken, error) {
+) (ServerAccessTokens, error) {
+	var resolved ServerAccessTokens
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
-		return nil, fmt.Errorf("list remote_session_clients: %w", err)
+		return resolved, fmt.Errorf("list remote_session_clients: %w", err)
 	}
 	if len(clients) == 0 {
-		return nil, nil
+		return resolved, nil
 	}
 	ids := make([]uuid.UUID, 0, len(clients))
 	for _, client := range clients {
 		ids = append(ids, client.ClientID)
 	}
-	required, err := requiredServerClients(ctx, remotesessions_repo.New(m.db), organizationID, userSessionIssuerID, mcpServerID, ids)
+	required, association, err := requiredServerClients(ctx, remotesessions_repo.New(m.db), organizationID, userSessionIssuerID, mcpServerID, ids)
 	if err != nil {
-		return nil, err
+		return resolved, err
 	}
+	resolved.Association = association
 	if len(required) == 0 {
-		return nil, nil
+		return resolved, nil
 	}
 	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
 		return !slices.Contains(required, client.ClientID)
 	})
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	resolved.Tokens, err = m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	return resolved, err
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
@@ -810,10 +860,10 @@ func (m *ChallengeManager) resolveClientTokens(
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
 			if skipUnusable {
-				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, ErrNoValidToken)
+				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, withRecordedRefresh(ErrNoValidToken, resolved))
 				continue
 			}
-			return nil, noTokenError(resolved.refreshFailureRecorded)
+			return nil, withRecordedRefresh(ErrNoValidToken, resolved)
 		default:
 			tokens[c.RemoteSessionIssuerID] = resolved
 		}
@@ -868,6 +918,7 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		ClientCredentialErr:                err,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}
 }
 
@@ -884,6 +935,7 @@ func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string
 		ClientCredentialErr:                outage,
 		renewal:                            nil,
 		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}
 }
 
@@ -902,10 +954,10 @@ func RetryAfter(err error) time.Duration {
 	return 0
 }
 
-// OutageKindOf says what kind of outage stopped err's refresh, none when unknown.
+// OutageKindOf is the outage the connect page shows for err's refresh, none when unknown.
 func OutageKindOf(err error) RefreshOutageKind {
 	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
-		return refreshErr.outageKind
+		return refreshErr.visibleOutage
 	}
 	return RefreshOutageNone
 }
@@ -922,7 +974,7 @@ func TokenEndpointCausedOutage(err error) bool {
 // OutageProviderHost is the issuer host behind a provider outage; a tunneled provider's stays off the page.
 func OutageProviderHost(err error) string {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	if !ok || refreshErr.outageKind != RefreshOutageProvider {
+	if !ok || refreshErr.visibleOutage != RefreshOutageProvider {
 		return ""
 	}
 	parsed, perr := url.Parse(refreshErr.IssuerURL)
@@ -932,10 +984,12 @@ func OutageProviderHost(err error) string {
 	return parsed.Hostname()
 }
 
-// RefreshBusy reports a refresh that waited on another request and made no call of its own.
+// RefreshBusy reports a deferred refresh with no outage the connect page can see. It keeps
+// that page's meaning on purpose: a cooldown whose record can't be read, or our own slow
+// setup, also reads as busy here, though ConnectionOutageHappened records them differently.
 func RefreshBusy(err error) bool {
 	refreshErr, ok := errors.AsType[*RefreshError](err)
-	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.outageKind == RefreshOutageNone
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
 }
 
 // SessionUnavailable reports a subject's connection that an outage stopped refreshing.

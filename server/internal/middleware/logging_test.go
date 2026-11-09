@@ -119,6 +119,11 @@ func TestLogSafeURL(t *testing.T) {
 			want: "/rpc/auth.login?email=REDACTED",
 		},
 		{
+			name: "login analytics session id redacted, utm params kept",
+			in:   "/rpc/auth.login?utm_source=linkedin&analytics_session_id=sess-123",
+			want: "/rpc/auth.login?utm_source=linkedin&analytics_session_id=REDACTED",
+		},
+		{
 			name: "unlisted parameter carrying an address untouched",
 			in:   "/rpc/organizations.listMembers?user_id=abc123",
 			want: "/rpc/organizations.listMembers?user_id=abc123",

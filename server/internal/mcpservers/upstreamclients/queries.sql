@@ -380,6 +380,22 @@ WHERE a.mcp_server_id = @mcp_server_id::uuid
   AND a.deleted IS FALSE
 ORDER BY a.created_at, a.remote_session_client_id;
 
+-- name: ListMCPServerUpstreamIssuers :many
+-- The distinct live providers one MCP server reaches through its live client
+-- associations.
+SELECT DISTINCT c.remote_session_issuer_id
+FROM mcp_server_remote_session_clients AS a
+JOIN remote_session_clients AS c
+  ON c.id = a.remote_session_client_id
+ AND c.deleted IS FALSE
+JOIN remote_session_issuers AS i
+  ON i.id = c.remote_session_issuer_id
+ AND i.deleted IS FALSE
+WHERE a.mcp_server_id = @mcp_server_id::uuid
+  AND a.project_id = @project_id::uuid
+  AND a.deleted IS FALSE
+ORDER BY c.remote_session_issuer_id;
+
 -- name: DetachMCPServerRemoteSessionClient :execrows
 -- Removes one server's association. The client and its other associations
 -- are untouched. The row is soft-deleted so capture and the backfill keep the
@@ -530,7 +546,25 @@ WITH selected AS (
                      AND c.client_type IN ('static_credential', 'pass_through'))))
       )
   ) AS candidates
-  WHERE @proposed::boolean AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
+  WHERE @proposed::boolean AND NOT @propose_all_clients::boolean
+    AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
+  UNION ALL
+  -- Discovery evaluates every offered client in one metadata-only read, using
+  -- the same authoritative header-source checks as a single proposed choice.
+  SELECT FALSE, link.auth_client_id, NULL::uuid, m.id, m.project_id,
+         p.organization_id, FALSE
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+  JOIN mcp_server_auth_clients AS link ON link.mcp_server_id = m.id
+   AND link.project_id = m.project_id AND link.organization_id = p.organization_id
+   AND link.deleted IS FALSE
+  JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+   AND c.organization_id = p.organization_id
+   AND (c.project_id IS NULL OR c.project_id = m.project_id)
+   AND c.deleted IS FALSE
+  WHERE @proposed::boolean AND @propose_all_clients::boolean
+    AND m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,

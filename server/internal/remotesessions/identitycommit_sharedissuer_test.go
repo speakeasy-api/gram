@@ -332,9 +332,12 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	tokens, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, associated, false)
+	resolved, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, associated, false)
 	require.NoError(t, err)
+	tokens := resolved.Tokens
 	require.Equal(t, "own-token", tokens[ownProvider].Token)
+	require.Equal(t, remotesessions.ServerAssociationIssuer{Known: true, Providers: 1, Provider: uuid.NullUUID{UUID: ownProvider, Valid: true}}, resolved.Association,
+		"the server's associations give its own client's provider")
 	require.NotContains(t, tokens, siblingProvider, "a sibling's client is never resolved for this server")
 	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: associated, Valid: true}))
 
@@ -355,9 +358,11 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)
-	tokens, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
+	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
 	require.NoError(t, err)
-	require.Empty(t, tokens, "another server's credential is never resolved for this one")
+	require.Empty(t, resolved.Tokens, "another server's credential is never resolved for this one")
+	require.Equal(t, remotesessions.ServerAssociationIssuer{Known: true, Providers: 0, Provider: uuid.NullUUID{}}, resolved.Association,
+		"a server with no association has no association issuer")
 }
 
 // seedBoundServiceAccountClient binds a service account client of provider to

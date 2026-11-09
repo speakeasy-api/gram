@@ -13,7 +13,7 @@ If this connection lists `call_platform_tool` instead of the tools named below, 
 
 Always begin by successfully calling `list_my_sessions`, even if the user supplied an ID or believes they remember one. Never ask the user to know, copy from elsewhere, or type a session ID from memory. This fresh list is both the access check and the authoritative set from which the user can choose.
 
-If the call is unavailable or authentication is not active, stop and explain that an authenticated Speakeasy AI Control Plane connection is required. Do not request authentication material in chat. If the call is rate-limited, report that and wait for the indicated retry window or ask the user to try later; do not loop.
+If the call is unavailable or authentication is not active, stop and explain that an authenticated Speakeasy AI Control Plane connection is required, then follow the `platform-sign-in` workflow to sign this client in. Do not request authentication material in chat. If the call is rate-limited, report that and wait for the indicated retry window or ask the user to try later; do not loop.
 
 If `sessions` is empty, say that no captured coding sessions are currently available to this OAuth caller in the organization. Do not infer whether sessions owned by anyone else exist.
 

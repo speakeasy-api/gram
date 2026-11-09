@@ -232,11 +232,11 @@ describe("AppSidebar", () => {
             label: "Upstream OAuth migration",
             href: "/upstream-oauth-migration",
           },
-          {
-            label: "External MCP migration",
-            href: "/external-mcp-migration",
-          },
           { label: "Fleet health", href: "/fleet-health" },
+          {
+            label: "Platform MCP feedback",
+            href: "/platform-mcp-feedback",
+          },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
             label: "Demo organization",

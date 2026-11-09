@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"net/http"
 	"testing"
 
 	"github.com/google/uuid"
@@ -247,15 +248,15 @@ func TestMemberAuthFailure_LinksConnectPage(t *testing.T) {
 	member := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
 	connectURL := "https://app.example.com/mcp/tools/connect/first-party?server=github"
 
-	err := memberAuthFailure(member, memberDial{anonymous: true, connectURL: connectURL})
+	err := memberAuthFailure(member, memberDial{anonymous: true, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, `server "github" is not connected for this user`)
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: false, connectURL: connectURL})
+	err = memberAuthFailure(member, memberDial{anonymous: false, fix: personFix(connectURL)}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "rejected the user's credential")
 	require.ErrorContains(t, err, connectURL)
 
-	err = memberAuthFailure(member, memberDial{anonymous: true})
+	err = memberAuthFailure(member, memberDial{anonymous: true}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "Ask your administrator to connect it")
 }
 

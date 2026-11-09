@@ -5,8 +5,10 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -33,6 +36,9 @@ const connectionAttemptEndTTL = 2 * time.Hour
 const (
 	// attemptEndingTimeout bounds one claim of an attempt's ending.
 	attemptEndingTimeout = 5 * time.Second
+
+	// memberStatusTimeout bounds the consent page's member status check; past it every row is written.
+	memberStatusTimeout = time.Second
 
 	// maxPendingAttemptEndings bounds claims waiting on a slow Redis.
 	maxPendingAttemptEndings = 256
@@ -88,6 +94,16 @@ func (s *Service) refusedWithoutRow(ctx context.Context, t *mcpconnectionattempt
 	s.metrics.RecordConnectionRefusalWithoutRow(ctx, reason)
 }
 
+// refuseRemoteSessionUnavailable records an outage under its owner; a lock-held refresh is the lock holder's row.
+func (s *Service) refuseRemoteSessionUnavailable(ctx context.Context, t *mcpconnectionattempts.Tracker, err error) {
+	code := remotesessions.ConnectionOutageHappened(err)
+	if code == (mcpconnectionattempts.Code{}) {
+		s.refusedWithoutRow(ctx, t, "refresh_busy")
+		return
+	}
+	t.Refuse(ctx, code)
+}
+
 // recordWrongConsentBrowser leaves the page usable for the right browser. The
 // endpoint comes from the route, so the state must belong to it before writing.
 func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {
@@ -97,11 +113,22 @@ func (s *Service) recordWrongConsentBrowser(r *http.Request, endpoint *ResolvedM
 		return
 	}
 	attempt := challengeState.connectionAttempt(endpoint)
-	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) {
+	if challengeState.CodeReconnect.expired(time.Now()) || challengeState.WorkloadReconnect.expired(time.Now()) || browserBindingExpired(challengeState, time.Now()) {
 		s.endAttemptOnce(ctx, s.logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
 		return
 	}
 	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, fromRequest, mcpconnectionattempts.Subject(challengeState.Subject))
+}
+
+// consentBrowserError records a consent request that failed its browser check
+// and refuses it: a challenge out of time as expired, any other as a request
+// from another browser.
+func (s *Service) consentBrowserError(r *http.Request, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, err error) error {
+	s.recordWrongConsentBrowser(r, endpoint, challengeState)
+	if errors.Is(err, errChallengeBrowserExpired) {
+		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge expired"), oauthui.ReasonExpired))
+	}
+	return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 }
 
 // reconnectFailure maps a failed catalogue reconnect, and whether a retry can't fix it.
@@ -201,9 +228,13 @@ func (s *Service) recordConsentPage(
 	attempt := challengeState.connectionAttempt(endpoint)
 	subject := mcpconnectionattempts.Subject(challengeState.Subject)
 	if gateway != nil {
+		statuses := make([]memberStatus, 0, len(gateway.Servers))
 		for _, server := range gateway.Servers {
-			s.recordGatewayServerStatus(ctx, attempt, gateway, server, subject, fromRequest)
+			if status, ok := gatewayMemberStatus(gateway, server); ok {
+				statuses = append(statuses, status)
+			}
 		}
+		s.recordMemberStatuses(ctx, logger, attempt, statuses, subject, fromRequest)
 	}
 	if problem != nil {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject, fromRequest)
@@ -213,10 +244,18 @@ func (s *Service) recordConsentPage(
 	}
 }
 
-func (s *Service) recordGatewayServerStatus(ctx context.Context, attempt mcpconnectionattempts.Attempt, gateway *gatewayConsentView, server gatewayServer, subject, fromRequest mcpconnectionattempts.Option) {
+// memberStatus is one gateway member's discovery row; status is its result and reason.
+type memberStatus struct {
+	id     string
+	status string
+	what   mcpconnectionattempts.Happened
+	opts   []mcpconnectionattempts.Option
+}
+
+func gatewayMemberStatus(gateway *gatewayConsentView, server gatewayServer) (memberStatus, bool) {
 	serverID, err := uuid.Parse(server.ServerID)
 	if err != nil {
-		return
+		return memberStatus{id: "", status: "", what: nil, opts: nil}, false
 	}
 	var authClient *authClientResolution
 	for i := range gateway.members {
@@ -226,11 +265,126 @@ func (s *Service) recordGatewayServerStatus(ctx context.Context, attempt mcpconn
 		}
 	}
 	what, detail := gatewayServerHappened(server.Status, authClient)
-	opts := []mcpconnectionattempts.Option{subject, fromRequest, mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Member(serverID), mcpconnectionattempts.Detail(detail)}
+	status := fmt.Sprint(what) + "|" + detail
 	if authClient != nil {
 		opts = append(opts, mcpconnectionattempts.AuthClient(authClient.clientID))
+		status += "|" + authClient.clientID.String()
 	}
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, what, opts...)
+	return memberStatus{id: serverID.String(), status: status, what: what, opts: opts}, true
+}
+
+// memberStatusCache is the cache side of changedMemberStatuses.
+type memberStatusCache interface {
+	Mutate(ctx context.Context, key string, value any, ttl time.Duration, fn func(exists bool) error) error
+}
+
+// recordedMember is a slice element, not a map entry, so a retried read can't keep stale keys.
+type recordedMember struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+}
+
+var errMemberStatusesUnchanged = errors.New("member statuses unchanged")
+
+func memberStatusesKey(attempt mcpconnectionattempts.Attempt) string {
+	return "connectionAttemptMembers:" + attempt.ID().String()
+}
+
+// recordMemberStatuses writes members whose status changed this attempt.
+func (s *Service) recordMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus, opts ...mcpconnectionattempts.Option) {
+	var dropped []memberStatus
+	for _, status := range s.changedMemberStatuses(ctx, logger, attempt, statuses) {
+		if !s.connections.Step(ctx, attempt, mcpconnectionattempts.StepDiscoveryMember, status.what, slices.Concat(status.opts, opts)...) {
+			dropped = append(dropped, status)
+		}
+	}
+	s.forgetMemberStatuses(ctx, logger, attempt, dropped)
+}
+
+// forgetMemberStatuses clears rows the recorder did not accept, so the next render records them again.
+// Rows accepted but lost later in the writer are not retried.
+func (s *Service) forgetMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, dropped []memberStatus) {
+	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	if !ok || len(dropped) == 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	var recorded []recordedMember
+	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
+		kept := recorded[:0]
+		for _, member := range recorded {
+			if !slices.ContainsFunc(dropped, func(status memberStatus) bool { return status.id == member.ID && status.status == member.Status }) {
+				kept = append(kept, member)
+			}
+		}
+		recorded = kept
+		return nil
+	})
+	if err != nil {
+		logger.WarnContext(ctx, "forget dropped gateway member statuses", attr.SlogError(err))
+	}
+}
+
+// changedMemberStatuses keeps members whose status changed this attempt; a cache failure keeps all.
+func (s *Service) changedMemberStatuses(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, statuses []memberStatus) []memberStatus {
+	store, ok := s.userSessionRefreshReplayCoordination.(memberStatusCache)
+	if !ok || attempt.IsZero() || len(statuses) == 0 {
+		return statuses
+	}
+	ctx, cancel := context.WithTimeout(ctx, memberStatusTimeout)
+	defer cancel()
+	var changed []memberStatus
+	var recorded []recordedMember
+	err := store.Mutate(ctx, memberStatusesKey(attempt), &recorded, connectionAttemptEndTTL, func(bool) error {
+		last := make(map[string]int, len(recorded))
+		for i, member := range recorded {
+			last[member.ID] = i
+		}
+		changed = changed[:0]
+		for _, status := range statuses {
+			i, seen := last[status.id]
+			switch {
+			case !seen:
+				last[status.id] = len(recorded)
+				recorded = append(recorded, recordedMember{ID: status.id, Status: status.status})
+			case recorded[i].Status != status.status:
+				recorded[i].Status = status.status
+			default:
+				continue
+			}
+			changed = append(changed, status)
+		}
+		if len(changed) == 0 {
+			return errMemberStatusesUnchanged
+		}
+		return nil
+	})
+	switch {
+	case errors.Is(err, errMemberStatusesUnchanged):
+		return nil
+	case err != nil:
+		logger.WarnContext(ctx, "read recorded gateway member statuses", attr.SlogError(err))
+		return statuses
+	}
+	return changed
+}
+
+// memberSetupChangedDetail marks a member whose saved choice no longer fits the sign-in setup an admin changed.
+const memberSetupChangedDetail = "setup_changed"
+
+// staleChoiceHappened records whoever the stale choice's message tells to act first.
+// An unchecked remedy is our failed lookup, not the person's or an admin's.
+func staleChoiceHappened(remedy staleChoiceRemedy) mcpconnectionattempts.Code {
+	switch remedy {
+	case staleChoiceReconnect, staleChoiceReconnectThenAdmin:
+		return mcpconnectionattempts.CodeNeedsSignIn
+	case staleChoiceAskAdmin:
+		return mcpconnectionattempts.CodeUpstreamSignInNotSetUp
+	case staleChoiceUnchecked:
+	}
+	return mcpconnectionattempts.CodeInternalError
 }
 
 // gatewayServerHappened maps a server's consent status, and any gap in its
@@ -515,23 +669,42 @@ func (s *Service) recordRemoteSessionVerdict(
 	verdict remotesessions.ValidationOutcome,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive || (verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled)) {
+	if verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	what := verdictHappened(verdict, target.tunnelID.Valid)
 	if verdict == remotesessions.ValidationOutcomeUnknown && target.setupFailed {
 		what = mcpconnectionattempts.CodeMemberToolsMissing
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what,
+	s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, what,
+		mcpconnectionattempts.Member(target.memberID),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+	)
+}
+
+// recordRemoteSessionCheck writes one check's row on the challenge's attempt; a keepalive writes none.
+func (s *Service) recordRemoteSessionCheck(
+	ctx context.Context,
+	fromRequest mcpconnectionattempts.Option,
+	endpoint *ResolvedMcpEndpoint,
+	challengeState AuthnChallengeState,
+	client remotesessions.Client,
+	trigger remotesessionmetrics.ValidationTrigger,
+	what mcpconnectionattempts.Happened,
+	opts ...mcpconnectionattempts.Option,
+) {
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+		return
+	}
+	opts = append([]mcpconnectionattempts.Option{
 		fromRequest,
 		mcpconnectionattempts.Detail(string(trigger)),
-		mcpconnectionattempts.Member(target.memberID),
 		mcpconnectionattempts.Provider(client.IssuerURL),
-		mcpconnectionattempts.RemoteSession(remoteSessionID),
 		mcpconnectionattempts.RemoteSessionClient(client.ID),
 		mcpconnectionattempts.RemoteSessionIssuer(client.RemoteSessionIssuerID),
 		mcpconnectionattempts.Subject(challengeState.Subject),
-	)
+	}, opts...)
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepProviderSignIn, what, opts...)
 }
 
 func verdictHappened(verdict remotesessions.ValidationOutcome, tunneled bool) mcpconnectionattempts.Happened {

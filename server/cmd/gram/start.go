@@ -80,6 +80,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/hooks"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 	"github.com/speakeasy-api/gram/server/internal/identityapi"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
 	"github.com/speakeasy-api/gram/server/internal/instances"
@@ -312,9 +313,10 @@ func restoreLocalPluginRepositories(
 }
 
 // shutdownDrainTimeout is how long srv.Shutdown waits for in-flight requests
-// to complete on SIGTERM before the process exits. It must cover the slowest
-// outbound work any endpoint can do, including the MCP runtime path
-// (POST /mcp/{mcpSlug}).
+// to complete on SIGTERM before the process exits. MCP tool calls, resource
+// reads and relayed requests are not left to run it out: requestInterruptAfter
+// answers them first, so this only has to cover the rest of an endpoint's work
+// plus writing and recording those answers.
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
 // terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
@@ -322,12 +324,13 @@ func restoreLocalPluginRepositories(
 // so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
-// relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
-// a remote MCP server may keep waiting for its response before it is answered
-// with a JSON-RPC error. It leaves 15s of shutdownDrainTimeout to write those
-// errors, cancel the upstream calls, and let handlers return before the
-// deadline cancels whatever is left.
-const relayedRequestInterruptAfter = 45 * time.Second
+// requestInterruptAfter is how long after SIGTERM an MCP request (a relayed
+// remote MCP request, or a tool call or resource read the gateway runs itself)
+// may keep running before it is cancelled and answered with a JSON-RPC error.
+// It leaves 15s of shutdownDrainTimeout to write those errors, cancel the
+// upstream calls, record the interrupted calls, and let handlers return before
+// the deadline cancels whatever is left.
+const requestInterruptAfter = 45 * time.Second
 
 func networkIngressLifecycleDeliveryReady(reconcileQueue, temporalQueue string, devSingleProcess bool) (bool, error) {
 	if reconcileQueue == "" {
@@ -524,6 +527,12 @@ func mcpRuntimeFlags() []cli.Flag {
 			Name:    "meta-member-call-timeout",
 			Usage:   "Deadline for one gateway member upstream call, handshake included (0 uses the built-in default)",
 			EnvVars: []string{"GRAM_META_MEMBER_CALL_TIMEOUT"},
+		},
+		&cli.DurationFlag{
+			Name:    "stream-max-age",
+			Usage:   "How long a long-lived SSE response (MCP streams, chat turn streams) may stay open before the server ends it with an SSE retry hint for the client to reconnect. Must stay under the load balancer's response deadline; zero or negative leaves streams open until they end on their own",
+			EnvVars: []string{"GRAM_STREAM_MAX_AGE"},
+			Value:   httpstream.DefaultMaxAge,
 		},
 		&cli.DurationFlag{
 			Name:    "remote-session-recheck-interval",
@@ -1267,7 +1276,8 @@ func newStartCommand() *cli.Command {
 			chatService := chat.NewService(logger, tracerProvider, db, sessionManager, chatSessionsManager, openRouter, chatClient, contextWindowResolver, posthogClient, telemSvc, assetStorage, authzEngine, assistantTokenManager, billingRepo, auditLogger).
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
-				WithRiskFindings(chatRiskFindings)
+				WithRiskFindings(chatRiskFindings).
+				WithStreamRotation(meterProvider, c.Duration("stream-max-age"))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -1766,7 +1776,7 @@ func newStartCommand() *cli.Command {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
 			mcpCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator).WithAssetBaseURL(siteURL)))
-			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, authzEngine, auditLogger, mcpCatalog)
+			deploymentsService := deployments.NewService(logger, tracerProvider, db, temporalEnv, sessionManager, assetStorage, posthogClient, siteURL, authzEngine, auditLogger)
 			deployments.Attach(mux, deploymentsService)
 			keys.Attach(mux, keys.NewService(logger, tracerProvider, db, sessionManager, c.String("environment"), authzEngine, auditLogger))
 			authclients.Attach(mux, authclients.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, encryptionClient))
@@ -1967,6 +1977,7 @@ func newStartCommand() *cli.Command {
 				ProjectCore:               projects.NewCore(logger.With(attr.SlogComponent("projects")), auditLogger, temporalEnv, pluginsGitHub != nil),
 				Skills:                    skillsService,
 				GatewaySessions:           userSessionsService,
+				AgentAuthorizationChecks:  accessService,
 				GatewayProxy:              mcpService,
 				SkillInsights:             telemetryrepo.New(chDB),
 				RiskPolicyApprovals:       mcpApprovalService,
@@ -2010,6 +2021,9 @@ func newStartCommand() *cli.Command {
 			platformMCPAssistant, err := configurePlatformMCP(ctx, platformMCPCfg)
 			if err != nil {
 				return err
+			}
+			if platformMCPAssistant.ConsentSignIn != nil {
+				mcpService.SetPendingSignInConnector(platformMCPAssistant.ConsentSignIn)
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
@@ -2304,7 +2318,7 @@ func newStartCommand() *cli.Command {
 
 				// Listen streams never finish on their own, so end them first and
 				// let their clients reconnect to a replica that is still serving.
-				mcpService.StartDrain(relayedRequestInterruptAfter)
+				mcpService.StartDrain(requestInterruptAfter)
 				drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown server")
 
 				// HTTP shutdown has quiesced handlers that produce realtime

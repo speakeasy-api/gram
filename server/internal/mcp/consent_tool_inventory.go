@@ -86,9 +86,6 @@ type consentToolInventory struct {
 	// BackendHash pins evidence to the configured backend, not just a tool name.
 	BackendHash string `json:"backend_hash,omitempty"`
 
-	// Recomputed at reuse validation, never trusted from the cache.
-	otherModeBackendHash string
-
 	// StateID keys the snapshot to one authn challenge.
 	StateID string `json:"state_id"`
 
@@ -153,14 +150,26 @@ func consentAttemptID(raw string) (string, error) {
 }
 
 // loadConsentInventoryDraft reads the attempt's draft, creating the initial
-// empty draft on first use.
-func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) (consentToolInventory, error) {
-	backendHash, err := s.consentBackendFingerprint(ctx, endpoint)
+// empty draft on first use. consenter identifies whose consent it is for the
+// re-consent forecast.
+func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt, consenter string) (consentToolInventory, error) {
+	backendHashes, err := s.consentBackendFingerprint(ctx, endpoint)
 	if err != nil {
 		return consentToolInventory{}, err
 	}
+	backendHash := backendHashes.decided
 	cached, err := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, attempt, endpointToolSelectionResource(endpoint)))
 	if err == nil {
+		// Without an MCP server there is no upstream issuer to compare.
+		if endpoint.McpServerID.Valid {
+			s.recordUpstreamIssuerReconsent(ctx, s.logger, upstreamIssuerReconsentCheck{
+				organizationID: endpoint.OrganizationID,
+				serverID:       endpoint.McpServerID.UUID,
+				site:           upstreamIssuerReconsentSiteInventoryDraft,
+				consenter:      consenter,
+				outcome:        upstreamIssuerReconsent(cached.BackendHash, backendHashes.decided, backendHashes.other, backendHashes.otherErr),
+			})
+		}
 		if cached.BackendHash != backendHash {
 			return consentToolInventory{}, errConsentConfigurationChanged
 		}
@@ -170,19 +179,18 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
-		DirectAuthClient:     nil,
-		otherModeBackendHash: "",
-		CompletedAt:          time.Time{},
-		BackendHash:          backendHash,
-		StateID:              stateID,
-		Attempt:              attempt,
-		Resource:             endpointToolSelectionResource(endpoint),
-		Tools:                []consentInventoryTool{},
-		ExpectedCursor:       "",
-		Complete:             false,
-		McpSessionID:         "",
-		MemberBindings:       nil,
-		MemberOutcomes:       nil,
+		DirectAuthClient: nil,
+		CompletedAt:      time.Time{},
+		BackendHash:      backendHash,
+		StateID:          stateID,
+		Attempt:          attempt,
+		Resource:         endpointToolSelectionResource(endpoint),
+		Tools:            []consentInventoryTool{},
+		ExpectedCursor:   "",
+		Complete:         false,
+		McpSessionID:     "",
+		MemberBindings:   nil,
+		MemberOutcomes:   nil,
 	}, nil
 }
 
@@ -336,7 +344,7 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 		if cerr := ctx.Err(); cerr != nil {
 			return nil, nil, fmt.Errorf("enumerate consent inventory: %w", cerr)
 		}
-		if tool == nil || conv.IsProxyTool(tool) {
+		if tool == nil {
 			continue
 		}
 		base, berr := conv.ToBaseTool(tool)
@@ -351,7 +359,9 @@ func (s *Service) enumerateToolsetConsentInventory(ctx context.Context, endpoint
 			if len(values) > 0 {
 				disposition = values[0]
 			}
-			if rerr := s.authz.Require(ctx, authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
+			// Listing the tools names none of them, as in tools/list
+			// (filterToolsByMCPConnect), so no check is recorded per tool.
+			if rerr := s.authz.Require(authz.WithoutChallenges(ctx), authz.MCPToolCallCheck(connectResourceID, authz.MCPToolCallDimensions{
 				Tool:        base.Name,
 				Disposition: disposition,
 				ProjectID:   endpoint.ProjectID.String(),

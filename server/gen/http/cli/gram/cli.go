@@ -135,7 +135,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
 		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|list-issuance-profiles|set-issuance-profile|delete-issuance-profile|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|count-by-user|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
@@ -206,7 +206,7 @@ func UsageCommands() []string {
 		"tunneled-mcp (create-server|list-servers|get-server|list-server-connections|get-server-metrics|update-server|rotate-server-key|delete-server)",
 		"unproxied-mcp (create-server|list-servers|get-server|delete-server)",
 		"usage (get-period-usage|get-meter-usage|get-spend-breakdown|get-tokens-under-management|set-billing-metadata|get-billing-email|set-billing-email|set-spend-cap|get-inference-spend-caps|get-usage-tiers|create-customer-session|create-checkout|get-stripe-checkout-status|create-stripe-checkout|get-stripe-subscription|get-payg-billing-summary|create-stripe-portal-session|cancel-stripe-subscription|resume-stripe-subscription|create-top-up-checkout)",
-		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|get-mcp-server-tool-calls|get-hook-clients|list-external-mcp-migration-candidates|preview-external-mcp-migration|migrate-external-mcp-servers|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants)",
+		"admin (login|callback|logout|get-session|get-organization-features|set-organization-provider-setup|set-organization-feature|get-organization-chat-analysis-settings|set-organization-chat-analysis-settings|trigger-organization-chat-analysis|open-organization-in-dashboard|get-project|update-organization|bulk-update-account-type|disable-organization|enable-organization|get-organization|list-organization-members|list-organization-projects|list-project-mcp-servers|list-organization-activity|list-users|list-user-organizations|list-organizations|extend-trial|create-organization|rearm-trial|get-organization-stats|repair-inference-key|get-inference-keys|set-inference-key-monthly-limit|get-inference-spend-history|get-payg-billing-summary|get-stripe-customer|set-stripe-customer|set-adoption-dashboard-url|get-stripe-subscription|cancel-stripe-subscription|resume-stripe-subscription|mark-enterprise-trial-converted|create-global-issuer|get-global-issuer-duplicate-preflight|list-global-issuers|get-global-issuer|update-global-issuer|delete-global-issuer|fetch-global-issuer-metadata|refresh-global-issuer-metadata|list-global-issuer-convergence-candidates|get-global-issuer-migrate-preflight|migrate-to-global-issuer|upload-platform-image|serve-image|start-trial|change-trial-end-date|get-meter-usage|get-spend-breakdown|get-support-matrix|update-support-matrix|get-support-coverage|describe-mcp-server-health|set-mcp-server-scope-pin|get-mcp-server-tool-calls|get-hook-clients|list-registry-promotion-candidates|get-registry-promotion-candidate|promote-registry-candidate|curate-registry-promotion-candidate|retry-registry-promotion-docs|get-registry-okta-candidates|list-registry-okta-unmapped|list-registry-entries|get-registry-entry|create-registry-entry|save-registry-entry|set-registry-entry-published|list-onboarding-steps|get-onboarding-stack-options|get-organization-onboarding-stack|set-organization-onboarding-stack|list-onboarding-use-cases|create-onboarding-use-case|update-onboarding-use-case|delete-onboarding-use-case|list-onboarding-playbooks|create-onboarding-playbook|update-onboarding-playbook|delete-onboarding-playbook|clone-onboarding-playbook|get-organization-onboarding-playbook|assign-organization-onboarding-playbook|list-signup-offers|create-signup-offer|update-signup-offer|list-platform-mcp-feedback|get-stripe-subscription-candidate|set-stripe-subscription|list-customer-usage|list-upstreamoauth-migration-organizations|get-upstreamoauth-migration-status|run-upstreamoauth-migration|enable-upstream-auth-enforcement|disable-upstream-auth-enforcement|backfill-mcp-auth-grants|backfill-mcp-connect-grants|get-project-redeploy-preview|redeploy-project)",
 		"user-session-clients (list-user-session-clients|get-user-session-client|refresh-user-session-client-cimd|revoke-user-session-client)",
 		"user-session-consents (list-user-session-consents|revoke-user-session-consent)",
 		"user-session-issuers-cimd-clients (list-presets|create-user-session-issuer-cimd-client|verify-url|list-user-session-issuer-cimd-clients|get-user-session-issuer-cimd-client|delete-user-session-issuer-cimd-client)",
@@ -217,7 +217,7 @@ func UsageCommands() []string {
 		"widgets (list-widgets|get-widget|create-widget|update-widget|duplicate-widget|delete-widget)",
 		"workload-identities (list|list-platforms|get-custom-flows|list-token-endpoints|register-issuer|update-issuer|withdraw-issuer|admit-subject|update-subject|withdraw-subject|create-device-join-token|register-device)",
 		"variations (upsert-global|delete-global|list-global|list-groups|create-global)",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-agent-policy-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
 	}
 }
 
@@ -752,12 +752,18 @@ func ParseEndpoint(
 		authCallbackErrorFlag = authCallbackFlags.String("error", "", "")
 		authCallbackStateFlag = authCallbackFlags.String("state", "", "")
 
-		authLoginFlags              = flag.NewFlagSet("login", flag.ExitOnError)
-		authLoginRedirectFlag       = authLoginFlags.String("redirect", "", "")
-		authLoginOrgNameFlag        = authLoginFlags.String("org-name", "", "")
-		authLoginPartnerCodeFlag    = authLoginFlags.String("partner-code", "", "")
-		authLoginEmailFlag          = authLoginFlags.String("email", "", "")
-		authLoginSupportHandoffFlag = authLoginFlags.String("support-handoff", "", "")
+		authLoginFlags                  = flag.NewFlagSet("login", flag.ExitOnError)
+		authLoginRedirectFlag           = authLoginFlags.String("redirect", "", "")
+		authLoginOrgNameFlag            = authLoginFlags.String("org-name", "", "")
+		authLoginPartnerCodeFlag        = authLoginFlags.String("partner-code", "", "")
+		authLoginEmailFlag              = authLoginFlags.String("email", "", "")
+		authLoginSupportHandoffFlag     = authLoginFlags.String("support-handoff", "", "")
+		authLoginUtmSourceFlag          = authLoginFlags.String("utm-source", "", "")
+		authLoginUtmMediumFlag          = authLoginFlags.String("utm-medium", "", "")
+		authLoginUtmCampaignFlag        = authLoginFlags.String("utm-campaign", "", "")
+		authLoginUtmTermFlag            = authLoginFlags.String("utm-term", "", "")
+		authLoginUtmContentFlag         = authLoginFlags.String("utm-content", "", "")
+		authLoginAnalyticsSessionIDFlag = authLoginFlags.String("analytics-session-id", "", "")
 
 		authSwitchScopesFlags              = flag.NewFlagSet("switch-scopes", flag.ExitOnError)
 		authSwitchScopesOrganizationIDFlag = authSwitchScopesFlags.String("organization-id", "", "")
@@ -912,6 +918,7 @@ func ParseEndpoint(
 		chatListChatsOffsetFlag            = chatListChatsFlags.String("offset", "", "")
 		chatListChatsSortByFlag            = chatListChatsFlags.String("sort-by", "last_message_timestamp", "")
 		chatListChatsSortOrderFlag         = chatListChatsFlags.String("sort-order", "desc", "")
+		chatListChatsPinnedFirstFlag       = chatListChatsFlags.String("pinned-first", "", "")
 		chatListChatsSessionTokenFlag      = chatListChatsFlags.String("session-token", "", "")
 		chatListChatsProjectSlugInputFlag  = chatListChatsFlags.String("project-slug-input", "", "")
 		chatListChatsChatSessionsTokenFlag = chatListChatsFlags.String("chat-sessions-token", "", "")
@@ -989,6 +996,14 @@ func ParseEndpoint(
 		chatListSourcesSessionTokenFlag      = chatListSourcesFlags.String("session-token", "", "")
 		chatListSourcesProjectSlugInputFlag  = chatListSourcesFlags.String("project-slug-input", "", "")
 		chatListSourcesChatSessionsTokenFlag = chatListSourcesFlags.String("chat-sessions-token", "", "")
+
+		chatCountByUserFlags                 = flag.NewFlagSet("count-by-user", flag.ExitOnError)
+		chatCountByUserFromFlag              = chatCountByUserFlags.String("from", "", "")
+		chatCountByUserToFlag                = chatCountByUserFlags.String("to", "", "")
+		chatCountByUserLimitFlag             = chatCountByUserFlags.String("limit", "10", "")
+		chatCountByUserSessionTokenFlag      = chatCountByUserFlags.String("session-token", "", "")
+		chatCountByUserProjectSlugInputFlag  = chatCountByUserFlags.String("project-slug-input", "", "")
+		chatCountByUserChatSessionsTokenFlag = chatCountByUserFlags.String("chat-sessions-token", "", "")
 
 		chatListSessionLinksFlags                 = flag.NewFlagSet("list-session-links", flag.ExitOnError)
 		chatListSessionLinksChatIdsFlag           = chatListSessionLinksFlags.String("chat-ids", "REQUIRED", "")
@@ -4750,6 +4765,10 @@ func ParseEndpoint(
 		adminDescribeMcpServerHealthWindowDaysFlag        = adminDescribeMcpServerHealthFlags.String("window-days", "14", "")
 		adminDescribeMcpServerHealthAdminSessionTokenFlag = adminDescribeMcpServerHealthFlags.String("admin-session-token", "", "")
 
+		adminSetMcpServerScopePinFlags                 = flag.NewFlagSet("set-mcp-server-scope-pin", flag.ExitOnError)
+		adminSetMcpServerScopePinBodyFlag              = adminSetMcpServerScopePinFlags.String("body", "REQUIRED", "")
+		adminSetMcpServerScopePinAdminSessionTokenFlag = adminSetMcpServerScopePinFlags.String("admin-session-token", "", "")
+
 		adminGetMcpServerToolCallsFlags                 = flag.NewFlagSet("get-mcp-server-tool-calls", flag.ExitOnError)
 		adminGetMcpServerToolCallsOrganizationIDFlag    = adminGetMcpServerToolCallsFlags.String("organization-id", "REQUIRED", "")
 		adminGetMcpServerToolCallsProjectIDFlag         = adminGetMcpServerToolCallsFlags.String("project-id", "REQUIRED", "")
@@ -4761,17 +4780,6 @@ func ParseEndpoint(
 		adminGetHookClientsWindowDaysFlag        = adminGetHookClientsFlags.String("window-days", "15", "")
 		adminGetHookClientsRefreshFlag           = adminGetHookClientsFlags.String("refresh", "", "")
 		adminGetHookClientsAdminSessionTokenFlag = adminGetHookClientsFlags.String("admin-session-token", "", "")
-
-		adminListExternalMcpMigrationCandidatesFlags                 = flag.NewFlagSet("list-external-mcp-migration-candidates", flag.ExitOnError)
-		adminListExternalMcpMigrationCandidatesAdminSessionTokenFlag = adminListExternalMcpMigrationCandidatesFlags.String("admin-session-token", "", "")
-
-		adminPreviewExternalMcpMigrationFlags                 = flag.NewFlagSet("preview-external-mcp-migration", flag.ExitOnError)
-		adminPreviewExternalMcpMigrationBodyFlag              = adminPreviewExternalMcpMigrationFlags.String("body", "REQUIRED", "")
-		adminPreviewExternalMcpMigrationAdminSessionTokenFlag = adminPreviewExternalMcpMigrationFlags.String("admin-session-token", "", "")
-
-		adminMigrateExternalMcpServersFlags                 = flag.NewFlagSet("migrate-external-mcp-servers", flag.ExitOnError)
-		adminMigrateExternalMcpServersBodyFlag              = adminMigrateExternalMcpServersFlags.String("body", "REQUIRED", "")
-		adminMigrateExternalMcpServersAdminSessionTokenFlag = adminMigrateExternalMcpServersFlags.String("admin-session-token", "", "")
 
 		adminListRegistryPromotionCandidatesFlags                 = flag.NewFlagSet("list-registry-promotion-candidates", flag.ExitOnError)
 		adminListRegistryPromotionCandidatesCursorFlag            = adminListRegistryPromotionCandidatesFlags.String("cursor", "", "")
@@ -4893,6 +4901,10 @@ func ParseEndpoint(
 		adminUpdateSignupOfferBodyFlag              = adminUpdateSignupOfferFlags.String("body", "REQUIRED", "")
 		adminUpdateSignupOfferAdminSessionTokenFlag = adminUpdateSignupOfferFlags.String("admin-session-token", "", "")
 
+		adminListPlatformMcpFeedbackFlags                 = flag.NewFlagSet("list-platform-mcp-feedback", flag.ExitOnError)
+		adminListPlatformMcpFeedbackLimitFlag             = adminListPlatformMcpFeedbackFlags.String("limit", "200", "")
+		adminListPlatformMcpFeedbackAdminSessionTokenFlag = adminListPlatformMcpFeedbackFlags.String("admin-session-token", "", "")
+
 		adminGetStripeSubscriptionCandidateFlags                    = flag.NewFlagSet("get-stripe-subscription-candidate", flag.ExitOnError)
 		adminGetStripeSubscriptionCandidateOrganizationIDFlag       = adminGetStripeSubscriptionCandidateFlags.String("organization-id", "REQUIRED", "")
 		adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag = adminGetStripeSubscriptionCandidateFlags.String("stripe-subscription-id", "REQUIRED", "")
@@ -4931,6 +4943,15 @@ func ParseEndpoint(
 		adminBackfillMcpConnectGrantsFlags                 = flag.NewFlagSet("backfill-mcp-connect-grants", flag.ExitOnError)
 		adminBackfillMcpConnectGrantsBodyFlag              = adminBackfillMcpConnectGrantsFlags.String("body", "REQUIRED", "")
 		adminBackfillMcpConnectGrantsAdminSessionTokenFlag = adminBackfillMcpConnectGrantsFlags.String("admin-session-token", "", "")
+
+		adminGetProjectRedeployPreviewFlags                 = flag.NewFlagSet("get-project-redeploy-preview", flag.ExitOnError)
+		adminGetProjectRedeployPreviewOrganizationIDFlag    = adminGetProjectRedeployPreviewFlags.String("organization-id", "REQUIRED", "")
+		adminGetProjectRedeployPreviewProjectIDFlag         = adminGetProjectRedeployPreviewFlags.String("project-id", "REQUIRED", "")
+		adminGetProjectRedeployPreviewAdminSessionTokenFlag = adminGetProjectRedeployPreviewFlags.String("admin-session-token", "", "")
+
+		adminRedeployProjectFlags                 = flag.NewFlagSet("redeploy-project", flag.ExitOnError)
+		adminRedeployProjectBodyFlag              = adminRedeployProjectFlags.String("body", "REQUIRED", "")
+		adminRedeployProjectAdminSessionTokenFlag = adminRedeployProjectFlags.String("admin-session-token", "", "")
 
 		userSessionClientsFlags = flag.NewFlagSet("user-session-clients", flag.ContinueOnError)
 
@@ -5397,6 +5418,9 @@ func ParseEndpoint(
 		accessListScopesApikeyTokenFlag  = accessListScopesFlags.String("apikey-token", "", "")
 		accessListScopesSessionTokenFlag = accessListScopesFlags.String("session-token", "", "")
 
+		accessListAgentPolicyScopesFlags            = flag.NewFlagSet("list-agent-policy-scopes", flag.ExitOnError)
+		accessListAgentPolicyScopesSessionTokenFlag = accessListAgentPolicyScopesFlags.String("session-token", "", "")
+
 		accessListMembersFlags            = flag.NewFlagSet("list-members", flag.ExitOnError)
 		accessListMembersApikeyTokenFlag  = accessListMembersFlags.String("apikey-token", "", "")
 		accessListMembersSessionTokenFlag = accessListMembersFlags.String("session-token", "", "")
@@ -5488,19 +5512,20 @@ func ParseEndpoint(
 		accessRequestAccessApikeyTokenFlag  = accessRequestAccessFlags.String("apikey-token", "", "")
 		accessRequestAccessSessionTokenFlag = accessRequestAccessFlags.String("session-token", "", "")
 
-		accessListChallengesFlags            = flag.NewFlagSet("list-challenges", flag.ExitOnError)
-		accessListChallengesOutcomeFlag      = accessListChallengesFlags.String("outcome", "", "")
-		accessListChallengesPrincipalUrnFlag = accessListChallengesFlags.String("principal-urn", "", "")
-		accessListChallengesScopeFlag        = accessListChallengesFlags.String("scope", "", "")
-		accessListChallengesProjectIDFlag    = accessListChallengesFlags.String("project-id", "", "")
-		accessListChallengesResolvedFlag     = accessListChallengesFlags.String("resolved", "", "")
-		accessListChallengesIdsFlag          = accessListChallengesFlags.String("ids", "", "")
-		accessListChallengesFromFlag         = accessListChallengesFlags.String("from", "", "")
-		accessListChallengesToFlag           = accessListChallengesFlags.String("to", "", "")
-		accessListChallengesLimitFlag        = accessListChallengesFlags.String("limit", "50", "")
-		accessListChallengesOffsetFlag       = accessListChallengesFlags.String("offset", "", "")
-		accessListChallengesApikeyTokenFlag  = accessListChallengesFlags.String("apikey-token", "", "")
-		accessListChallengesSessionTokenFlag = accessListChallengesFlags.String("session-token", "", "")
+		accessListChallengesFlags             = flag.NewFlagSet("list-challenges", flag.ExitOnError)
+		accessListChallengesOutcomeFlag       = accessListChallengesFlags.String("outcome", "", "")
+		accessListChallengesPrincipalUrnFlag  = accessListChallengesFlags.String("principal-urn", "", "")
+		accessListChallengesScopeFlag         = accessListChallengesFlags.String("scope", "", "")
+		accessListChallengesExcludeScopesFlag = accessListChallengesFlags.String("exclude-scopes", "", "")
+		accessListChallengesProjectIDFlag     = accessListChallengesFlags.String("project-id", "", "")
+		accessListChallengesResolvedFlag      = accessListChallengesFlags.String("resolved", "", "")
+		accessListChallengesIdsFlag           = accessListChallengesFlags.String("ids", "", "")
+		accessListChallengesFromFlag          = accessListChallengesFlags.String("from", "", "")
+		accessListChallengesToFlag            = accessListChallengesFlags.String("to", "", "")
+		accessListChallengesLimitFlag         = accessListChallengesFlags.String("limit", "50", "")
+		accessListChallengesOffsetFlag        = accessListChallengesFlags.String("offset", "", "")
+		accessListChallengesApikeyTokenFlag   = accessListChallengesFlags.String("apikey-token", "", "")
+		accessListChallengesSessionTokenFlag  = accessListChallengesFlags.String("session-token", "", "")
 
 		accessListChallengeBucketsFlags            = flag.NewFlagSet("list-challenge-buckets", flag.ExitOnError)
 		accessListChallengeBucketsOutcomeFlag      = accessListChallengeBucketsFlags.String("outcome", "", "")
@@ -5705,6 +5730,7 @@ func ParseEndpoint(
 	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
 	chatListSourcesFlags.Usage = chatListSourcesUsage
+	chatCountByUserFlags.Usage = chatCountByUserUsage
 	chatListSessionLinksFlags.Usage = chatListSessionLinksUsage
 
 	chatSessionsFlags.Usage = chatSessionsUsage
@@ -6533,11 +6559,9 @@ func ParseEndpoint(
 	adminUpdateSupportMatrixFlags.Usage = adminUpdateSupportMatrixUsage
 	adminGetSupportCoverageFlags.Usage = adminGetSupportCoverageUsage
 	adminDescribeMcpServerHealthFlags.Usage = adminDescribeMcpServerHealthUsage
+	adminSetMcpServerScopePinFlags.Usage = adminSetMcpServerScopePinUsage
 	adminGetMcpServerToolCallsFlags.Usage = adminGetMcpServerToolCallsUsage
 	adminGetHookClientsFlags.Usage = adminGetHookClientsUsage
-	adminListExternalMcpMigrationCandidatesFlags.Usage = adminListExternalMcpMigrationCandidatesUsage
-	adminPreviewExternalMcpMigrationFlags.Usage = adminPreviewExternalMcpMigrationUsage
-	adminMigrateExternalMcpServersFlags.Usage = adminMigrateExternalMcpServersUsage
 	adminListRegistryPromotionCandidatesFlags.Usage = adminListRegistryPromotionCandidatesUsage
 	adminGetRegistryPromotionCandidateFlags.Usage = adminGetRegistryPromotionCandidateUsage
 	adminPromoteRegistryCandidateFlags.Usage = adminPromoteRegistryCandidateUsage
@@ -6568,6 +6592,7 @@ func ParseEndpoint(
 	adminListSignupOffersFlags.Usage = adminListSignupOffersUsage
 	adminCreateSignupOfferFlags.Usage = adminCreateSignupOfferUsage
 	adminUpdateSignupOfferFlags.Usage = adminUpdateSignupOfferUsage
+	adminListPlatformMcpFeedbackFlags.Usage = adminListPlatformMcpFeedbackUsage
 	adminGetStripeSubscriptionCandidateFlags.Usage = adminGetStripeSubscriptionCandidateUsage
 	adminSetStripeSubscriptionFlags.Usage = adminSetStripeSubscriptionUsage
 	adminListCustomerUsageFlags.Usage = adminListCustomerUsageUsage
@@ -6578,6 +6603,8 @@ func ParseEndpoint(
 	adminDisableUpstreamAuthEnforcementFlags.Usage = adminDisableUpstreamAuthEnforcementUsage
 	adminBackfillMcpAuthGrantsFlags.Usage = adminBackfillMcpAuthGrantsUsage
 	adminBackfillMcpConnectGrantsFlags.Usage = adminBackfillMcpConnectGrantsUsage
+	adminGetProjectRedeployPreviewFlags.Usage = adminGetProjectRedeployPreviewUsage
+	adminRedeployProjectFlags.Usage = adminRedeployProjectUsage
 
 	userSessionClientsFlags.Usage = userSessionClientsUsage
 	userSessionClientsListUserSessionClientsFlags.Usage = userSessionClientsListUserSessionClientsUsage
@@ -6681,6 +6708,7 @@ func ParseEndpoint(
 	accessGetDirectoryReviewSettingsFlags.Usage = accessGetDirectoryReviewSettingsUsage
 	accessUpdateDirectoryReviewSettingsFlags.Usage = accessUpdateDirectoryReviewSettingsUsage
 	accessListScopesFlags.Usage = accessListScopesUsage
+	accessListAgentPolicyScopesFlags.Usage = accessListAgentPolicyScopesUsage
 	accessListMembersFlags.Usage = accessListMembersUsage
 	accessListGrantsFlags.Usage = accessListGrantsUsage
 	accessUpdateMemberRolesFlags.Usage = accessUpdateMemberRolesUsage
@@ -7400,6 +7428,9 @@ func ParseEndpoint(
 
 			case "list-sources":
 				epf = chatListSourcesFlags
+
+			case "count-by-user":
+				epf = chatCountByUserFlags
 
 			case "list-session-links":
 				epf = chatListSessionLinksFlags
@@ -9743,20 +9774,14 @@ func ParseEndpoint(
 			case "describe-mcp-server-health":
 				epf = adminDescribeMcpServerHealthFlags
 
+			case "set-mcp-server-scope-pin":
+				epf = adminSetMcpServerScopePinFlags
+
 			case "get-mcp-server-tool-calls":
 				epf = adminGetMcpServerToolCallsFlags
 
 			case "get-hook-clients":
 				epf = adminGetHookClientsFlags
-
-			case "list-external-mcp-migration-candidates":
-				epf = adminListExternalMcpMigrationCandidatesFlags
-
-			case "preview-external-mcp-migration":
-				epf = adminPreviewExternalMcpMigrationFlags
-
-			case "migrate-external-mcp-servers":
-				epf = adminMigrateExternalMcpServersFlags
 
 			case "list-registry-promotion-candidates":
 				epf = adminListRegistryPromotionCandidatesFlags
@@ -9848,6 +9873,9 @@ func ParseEndpoint(
 			case "update-signup-offer":
 				epf = adminUpdateSignupOfferFlags
 
+			case "list-platform-mcp-feedback":
+				epf = adminListPlatformMcpFeedbackFlags
+
 			case "get-stripe-subscription-candidate":
 				epf = adminGetStripeSubscriptionCandidateFlags
 
@@ -9877,6 +9905,12 @@ func ParseEndpoint(
 
 			case "backfill-mcp-connect-grants":
 				epf = adminBackfillMcpConnectGrantsFlags
+
+			case "get-project-redeploy-preview":
+				epf = adminGetProjectRedeployPreviewFlags
+
+			case "redeploy-project":
+				epf = adminRedeployProjectFlags
 
 			}
 
@@ -10164,6 +10198,9 @@ func ParseEndpoint(
 
 			case "list-scopes":
 				epf = accessListScopesFlags
+
+			case "list-agent-policy-scopes":
+				epf = accessListAgentPolicyScopesFlags
 
 			case "list-members":
 				epf = accessListMembersFlags
@@ -10620,7 +10657,7 @@ func ParseEndpoint(
 				data, err = authc.BuildCallbackPayload(*authCallbackCodeFlag, *authCallbackErrorFlag, *authCallbackStateFlag)
 			case "login":
 				endpoint = c.Login()
-				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag)
+				data, err = authc.BuildLoginPayload(*authLoginRedirectFlag, *authLoginOrgNameFlag, *authLoginPartnerCodeFlag, *authLoginEmailFlag, *authLoginSupportHandoffFlag, *authLoginUtmSourceFlag, *authLoginUtmMediumFlag, *authLoginUtmCampaignFlag, *authLoginUtmTermFlag, *authLoginUtmContentFlag, *authLoginAnalyticsSessionIDFlag)
 			case "switch-scopes":
 				endpoint = c.SwitchScopes()
 				data, err = authc.BuildSwitchScopesPayload(*authSwitchScopesOrganizationIDFlag, *authSwitchScopesProjectIDFlag, *authSwitchScopesSessionTokenFlag)
@@ -10713,7 +10750,7 @@ func ParseEndpoint(
 			switch epn {
 			case "list-chats":
 				endpoint = c.ListChats()
-				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsAgentIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
+				data, err = chatc.BuildListChatsPayload(*chatListChatsSearchFlag, *chatListChatsExternalUserIDFlag, *chatListChatsUserIDFlag, *chatListChatsSourceFlag, *chatListChatsAssistantIDFlag, *chatListChatsAgentIDFlag, *chatListChatsSourceKindFlag, *chatListChatsExcludeSourceKindFlag, *chatListChatsHasRiskFlag, *chatListChatsAccountTypeFlag, *chatListChatsPinnedFlag, *chatListChatsMinRiskScoreFlag, *chatListChatsFromFlag, *chatListChatsToFlag, *chatListChatsLimitFlag, *chatListChatsOffsetFlag, *chatListChatsSortByFlag, *chatListChatsSortOrderFlag, *chatListChatsPinnedFirstFlag, *chatListChatsSessionTokenFlag, *chatListChatsProjectSlugInputFlag, *chatListChatsChatSessionsTokenFlag)
 			case "get-assistant-session-summary":
 				endpoint = c.GetAssistantSessionSummary()
 				data, err = chatc.BuildGetAssistantSessionSummaryPayload(*chatGetAssistantSessionSummaryAssistantIDFlag, *chatGetAssistantSessionSummaryFromFlag, *chatGetAssistantSessionSummaryToFlag, *chatGetAssistantSessionSummarySessionTokenFlag, *chatGetAssistantSessionSummaryProjectSlugInputFlag)
@@ -10750,6 +10787,9 @@ func ParseEndpoint(
 			case "list-sources":
 				endpoint = c.ListSources()
 				data, err = chatc.BuildListSourcesPayload(*chatListSourcesSessionTokenFlag, *chatListSourcesProjectSlugInputFlag, *chatListSourcesChatSessionsTokenFlag)
+			case "count-by-user":
+				endpoint = c.CountByUser()
+				data, err = chatc.BuildCountByUserPayload(*chatCountByUserFromFlag, *chatCountByUserToFlag, *chatCountByUserLimitFlag, *chatCountByUserSessionTokenFlag, *chatCountByUserProjectSlugInputFlag, *chatCountByUserChatSessionsTokenFlag)
 			case "list-session-links":
 				endpoint = c.ListSessionLinks()
 				data, err = chatc.BuildListSessionLinksPayload(*chatListSessionLinksChatIdsFlag, *chatListSessionLinksSessionTokenFlag, *chatListSessionLinksProjectSlugInputFlag, *chatListSessionLinksChatSessionsTokenFlag)
@@ -13106,21 +13146,15 @@ func ParseEndpoint(
 			case "describe-mcp-server-health":
 				endpoint = c.DescribeMcpServerHealth()
 				data, err = adminc.BuildDescribeMcpServerHealthPayload(*adminDescribeMcpServerHealthOrganizationIDFlag, *adminDescribeMcpServerHealthProjectIDFlag, *adminDescribeMcpServerHealthMcpServerIDFlag, *adminDescribeMcpServerHealthWindowDaysFlag, *adminDescribeMcpServerHealthAdminSessionTokenFlag)
+			case "set-mcp-server-scope-pin":
+				endpoint = c.SetMcpServerScopePin()
+				data, err = adminc.BuildSetMcpServerScopePinPayload(*adminSetMcpServerScopePinBodyFlag, *adminSetMcpServerScopePinAdminSessionTokenFlag)
 			case "get-mcp-server-tool-calls":
 				endpoint = c.GetMcpServerToolCalls()
 				data, err = adminc.BuildGetMcpServerToolCallsPayload(*adminGetMcpServerToolCallsOrganizationIDFlag, *adminGetMcpServerToolCallsProjectIDFlag, *adminGetMcpServerToolCallsMcpServerIDFlag, *adminGetMcpServerToolCallsWindowDaysFlag, *adminGetMcpServerToolCallsAdminSessionTokenFlag)
 			case "get-hook-clients":
 				endpoint = c.GetHookClients()
 				data, err = adminc.BuildGetHookClientsPayload(*adminGetHookClientsWindowDaysFlag, *adminGetHookClientsRefreshFlag, *adminGetHookClientsAdminSessionTokenFlag)
-			case "list-external-mcp-migration-candidates":
-				endpoint = c.ListExternalMcpMigrationCandidates()
-				data, err = adminc.BuildListExternalMcpMigrationCandidatesPayload(*adminListExternalMcpMigrationCandidatesAdminSessionTokenFlag)
-			case "preview-external-mcp-migration":
-				endpoint = c.PreviewExternalMcpMigration()
-				data, err = adminc.BuildPreviewExternalMcpMigrationPayload(*adminPreviewExternalMcpMigrationBodyFlag, *adminPreviewExternalMcpMigrationAdminSessionTokenFlag)
-			case "migrate-external-mcp-servers":
-				endpoint = c.MigrateExternalMcpServers()
-				data, err = adminc.BuildMigrateExternalMcpServersPayload(*adminMigrateExternalMcpServersBodyFlag, *adminMigrateExternalMcpServersAdminSessionTokenFlag)
 			case "list-registry-promotion-candidates":
 				endpoint = c.ListRegistryPromotionCandidates()
 				data, err = adminc.BuildListRegistryPromotionCandidatesPayload(*adminListRegistryPromotionCandidatesCursorFlag, *adminListRegistryPromotionCandidatesStatusFlag, *adminListRegistryPromotionCandidatesLimitFlag, *adminListRegistryPromotionCandidatesAdminSessionTokenFlag)
@@ -13211,6 +13245,9 @@ func ParseEndpoint(
 			case "update-signup-offer":
 				endpoint = c.UpdateSignupOffer()
 				data, err = adminc.BuildUpdateSignupOfferPayload(*adminUpdateSignupOfferBodyFlag, *adminUpdateSignupOfferAdminSessionTokenFlag)
+			case "list-platform-mcp-feedback":
+				endpoint = c.ListPlatformMcpFeedback()
+				data, err = adminc.BuildListPlatformMcpFeedbackPayload(*adminListPlatformMcpFeedbackLimitFlag, *adminListPlatformMcpFeedbackAdminSessionTokenFlag)
 			case "get-stripe-subscription-candidate":
 				endpoint = c.GetStripeSubscriptionCandidate()
 				data, err = adminc.BuildGetStripeSubscriptionCandidatePayload(*adminGetStripeSubscriptionCandidateOrganizationIDFlag, *adminGetStripeSubscriptionCandidateStripeSubscriptionIDFlag, *adminGetStripeSubscriptionCandidateAdminSessionTokenFlag)
@@ -13241,6 +13278,12 @@ func ParseEndpoint(
 			case "backfill-mcp-connect-grants":
 				endpoint = c.BackfillMcpConnectGrants()
 				data, err = adminc.BuildBackfillMcpConnectGrantsPayload(*adminBackfillMcpConnectGrantsBodyFlag, *adminBackfillMcpConnectGrantsAdminSessionTokenFlag)
+			case "get-project-redeploy-preview":
+				endpoint = c.GetProjectRedeployPreview()
+				data, err = adminc.BuildGetProjectRedeployPreviewPayload(*adminGetProjectRedeployPreviewOrganizationIDFlag, *adminGetProjectRedeployPreviewProjectIDFlag, *adminGetProjectRedeployPreviewAdminSessionTokenFlag)
+			case "redeploy-project":
+				endpoint = c.RedeployProject()
+				data, err = adminc.BuildRedeployProjectPayload(*adminRedeployProjectBodyFlag, *adminRedeployProjectAdminSessionTokenFlag)
 			}
 		case "user-session-clients":
 			c := usersessionclientsc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13528,6 +13571,9 @@ func ParseEndpoint(
 			case "list-scopes":
 				endpoint = c.ListScopes()
 				data, err = accessc.BuildListScopesPayload(*accessListScopesApikeyTokenFlag, *accessListScopesSessionTokenFlag)
+			case "list-agent-policy-scopes":
+				endpoint = c.ListAgentPolicyScopes()
+				data, err = accessc.BuildListAgentPolicyScopesPayload(*accessListAgentPolicyScopesSessionTokenFlag)
 			case "list-members":
 				endpoint = c.ListMembers()
 				data, err = accessc.BuildListMembersPayload(*accessListMembersApikeyTokenFlag, *accessListMembersSessionTokenFlag)
@@ -13584,7 +13630,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildRequestAccessPayload(*accessRequestAccessBodyFlag, *accessRequestAccessApikeyTokenFlag, *accessRequestAccessSessionTokenFlag)
 			case "list-challenges":
 				endpoint = c.ListChallenges()
-				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesFromFlag, *accessListChallengesToFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
+				data, err = accessc.BuildListChallengesPayload(*accessListChallengesOutcomeFlag, *accessListChallengesPrincipalUrnFlag, *accessListChallengesScopeFlag, *accessListChallengesExcludeScopesFlag, *accessListChallengesProjectIDFlag, *accessListChallengesResolvedFlag, *accessListChallengesIdsFlag, *accessListChallengesFromFlag, *accessListChallengesToFlag, *accessListChallengesLimitFlag, *accessListChallengesOffsetFlag, *accessListChallengesApikeyTokenFlag, *accessListChallengesSessionTokenFlag)
 			case "list-challenge-buckets":
 				endpoint = c.ListChallengeBuckets()
 				data, err = accessc.BuildListChallengeBucketsPayload(*accessListChallengeBucketsOutcomeFlag, *accessListChallengeBucketsPrincipalUrnFlag, *accessListChallengeBucketsScopeFlag, *accessListChallengeBucketsProjectIDFlag, *accessListChallengeBucketsResolvedFlag, *accessListChallengeBucketsLimitFlag, *accessListChallengeBucketsOffsetFlag, *accessListChallengeBucketsApikeyTokenFlag, *accessListChallengeBucketsSessionTokenFlag)
@@ -15962,6 +16008,12 @@ func authLoginUsage() {
 	fmt.Fprint(os.Stderr, " -partner-code STRING")
 	fmt.Fprint(os.Stderr, " -email STRING")
 	fmt.Fprint(os.Stderr, " -support-handoff STRING")
+	fmt.Fprint(os.Stderr, " -utm-source STRING")
+	fmt.Fprint(os.Stderr, " -utm-medium STRING")
+	fmt.Fprint(os.Stderr, " -utm-campaign STRING")
+	fmt.Fprint(os.Stderr, " -utm-term STRING")
+	fmt.Fprint(os.Stderr, " -utm-content STRING")
+	fmt.Fprint(os.Stderr, " -analytics-session-id STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
@@ -15974,10 +16026,16 @@ func authLoginUsage() {
 	fmt.Fprintln(os.Stderr, `    -partner-code STRING: `)
 	fmt.Fprintln(os.Stderr, `    -email STRING: `)
 	fmt.Fprintln(os.Stderr, `    -support-handoff STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-source STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-medium STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-campaign STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-term STRING: `)
+	fmt.Fprintln(os.Stderr, `    -utm-content STRING: `)
+	fmt.Fprintln(os.Stderr, `    -analytics-session-id STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --partner-code \"aaa\" --email \"abc123\" --support-handoff \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auth login --redirect \"abc123\" --org-name \"abc123\" --partner-code \"aaa\" --email \"abc123\" --support-handoff \"abc123\" --utm-source \"abc123\" --utm-medium \"abc123\" --utm-campaign \"abc123\" --utm-term \"abc123\" --utm-content \"abc123\" --analytics-session-id \"abc123\"")
 }
 
 func authSwitchScopesUsage() {
@@ -16608,6 +16666,7 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
 	fmt.Fprintln(os.Stderr, `    list-sources: List the distinct agent sources present in this project's chats, for populating the agent-type filter on the Agent Sessions page.`)
+	fmt.Fprintln(os.Stderr, `    count-by-user: Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.`)
 	fmt.Fprintln(os.Stderr, `    list-session-links: List session-lineage links touching the given chats (session portability). A link records that a session was moved to another harness; the child side is present when the continuation's session id was known at move time. Returns every link where a requested chat is either the parent or the child, honoring the same visibility scoping as listChats.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -16634,6 +16693,7 @@ func chatListChatsUsage() {
 	fmt.Fprint(os.Stderr, " -offset INT")
 	fmt.Fprint(os.Stderr, " -sort-by STRING")
 	fmt.Fprint(os.Stderr, " -sort-order STRING")
+	fmt.Fprint(os.Stderr, " -pinned-first BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
 	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
@@ -16662,13 +16722,14 @@ func chatListChatsUsage() {
 	fmt.Fprintln(os.Stderr, `    -offset INT: `)
 	fmt.Fprintln(os.Stderr, `    -sort-by STRING: `)
 	fmt.Fprintln(os.Stderr, `    -sort-order STRING: `)
+	fmt.Fprintln(os.Stderr, `    -pinned-first BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-chats --search \"abc123\" --external-user-id \"abc123\" --user-id \"abc123\" --source \"abc123\" --assistant-id \"550e8400-e29b-41d4-a716-446655440000\" --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --source-kind \"abc123\" --exclude-source-kind \"abc123\" --has-risk \"true\" --account-type \"team\" --pinned \"true\" --min-risk-score 1 --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --sort-by \"num_messages\" --sort-order \"desc\" --pinned-first false --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatGetAssistantSessionSummaryUsage() {
@@ -16961,6 +17022,34 @@ func chatListSourcesUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat list-sources --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
+}
+
+func chatCountByUserUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat count-by-user", os.Args[0])
+	fmt.Fprint(os.Stderr, " -from STRING")
+	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprint(os.Stderr, " -chat-sessions-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -from STRING: `)
+	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+	fmt.Fprintln(os.Stderr, `    -chat-sessions-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat count-by-user --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\" --chat-sessions-token \"abc123\"")
 }
 
 func chatListSessionLinksUsage() {
@@ -17699,7 +17788,7 @@ func deploymentsCreateDeploymentUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments create-deployment --body '{\n      \"external_id\": \"bc5f4a555e933e6861d12edba4c2d87ef6caf8e6\",\n      \"external_url\": \"abc123\",\n      \"functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"github_pr\": \"1234\",\n      \"github_repo\": \"speakeasyapi/gram\",\n      \"github_sha\": \"f33e693e9e12552043bc0ec5c37f1b8a9e076161\",\n      \"non_blocking\": false,\n      \"openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\" --idempotency-key \"01jqq0ajmb4qh9eppz48dejr2m\"")
 }
 
 func deploymentsEvolveUsage() {
@@ -17723,7 +17812,7 @@ func deploymentsEvolveUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_external_mcps\": [\n         {\n            \"name\": \"My Slack Integration\",\n            \"registry_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n            \"registry_server_specifier\": \"slack\",\n            \"selected_remotes\": [\n               \"https://mcp.example.com/sse\"\n            ],\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "deployments evolve --body '{\n      \"deployment_id\": \"abc123\",\n      \"exclude_external_mcps\": [\n         \"abc123\"\n      ],\n      \"exclude_functions\": [\n         \"abc123\"\n      ],\n      \"exclude_openapiv3_assets\": [\n         \"abc123\"\n      ],\n      \"exclude_packages\": [\n         \"abc123\"\n      ],\n      \"non_blocking\": false,\n      \"upsert_functions\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"memory_mib\": 1,\n            \"name\": \"abc123\",\n            \"runtime\": \"abc123\",\n            \"scale\": 1,\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_openapiv3_assets\": [\n         {\n            \"asset_id\": \"abc123\",\n            \"name\": \"abc123\",\n            \"slug\": \"aaa\"\n         }\n      ],\n      \"upsert_packages\": [\n         {\n            \"name\": \"abc123\",\n            \"version\": \"abc123\"\n         }\n      ]\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func deploymentsRedeployUsage() {
@@ -30332,7 +30421,7 @@ func telemetryGetProjectOverviewUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "telemetry get-project-overview --body '{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_usage\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }' --apikey-token \"abc123\" --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func telemetryGetUnproxiedMcpServerUsageUsage() {
@@ -32557,13 +32646,11 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    get-spend-breakdown: Returns exact current PAYG list-price estimates for an organization's three metered products over a maximum of three calendar months. Available for every organization regardless of account type or subscription state.`)
 	fmt.Fprintln(os.Stderr, `    get-support-matrix: Read the shared support catalog and product coverage.`)
 	fmt.Fprintln(os.Stderr, `    update-support-matrix: Save coverage against the last read revision; rejects concurrent changes.`)
-	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
+	fmt.Fprintln(os.Stderr, `    get-support-coverage: Observed support coverage for one organization: per-surface evidence for activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Speakeasy's MCP gateway and each consuming agent surface.`)
 	fmt.Fprintln(os.Stderr, `    describe-mcp-server-health: Describes one MCP server's health: authentication configuration and session counts (admin view, no auth scoping). Tool calls come from getMcpServerToolCalls.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-scope-pin: Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-tool-calls: Reads one MCP server's tool call outcomes and series over a window (admin view, no auth scoping). Returns logging:disabled without reading telemetry when the organization's logs are off.`)
 	fmt.Fprintln(os.Stderr, `    get-hook-clients: Fleet-wide client health grids: which hook client (legacy curl or hooks binary version) each organization's new sessions use per day, inference hook traffic per Claude app, and device agent versions per day.`)
-	fmt.Fprintln(os.Stderr, `    list-external-mcp-migration-candidates: Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
-	fmt.Fprintln(os.Stderr, `    preview-external-mcp-migration: Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
-	fmt.Fprintln(os.Stderr, `    migrate-external-mcp-servers: Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
 	fmt.Fprintln(os.Stderr, `    list-registry-promotion-candidates: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.`)
 	fmt.Fprintln(os.Stderr, `    get-registry-promotion-candidate: Refresh health evidence for one exact remote MCP deployment before staff review.`)
 	fmt.Fprintln(os.Stderr, `    promote-registry-candidate: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.`)
@@ -32594,6 +32681,7 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-signup-offers: List staff-managed signup offers. Stripe owns all promotion terms.`)
 	fmt.Fprintln(os.Stderr, `    create-signup-offer: Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
 	fmt.Fprintln(os.Stderr, `    update-signup-offer: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
+	fmt.Fprintln(os.Stderr, `    list-platform-mcp-feedback: List the newest Platform MCP feedback reports across every organization.`)
 	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
 	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
 	fmt.Fprintln(os.Stderr, `    list-customer-usage: Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.`)
@@ -32604,6 +32692,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    disable-upstream-auth-enforcement: Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-auth-grants: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.`)
 	fmt.Fprintln(os.Stderr, `    backfill-mcp-connect-grants: Adds an explicit mcp:connect grant, with the same principal, selectors and expiry, for every unexpired mcp:read or mcp:write grant in every organization, ahead of read and write no longer implying connect. Never removes access. Safe to run more than once.`)
+	fmt.Fprintln(os.Stderr, `    get-project-redeploy-preview: Returns what redeploying a project would act on, for review before redeployProject.`)
+	fmt.Fprintln(os.Stderr, `    redeploy-project: Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s admin COMMAND --help\n", os.Args[0])
@@ -33860,7 +33950,7 @@ func adminGetSupportCoverageUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Observed support coverage for one organization: per-surface evidence for session activity, policy enforcement, identity attribution, token usage and shadow MCP exposure.`)
+	fmt.Fprintln(os.Stderr, `Observed support coverage for one organization: per-surface evidence for activity, policy enforcement, identity attribution, token usage and shadow MCP exposure, across Speakeasy's MCP gateway and each consuming agent surface.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
@@ -33896,6 +33986,26 @@ func adminDescribeMcpServerHealthUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin describe-mcp-server-health --organization-id \"abc123\" --project-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --window-days 30 --admin-session-token \"abc123\"")
+}
+
+func adminSetMcpServerScopePinUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin set-mcp-server-scope-pin", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin set-mcp-server-scope-pin --body '{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminGetMcpServerToolCallsUsage() {
@@ -33944,64 +34054,6 @@ func adminGetHookClientsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-hook-clients --window-days 2 --refresh false --admin-session-token \"abc123\"")
-}
-
-func adminListExternalMcpMigrationCandidatesUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin list-external-mcp-migration-candidates", os.Args[0])
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Lists every live server across all organizations whose latest toolset version proxies an external MCP attachment on its project's active deployment, with the blockers that stop each one from migrating.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-external-mcp-migration-candidates --admin-session-token \"abc123\"")
-}
-
-func adminPreviewExternalMcpMigrationUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin preview-external-mcp-migration", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Runs each server's migration or deletion inside a transaction that is rolled back, reporting what would happen without changing anything.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin preview-external-mcp-migration --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
-}
-
-func adminMigrateExternalMcpServersUsage() {
-	// Header with flags
-	fmt.Fprintf(os.Stderr, "%s [flags] admin migrate-external-mcp-servers", os.Args[0])
-	fmt.Fprint(os.Stderr, " -body JSON")
-	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
-	fmt.Fprintln(os.Stderr)
-
-	// Description
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Switches each server in place from its external MCP attachment to a remote MCP source on the same sign-in provider, keeping its ID, address and everything that references it, and disables the old toolset. A candidate left with nothing to migrate is deleted instead, with its server, addresses and plugin entries, as the toolset delete API does. Servers run one at a time, each in its own transaction, and the run stops at the first failure. Never creates a sign-in provider or a client and never registers one with the upstream.`)
-
-	// Flags list
-	fmt.Fprintln(os.Stderr, `    -body JSON: `)
-	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
-
-	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin migrate-external-mcp-servers --body '{\n      \"servers\": [\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         },\n         {\n            \"toolset_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n         }\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminListRegistryPromotionCandidatesUsage() {
@@ -34604,6 +34656,26 @@ func adminUpdateSignupOfferUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-signup-offer --body '{\n      \"enabled\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aa\",\n      \"signup_flow\": \"tailscale_partner_gateway\",\n      \"stripe_promotion_code_id\": \"aaa\"\n   }' --admin-session-token \"abc123\"")
 }
 
+func adminListPlatformMcpFeedbackUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin list-platform-mcp-feedback", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the newest Platform MCP feedback reports across every organization.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin list-platform-mcp-feedback --limit 2 --admin-session-token \"abc123\"")
+}
+
 func adminGetStripeSubscriptionCandidateUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] admin get-stripe-subscription-candidate", os.Args[0])
@@ -34800,6 +34872,48 @@ func adminBackfillMcpConnectGrantsUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin backfill-mcp-connect-grants --body '{\n      \"created_before\": \"1970-01-01T00:00:01Z\"\n   }' --admin-session-token \"abc123\"")
+}
+
+func adminGetProjectRedeployPreviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin get-project-redeploy-preview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -organization-id STRING")
+	fmt.Fprint(os.Stderr, " -project-id STRING")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Returns what redeploying a project would act on, for review before redeployProject.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin get-project-redeploy-preview --organization-id \"abc123\" --project-id \"abc123\" --admin-session-token \"abc123\"")
+}
+
+func adminRedeployProjectUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] admin redeploy-project", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -admin-session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Clones a project's active deployment and starts processing it. Refuses when the active deployment is no longer the one reviewed. The new deployment becomes active only if processing succeeds.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -admin-session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin redeploy-project --body '{\n      \"expected_active_deployment_id\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"project_id\": \"abc123\"\n   }' --admin-session-token \"abc123\"")
 }
 
 // userSessionClientsUsage displays the usage of the user-session-clients
@@ -36463,6 +36577,7 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    get-directory-review-settings: Get the organization's directory review settings: whether its admins are emailed when directory changes are waiting for a decision.`)
 	fmt.Fprintln(os.Stderr, `    update-directory-review-settings: Turn the organization's directory review emails on or off. Pending items stay listed in the dashboard either way, and webhooks are unaffected.`)
 	fmt.Fprintln(os.Stderr, `    list-scopes: List all available scopes and their resource types.`)
+	fmt.Fprintln(os.Stderr, `    list-agent-policy-scopes: List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
 	fmt.Fprintln(os.Stderr, `    list-members: List all team members with their role assignments.`)
 	fmt.Fprintln(os.Stderr, `    list-grants: List the current user's effective grants, including inherited role grants.`)
 	fmt.Fprintln(os.Stderr, `    update-member-roles: Update a team member's role assignments.`)
@@ -36875,6 +36990,24 @@ func accessListScopesUsage() {
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-scopes --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
+func accessListAgentPolicyScopesUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-agent-policy-scopes", os.Args[0])
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-agent-policy-scopes --session-token \"abc123\"")
+}
+
 func accessListMembersUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-members", os.Args[0])
@@ -37279,6 +37412,7 @@ func accessListChallengesUsage() {
 	fmt.Fprint(os.Stderr, " -outcome STRING")
 	fmt.Fprint(os.Stderr, " -principal-urn STRING")
 	fmt.Fprint(os.Stderr, " -scope STRING")
+	fmt.Fprint(os.Stderr, " -exclude-scopes JSON")
 	fmt.Fprint(os.Stderr, " -project-id STRING")
 	fmt.Fprint(os.Stderr, " -resolved BOOL")
 	fmt.Fprint(os.Stderr, " -ids JSON")
@@ -37298,6 +37432,7 @@ func accessListChallengesUsage() {
 	fmt.Fprintln(os.Stderr, `    -outcome STRING: `)
 	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -scope STRING: `)
+	fmt.Fprintln(os.Stderr, `    -exclude-scopes JSON: `)
 	fmt.Fprintln(os.Stderr, `    -project-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -resolved BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -ids JSON: `)
@@ -37310,7 +37445,7 @@ func accessListChallengesUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --project-id \"abc123\" --resolved false --ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-challenges --outcome \"deny\" --principal-urn \"abc123\" --scope \"abc123\" --exclude-scopes '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --project-id \"abc123\" --resolved false --ids '[\n      \"abc123\"\n   ]' --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --limit 2 --offset 1 --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func accessListChallengeBucketsUsage() {

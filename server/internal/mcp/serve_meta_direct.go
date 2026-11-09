@@ -15,6 +15,7 @@ import (
 	"golang.org/x/sync/semaphore"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -255,7 +256,9 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, err
 	}
-	inventory, unavailable, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
+	// Listing every member's tools names none of them, so it records no
+	// authorization check for any.
+	inventory, unavailable, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, false, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -54,6 +54,9 @@ type IssueSetupHandoffInput struct {
 	RegistrationID string
 	ProviderKey    string
 	CatalogRef     string
+	// NextAction, when set, names the open setup step so the dashboard link
+	// can say what is left. Empty links to the settings page without a step.
+	NextAction string
 }
 
 type RegisterCatalogMCPResult struct {
@@ -100,6 +103,8 @@ type RegistrationService struct {
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 	logos                      *cardLogos
+	catalogLogos               *catalogLogos
+	signInLinks                *signInConnectLinks
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -351,10 +356,27 @@ func (s *RegistrationService) DashboardSetupURL(ctx context.Context, principal P
 			return "", ErrCatalogRejected
 		}
 	}
-	return s.dashboardSettingsURL(ctx, principal, project, registrationID)
+	return s.dashboardSettingsURL(ctx, principal, project, registrationID, input.NextAction)
 }
 
-func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID) (string, error) {
+// dashboardSetupStep names the dashboard step a next action leaves open, as
+// the settings page's setup query parameter reads it, or "" for none.
+func dashboardSetupStep(nextAction string) string {
+	switch nextAction {
+	case nextActionSecureDashboardSetup:
+		return "credentials"
+	case nextActionContinueDashboardSetup:
+		// An administrator still has to configure the catalog server's OAuth
+		// client in the dashboard before anyone can sign in.
+		return "oauth-client"
+	case nextActionConnectSignIn:
+		return "sign-in"
+	default:
+		return ""
+	}
+}
+
+func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID uuid.UUID, nextAction string) (string, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || registrationID == uuid.Nil {
 		return "", ErrRegistrationUnavailable
 	}
@@ -365,7 +387,14 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
 		return "", ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings").String() + "#authentication", nil
+	settings := s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings")
+	// Every open step (credentials, OAuth client, sign-in) lives in the
+	// Authentication section; the step tells the page which one to explain.
+	if step := dashboardSetupStep(nextAction); step != "" {
+		settings.RawQuery = url.Values{"setup": {step}}.Encode()
+	}
+	settings.Fragment = "authentication"
+	return settings.String(), nil
 }
 
 // DashboardAuthorization is where a user signs in to an MCP server's
@@ -637,16 +666,23 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	setupURL := ""
 	nextAction := "ready"
 	if inspection.RequiresDashboardSetup {
-		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID)
-		if err != nil {
-			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
-		}
 		nextAction = nextActionSecureDashboardSetup
 		// Attachment can set up the provider's client automatically, so the
 		// only step left is the user's sign-in, which the agent can connect in
 		// chat. The dashboard link stays as the fallback.
 		if inspection.AttachmentSupported {
 			nextAction = nextActionConnectSignIn
+		}
+		// Only sign-in is a known step here. A remote that needs dashboard
+		// setup may want an OAuth client or an API key, and the inspection
+		// cannot tell which, so that link names no step.
+		linkAction := ""
+		if nextAction == nextActionConnectSignIn {
+			linkAction = nextAction
+		}
+		setupURL, err = s.dashboardSettingsURL(ctx, principal, project, receipt.RegistrationID.UUID, linkAction)
+		if err != nil {
+			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})

@@ -182,7 +182,7 @@ func TestRecord_RealAttemptsAreUnaffectedByAOnceFlood(t *testing.T) {
 		written += size
 	}
 	require.Equal(t, onceKeyBurst+1+steps+1, written, "the burst, one row for the held-back count, and every real step")
-	require.Equal(t, int64(flood-onceKeyBurst), recorder.dropped(t, dropRateLimited))
+	require.Zero(t, recorder.droppedTotal(t), "held-back rows were written as the count, not lost")
 }
 
 // The check happens before the queue, without I/O, so a stalled writer can't hold it up.
@@ -210,7 +210,7 @@ func TestOnce_HeldBackRowsNeverBlockOrReachTheQueue(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Once blocked")
 	}
-	require.Equal(t, int64(1000-onceKeyBurst), recorder.dropped(t, dropRateLimited))
+	require.Zero(t, recorder.dropped(t, dropRateLimited), "held-back rows are not lost")
 	require.Zero(t, recorder.dropped(t, dropQueueFull))
 }
 
@@ -226,7 +226,26 @@ func TestOnce_AHeldBackRowCountsNoStep(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Equal(t, int64(onceKeyBurst+1), stepsCounted(t, recorder), "the burst and the row standing for the rest")
-	require.Equal(t, int64(2), recorder.dropped(t, dropRateLimited))
+	require.Zero(t, recorder.dropped(t, dropRateLimited), "held-back rows are not lost")
+}
+
+func TestOnce_AHeldBackRowAfterShutdownIsCounted(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+	scope := testScope()
+	for range onceKeyBurst + 1 {
+		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+	// The row held back before shutdown is written by the final pass.
+	require.Equal(t, int64(onceKeyBurst+1), conn.rows.Load()+conn.repeats.Load())
+
+	require.False(t, recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest))
+	require.Equal(t, int64(onceKeyBurst+1), conn.rows.Load()+conn.repeats.Load())
+	require.Equal(t, int64(1), recorder.droppedTotal(t))
+	require.Equal(t, int64(1), recorder.dropped(t, dropShutdown))
 }
 
 // A burst across keys stops at its share of the queue, leaving room for real attempts.
@@ -249,8 +268,12 @@ func TestOnce_LeavesTheQueueReserveForRealAttempts(t *testing.T) {
 	for range 20 {
 		recorder.Once(t.Context(), testScope(), StepInboundAuthorize, CodeInvalidRequest)
 	}
-	require.Equal(t, int64(14), recorder.dropped(t, dropQueueReserve), "6 of 8 slots go to Once rows")
-	require.Zero(t, recorder.dropped(t, dropRateLimited), "a backed-up queue doesn't read as a noisy key")
+	require.Zero(t, recorder.dropped(t, dropQueueReserve), "rows past the share are held back on their keys, not lost")
+	require.Zero(t, recorder.dropped(t, dropRateLimited))
+	recorder.limiter.mu.Lock()
+	held := len(recorder.limiter.withPending)
+	recorder.limiter.mu.Unlock()
+	require.Equal(t, 14, held, "6 of 8 slots go to Once rows")
 
 	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
 	recorder.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
@@ -484,4 +507,84 @@ func TestRecord_EvictedRepeatsCountInTheDropMetric(t *testing.T) {
 	recorder.Once(t.Context(), testScope(), StepInboundAuthorize, CodeInvalidRequest)
 
 	require.Equal(t, int64(4), recorder.dropped(t, dropRepeatsLost))
+}
+
+// Rows held back by the per-key limit are written as the next row's repeats, so none are lost.
+func TestDropped_HeldBackThenFoldedIsNotADrop(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+		recorder := newTestRecorder(t, conn, testConfig())
+		scope := testScope()
+
+		const held = 3
+		for range onceKeyBurst + held {
+			recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
+		}
+		time.Sleep(onceKeyInterval) //nolint:forbidigo // GG013: advances the synctest fake clock inside a synctest.Test bubble
+		require.True(t, recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest))
+		require.NoError(t, recorder.Shutdown(t.Context()))
+
+		require.Equal(t, int64(onceKeyBurst+1), conn.rows.Load())
+		require.Equal(t, int64(held), conn.repeats.Load(), "the next row carried the held-back count")
+		require.Zero(t, recorder.droppedTotal(t))
+	})
+}
+
+// A held-back row is lost only when its key is evicted, and counts once, as repeats_lost.
+func TestDropped_HeldBackThenEvictedCountsOnce(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+	scope := testScope()
+
+	for range onceKeyBurst + 1 {
+		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
+	}
+	for range onceMaxKeys {
+		recorder.Once(t.Context(), testScope(), StepInboundAuthorize, CodeInvalidRequest)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, int64(1), recorder.dropped(t, dropRepeatsLost))
+	require.Equal(t, int64(1), recorder.droppedTotal(t), "the evicted row counts only as repeats_lost")
+	require.Equal(t, int64(onceKeyBurst+1+onceMaxKeys), conn.rows.Load()+conn.repeats.Load()+1, "every other row was written")
+}
+
+// A Start row over the organization's ceiling is discarded, not held, so it counts as rate_limited.
+func TestDropped_StartOverTheCeilingCountsOnce(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		conn := &slowConn{Conn: nil, delay: 0, sizes: nil}
+		cfg := testConfig()
+		cfg.queueSize = 4096
+		recorder := newTestRecorder(t, conn, cfg)
+
+		for range onceOrgBurst + 1 {
+			recorder.Start(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+		}
+
+		require.Equal(t, int64(1), recorder.dropped(t, dropRateLimited))
+		require.Equal(t, int64(1), recorder.droppedTotal(t))
+	})
+}
+
+// A row that carries repeats and is then lost counts every event it stood for.
+func TestDropped_ALostRowCountsItsRepeats(t *testing.T) {
+	t.Parallel()
+
+	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+	scope := testScope()
+
+	const calls = onceKeyBurst + 3
+	for range calls {
+		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, int64(calls), recorder.droppedTotal(t))
 }

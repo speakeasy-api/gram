@@ -115,7 +115,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		if selected && choice.noAuth() {
 			return none, nil
 		}
-		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID, selected && !choice.noAuth())
 	}
 	req, chainable := s.identityChainingRequest(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID, upstreamResource, tunneled, backendIssuerID, authentication.chosenClient)
 	switch {
@@ -124,7 +124,7 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 		// chaining binding serves it, and it calls anonymously.
 		return none, nil
 	case !chainable:
-		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
+		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID, selected && !choice.noAuth())
 	}
 
 	tokens, strictErr := s.resolveAccessTokens(ctx, authentication, false)
@@ -144,13 +144,13 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 			return none, s.rejectRemoteSession(ctx, w, authentication, err)
 		}
 		if err != nil {
-			return none, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, logger)
+			return none, s.remoteSessionResolveFailed(ctx, logger, authentication, err)
 		}
 		if upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID) {
 			return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 		}
 	case strictErr != nil:
-		return none, oops.E(oops.CodeUnexpected, strictErr, "resolve remote session").LogError(ctx, logger)
+		return none, s.remoteSessionResolveFailed(ctx, logger, authentication, strictErr)
 	case upstreamTokenPresent(tokens, upstreamResource, tunneled, backendIssuerID):
 		return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 	}
@@ -190,12 +190,27 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 
 // resolveStrictUpstreamToken is the issuer gate's all-or-nothing resolution
 // followed by routing, the behavior without identity chaining.
-func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID) (remotesessions.UpstreamToken, error) {
+//
+// backendIssuerID is the server's column value, or the issuer of the
+// credential's own choice when choiceGoverns. The organization's upstream
+// issuer flag decides whether the column or the server's associations route.
+func (s *Service) resolveStrictUpstreamToken(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, authentication *issuerGateAuthentication, upstreamResource string, tunneled bool, backendIssuerID uuid.NullUUID, choiceGoverns bool) (remotesessions.UpstreamToken, error) {
 	var none remotesessions.UpstreamToken
 	tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 	if err != nil {
 		return none, fmt.Errorf("resolve issuer-gated upstream tokens: %w", err)
 	}
+	backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
+		organizationID:   authentication.endpoint.OrganizationID,
+		serverID:         authentication.endpoint.proxiedServerID().UUID,
+		site:             upstreamIssuerSiteRoute,
+		tokens:           tokens,
+		upstreamResource: upstreamResource,
+		tunneled:         tunneled,
+		backendIssuerID:  backendIssuerID,
+		choiceGoverns:    choiceGoverns,
+		association:      authentication.serverAssociation,
+	})
 	return routeDirectUpstreamToken(ctx, w, logger, tokens, upstreamResource, tunneled, backendIssuerID)
 }
 

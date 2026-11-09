@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
@@ -68,6 +69,11 @@ func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder
 // ConnectionAttempt exposes the state's connection attempt.
 func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
 	return a.connectionAttempt(endpoint)
+}
+
+// SetEnvironmentLoader replaces the environment loader.
+func (s *Service) SetEnvironmentLoader(loader toolconfig.EnvironmentLoader) {
+	s.env = loader
 }
 
 // SetCIMDResolver replaces the client metadata document resolver.

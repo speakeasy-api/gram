@@ -11,6 +11,7 @@ import { accessExplainResourceAccess } from "../funcs/accessExplainResourceAcces
 import { accessGetDirectoryReviewSettings } from "../funcs/accessGetDirectoryReviewSettings.js";
 import { accessGetRole } from "../funcs/accessGetRole.js";
 import { accessGetShadowMCPInventoryServer } from "../funcs/accessGetShadowMCPInventoryServer.js";
+import { accessListAgentPolicyScopes } from "../funcs/accessListAgentPolicyScopes.js";
 import { accessListAIDetections } from "../funcs/accessListAIDetections.js";
 import { accessListAIDetectionUsers } from "../funcs/accessListAIDetectionUsers.js";
 import { accessListAudienceOptions } from "../funcs/accessListAudienceOptions.js";
@@ -52,6 +53,7 @@ import { DirectoryReviewSettings } from "../models/components/directoryreviewset
 import { DirectoryRoleMapping } from "../models/components/directoryrolemapping.js";
 import { DirectoryRoleSetupPreviewResult } from "../models/components/directoryrolesetuppreviewresult.js";
 import { ExplainResourceAccessResult } from "../models/components/explainresourceaccessresult.js";
+import { ListAgentPolicyScopesResult } from "../models/components/listagentpolicyscopesresult.js";
 import { ListAIDetectionsResult } from "../models/components/listaidetectionsresult.js";
 import { ListAIDetectionUsersResult } from "../models/components/listaidetectionusersresult.js";
 import { ListAudienceOptionsResult } from "../models/components/listaudienceoptionsresult.js";
@@ -114,6 +116,10 @@ import {
   GetShadowMCPInventoryServerRequest,
   GetShadowMCPInventoryServerSecurity,
 } from "../models/operations/getshadowmcpinventoryserver.js";
+import {
+  ListAgentPolicyScopesRequest,
+  ListAgentPolicyScopesSecurity,
+} from "../models/operations/listagentpolicyscopes.js";
 import {
   ListAIDetectionsRequest,
   ListAIDetectionsSecurity,
@@ -455,6 +461,25 @@ export class Access extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListAIDetectionsResult> {
     return unwrapAsync(accessListAIDetections(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * listAgentPolicyScopes access
+   *
+   * @remarks
+   * List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.
+   */
+  async listAgentPolicyScopes(
+    request?: ListAgentPolicyScopesRequest | undefined,
+    security?: ListAgentPolicyScopesSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListAgentPolicyScopesResult> {
+    return unwrapAsync(accessListAgentPolicyScopes(
       this,
       request,
       security,

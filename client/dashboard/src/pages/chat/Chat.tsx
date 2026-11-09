@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -17,6 +18,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useAui, useAuiState } from "@assistant-ui/react";
 import { ActiveChatTitle, Chat, ChatComposer } from "@/elements";
+import { focusChatComposer } from "@/elements/lib/composerFocus";
 import {
   ChevronLeft,
   Home,
@@ -51,6 +53,8 @@ import {
   useHideInsightsDock,
   useInsightsState,
 } from "@/components/insights-context";
+import { useFreshAssistantConversation } from "@/hooks/useFreshAssistantConversation";
+import { ComposerDraftHandover } from "@/hooks/useComposerDraftHandover";
 import { useServerAssistantTransport } from "@/hooks/useServerAssistantTransport";
 import { useSlugs } from "@/contexts/Sdk";
 import {
@@ -185,10 +189,41 @@ export function ChatLanding({
   const { user } = useSession();
   const navigate = useNavigate();
   const routes = useRoutes();
-  const { sendPrompt, assistantNeedsAdmin, assistantReady } =
-    useInsightsState();
+  const { sendPrompt, assistantNeedsAdmin } = useInsightsState();
+  const assistantReady = useFreshAssistantConversation();
   const [value, setValue] = useState("");
   const [inputFocused, setInputFocused] = useState(false);
+  const fallbackInputRef = useRef<HTMLInputElement | null>(null);
+  const restoreFocusRef = useRef(false);
+  const composerHostRef = useRef<HTMLDivElement>(null);
+  // Keep the fallback editable until the destination accepts its latest draft.
+  // Mounting the composer earlier lets new typing race with the queued seed.
+  const showComposer = assistantReady && !value.trim();
+  const setFallbackInput = useCallback((input: HTMLInputElement | null) => {
+    if (!input) {
+      restoreFocusRef.current =
+        document.activeElement === fallbackInputRef.current;
+    }
+    fallbackInputRef.current = input;
+  }, []);
+
+  useEffect(() => {
+    if (!showComposer || !restoreFocusRef.current) return;
+    restoreFocusRef.current = false;
+    let frame = 0;
+    let attempts = 0;
+    const focus = () => {
+      // The shadow-root input mounts after the host. Never reclaim focus if
+      // the user moved elsewhere while it was mounting.
+      if (document.activeElement !== document.body) return;
+      focusChatComposer(composerHostRef.current);
+      if (document.activeElement === document.body && ++attempts < 10) {
+        frame = requestAnimationFrame(focus);
+      }
+    };
+    focus();
+    return () => cancelAnimationFrame(frame);
+  }, [showComposer]);
   const [activeCommand, setActiveCommand] = useState(0);
   const { text: placeholder, visible: placeholderVisible } =
     useCyclingPlaceholder();
@@ -281,11 +316,17 @@ export function ChatLanding({
             <ReleaseStageBadge stage="beta" className="ml-3 align-middle" />
           </span>
         </h1>
+        {assistantReady && !assistantNeedsAdmin && value.trim() !== "" && (
+          <ComposerDraftHandover
+            value={value}
+            onAccepted={() => setValue("")}
+          />
+        )}
         {assistantNeedsAdmin ? (
           <p className="border-border bg-card text-muted-foreground border px-4 py-3 text-sm">
             Ask an admin to enable the Project Assistant for this project.
           </p>
-        ) : assistantReady ? (
+        ) : showComposer ? (
           // The real AUI composer, bound to the shared runtime: sending happens
           // in the runtime itself, so this entry point has dictation,
           // attachments, tool mentions and skill context like every other one.
@@ -295,6 +336,7 @@ export function ChatLanding({
           // via :host-context, so it must sit on an ancestor of the host — not
           // on anything ChatComposer renders inside it.
           <div
+            ref={composerHostRef}
             className="gram-chat-landing border-border bg-card border"
             // Cycling example prompts ride in as custom properties: they
             // inherit into the Elements shadow root, so the placeholder can
@@ -310,8 +352,6 @@ export function ChatLanding({
             }
           >
             <ChatComposer />
-            <StartFreshThread />
-            <SeedComposerDraft value={value} onSeeded={() => setValue("")} />
             <NavigateOnFirstMessage />
           </div>
         ) : (
@@ -323,6 +363,7 @@ export function ChatLanding({
             className="border-border bg-card focus-within:border-foreground relative border px-4 py-3 transition-colors"
           >
             <input
+              ref={setFallbackInput}
               value={value}
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -392,55 +433,6 @@ export function ChatLanding({
       )}
     </div>
   );
-}
-
-/**
- * Carries a draft typed into the fallback input over to the shared composer.
- *
- * The fallback renders only until the assistant runtime is ready; the two
- * controls keep their drafts in different places, so without this a message
- * typed during that window vanishes when the composer swaps in. Runs after
- * StartFreshThread so the text lands on the new thread, not the old one.
- */
-function SeedComposerDraft({
-  value,
-  onSeeded,
-}: {
-  value: string;
-  onSeeded: () => void;
-}): null {
-  const aui = useAui();
-  const seededRef = useRef(false);
-  useEffect(() => {
-    if (seededRef.current || !value.trim()) return;
-    seededRef.current = true;
-    aui.composer().setText(value);
-    onSeeded();
-  }, [aui, value, onSeeded]);
-  return null;
-}
-
-/**
- * The landing widgets always start a NEW conversation: they share one runtime
- * with the dock, and the dock is the only surface that deliberately continues
- * an existing chat. Without this, opening /chat (or project home) after a dock
- * conversation would drop the next message into that thread.
- */
-function StartFreshThread(): null {
-  const aui = useAui();
-  // Switch unconditionally, exactly once, as soon as the thread list has
-  // loaded. Reacting to "the thread has messages" instead would fire on the
-  // user's OWN send — switching the just-sent message out from under them and
-  // leaving an empty /chat/new. Thread ids are minted lazily
-  // (deferThreadIdMinting), so a visit that sends nothing costs no server chat.
-  const listLoading = useAuiState(({ threads }) => threads.isLoading);
-  const switchedRef = useRef(false);
-  useEffect(() => {
-    if (switchedRef.current || listLoading) return;
-    switchedRef.current = true;
-    aui.threads().switchToNewThread();
-  }, [aui, listLoading]);
-  return null;
 }
 
 /**
@@ -629,10 +621,13 @@ function buildRecentEntries(
   return entries;
 }
 
-// Resolve the project's Project Assistant and list its conversations, filtered
-// by pinned state. Shared by the pinned and recents sections so the
-// assistant-resolution logic lives in one place.
-function useProjectAssistantChats(pinned: Pinned): {
+// Resolve the project's Project Assistant and list its conversations. Shared
+// by the pinned, recents, and compact sections so the assistant-resolution
+// logic lives in one place. Pass a pinned state to filter, or `pinnedFirst` to
+// list every chat with pinned ones ahead of the rest.
+function useProjectAssistantChats(
+  filter: { pinned: Pinned } | { pinnedFirst: true; limit: number },
+): {
   chats: ChatOverview[];
   loading: boolean;
 } {
@@ -650,10 +645,10 @@ function useProjectAssistantChats(pinned: Pinned): {
       // Mirror the Elements runtime request: hide onboarding/warmup threads
       // from the recents lists.
       excludeSourceKind: "setup",
-      pinned,
       sortBy: SortBy.LastMessageTimestamp,
       sortOrder: SortOrder.Desc,
       limit: 50,
+      ...filter,
     },
     undefined,
     { enabled, throwOnError: false },
@@ -666,7 +661,7 @@ function useProjectAssistantChats(pinned: Pinned): {
 
 // Pinned conversations, shown above recents. Hidden entirely when none exist.
 function ChatHomePinned(): ReactElement | null {
-  const { chats, loading } = useProjectAssistantChats(Pinned.True);
+  const { chats, loading } = useProjectAssistantChats({ pinned: Pinned.True });
   if (loading || chats.length === 0) {
     return null;
   }
@@ -684,7 +679,9 @@ function ChatHomePinned(): ReactElement | null {
 
 function ChatHomeRecents(): ReactElement {
   // Exclude pinned chats — they live in the Pinned section above.
-  const { chats, loading } = useProjectAssistantChats(Pinned.False);
+  const { chats, loading } = useProjectAssistantChats({
+    pinned: Pinned.False,
+  });
   const [showAll, setShowAll] = useState(false);
 
   return (
@@ -717,16 +714,12 @@ const COMPACT_RECENTS_COUNT = 3;
 
 function ChatHomeCompactRecents(): ReactElement {
   const routes = useRoutes();
-  // Pinned chats take the slots first; recents fill whatever is left.
-  const { chats: pinnedChats, loading: pinnedLoading } =
-    useProjectAssistantChats(Pinned.True);
-  const { chats: recentChats, loading: recentLoading } =
-    useProjectAssistantChats(Pinned.False);
-  const loading = pinnedLoading || recentLoading;
-  const chats = [
-    ...pinnedChats.map((chat) => ({ chat, pinned: true })),
-    ...recentChats.map((chat) => ({ chat, pinned: false })),
-  ];
+  // One request: pinned chats take the slots first and recents fill whatever
+  // is left. The extra row only tells us whether to show "View more".
+  const { chats, loading } = useProjectAssistantChats({
+    pinnedFirst: true,
+    limit: COMPACT_RECENTS_COUNT + 1,
+  });
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between px-3">
@@ -754,8 +747,12 @@ function ChatHomeCompactRecents(): ReactElement {
         </p>
       ) : (
         <div className="flex flex-col">
-          {chats.slice(0, COMPACT_RECENTS_COUNT).map(({ chat, pinned }) => (
-            <RecentRow key={chat.id} chat={chat} pinned={pinned} />
+          {chats.slice(0, COMPACT_RECENTS_COUNT).map((chat) => (
+            <RecentRow
+              key={chat.id}
+              chat={chat}
+              pinned={chat.pinned === true}
+            />
           ))}
         </div>
       )}

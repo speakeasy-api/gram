@@ -1343,6 +1343,88 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAgentPolicyScopes:
+    get:
+      description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
+      operationId: listAgentPolicyScopes
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAgentPolicyScopesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAgentPolicyScopes access
+      tags:
+        - access
+      x-speakeasy-name-override: listAgentPolicyScopes
+      x-speakeasy-react-hook:
+        name: ListAgentPolicyScopes
   /rpc/access.listAudienceOptions:
     get:
       description: 'List the principals that can be given access: everyone, roles, people, and agents.'
@@ -1611,6 +1693,16 @@ paths:
           schema:
             description: Filter by scope.
             type: string
+        - allowEmptyValue: true
+          description: Leave out checks of these scopes, from the rows and from the total.
+          in: query
+          name: exclude_scopes
+          schema:
+            description: Leave out checks of these scopes, from the rows and from the total.
+            items:
+              type: string
+            maxItems: 20
+            type: array
         - allowEmptyValue: true
           description: Filter to a specific project.
           in: query
@@ -15860,6 +15952,48 @@ paths:
           schema:
             description: Opaque, one-time organization support handoff. Never included in OAuth state.
             type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM source.'
+          in: query
+          name: utm_source
+          schema:
+            description: 'Optional sign-up attribution: UTM source.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM medium.'
+          in: query
+          name: utm_medium
+          schema:
+            description: 'Optional sign-up attribution: UTM medium.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM campaign.'
+          in: query
+          name: utm_campaign
+          schema:
+            description: 'Optional sign-up attribution: UTM campaign.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM term.'
+          in: query
+          name: utm_term
+          schema:
+            description: 'Optional sign-up attribution: UTM term.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM content.'
+          in: query
+          name: utm_content
+          schema:
+            description: 'Optional sign-up attribution: UTM content.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: the browser''s product analytics session id.'
+          in: query
+          name: analytics_session_id
+          schema:
+            description: 'Optional sign-up attribution: the browser''s product analytics session id.'
+            type: string
       responses:
         "307":
           description: Temporary Redirect response.
@@ -18316,6 +18450,132 @@ paths:
       x-speakeasy-name-override: search
       x-speakeasy-react-hook:
         name: SearchBusinessMemories
+  /rpc/chat.countByUser:
+    get:
+      description: Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.
+      operationId: countChatsByUser
+      parameters:
+        - allowEmptyValue: true
+          description: Count chats last active after this timestamp (ISO 8601)
+          in: query
+          name: from
+          schema:
+            description: Count chats last active after this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Count chats created before this timestamp (ISO 8601)
+          in: query
+          name: to
+          schema:
+            description: Count chats created before this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of users to return
+          in: query
+          name: limit
+          schema:
+            default: 10
+            description: Maximum number of users to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountChatsByUserResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: countByUser chat
+      tags:
+        - chat
+      x-speakeasy-name-override: countByUser
+      x-speakeasy-react-hook:
+        name: CountChatsByUser
+        type: query
   /rpc/chat.creditUsage:
     get:
       description: Get the total number of chat credits and usage for the current billing period
@@ -18981,6 +19241,14 @@ paths:
               - asc
               - desc
             type: string
+        - allowEmptyValue: true
+          description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+          in: query
+          name: pinned_first
+          schema:
+            default: false
+            description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -73040,7 +73308,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+              $ref: '#/components/schemas/GetProjectOverviewPayload'
         required: true
       responses:
         "200":
@@ -88037,37 +88305,6 @@ components:
           description: The version of the package.
       required:
         - name
-    AddExternalMCPForm:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The display name for the external MCP server.
-          example: My Slack Integration
-        registry_id:
-          type: string
-          description: The ID of the external MCP registry the server is from.
-          format: uuid
-        registry_server_specifier:
-          type: string
-          description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
-          example: slack
-        selected_remotes:
-          type: array
-          items:
-            type: string
-          description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
-          example:
-            - https://mcp.example.com/sse
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - name
-        - slug
-        - registry_server_specifier
     AddExternalOAuthServerRequestBody:
       type: object
       properties:
@@ -92220,6 +92457,27 @@ components:
         - tool_calls
         - tool_results
         - risk_only
+    ChatUserSessionCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of sessions; equals the chat.list total when filtered to this user
+          format: int64
+        display_name:
+          type: string
+          description: The user's display name, empty when unknown
+        email:
+          type: string
+          description: The user's email, empty when unknown
+        user_id:
+          type: string
+          description: Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).
+      required:
+        - user_id
+        - email
+        - display_name
+        - count
     CheckAgentPolicyGrantsForm:
       type: object
       properties:
@@ -92691,6 +92949,21 @@ components:
           description: The confirmed servers with their new state.
       required:
         - servers
+    CountChatsByUserResult:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total sessions across all users; equals the unfiltered chat.list total for the same range
+          format: int64
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatUserSessionCount'
+          description: Users ranked by session count, highest first, truncated to the requested limit
+      required:
+        - users
+        - total
     CountRemoteSessionsResult:
       type: object
       properties:
@@ -92996,10 +93269,6 @@ components:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
           example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
         external_url:
           type: string
           description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -97016,7 +97285,7 @@ components:
           type: array
           items:
             type: string
-          description: The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
+          description: 'Has no effect: new deployments never include external MCP servers. Accepted so existing callers keep working.'
         exclude_functions:
           type: array
           items:
@@ -97036,11 +97305,6 @@ components:
           type: boolean
           description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
           example: false
-        upsert_external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
-          description: The external MCP servers to upsert in the new deployment.
         upsert_functions:
           type: array
           items:
@@ -99263,24 +99527,41 @@ components:
       required:
         - from
         - to
+    GetProjectOverviewPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        include_usage:
+          type: boolean
+          description: Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response
+          default: false
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for getting project-level overview
+      required:
+        - from
+        - to
     GetProjectOverviewResult:
       type: object
       properties:
-        comparison:
-          $ref: '#/components/schemas/ProjectOverviewSummary'
-        metrics_mode:
-          type: string
-          description: Indicates whether metrics are session-based or tool-call-based
-          enum:
-            - session
-            - tool_call
+        mcp_usage:
+          $ref: '#/components/schemas/ProjectMcpUsage'
         summary:
           $ref: '#/components/schemas/ProjectOverviewSummary'
+        usage_by_agent:
+          $ref: '#/components/schemas/QueryResult'
+        usage_by_user:
+          $ref: '#/components/schemas/QueryResult'
       description: Result of project overview query
       required:
         - summary
-        - comparison
-        - metrics_mode
     GetProjectResult:
       type: object
       properties:
@@ -102141,20 +102422,6 @@ components:
         - affected
         - affected_now
         - scheduled
-    LLMClientUsage:
-      type: object
-      properties:
-        activity_count:
-          type: integer
-          description: Number of messages (session mode) or tool calls (tool_call mode)
-          format: int64
-        client_name:
-          type: string
-          description: Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-      description: Usage breakdown by LLM client/agent
-      required:
-        - client_name
-        - activity_count
     LauncherCandidate:
       type: object
       properties:
@@ -102321,6 +102588,16 @@ components:
           description: Cursor for the next page; absent when exhausted.
       required:
         - items
+    ListAgentPolicyScopesResult:
+      type: object
+      properties:
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeDefinition'
+          description: The scopes an agent policy may hold, in catalogue order.
+      required:
+        - scopes
     ListAgentsResult:
       type: object
       properties:
@@ -109011,6 +109288,20 @@ components:
         - id
         - name
         - slug
+    ProjectMcpEndUser:
+      type: object
+      properties:
+        tool_calls:
+          type: integer
+          description: Number of tool calls
+          format: int64
+        user_id:
+          type: string
+          description: External end user ID
+      description: Tool calls made by one external end user
+      required:
+        - user_id
+        - tool_calls
     ProjectMcpServerActivity:
       type: object
       properties:
@@ -109027,6 +109318,53 @@ components:
       required:
         - project_id
         - activity
+    ProjectMcpToolUsage:
+      type: object
+      properties:
+        calls:
+          type: integer
+          description: Number of calls
+          format: int64
+        failures:
+          type: integer
+          description: Number of failed calls
+          format: int64
+        urn:
+          type: string
+          description: Tool URN, or the tool name for agent hook events
+      description: Calls and failures for one tool made by external end users
+      required:
+        - urn
+        - calls
+        - failures
+    ProjectMcpUsage:
+      type: object
+      properties:
+        end_users_count:
+          type: integer
+          description: Number of distinct external end users with activity in the period
+          format: int64
+        top_end_users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpEndUser'
+          description: Top 5 external end users by tool calls
+        top_failing_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools with at least one failure, ranked by failure rate, then by failures
+        top_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools by calls
+      description: External end user and MCP tool usage for a project in a time period
+      required:
+        - end_users_count
+        - top_end_users
+        - top_tools
+        - top_failing_tools
     ProjectOverviewSummary:
       type: object
       properties:
@@ -109034,37 +109372,15 @@ components:
           type: integer
           description: Number of MCP servers with at least one tool call in the time period
           format: int64
-        active_users_count:
-          type: integer
-          description: Number of unique users with activity in the time period
-          format: int64
-        failed_chats:
-          type: integer
-          description: Number of failed chat sessions
-          format: int64
         failed_tool_calls:
           type: integer
           description: Number of failed tool calls
-          format: int64
-        llm_client_breakdown:
-          type: array
-          items:
-            $ref: '#/components/schemas/LLMClientUsage'
-          description: Breakdown of messages/activity by LLM client/agent
-        resolved_chats:
-          type: integer
-          description: Number of resolved chat sessions
           format: int64
         top_servers:
           type: array
           items:
             $ref: '#/components/schemas/TopServer'
           description: Top 10 MCP servers by tool call count
-        top_users:
-          type: array
-          items:
-            $ref: '#/components/schemas/TopUser'
-          description: Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
         total_chats:
           type: integer
           description: Total number of chat sessions
@@ -109076,15 +109392,10 @@ components:
       description: Aggregated project-level summary metrics for a time period
       required:
         - total_chats
-        - resolved_chats
-        - failed_chats
         - total_tool_calls
         - failed_tool_calls
         - active_servers_count
-        - active_users_count
-        - top_users
         - top_servers
-        - llm_client_breakdown
     ProjectSummary:
       type: object
       properties:
@@ -120292,27 +120603,6 @@ components:
       required:
         - server_name
         - tool_call_count
-    TopUser:
-      type: object
-      properties:
-        activity_count:
-          type: integer
-          description: Number of messages (session mode) or tool calls (tool_call mode)
-          format: int64
-        user_id:
-          type: string
-          description: User ID (internal or external depending on availability)
-        user_type:
-          type: string
-          description: Type of user ID
-          enum:
-            - internal
-            - external
-      description: Top user by activity
-      required:
-        - user_id
-        - user_type
-        - activity_count
     Trial:
       type: object
       properties:

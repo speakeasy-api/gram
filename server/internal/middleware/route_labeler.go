@@ -2,11 +2,11 @@ package middleware
 
 import (
 	"net/http"
-	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/httpstream"
 )
 
 // RouteLabelerMiddleware enriches HTTP metric attributes recorded by otelhttp.
@@ -21,8 +21,8 @@ func RouteLabelerMiddleware(next http.Handler) http.Handler {
 			// via the Labeler so metrics like http.server.request.duration
 			// can be segmented by route. Remove this if a future otelhttp
 			// version populates MetricAttributes.Route from r.Pattern.
-			if idx := strings.IndexByte(r.Pattern, '/'); idx >= 0 {
-				labeler.Add(attr.HTTPRoute(r.Pattern[idx:]))
+			if route := httpstream.Route(r); route != "" {
+				labeler.Add(attr.HTTPRoute(route))
 			}
 		}
 		next.ServeHTTP(w, r)

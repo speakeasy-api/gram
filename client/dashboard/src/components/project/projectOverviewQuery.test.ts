@@ -132,9 +132,10 @@ describe("buildProjectOverviewQuery", () => {
       client,
       expect.objectContaining({
         gramProject: "analytics",
-        getProjectMetricsSummaryPayload: expect.objectContaining({
+        getProjectOverviewPayload: expect.objectContaining({
           from: expect.any(Date),
           to: expect.any(Date),
+          includeUsage: true,
         }),
       }),
     );
@@ -153,9 +154,10 @@ describe("buildProjectOverviewQuery", () => {
     expect(mockGetOverview).toHaveBeenCalledWith(
       client,
       expect.objectContaining({
-        getProjectMetricsSummaryPayload: {
+        getProjectOverviewPayload: {
           from: new Date(from),
           to: new Date(to),
+          includeUsage: true,
         },
       }),
     );

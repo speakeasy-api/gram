@@ -47,9 +47,8 @@ type consentMemberOutcome struct {
 func (s *Service) captureGatewayConsentInventory(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, view *gatewayConsentView) (string, error) {
 	ctx := r.Context()
 	reservation := consentToolInventory{
-		DirectAuthClient:     nil,
-		otherModeBackendHash: "",
-		CompletedAt:          time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
+		DirectAuthClient: nil,
+		CompletedAt:      time.Time{}, BackendHash: "", StateID: state.ID, Attempt: uuid.NewString(), Resource: endpointToolSelectionResource(endpoint), Tools: []consentInventoryTool{}, ExpectedCursor: "", Complete: false, McpSessionID: "", MemberOutcomes: nil, MemberBindings: nil,
 	}
 	if err := s.consentToolInventoryCache.Store(ctx, reservation); err != nil {
 		return "", fmt.Errorf("%w: reserve gateway capture: %w", errConsentInventoryUnavailable, err)
@@ -165,6 +164,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		authentication:      nil,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,
+		deniedMembers:       nil,
 		execute:             false,
 		discoveryMode:       "",
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
@@ -175,6 +175,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		connectURL:          "",
+		agentFix:            nil,
 		skillsOverMCP:       nil,
 		servedCredentials:   nil,
 	}
@@ -215,7 +216,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		s.applyMemberAuthClient(ctx, member, res, resolveErr)
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-		if member.typedAuthClient {
+		// Enforcement uses registration-scoped tokens even for legacy resolver
+		// outcomes (for example EMA), matching the runtime selection path.
+		if memberAuth != nil {
 			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
 				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
@@ -232,12 +235,14 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	for _, member := range members {
 		ids = append(ids, member.serverID)
 	}
-	backendHashes, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
+	backendHashes, _, err := s.catalogMemberConfigurations(ctx, endpoint.OrganizationID, ids)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	captured := map[string]*memberCatalog{}
-	inventory, unavailableMembers, err := s.collectGatewayTools(ctx, logger, gate, members, true, captured)
+	// Listing every member's tools for the consent page names none of them,
+	// so it records no authorization check for any.
+	inventory, unavailableMembers, err := s.collectGatewayTools(authz.WithoutChallenges(ctx), logger, gate, members, true, captured)
 	if err != nil {
 		return nil, nil, nil, err
 	}

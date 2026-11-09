@@ -260,6 +260,10 @@ type Client struct {
 	// describeMcpServerHealth endpoint.
 	DescribeMcpServerHealthDoer goahttp.Doer
 
+	// SetMcpServerScopePin Doer is the HTTP client used to make requests to the
+	// setMcpServerScopePin endpoint.
+	SetMcpServerScopePinDoer goahttp.Doer
+
 	// GetMcpServerToolCalls Doer is the HTTP client used to make requests to the
 	// getMcpServerToolCalls endpoint.
 	GetMcpServerToolCallsDoer goahttp.Doer
@@ -267,18 +271,6 @@ type Client struct {
 	// GetHookClients Doer is the HTTP client used to make requests to the
 	// getHookClients endpoint.
 	GetHookClientsDoer goahttp.Doer
-
-	// ListExternalMcpMigrationCandidates Doer is the HTTP client used to make
-	// requests to the listExternalMcpMigrationCandidates endpoint.
-	ListExternalMcpMigrationCandidatesDoer goahttp.Doer
-
-	// PreviewExternalMcpMigration Doer is the HTTP client used to make requests to
-	// the previewExternalMcpMigration endpoint.
-	PreviewExternalMcpMigrationDoer goahttp.Doer
-
-	// MigrateExternalMcpServers Doer is the HTTP client used to make requests to
-	// the migrateExternalMcpServers endpoint.
-	MigrateExternalMcpServersDoer goahttp.Doer
 
 	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
 	// requests to the listRegistryPromotionCandidates endpoint.
@@ -400,6 +392,10 @@ type Client struct {
 	// updateSignupOffer endpoint.
 	UpdateSignupOfferDoer goahttp.Doer
 
+	// ListPlatformMcpFeedback Doer is the HTTP client used to make requests to the
+	// listPlatformMcpFeedback endpoint.
+	ListPlatformMcpFeedbackDoer goahttp.Doer
+
 	// GetStripeSubscriptionCandidate Doer is the HTTP client used to make requests
 	// to the getStripeSubscriptionCandidate endpoint.
 	GetStripeSubscriptionCandidateDoer goahttp.Doer
@@ -439,6 +435,14 @@ type Client struct {
 	// BackfillMcpConnectGrants Doer is the HTTP client used to make requests to
 	// the backfillMcpConnectGrants endpoint.
 	BackfillMcpConnectGrantsDoer goahttp.Doer
+
+	// GetProjectRedeployPreview Doer is the HTTP client used to make requests to
+	// the getProjectRedeployPreview endpoint.
+	GetProjectRedeployPreviewDoer goahttp.Doer
+
+	// RedeployProject Doer is the HTTP client used to make requests to the
+	// redeployProject endpoint.
+	RedeployProjectDoer goahttp.Doer
 
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
@@ -521,11 +525,9 @@ func NewClient(
 		UpdateSupportMatrixDoer:                     doer,
 		GetSupportCoverageDoer:                      doer,
 		DescribeMcpServerHealthDoer:                 doer,
+		SetMcpServerScopePinDoer:                    doer,
 		GetMcpServerToolCallsDoer:                   doer,
 		GetHookClientsDoer:                          doer,
-		ListExternalMcpMigrationCandidatesDoer:      doer,
-		PreviewExternalMcpMigrationDoer:             doer,
-		MigrateExternalMcpServersDoer:               doer,
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
 		PromoteRegistryCandidateDoer:                doer,
@@ -556,6 +558,7 @@ func NewClient(
 		ListSignupOffersDoer:                        doer,
 		CreateSignupOfferDoer:                       doer,
 		UpdateSignupOfferDoer:                       doer,
+		ListPlatformMcpFeedbackDoer:                 doer,
 		GetStripeSubscriptionCandidateDoer:          doer,
 		SetStripeSubscriptionDoer:                   doer,
 		ListCustomerUsageDoer:                       doer,
@@ -566,6 +569,8 @@ func NewClient(
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
 		BackfillMcpConnectGrantsDoer:                doer,
+		GetProjectRedeployPreviewDoer:               doer,
+		RedeployProjectDoer:                         doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -2043,6 +2048,30 @@ func (c *Client) DescribeMcpServerHealth() goa.Endpoint {
 	}
 }
 
+// SetMcpServerScopePin returns an endpoint that makes HTTP requests to the
+// admin service setMcpServerScopePin server.
+func (c *Client) SetMcpServerScopePin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetMcpServerScopePinRequest(c.encoder)
+		decodeResponse = DecodeSetMcpServerScopePinResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetMcpServerScopePinRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetMcpServerScopePinDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setMcpServerScopePin", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetMcpServerToolCalls returns an endpoint that makes HTTP requests to the
 // admin service getMcpServerToolCalls server.
 func (c *Client) GetMcpServerToolCalls() goa.Endpoint {
@@ -2086,78 +2115,6 @@ func (c *Client) GetHookClients() goa.Endpoint {
 		resp, err := c.GetHookClientsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getHookClients", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// ListExternalMcpMigrationCandidates returns an endpoint that makes HTTP
-// requests to the admin service listExternalMcpMigrationCandidates server.
-func (c *Client) ListExternalMcpMigrationCandidates() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListExternalMcpMigrationCandidatesRequest(c.encoder)
-		decodeResponse = DecodeListExternalMcpMigrationCandidatesResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListExternalMcpMigrationCandidatesRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListExternalMcpMigrationCandidatesDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "listExternalMcpMigrationCandidates", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// PreviewExternalMcpMigration returns an endpoint that makes HTTP requests to
-// the admin service previewExternalMcpMigration server.
-func (c *Client) PreviewExternalMcpMigration() goa.Endpoint {
-	var (
-		encodeRequest  = EncodePreviewExternalMcpMigrationRequest(c.encoder)
-		decodeResponse = DecodePreviewExternalMcpMigrationResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildPreviewExternalMcpMigrationRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.PreviewExternalMcpMigrationDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "previewExternalMcpMigration", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// MigrateExternalMcpServers returns an endpoint that makes HTTP requests to
-// the admin service migrateExternalMcpServers server.
-func (c *Client) MigrateExternalMcpServers() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeMigrateExternalMcpServersRequest(c.encoder)
-		decodeResponse = DecodeMigrateExternalMcpServersResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildMigrateExternalMcpServersRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.MigrateExternalMcpServersDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "migrateExternalMcpServers", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -2883,6 +2840,30 @@ func (c *Client) UpdateSignupOffer() goa.Endpoint {
 	}
 }
 
+// ListPlatformMcpFeedback returns an endpoint that makes HTTP requests to the
+// admin service listPlatformMcpFeedback server.
+func (c *Client) ListPlatformMcpFeedback() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListPlatformMcpFeedbackRequest(c.encoder)
+		decodeResponse = DecodeListPlatformMcpFeedbackResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListPlatformMcpFeedbackRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListPlatformMcpFeedbackDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listPlatformMcpFeedback", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // GetStripeSubscriptionCandidate returns an endpoint that makes HTTP requests
 // to the admin service getStripeSubscriptionCandidate server.
 func (c *Client) GetStripeSubscriptionCandidate() goa.Endpoint {
@@ -3118,6 +3099,54 @@ func (c *Client) BackfillMcpConnectGrants() goa.Endpoint {
 		resp, err := c.BackfillMcpConnectGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "backfillMcpConnectGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetProjectRedeployPreview returns an endpoint that makes HTTP requests to
+// the admin service getProjectRedeployPreview server.
+func (c *Client) GetProjectRedeployPreview() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetProjectRedeployPreviewRequest(c.encoder)
+		decodeResponse = DecodeGetProjectRedeployPreviewResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetProjectRedeployPreviewRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetProjectRedeployPreviewDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getProjectRedeployPreview", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// RedeployProject returns an endpoint that makes HTTP requests to the admin
+// service redeployProject server.
+func (c *Client) RedeployProject() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeRedeployProjectRequest(c.encoder)
+		decodeResponse = DecodeRedeployProjectResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildRedeployProjectRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.RedeployProjectDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "redeployProject", err)
 		}
 		return decodeResponse(resp)
 	}

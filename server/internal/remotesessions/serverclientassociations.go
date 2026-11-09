@@ -74,7 +74,7 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 		for _, client := range bound {
 			ids = append(ids, client.ClientID)
 		}
-		required, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
+		required, _, err := requiredServerClients(ctx, q, authCtx.ActiveOrganizationID, server.UserSessionIssuerID.UUID, serverID, ids)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide required MCP server clients").LogError(ctx, logger)
 		}
@@ -322,6 +322,18 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		// detach stays a no-op.
 		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
+		}
+
+		// The server's upstream issuer is derived from its associations, and the
+		// writer scope taken above covers this update.
+		if server.UserSessionIssuerID.Valid {
+			if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+				UserSessionIssuerIds: []uuid.UUID{server.UserSessionIssuerID.UUID},
+				OrganizationID:       authCtx.ActiveOrganizationID,
+				ProjectID:            *authCtx.ProjectID,
+			}); err != nil {
+				return oops.E(oops.CodeUnexpected, err, "resync mcp server upstream issuer").LogError(ctx, logger)
+			}
 		}
 
 		if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

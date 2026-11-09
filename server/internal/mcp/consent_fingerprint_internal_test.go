@@ -37,14 +37,14 @@ func TestCatalogMemberConfigurationsTypedHashIgnoresDerivedIssuer(t *testing.T) 
 	f := newAuthClientFixture(t, pool)
 	hosted := f.hosted()
 	ids := []uuid.UUID{f.serverID, hosted}
-	before, err := f.service.catalogMemberConfigurations(t.Context(), f.orgID, ids)
+	before, _, err := f.service.catalogMemberConfigurations(t.Context(), f.orgID, ids)
 	require.NoError(t, err)
 	require.NotEmpty(t, before[f.serverID].hash)
 	require.NotEmpty(t, before[f.serverID].typedHash)
 
 	require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
 	require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: hosted}))
-	after, err := f.service.catalogMemberConfigurations(t.Context(), f.orgID, ids)
+	after, _, err := f.service.catalogMemberConfigurations(t.Context(), f.orgID, ids)
 	require.NoError(t, err)
 
 	require.NotEqual(t, before[f.serverID].hash, after[f.serverID].hash, "the full fingerprint covers the derived authorization server")
@@ -70,7 +70,7 @@ func TestConsentBackendFingerprintFollowsEnforcement(t *testing.T) {
 		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
 		after, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NotEqual(t, before, after)
+		require.NotEqual(t, before.decided, after.decided)
 	})
 
 	t.Run("typed auth clients leave a proxied server's derived issuer out", func(t *testing.T) {
@@ -83,23 +83,25 @@ func TestConsentBackendFingerprintFollowsEnforcement(t *testing.T) {
 		f.enforce()
 		typed, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NotEqual(t, issuerBound, typed)
+		require.NotEqual(t, issuerBound.decided, typed.decided)
+		require.Equal(t, issuerBound.decided, typed.otherMode, "an approval saved before enforcement is compared in its own form")
+		require.Equal(t, typed.decided, issuerBound.otherMode)
 		recorded, err := f.service.consentBackendEvidence(ctx, endpoint)
 		require.NoError(t, err)
-		require.Equal(t, typed, recorded.typedHash)
-		require.Equal(t, issuerBound, recorded.hash, "the issuer-covering evidence recorded beside it is what the upstream client choice compares")
+		require.Equal(t, typed.decided, recorded.decided.typedHash)
+		require.Equal(t, issuerBound.decided, recorded.decided.hash, "the issuer-covering evidence recorded beside it is what the upstream client choice compares")
 
 		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: f.serverID}))
 		resynced, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.Equal(t, typed, resynced)
+		require.Equal(t, typed.decided, resynced.decided)
 
 		_, err = productfeaturesrepo.New(pool).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{OrganizationID: f.orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
 		require.NoError(t, err)
 		f.service.authEnforcement = authenforcement.NewGate(pool)
 		rolledBack, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NotEqual(t, issuerBound, rolledBack, "after enforcement ends the resynchronized issuer is a configuration change again")
+		require.NotEqual(t, issuerBound.decided, rolledBack.decided, "after enforcement ends the resynchronized issuer is a configuration change again")
 	})
 
 	t.Run("typed auth clients still cover a hosted server's derived issuer", func(t *testing.T) {
@@ -113,7 +115,7 @@ func TestConsentBackendFingerprintFollowsEnforcement(t *testing.T) {
 		require.NoError(t, f.q.SetServerRemoteSessionIssuerFixture(t.Context(), authclientbackfill.SetServerRemoteSessionIssuerFixtureParams{RemoteSessionIssuerID: validUUID(f.issuerID), ID: hosted}))
 		after, err := f.service.consentBackendFingerprint(ctx, endpoint)
 		require.NoError(t, err)
-		require.NotEqual(t, before, after)
+		require.NotEqual(t, before.decided, after.decided)
 	})
 }
 

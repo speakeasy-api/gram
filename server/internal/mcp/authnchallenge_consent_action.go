@@ -94,8 +94,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -285,13 +284,17 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errRemoteSessionNoUsableCredential):
-			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			notice := ""
+			if kind := noUsableCredentialNotice(ctx, err); kind != verifyNoticeSignIn {
+				notice = "&validate_notice=" + url.QueryEscape(string(kind))
+			}
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String())+notice, http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errValidationUnfinished):
 			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
-			return err
+			return checkFailureBrowserError(ctx, err)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
@@ -359,10 +362,11 @@ func (s *Service) buildRemoteConnectURL(
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
-	// endpoint.UpstreamResource only when no other bound client can claim
-	// it: under multi-binding it may belong to a different client's
-	// upstream, while a client shared by servers with different upstreams
-	// derives none on its own and would record a grant nothing routes to.
+	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
+	// Otherwise, use it only when no other bound client can claim it: under
+	// multi-binding it may belong to a different client's upstream, while a
+	// client shared by servers with different upstreams derives none on its
+	// own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
 	claimedByMember := false
@@ -430,6 +434,13 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
+		// An exact typed offer authorizes this registration for this server.
+		// Alternative providers offering the same server are not competing
+		// resource owners; keep the selected server's concrete target. Legacy
+		// issuer bindings and ambiguous gateway members retain their derivation.
+		if !claimedByMember && endpoint.McpServerID.Valid && endpoint.UpstreamResource != "" && typedAuthorization.ServerID == endpoint.McpServerID.UUID {
+			clientResource = endpoint.UpstreamResource
+		}
 	}
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,
