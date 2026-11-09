@@ -37,7 +37,7 @@ func TestDailySnapshotRidesFirstEventOfEachDay(t *testing.T) {
 	first := fs.headers[0]
 	require.Equal(t, "true", first.Get("X-Gram-Device-Debug-Log"))
 	require.Equal(t, "0", first.Get("X-Gram-Device-Spool-Depth"))
-	require.Contains(t, []string{"true", "false"}, first.Get("X-Gram-Device-Fail-Open"))
+	require.Equal(t, "true", first.Get("X-Gram-Device-Fail-Open"), "a cold start fails open")
 
 	sent := fs.count()
 	invoke(t, cfg, agenthooks.ProviderClaudeCode, "claude/pre_tool_use.json")
@@ -70,12 +70,12 @@ func TestDailySnapshotRetriesAfterFailedSend(t *testing.T) {
 	}
 
 	send()
-	_, err := os.Stat(snapshotMarkerPath())
+	_, err := os.Stat(snapshotMarkerPath(Config{}))
 	require.ErrorIs(t, err, os.ErrNotExist, "a failed send must not use up the day's snapshot")
 
 	status = http.StatusOK
 	send()
-	b, err := os.ReadFile(snapshotMarkerPath())
+	b, err := os.ReadFile(snapshotMarkerPath(Config{}))
 	require.NoError(t, err)
 	require.Equal(t, "2026-11-09", string(b))
 	_, ok := withDailySnapshot(context.Background(), Config{}).Value(clientSnapshotKey{}).(clientSnapshot)
@@ -96,4 +96,20 @@ func TestSpoolDepthCountsOnlyEntries(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, spoolFileName(now)+".tmp"), []byte("{}"), 0o600))
 
 	require.Equal(t, 2, spoolDepth())
+}
+
+func TestDailySnapshotMarkerIsPerDeployment(t *testing.T) {
+	setSpoolStateHome(t)
+	setSnapshotNow(t, time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC))
+
+	a := Config{ServerURL: "https://a.example", OrgID: "org-a", ProjectSlug: "default"}
+	b := Config{ServerURL: "https://b.example", OrgID: "org-b", ProjectSlug: "default"}
+	snap, ok := withDailySnapshot(context.Background(), a).Value(clientSnapshotKey{}).(clientSnapshot)
+	require.True(t, ok)
+	markSnapshotDelivered(snap)
+
+	_, ok = withDailySnapshot(context.Background(), a).Value(clientSnapshotKey{}).(clientSnapshot)
+	require.False(t, ok)
+	_, ok = withDailySnapshot(context.Background(), b).Value(clientSnapshotKey{}).(clientSnapshot)
+	require.True(t, ok, "another deployment still gets its own snapshot")
 }

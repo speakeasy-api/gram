@@ -2,6 +2,8 @@ package relay
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 // than a timer. It carries settings and counts only, never prompt or tool
 // content.
 type clientSnapshot struct {
+	marker     string
 	day        string
 	failOpen   bool
 	debugLog   bool
@@ -28,19 +31,22 @@ type clientSnapshotKey struct{}
 
 var snapshotNow = time.Now
 
-func snapshotMarkerPath() string {
+// snapshotMarkerPath is keyed by deployment identity, so each server, org
+// and project a machine reports to gets its own daily snapshot.
+func snapshotMarkerPath(cfg Config) string {
 	dir := hooksStateDir()
 	if dir == "" {
 		return ""
 	}
-	return filepath.Join(dir, "snapshot-day")
+	sum := sha256.Sum256([]byte(cfg.ServerURL + "\x00" + cfg.OrgID + "\x00" + cfg.ProjectSlug))
+	return filepath.Join(dir, "snapshot-day-"+hex.EncodeToString(sum[:8]))
 }
 
 // withDailySnapshot attaches a snapshot to ctx unless one was already
 // delivered today. Concurrent hooks at the start of a day can each send one,
 // which is harmless.
 func withDailySnapshot(ctx context.Context, cfg Config) context.Context {
-	path := snapshotMarkerPath()
+	path := snapshotMarkerPath(cfg)
 	if path == "" {
 		return ctx
 	}
@@ -49,6 +55,7 @@ func withDailySnapshot(ctx context.Context, cfg Config) context.Context {
 		return ctx
 	}
 	return context.WithValue(ctx, clientSnapshotKey{}, clientSnapshot{
+		marker:     path,
 		day:        today,
 		failOpen:   failOpenAllowed(cfg),
 		debugLog:   cfg.DebugLog != "",
@@ -72,9 +79,7 @@ func stampSnapshotHeaders(req *http.Request) (clientSnapshot, bool) {
 // carrying the snapshot. A failed send leaves the marker alone so the next
 // event tries again.
 func markSnapshotDelivered(snap clientSnapshot) {
-	if path := snapshotMarkerPath(); path != "" {
-		_ = atomicWriteCacheFile(path, []byte(snap.day))
-	}
+	_ = atomicWriteCacheFile(snap.marker, []byte(snap.day))
 }
 
 // spoolDepth counts the entries waiting in the spool to be resent.
