@@ -1,20 +1,27 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const switchProject = vi.fn();
+const navigate = vi.fn();
+
+type Project = { id: string; slug: string; name: string };
+let projects: Project[] = [];
+let organizations: Array<{ id: string }> = [];
+let projectSlug: string | undefined;
 
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({
     id: "org_1",
     slug: "acme",
     name: "Acme",
-    projects: [{ id: "p1", slug: "proj", name: "Proj" }],
+    projects,
   }),
   useProject: () => ({ id: "p1", slug: "proj", name: "Proj", switchProject }),
-  useSession: () => ({ organizations: [{ id: "org_1" }] }),
+  useSession: () => ({ organizations }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSlugs: () => ({ orgSlug: "acme", projectSlug: "proj" }),
+  useSlugs: () => ({ orgSlug: "acme", projectSlug }),
   useSdkClient: () => ({ projects: { create: vi.fn() } }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
@@ -22,11 +29,21 @@ vi.mock("@/hooks/useRBAC", () => ({
 }));
 vi.mock("react-router", () => ({
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
-  useNavigate: () => vi.fn(),
+  useNavigate: () => navigate,
 }));
 
 import { WorkspaceSwitcher } from "./workspace-switcher";
 
+const proj = { id: "p1", slug: "proj", name: "Proj" };
+const alpha = { id: "p2", slug: "alpha", name: "Alpha" };
+
+beforeEach(() => {
+  projects = [proj];
+  organizations = [{ id: "org_1" }];
+  projectSlug = "proj";
+  navigate.mockReset();
+  switchProject.mockReset();
+});
 afterEach(cleanup);
 
 describe("WorkspaceSwitcher", () => {
@@ -37,5 +54,49 @@ describe("WorkspaceSwitcher", () => {
     expect(screen.getByText("Proj Project")).toBeTruthy();
     expect(screen.queryByRole("img", { name: "Proj" })).toBeNull();
     expect(screen.getByText("P").getAttribute("aria-hidden")).toBe("true");
+  });
+
+  describe("on an org-level page", () => {
+    beforeEach(() => {
+      projectSlug = undefined;
+    });
+
+    it("lists the projects the member can open", async () => {
+      const user = userEvent.setup();
+      projects = [proj, alpha];
+      render(<WorkspaceSwitcher />);
+
+      await user.click(screen.getByRole("button", { name: /Acme/ }));
+      expect(screen.getByRole("option", { name: /Alpha/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /Proj/ })).toBeTruthy();
+
+      await user.click(screen.getByRole("option", { name: /Alpha/ }));
+      expect(navigate).toHaveBeenCalledWith("/acme/projects/alpha");
+    });
+
+    it("says who to ask when the member is in no projects", async () => {
+      const user = userEvent.setup();
+      projects = [];
+      organizations = [{ id: "org_1" }, { id: "org_2" }];
+      render(<WorkspaceSwitcher />);
+
+      await user.click(screen.getByRole("button", { name: /Acme/ }));
+      expect(
+        screen.getByText(/Ask an admin to add you to one/).textContent,
+      ).toContain("not in any projects in Acme");
+
+      await user.click(
+        screen.getByRole("button", { name: "Switch organization" }),
+      );
+      expect(navigate).toHaveBeenCalledWith("/switch-org");
+    });
+
+    it("renders the org name only when there is nothing to switch to", () => {
+      projects = [];
+      render(<WorkspaceSwitcher />);
+
+      expect(screen.getByText("Acme")).toBeTruthy();
+      expect(screen.queryByRole("button")).toBeNull();
+    });
   });
 });
