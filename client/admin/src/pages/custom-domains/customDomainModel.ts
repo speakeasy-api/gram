@@ -110,6 +110,7 @@ export function fmtDateTimeUtc(date: Date | undefined): string {
 }
 
 // DNS observations describe visible configuration, not endpoint availability.
+// A status added later is drawn as it came rather than read as not checked.
 export function dnsConfigurationLabel(status: string | undefined): Label {
   switch (status) {
     case "matched":
@@ -125,8 +126,10 @@ export function dnsConfigurationLabel(status: string | undefined): Label {
     case "not_configured":
       return { label: "Not configured", tone: "neutral" };
     case undefined:
-    default:
+    case "":
       return { label: "Not checked", tone: "neutral" };
+    default:
+      return { label: status, tone: "neutral" };
   }
 }
 

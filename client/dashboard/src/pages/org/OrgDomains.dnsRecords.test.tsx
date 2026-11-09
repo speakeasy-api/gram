@@ -321,7 +321,7 @@ it("does not treat an older worker's later health write as fresh infrastructure"
   );
 });
 
-it("shows the designated target when DNS points at another domain's token", () => {
+it("shows the designated target when DNS points at a different token", () => {
   state.domain = customDomain({
     verified: true,
     activated: true,
@@ -330,7 +330,9 @@ it("shows the designated target when DNS points at another domain's token", () =
     dnsRoutingMethod: "unknown",
   });
   renderPage();
-  expect(screen.getByText(/point to another domain/)).toBeTruthy();
+  expect(
+    screen.getByText(/point to a different designated target/),
+  ).toBeTruthy();
   expect(screen.getByText(`Designated target: ${target}`)).toBeTruthy();
 });
 
@@ -341,7 +343,9 @@ it("shows saved DNS guidance before ownership is verified", () => {
   });
   renderPage();
   expect(screen.getByText("DNS configuration")).toBeTruthy();
-  expect(screen.getByText(/The domain name was not found in DNS/)).toBeTruthy();
+  expect(
+    screen.getByText(/does not resolve to any address in public DNS/),
+  ).toBeTruthy();
 });
 
 it("keeps shared-target DNS observations visible without a designated target", () => {
@@ -393,4 +397,41 @@ it("distinguishes an unavailable DNS check from a check that has never run", () 
   expect(
     screen.queryByText("DNS configuration has not been checked yet."),
   ).toBeNull();
+});
+
+it("does not read an unrecognized DNS result as never checked", () => {
+  state.domain = customDomain({
+    verified: true,
+    dnsConfigurationStatus: "mx_only",
+    dnsCheckedAt: new Date("2026-11-01T00:00:00Z"),
+  });
+  renderPage();
+  expect(
+    screen.getByText(/returned a result this page does not recognize/),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("DNS configuration has not been checked yet."),
+  ).toBeNull();
+});
+
+it("only says checks never disable the domain while it is verified", () => {
+  state.domain = customDomain({
+    verified: true,
+    activated: true,
+    dnsConfigurationStatus: "matched",
+  });
+  renderPage();
+  expect(screen.getByText(/or automatically disable the domain/)).toBeTruthy();
+  cleanup();
+
+  state.domain = customDomain({
+    verified: false,
+    activated: false,
+    dnsConfigurationStatus: "not_found",
+    healthStatus: "unhealthy",
+    healthIssue: "dns_not_found",
+    unhealthySince: new Date("2026-10-01T00:00:00Z"),
+  });
+  renderPage();
+  expect(screen.queryByText(/automatically disable the domain/)).toBeNull();
 });

@@ -7,7 +7,7 @@ import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/op
 import { routeTree } from "@/routeTree.gen";
 import { renderRouteTree } from "@/test/harness";
 
-import { routingMethodLabel } from "./customDomainModel";
+import { dnsConfigurationLabel, routingMethodLabel } from "./customDomainModel";
 import { customDomainsSearch } from "./customDomainsSearch";
 
 const mocks = vi.hoisted(() => ({
@@ -79,6 +79,18 @@ describe("routingMethodLabel", () => {
     [undefined, "Not checked"],
   ] as const)("labels %s as %s", (method, label) => {
     expect(routingMethodLabel(method).label).toBe(label);
+  });
+});
+
+describe("dnsConfigurationLabel", () => {
+  it.each([
+    ["matched", "Target matches"],
+    ["not_found", "Name not found"],
+    ["", "Not checked"],
+    [undefined, "Not checked"],
+    ["mx_only", "mx_only"],
+  ] as const)("labels %s as %s", (status, label) => {
+    expect(dnsConfigurationLabel(status).label).toBe(label);
   });
 });
 

@@ -111,11 +111,11 @@ const infrastructureStatusLabels: Record<string, string> = {
 const dnsConfigurationMessages: Record<string, string> = {
   matched: "The public DNS records match a configured Speakeasy target.",
   wrong_target:
-    "The public DNS records point to another domain’s designated target. Update your CNAME to this domain’s designated target.",
+    "The public DNS records point to a different designated target. Update your CNAME to this domain’s designated target.",
   unconfirmed:
     "The routing target could not be confirmed from public DNS. A proxy or flattened record can hide it; this does not mean the domain is unavailable.",
   not_found:
-    "The domain name was not found in DNS. Check its records with your DNS provider.",
+    "The domain name does not resolve to any address in public DNS. Add its routing record with your DNS provider.",
   check_failed: "The DNS check could not complete. Try checking again.",
   not_configured: "DNS target verification is unavailable.",
 };
@@ -1090,9 +1090,12 @@ function OrgDomainsInner() {
                   DNS configuration
                 </Text>
                 <Text variant="body" className="text-muted-foreground text-sm">
-                  {dnsConfigurationMessages[
-                    domain.dnsConfigurationStatus ?? ""
-                  ] ?? "DNS configuration has not been checked yet."}
+                  {domain.dnsConfigurationStatus
+                    ? (dnsConfigurationMessages[
+                        domain.dnsConfigurationStatus
+                      ] ??
+                      "The latest DNS check returned a result this page does not recognize. Try checking again.")
+                    : "DNS configuration has not been checked yet."}
                 </Text>
                 {domain.dnsConfigurationStatus === "wrong_target" &&
                   domain.dnsTarget && (
@@ -1106,8 +1109,11 @@ function OrgDomainsInner() {
                     ? (infrastructureStatusLabels[domain.healthStatus ?? ""] ??
                       "Not checked")
                     : "not checked separately yet"}
-                  . These checks do not test public endpoint availability or
-                  automatically disable the domain.
+                  . These checks do not test public endpoint availability
+                  {domain.verified
+                    ? " or automatically disable the domain"
+                    : ""}
+                  .
                 </Text>
                 {domain.dnsCheckedAt && (
                   <Text
