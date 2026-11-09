@@ -494,7 +494,14 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	trimmedTarget := strings.TrimSpace(payload.Target)
+	return s.ensureServerReview(ctx, projectID, organizationID, authCtx.UserID, authCtx.Email, payload.Target)
+}
+
+// ensureServerReview resolves or opens the dossier for a server URL in an
+// exact project. The dashboard and staff catalogue reviews both land here, so
+// there is one dossier per server per project however it was reached.
+func (s *Service) ensureServerReview(ctx context.Context, projectID uuid.UUID, organizationID, actor string, actorEmail *string, target string) (*gen.ApprovalRequestSummary, error) {
+	trimmedTarget := strings.TrimSpace(target)
 	if len(trimmedTarget) > maxTargetLength {
 		return nil, oops.E(oops.CodeBadRequest, nil, "target must be at most %d characters", maxTargetLength)
 	}
@@ -541,8 +548,8 @@ func (s *Service) EnsureServerReview(ctx context.Context, payload *gen.EnsureSer
 		requesterID:     "",
 		requesterEmail:  nil,
 		note:            nil,
-		actor:           authCtx.UserID,
-		actorEmail:      authCtx.Email,
+		actor:           actor,
+		actorEmail:      actorEmail,
 	})
 }
 
@@ -928,6 +935,20 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid approval request id")
 	}
 
+	requestedBy := ""
+	var actorEmail *string
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		requestedBy = authCtx.UserID
+		actorEmail = authCtx.Email
+	}
+
+	return s.startResearch(ctx, projectID, orgID, requestID, requestedBy, actorEmail)
+}
+
+// startResearch admits one research run for an exact request after the caller
+// has passed the research gates. The dashboard and staff catalogue reviews
+// share it, including its one-run-per-request guard and audit entry.
+func (s *Service) startResearch(ctx context.Context, projectID uuid.UUID, orgID string, requestID uuid.UUID, requestedBy string, actorEmail *string) (*gen.ResearchReport, error) {
 	queries := repo.New(s.db)
 
 	// Resolved with the project id in the predicate, so a caller who learns an
@@ -942,11 +963,6 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 
 	if s.research == nil {
 		return nil, oops.E(oops.CodeUnexpected, nil, "the research runner is not available").LogError(ctx, s.logger)
-	}
-
-	requestedBy := ""
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		requestedBy = authCtx.UserID
 	}
 
 	// At most one run per request in flight: a start while one runs returns
@@ -1015,10 +1031,6 @@ func (s *Service) StartResearch(ctx context.Context, payload *gen.StartResearchP
 		return nil, oops.E(oops.CodeUnexpected, err, "error creating research report").LogError(ctx, s.logger)
 	}
 
-	var actorEmail *string
-	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
-		actorEmail = authCtx.Email
-	}
 	if err := s.audit.LogMCPApprovalRequestResearchStart(ctx, dbtx, audit.LogMCPApprovalRequestResearchStartEvent{
 		OrganizationID:   orgID,
 		ProjectID:        projectID,

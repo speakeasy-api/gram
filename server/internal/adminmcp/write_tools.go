@@ -84,6 +84,23 @@ func runWrite[Out any](ctx context.Context, r *writeRunner, authority writeAutho
 // runWriteOn applies a write on conn, for callers holding connection-scoped
 // locks such as the feature cache advisory locks. The caller releases them
 // after the write returns, so they cover any post-commit work.
+// checkLiveConnection revalidates the caller's connection under the same row
+// lock runWrite takes, then releases it. Writes whose side effect cannot run
+// inside the write transaction call it first, so a revoked or reconsented
+// connection is refused before anything is spent.
+func checkLiveConnection(ctx context.Context, r *writeRunner, authority writeAuthority) error {
+	clientRowID, connectionID, generation, err := connectionIdentity(authority)
+	if err != nil {
+		return err
+	}
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin admin MCP connection check: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	return lockActiveConnection(ctx, repo.New(tx), authority.Principal.Subject, clientRowID, connectionID, generation)
+}
+
 func runWriteOn[Out any](ctx context.Context, r *writeRunner, conn *pgxpool.Conn, authority writeAuthority, target writeTarget, apply func(ctx context.Context, tx pgx.Tx) (Out, error)) (Out, error) {
 	var zero Out
 	tx, err := conn.Begin(ctx)
@@ -300,6 +317,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		tools.writers[OperationCurateRegistryPromotionCandidate] = &catalogCurationWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationRetryRegistryPromotionDocs] = &catalogDocsRetryWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
 		tools.writers[OperationPromoteRegistryCandidate] = &catalogPromotionWriter{runner: runner, writes: writes, mutator: runtime.catalogPromotions}
+		tools.writers[OperationStartRegistryPromotionReview] = &catalogReviewWriter{runner: runner, writes: writes, starter: runtime.catalogPromotions}
 	}
 	runtime.writes = tools
 	registerWriteTools(runtime.server, tools)

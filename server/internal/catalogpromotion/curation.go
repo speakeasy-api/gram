@@ -121,11 +121,11 @@ func (s *Service) CurateTx(ctx context.Context, tx pgx.Tx, request CurationReque
 	logger := audit.NewLogger()
 	switch request.Action {
 	case "reject":
-		err = logger.LogCatalogPromotionReject(ctx, tx, audit.LogCatalogPromotionRejectEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
+		err = logger.LogCatalogPromotionReject(ctx, tx, audit.LogCatalogPromotionRejectEvent{OrganizationID: s.home.OrganizationID, ProjectID: uuid.NullUUID{UUID: s.home.ProjectID, Valid: true}, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
 	case "archive":
-		err = logger.LogCatalogPromotionArchive(ctx, tx, audit.LogCatalogPromotionArchiveEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
+		err = logger.LogCatalogPromotionArchive(ctx, tx, audit.LogCatalogPromotionArchiveEvent{OrganizationID: s.home.OrganizationID, ProjectID: uuid.NullUUID{UUID: s.home.ProjectID, Valid: true}, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
 	case "restore":
-		err = logger.LogCatalogPromotionRestore(ctx, tx, audit.LogCatalogPromotionRestoreEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
+		err = logger.LogCatalogPromotionRestore(ctx, tx, audit.LogCatalogPromotionRestoreEvent{OrganizationID: s.home.OrganizationID, ProjectID: uuid.NullUUID{UUID: s.home.ProjectID, Valid: true}, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})
 	}
 	if err != nil {
 		return Candidate{}, fmt.Errorf("audit candidate curation: %w", err)

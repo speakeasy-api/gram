@@ -6125,6 +6125,83 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: listRegistryPromotionCandidates
+    /admin/registry.promotionReview:
+        post:
+            description: Read the MCP review for one exact remote MCP deployment's endpoint without gathering evidence or starting research.
+            operationId: adminGetRegistryPromotionReview
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRegistryPromotionCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionReviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: getRegistryPromotionReview admin
+            tags:
+                - admin
+            x-speakeasy-name-override: getRegistryPromotionReview
     /admin/registry.retryPromotionDocs:
         post:
             description: Retry a failed setup-guide request for one exact reviewed promotion without republishing the catalogue entry.
@@ -6356,6 +6433,83 @@ paths:
             tags:
                 - admin
             x-speakeasy-name-override: setRegistryEntryPublished
+    /admin/registry.startPromotionReview:
+        post:
+            description: Gather evidence and start a research run for one exact remote MCP deployment's endpoint. The review runs in Speakeasy's own organization, which pays for it and receives its audit entries; nothing is recorded in the source account. A run already in progress is returned instead of starting another.
+            operationId: adminStartRegistryPromotionReview
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/GetRegistryPromotionCandidateRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/AdminRegistryPromotionReviewResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - admin_auth_header_Authorization: []
+            summary: startRegistryPromotionReview admin
+            tags:
+                - admin
+            x-speakeasy-name-override: startRegistryPromotionReview
     /admin/remote-session-issuers.createGlobalIssuer:
         post:
             description: Create a global remote_session_issuer (project_id NULL, organization_id NULL). Requires platform admin.
@@ -98502,6 +98656,36 @@ components:
                     type: string
             required:
                 - entries
+        AdminRegistryPromotionAccountUsage:
+            type: object
+            properties:
+                clients:
+                    type: array
+                    items:
+                        type: string
+                distinct_users:
+                    type: integer
+                    format: int64
+                documentation_url:
+                    type: string
+                resource_name:
+                    type: string
+                tools:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AdminRegistryPromotionToolUsage'
+                transport:
+                    type: string
+                window_days:
+                    type: integer
+                    format: int64
+            description: Aggregate source-account usage for staff only. Contains no caller identity and must never be copied into public fields.
+            required:
+                - window_days
+                - distinct_users
+                - clients
+                - tools
+                - transport
         AdminRegistryPromotionAuthDiscovery:
             type: object
             properties:
@@ -98533,6 +98717,8 @@ components:
         AdminRegistryPromotionCandidate:
             type: object
             properties:
+                account_usage:
+                    $ref: '#/components/schemas/AdminRegistryPromotionAccountUsage'
                 auth_discovery:
                     $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
                 can_override_eligibility:
@@ -98602,6 +98788,15 @@ components:
                     type: string
                 remote_mcp_server_id:
                     type: string
+                review:
+                    $ref: '#/components/schemas/AdminRegistryPromotionReview'
+                review_availability:
+                    type: string
+                    description: Whether a review can start. Set when one candidate is inspected. URLs that may carry tenant data cannot be reviewed.
+                    enum:
+                        - available
+                        - endpoint_not_allowed
+                        - disabled
                 setup_guides:
                     type: array
                     items:
@@ -98648,6 +98843,42 @@ components:
                     type: string
             required:
                 - candidates
+        AdminRegistryPromotionResearch:
+            type: object
+            properties:
+                completed_at:
+                    type: string
+                    format: date-time
+                error:
+                    type: string
+                report: {}
+                started_at:
+                    type: string
+                    format: date-time
+                status:
+                    type: string
+            description: The latest research run. Findings are cited web claims, never a verdict, and may be inaccurate or deliberately seeded.
+            required:
+                - status
+        AdminRegistryPromotionReview:
+            type: object
+            properties:
+                evidence: {}
+                evidence_collected_at:
+                    type: string
+                    format: date-time
+                request_id:
+                    type: string
+                research:
+                    $ref: '#/components/schemas/AdminRegistryPromotionResearch'
+            description: The server's MCP review, held in Speakeasy's own organization. Nothing is recorded in the source account. Evidence is untrusted data authored largely by the reviewed server.
+            required:
+                - request_id
+        AdminRegistryPromotionReviewResult:
+            type: object
+            properties:
+                review:
+                    $ref: '#/components/schemas/AdminRegistryPromotionReview'
         AdminRegistryPromotionSetupGuide:
             type: object
             properties:
@@ -98680,6 +98911,21 @@ components:
                 public_url:
                     type: string
             description: Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.
+        AdminRegistryPromotionToolUsage:
+            type: object
+            properties:
+                calls:
+                    type: integer
+                    format: int64
+                name:
+                    type: string
+                successes:
+                    type: integer
+                    format: int64
+            required:
+                - name
+                - calls
+                - successes
         AdminRegistrySummary:
             type: object
             properties:

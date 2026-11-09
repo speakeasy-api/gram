@@ -7,6 +7,10 @@ import (
 	"encoding/csv"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/catalogpromotion"
+	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -1850,4 +1854,44 @@ func issuerKeySweeper(provisioner *identityproviderconnections.Provisioner) back
 		return nil
 	}
 	return provisioner
+}
+
+// resolveCatalogReviewHome reads the Speakeasy-owned project that holds catalogue
+// promotion reviews. Production defaults to Speakeasy's own organization. Other
+// environments have their own organizations, so reviews stay off there until
+// both values are set.
+func resolveCatalogReviewHome(environment, organizationID, projectID string) (catalogpromotion.Home, bool, error) {
+	if organizationID == "" && projectID == "" {
+		if environment != "prod" {
+			return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, nil
+		}
+		organizationID, projectID = constants.SpeakeasyTeamOrganizationID, constants.SpeakeasyTeamDefaultProjectID
+	}
+	if strings.TrimSpace(organizationID) == "" {
+		return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, errors.New("catalog review organization id is required with a project id")
+	}
+	project, err := uuid.Parse(projectID)
+	if err != nil {
+		return catalogpromotion.Home{OrganizationID: "", ProjectID: uuid.Nil}, false, fmt.Errorf("invalid catalog review project id: %w", err)
+	}
+	return catalogpromotion.Home{OrganizationID: organizationID, ProjectID: project}, true, nil
+}
+
+// mcpApprovalResearchStarter enqueues research runs on the shared workflow.
+func mcpApprovalResearchStarter(temporalEnv *temporal.Environment) mcpapproval.ResearchStarter {
+	if temporalEnv == nil {
+		return nil
+	}
+	return func(ctx context.Context, run mcpapproval.ResearchRun) error {
+		_, err := background.ExecuteMcpResearchWorkflow(ctx, temporalEnv, activities.McpResearchInput{
+			ReportID:  run.ReportID,
+			RequestID: run.RequestID,
+			ProjectID: run.ProjectID,
+			OrgID:     run.OrgID,
+		})
+		if err != nil {
+			return fmt.Errorf("execute research workflow: %w", err)
+		}
+		return nil
+	}
 }
