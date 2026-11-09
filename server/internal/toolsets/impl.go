@@ -783,8 +783,8 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	if err := s.authz.Require(
 		ctx,
-		authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil},
-		authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: originalToolset.ID.String(), Dimensions: nil},
+		authz.MCPCheck(authz.ScopeMCPWrite, authCtx.ProjectID.String(), authCtx.ProjectID.String()),
+		authz.MCPCheck(authz.ScopeMCPRead, originalToolset.ID.String(), authCtx.ProjectID.String()),
 	); err != nil {
 		return nil, err
 	}

@@ -159,6 +159,62 @@ func TestToolsets_RBAC_CloneToolset_DeniedWithProjectWriteButNoSourceRead(t *tes
 	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
 }
 
+func projectBoundMCPGrant(scope authz.Scope, projectID string) authz.Grant {
+	return authz.Grant{Scope: scope, Selector: authz.Selector{
+		authz.SelectorKeyResourceKind: authz.ResourceKindMCP,
+		authz.SelectorKeyResourceID:   authz.WildcardResource,
+		authz.SelectorKeyProjectID:    projectID,
+	}}
+}
+
+func TestToolsets_RBAC_CloneToolset_DeniedWithGrantsBoundToAnotherProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-other-project-test")
+
+	otherProjectID := uuid.NewString()
+	ctx = authztest.WithExactGrants(t, ctx,
+		projectBoundMCPGrant(authz.ScopeMCPWrite, otherProjectID),
+		projectBoundMCPGrant(authz.ScopeMCPRead, otherProjectID),
+	)
+
+	_, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+	})
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeForbidden, oopsErr.Code)
+}
+
+func TestToolsets_RBAC_CloneToolset_AllowedWithGrantsBoundToItsProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestToolsetsService(t)
+	toolset := createMinimalPrivateToolset(t, ctx, ti, "rbac-clone-own-project-test")
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	ctx = authztest.WithExactGrants(t, ctx,
+		projectBoundMCPGrant(authz.ScopeMCPWrite, authCtx.ProjectID.String()),
+		projectBoundMCPGrant(authz.ScopeMCPRead, authCtx.ProjectID.String()),
+	)
+
+	cloned, err := ti.service.CloneToolset(ctx, &gen.CloneToolsetPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Slug:             toolset.Slug,
+	})
+	require.NoError(t, err)
+	require.NotEqual(t, toolset.ID, cloned.ID)
+}
+
 func TestToolsets_RBAC_WriteOps_DeniedWithNoGrants(t *testing.T) {
 	t.Parallel()
 
