@@ -1,6 +1,11 @@
 package remotemcp
 
-import "time"
+import (
+	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+)
 
 // SetBeforeClaim runs f between the claim's list and re-read, inside the locked update transaction.
 func (s *Service) SetBeforeClaim(f func(holderPID uint32, previousURL string)) { s.beforeClaim = f }
@@ -24,4 +29,12 @@ func (f *ProxyManager) SetAfterProtectedResourceProbe(fn func()) {
 // SetProtectedResourceProbeClock replaces the clock the on-use probe reads.
 func (f *ProxyManager) SetProtectedResourceProbeClock(now func() time.Time) {
 	f.protectedResources.SetClock(now)
+}
+
+// InstallConnections has p send upstreamAuth and record its failures the way a direct server's proxy does.
+func InstallConnections(p *proxy.Proxy, attribution ConnectionAttribution, recorder *mcpconnectionattempts.Recorder, upstreamAuth string) {
+	connections := newRequestConnections(&attribution, recorder, proxy.ServerIdentity{}, p.RemoteURL, upstreamAuth, nil)
+	p.AuthorizationOverride = upstreamAuth
+	p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+	p.RequestFailureInterceptors = connections.requestFailures()
 }
