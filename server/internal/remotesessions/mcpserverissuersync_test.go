@@ -302,8 +302,6 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 	})
 }
 
-// The read DeleteRemoteSessionClient takes before its purge: the tenancy has
-// to live in the query, since an unowned client must yield nothing.
 func associateClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, clientID uuid.UUID) {
 	t.Helper()
 	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
@@ -412,6 +410,8 @@ func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
 	})
 }
 
+// The read DeleteRemoteSessionClient takes before its purge: the tenancy has
+// to live in the query, since an unowned client must yield nothing.
 func TestListUserSessionIssuersBoundToProjectClient_Scoping(t *testing.T) {
 	t.Parallel()
 
