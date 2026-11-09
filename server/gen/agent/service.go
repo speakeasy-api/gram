@@ -50,6 +50,15 @@ type Service interface {
 	// Consider [goa.design/goa/v3/pkg.SkipResponseWriter] to adapt existing
 	// implementations.
 	GetClaudeObservabilityPlugin(context.Context, *GetClaudeObservabilityPluginPayload) (res *GetClaudeObservabilityPluginResult, body io.ReadCloser, err error)
+	// Report whether the enrolled user should be offered the Claude observability
+	// plugin download, and whether the plugin they uploaded is sending events.
+	// available is false when the organization has no observability plugin, or has
+	// turned observability off. key_created_at is when the user's live plugin key
+	// was minted by their latest download, and key_last_used_at when hooks last
+	// authenticated with it (recorded at most once a minute); both are absent when
+	// the user has no live key. Mints and revokes nothing. Authenticates like
+	// getClaudeObservabilityPlugin: a per-user key only.
+	GetClaudeObservabilityPluginStatus(context.Context, *GetClaudeObservabilityPluginStatusPayload) (res *GetClaudeObservabilityPluginStatusResult, err error)
 	// Hide an MCP server for the enrolled user, the same preference the gateway
 	// consent page's Hide sets. Gateways leave a hidden server out of the user's
 	// tools, and getMyConnections reports it as hidden. Only servers
@@ -177,7 +186,7 @@ const ServiceName = "agent"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [17]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
+var MethodNames = [18]string{"getPlugins", "getMyConnections", "getClaudeObservabilityPlugin", "getClaudeObservabilityPluginStatus", "hideMcpServer", "unhideMcpServer", "listSyncedUsers", "getConfiguration", "updateConfiguration", "listAiScanTargets", "upsertAiScanTarget", "deleteAiScanTarget", "getSessionMeta", "reportSessionMoved", "reportAIScan", "reportState", "reportCrash", "createSessionHandoff"}
 
 // One AI detection target a device-agent scan matched.
 type AIScanMatch struct {
@@ -622,6 +631,23 @@ type GetClaudeObservabilityPluginPayload struct {
 type GetClaudeObservabilityPluginResult struct {
 	ContentType        string
 	ContentDisposition string
+}
+
+// GetClaudeObservabilityPluginStatusPayload is the payload type of the agent
+// service getClaudeObservabilityPluginStatus method.
+type GetClaudeObservabilityPluginStatusPayload struct {
+	ApikeyToken *string
+}
+
+// GetClaudeObservabilityPluginStatusResult is the result type of the agent
+// service getClaudeObservabilityPluginStatus method.
+type GetClaudeObservabilityPluginStatusResult struct {
+	// Whether the organization offers the Claude observability plugin.
+	Available bool
+	// When the user's live plugin key was minted.
+	KeyCreatedAt *string
+	// When hooks last authenticated with the user's live plugin key.
+	KeyLastUsedAt *string
 }
 
 // GetConfigurationPayload is the payload type of the agent service

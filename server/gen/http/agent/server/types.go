@@ -202,6 +202,17 @@ type GetMyConnectionsResponseBody struct {
 	Servers []*AgentServerConnectionResponseBody `form:"servers" json:"servers" xml:"servers"`
 }
 
+// GetClaudeObservabilityPluginStatusResponseBody is the type of the "agent"
+// service "getClaudeObservabilityPluginStatus" endpoint HTTP response body.
+type GetClaudeObservabilityPluginStatusResponseBody struct {
+	// Whether the organization offers the Claude observability plugin.
+	Available bool `form:"available" json:"available" xml:"available"`
+	// When the user's live plugin key was minted.
+	KeyCreatedAt *string `form:"key_created_at,omitempty" json:"key_created_at,omitempty" xml:"key_created_at,omitempty"`
+	// When hooks last authenticated with the user's live plugin key.
+	KeyLastUsedAt *string `form:"key_last_used_at,omitempty" json:"key_last_used_at,omitempty" xml:"key_last_used_at,omitempty"`
+}
+
 // ListSyncedUsersResponseBody is the type of the "agent" service
 // "listSyncedUsers" endpoint HTTP response body.
 type ListSyncedUsersResponseBody struct {
@@ -849,6 +860,196 @@ type GetClaudeObservabilityPluginUnexpectedResponseBody struct {
 // "agent" service "getClaudeObservabilityPlugin" endpoint HTTP response body
 // for the "gateway_error" error.
 type GetClaudeObservabilityPluginGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusUnauthorizedResponseBody is the type of
+// the "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP
+// response body for the "unauthorized" error.
+type GetClaudeObservabilityPluginStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusForbiddenResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "forbidden" error.
+type GetClaudeObservabilityPluginStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusBadRequestResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "bad_request" error.
+type GetClaudeObservabilityPluginStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusNotFoundResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "not_found" error.
+type GetClaudeObservabilityPluginStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusConflictResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "conflict" error.
+type GetClaudeObservabilityPluginStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody is the type
+// of the "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP
+// response body for the "unsupported_media" error.
+type GetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusInvalidResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "invalid" error.
+type GetClaudeObservabilityPluginStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusInvariantViolationResponseBody is the type
+// of the "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP
+// response body for the "invariant_violation" error.
+type GetClaudeObservabilityPluginStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusUnexpectedResponseBody is the type of the
+// "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP response
+// body for the "unexpected" error.
+type GetClaudeObservabilityPluginStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetClaudeObservabilityPluginStatusGatewayErrorResponseBody is the type of
+// the "agent" service "getClaudeObservabilityPluginStatus" endpoint HTTP
+// response body for the "gateway_error" error.
+type GetClaudeObservabilityPluginStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -3948,6 +4149,18 @@ func NewGetMyConnectionsResponseBody(res *agent.GetMyConnectionsResult) *GetMyCo
 	return body
 }
 
+// NewGetClaudeObservabilityPluginStatusResponseBody builds the HTTP response
+// body from the result of the "getClaudeObservabilityPluginStatus" endpoint of
+// the "agent" service.
+func NewGetClaudeObservabilityPluginStatusResponseBody(res *agent.GetClaudeObservabilityPluginStatusResult) *GetClaudeObservabilityPluginStatusResponseBody {
+	body := &GetClaudeObservabilityPluginStatusResponseBody{
+		Available:     res.Available,
+		KeyCreatedAt:  res.KeyCreatedAt,
+		KeyLastUsedAt: res.KeyLastUsedAt,
+	}
+	return body
+}
+
 // NewListSyncedUsersResponseBody builds the HTTP response body from the result
 // of the "listSyncedUsers" endpoint of the "agent" service.
 func NewListSyncedUsersResponseBody(res *agent.ListSyncedUsersResult) *ListSyncedUsersResponseBody {
@@ -4521,6 +4734,156 @@ func NewGetClaudeObservabilityPluginUnexpectedResponseBody(res *goa.ServiceError
 // of the "agent" service.
 func NewGetClaudeObservabilityPluginGatewayErrorResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginGatewayErrorResponseBody {
 	body := &GetClaudeObservabilityPluginGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusUnauthorizedResponseBody builds the
+// HTTP response body from the result of the
+// "getClaudeObservabilityPluginStatus" endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusUnauthorizedResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusUnauthorizedResponseBody {
+	body := &GetClaudeObservabilityPluginStatusUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusForbiddenResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusForbiddenResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusForbiddenResponseBody {
+	body := &GetClaudeObservabilityPluginStatusForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusBadRequestResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusBadRequestResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusBadRequestResponseBody {
+	body := &GetClaudeObservabilityPluginStatusBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusNotFoundResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusNotFoundResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusNotFoundResponseBody {
+	body := &GetClaudeObservabilityPluginStatusNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusConflictResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusConflictResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusConflictResponseBody {
+	body := &GetClaudeObservabilityPluginStatusConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody builds the
+// HTTP response body from the result of the
+// "getClaudeObservabilityPluginStatus" endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody {
+	body := &GetClaudeObservabilityPluginStatusUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusInvalidResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusInvalidResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusInvalidResponseBody {
+	body := &GetClaudeObservabilityPluginStatusInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusInvariantViolationResponseBody builds
+// the HTTP response body from the result of the
+// "getClaudeObservabilityPluginStatus" endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusInvariantViolationResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusInvariantViolationResponseBody {
+	body := &GetClaudeObservabilityPluginStatusInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getClaudeObservabilityPluginStatus"
+// endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusUnexpectedResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusUnexpectedResponseBody {
+	body := &GetClaudeObservabilityPluginStatusUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetClaudeObservabilityPluginStatusGatewayErrorResponseBody builds the
+// HTTP response body from the result of the
+// "getClaudeObservabilityPluginStatus" endpoint of the "agent" service.
+func NewGetClaudeObservabilityPluginStatusGatewayErrorResponseBody(res *goa.ServiceError) *GetClaudeObservabilityPluginStatusGatewayErrorResponseBody {
+	body := &GetClaudeObservabilityPluginStatusGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -6543,6 +6906,15 @@ func NewGetMyConnectionsPayload(apikeyToken *string, email *string) *agent.GetMy
 // getClaudeObservabilityPlugin endpoint payload.
 func NewGetClaudeObservabilityPluginPayload(apikeyToken *string) *agent.GetClaudeObservabilityPluginPayload {
 	v := &agent.GetClaudeObservabilityPluginPayload{}
+	v.ApikeyToken = apikeyToken
+
+	return v
+}
+
+// NewGetClaudeObservabilityPluginStatusPayload builds a agent service
+// getClaudeObservabilityPluginStatus endpoint payload.
+func NewGetClaudeObservabilityPluginStatusPayload(apikeyToken *string) *agent.GetClaudeObservabilityPluginStatusPayload {
+	v := &agent.GetClaudeObservabilityPluginStatusPayload{}
 	v.ApikeyToken = apikeyToken
 
 	return v
