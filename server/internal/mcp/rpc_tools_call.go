@@ -658,16 +658,25 @@ func handleToolsCall(
 	}
 
 	if plan.Kind == gateway.ToolKindHTTP {
-		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, plan.HTTP, toolCallEnv, payload.mcpEnvVariables, payload.oauthTokenInputs)
+		payload.upstreamRejection = httpToolRejectionHappened(rw.statusCode, rw.headers, plan.HTTP, toolCallEnv, payload.mcpEnvVariables, payload.oauthTokenInputs)
 	}
 	return bs, nil
 }
 
 // httpToolRejectionHappened says who fixes an HTTP tool call its provider answered with 401 or 403.
 // The zero code means there is nothing to record.
-func httpToolRejectionHappened(status int, plan *gateway.HTTPToolCallPlan, env toolconfig.ToolCallEnv, callerVariables map[string]string, tokens []oauthTokenInputs) mcpconnectionattempts.Code {
+func httpToolRejectionHappened(status int, headers http.Header, plan *gateway.HTTPToolCallPlan, env toolconfig.ToolCallEnv, callerVariables map[string]string, tokens []oauthTokenInputs) mcpconnectionattempts.Code {
 	if plan == nil || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
 		return mcpconnectionattempts.Code{}
+	}
+	// The proxy wrote this 401 itself because it could not get a client credentials token.
+	switch gateway.ClientGrantFailure(headers.Get(gateway.ClientGrantFailureHeader)) {
+	case gateway.ClientGrantRejected:
+		return mcpconnectionattempts.CodeSharedCredentialRejected
+	case gateway.ClientGrantUnavailable:
+		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+	case gateway.ClientGrantBlocked, gateway.ClientGrantMisconfigured:
+		return mcpconnectionattempts.CodeCredentialMisconfigured
 	}
 	code, _ := remotemcp.UpstreamFailureHappened(status, httpToolCredentialSent(plan, env, callerVariables, tokens), false, "")
 	return code

@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -154,6 +155,9 @@ func processSecurity(
 					if err != nil {
 						logger.ErrorContext(ctx, "could not process client credentials", attr.SlogError(err))
 						if strings.Contains(err.Error(), "failed to make client credentials token request") {
+							if failure, ok := errors.AsType[*clientCredentialsError](err); ok {
+								w.Header().Set(ClientGrantFailureHeader, string(failure.failure))
+							}
 							w.Header().Set("Content-Type", "application/json")
 							w.WriteHeader(http.StatusUnauthorized)
 							if responseStatusCodeCapture != nil {
@@ -332,7 +336,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	client.Timeout = 10 * time.Second
 	resp, err := client.Do(tokenReq)
 	if err != nil {
-		return "", fmt.Errorf("failed to make client credentials token request: %w", err)
+		return "", &clientCredentialsError{failure: clientCredentialsTransportFailure(err), err: fmt.Errorf("failed to make client credentials token request: %w", err)}
 	}
 	defer func() {
 		if closeErr := resp.Body.Close(); closeErr != nil {
@@ -352,7 +356,7 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 
 			retryResp, retryErr := retryTokenRequestWithBasicAuth(ctx, client, tokenURL, clientID, clientSecret, requestedScopes)
 			if retryErr != nil {
-				return "", fmt.Errorf("failed to make client credentials token request: %w", retryErr)
+				return "", &clientCredentialsError{failure: clientCredentialsTransportFailure(retryErr), err: fmt.Errorf("failed to make client credentials token request: %w", retryErr)}
 			}
 
 			resp = retryResp
@@ -362,10 +366,10 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 		if resp.StatusCode != http.StatusOK {
 			bodyBytes, err := io.ReadAll(resp.Body)
 			if err != nil {
-				return "", fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)
+				return "", &clientCredentialsError{failure: ClientGrantUnavailable, err: fmt.Errorf("failed to make client credentials token request: status %d, failed to read response body: %w", resp.StatusCode, err)}
 			}
 
-			return "", fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))
+			return "", &clientCredentialsError{failure: clientCredentialsStatusFailure(resp.StatusCode), err: fmt.Errorf("failed to make client credentials token request: status %d, response: %s", resp.StatusCode, string(bodyBytes))}
 		}
 	}
 
@@ -395,6 +399,54 @@ func processClientCredentials(ctx context.Context, logger *slog.Logger, guardian
 	}
 
 	return accessToken, nil
+}
+
+// ClientGrantFailureHeader marks the 401 the proxy writes itself when its client
+// credentials token request fails. Its value is a [ClientGrantFailure].
+const ClientGrantFailureHeader = "X-Gram-Client-Grant-Failure"
+
+// ClientGrantFailure is why a client credentials token request failed.
+type ClientGrantFailure string
+
+const (
+	// ClientGrantRejected means the token endpoint refused the client (400, 401 or 403).
+	ClientGrantRejected ClientGrantFailure = "rejected"
+
+	// ClientGrantUnavailable means the token endpoint was unreachable, timed out, or answered 429 or 5xx.
+	ClientGrantUnavailable ClientGrantFailure = "unavailable"
+
+	// ClientGrantBlocked means the token URL resolves to an address Speakeasy may not call.
+	ClientGrantBlocked ClientGrantFailure = "blocked"
+
+	// ClientGrantMisconfigured means the token endpoint gave any other answer.
+	ClientGrantMisconfigured ClientGrantFailure = "misconfigured"
+)
+
+// clientCredentialsError carries why a token request failed without changing its message.
+type clientCredentialsError struct {
+	failure ClientGrantFailure
+	err     error
+}
+
+func (e *clientCredentialsError) Error() string { return e.err.Error() }
+
+func (e *clientCredentialsError) Unwrap() error { return e.err }
+
+func clientCredentialsTransportFailure(err error) ClientGrantFailure {
+	if errors.Is(err, guardian.ErrBlockedIP) {
+		return ClientGrantBlocked
+	}
+	return ClientGrantUnavailable
+}
+
+func clientCredentialsStatusFailure(status int) ClientGrantFailure {
+	switch {
+	case status == http.StatusBadRequest || status == http.StatusUnauthorized || status == http.StatusForbidden:
+		return ClientGrantRejected
+	case status == http.StatusTooManyRequests || status >= http.StatusInternalServerError:
+		return ClientGrantUnavailable
+	}
+	return ClientGrantMisconfigured
 }
 
 // Technically the OAuth spec does expect snake_case field names in the response but we will be generous to mistakes and try with camelCase

@@ -372,7 +372,9 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	if err == nil && inputs.upstreamRejection != (mcpconnectionattempts.Code{}) {
+	// An anonymous caller's rejected bearer says nothing about a person's access.
+	anonymousRejection := inputs.upstreamRejection == mcpconnectionattempts.CodeProviderRejected && gate.resolvedSubject(ctx) == nil
+	if err == nil && inputs.upstreamRejection != (mcpconnectionattempts.Code{}) && !anonymousRejection {
 		s.recordMemberFailure(ctx, gate, member, inputs.upstreamRejection)
 	}
 	if err != nil {
