@@ -702,6 +702,9 @@ func (tp *ToolProxy) doHTTP(
 	if toolCallBody.EnvironmentVariables != nil {
 		for k, v := range toolCallBody.EnvironmentVariables {
 			env.UserConfig.Set(k, v)
+			if env.Credentials != nil {
+				env.Credentials.CallerVariables = append(env.Credentials.CallerVariables, k)
+			}
 		}
 	}
 

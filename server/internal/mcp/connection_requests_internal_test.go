@@ -622,6 +622,7 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		status  int
 		sent    []toolconfig.AppliedCredential
 		failure toolconfig.ClientGrantFailure
+		callers []string
 		want    mcpconnectionattempts.Code
 		who     mcpconnectionattempts.WhoFixes
 	}{
@@ -639,6 +640,9 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		{name: "caller's client secret rejected upstream", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(user("CALLER_SECRET"))}, want: none},
 		{name: "caller's access token", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_ACCESS_TOKEN")}, want: none},
 		{name: "caller's own key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("CALLER_KEY")}, want: none},
+		{name: "tool call arguments override a saved key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, callers: []string{"environment_key"}, want: none},
+		{name: "tool call arguments override a sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, callers: []string{"PERSON_ACCESS_TOKEN"}, want: none},
+		{name: "tool call arguments override another variable", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, callers: []string{"REGION"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "no credential", status: http.StatusUnauthorized, want: none},
 		{name: "served", status: http.StatusOK, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
 		{name: "not found", status: http.StatusNotFound, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
@@ -648,7 +652,7 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Sent: tc.sent, GrantFailure: tc.failure}, sources)
+			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Sent: tc.sent, GrantFailure: tc.failure, CallerVariables: tc.callers}, sources)
 			require.Equal(t, tc.want, got)
 			if tc.want == none {
 				return

@@ -3178,3 +3178,70 @@ func TestToolProxy_Do_FunctionTool_AuthInputNilNotSent(t *testing.T) {
 	// Verify the auth input variable was NOT sent when AuthInput is nil
 	require.NotContains(t, capturedEnvironment, "OAUTH_TOKEN")
 }
+
+func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
+	t.Parallel()
+
+	var sentKey string
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sentKey = r.Header.Get("X-API-Key")
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer mockServer.Close()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:     "TEST_SERVER_URL",
+		DefaultServerUrl: NullString{Value: mockServer.URL, Valid: true},
+		Security: []*HTTPToolSecurity{
+			{
+				Type:         NullString{Value: "apiKey", Valid: true},
+				Scheme:       NullString{Value: "apiKey", Valid: true},
+				Name:         NullString{Value: "X-API-Key", Valid: true},
+				Placement:    NullString{Value: "header", Valid: true},
+				EnvVariables: []string{"API_KEY"},
+			},
+		},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+
+	bodyBytes, err := json.Marshal(ToolCallBody{
+		PathParameters:       nil,
+		QueryParameters:      nil,
+		HeaderParameters:     nil,
+		Body:                 nil,
+		ResponseFilter:       nil,
+		EnvironmentVariables: map[string]string{"api_key": "argument-key"},
+		GramRequestSummary:   "",
+	})
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(logger, tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceDirect, testenv.NewEncryptionClient(t), nil, policy, funcs, nil, nil)
+
+	userConfig := toolconfig.NewCaseInsensitiveEnv()
+	userConfig.Set("API_KEY", "saved-key")
+	report := &toolconfig.CredentialReport{}
+
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.NewCaseInsensitiveEnv(),
+		UserConfig:  userConfig,
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	require.Equal(t, "argument-key", sentKey)
+	require.Equal(t, []string{"api_key"}, report.CallerVariables)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false}}, report.Sent)
+}

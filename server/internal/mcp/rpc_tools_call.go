@@ -305,8 +305,9 @@ func handleToolsCall(
 		GramChatID: payload.chatID,
 		MCPClient:  clientIdentity,
 		Credentials: &toolconfig.CredentialReport{
-			Sent:         nil,
-			GrantFailure: "",
+			Sent:            nil,
+			GrantFailure:    "",
+			CallerVariables: nil,
 		},
 	}
 
@@ -692,6 +693,11 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 		return none
 	}
 	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
+		if !credential.System && slices.ContainsFunc(report.CallerVariables, func(variable string) bool {
+			return strings.EqualFold(variable, credential.Variable)
+		}) {
+			return credentialSourceCaller
+		}
 		if source, ok := sources[strings.ToLower(credential.Variable)]; ok && !credential.System {
 			return source
 		}
