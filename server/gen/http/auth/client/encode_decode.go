@@ -319,6 +319,24 @@ func EncodeLoginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.
 		if p.SupportHandoff != nil {
 			values.Add("support_handoff", *p.SupportHandoff)
 		}
+		if p.UtmSource != nil {
+			values.Add("utm_source", *p.UtmSource)
+		}
+		if p.UtmMedium != nil {
+			values.Add("utm_medium", *p.UtmMedium)
+		}
+		if p.UtmCampaign != nil {
+			values.Add("utm_campaign", *p.UtmCampaign)
+		}
+		if p.UtmTerm != nil {
+			values.Add("utm_term", *p.UtmTerm)
+		}
+		if p.UtmContent != nil {
+			values.Add("utm_content", *p.UtmContent)
+		}
+		if p.AnalyticsSessionID != nil {
+			values.Add("analytics_session_id", *p.AnalyticsSessionID)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

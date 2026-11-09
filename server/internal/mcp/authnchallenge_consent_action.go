@@ -94,8 +94,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -285,13 +284,17 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errRemoteSessionNoUsableCredential):
-			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			notice := ""
+			if kind := noUsableCredentialNotice(ctx, err); kind != verifyNoticeSignIn {
+				notice = "&validate_notice=" + url.QueryEscape(string(kind))
+			}
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String())+notice, http.StatusSeeOther)
 			return nil
 		case errors.Is(err, errValidationUnfinished):
 			http.Redirect(w, r, backURL+"&validate_unfinished="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
-			return err
+			return checkFailureBrowserError(ctx, err)
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil

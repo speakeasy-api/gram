@@ -435,6 +435,44 @@ func TestRegistrationServiceReturnsDashboardSetupURLForDirectRemote(t *testing.T
 	require.Equal(t, 1, store.resolveCalls)
 }
 
+func TestRegistrationServiceDashboardSetupURLNamesTheOpenStep(t *testing.T) {
+	t.Parallel()
+
+	const settings = "https://localhost:5173/organization/projects/project/mcp/server%20route/settings"
+	cases := []struct {
+		nextAction string
+		want       string
+	}{
+		{nextAction: nextActionSecureDashboardSetup, want: settings + "?setup=credentials#authentication"},
+		{nextAction: nextActionContinueDashboardSetup, want: settings + "?setup=oauth-client#authentication"},
+		{nextAction: nextActionConnectSignIn, want: settings + "?setup=sign-in#authentication"},
+		{nextAction: nextActionReady, want: settings + "#authentication"},
+		{nextAction: nextActionStartSetup, want: settings + "#authentication"},
+		{nextAction: "", want: settings + "#authentication"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.nextAction, func(t *testing.T) {
+			t.Parallel()
+
+			project := ResolvedProject{ID: uuid.New(), Slug: "project"}
+			store := &recordingRegistrationStore{
+				project:   project,
+				candidate: CatalogCandidate{ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp"},
+				dashboard: RegistrationDashboardSetup{OrganizationSlug: "organization", MCPServerRoute: "server route"},
+			}
+			service := newRegistrationService(nil, &testRegistrationGate{enabled: true}, store)
+			service.WithDashboardURL(&url.URL{Scheme: "https", Host: "localhost:5173"})
+
+			setupURL, err := service.DashboardSetupURL(t.Context(), registrationServicePrincipal(), IssueSetupHandoffInput{
+				ProjectSlug: project.Slug, RegistrationID: uuid.NewString(), ProviderKey: directRemoteProviderKey, CatalogRef: "https://remote.example.test/mcp", NextAction: tc.nextAction,
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.want, setupURL)
+		})
+	}
+}
+
 func TestRegistrationServiceBuildsInspectAuthorizationURLOnlyAfterAttachment(t *testing.T) {
 	t.Parallel()
 

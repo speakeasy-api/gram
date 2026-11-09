@@ -74,6 +74,14 @@ export type CommitServerIdentityConfigurationForm = {
    */
   registrationMethod?: RegistrationMethod | undefined;
   /**
+   * Replace the selected provider's client already bound to the user session issuer, rather than reuse it or be refused. Everyone signed in through the old client must sign in again, on this server and every other server that uses it. The other servers move to the new client. Refused when a gateway or a server that is not directly Remote MCP-backed shares the issuer, or when a server using the client is in another project.
+   */
+  replaceClient?: boolean | undefined;
+  /**
+   * With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.
+   */
+  replaceClientServerIds?: Array<string> | undefined;
+  /**
    * Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
    */
   targetServerOnly?: boolean | undefined;
@@ -97,6 +105,8 @@ export type CommitServerIdentityConfigurationForm$Outbound = {
   mcp_server_id: string;
   provider_id?: string | undefined;
   registration_method?: string | undefined;
+  replace_client?: boolean | undefined;
+  replace_client_server_ids?: Array<string> | undefined;
   target_server_only?: boolean | undefined;
 };
 
@@ -116,6 +126,8 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
       mcpServerId: z.string(),
       providerId: z.optional(z.string()),
       registrationMethod: z.optional(RegistrationMethod$outboundSchema),
+      replaceClient: z.optional(z.boolean()),
+      replaceClientServerIds: z.optional(z.array(z.string())),
       targetServerOnly: z.optional(z.boolean()),
     }),
     z.transform((v) => {
@@ -127,6 +139,8 @@ export const CommitServerIdentityConfigurationForm$outboundSchema:
         mcpServerId: "mcp_server_id",
         providerId: "provider_id",
         registrationMethod: "registration_method",
+        replaceClient: "replace_client",
+        replaceClientServerIds: "replace_client_server_ids",
         targetServerOnly: "target_server_only",
       });
     }),

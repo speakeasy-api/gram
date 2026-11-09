@@ -91,7 +91,7 @@ func registerCatalogPromotionTools(server *mcp.Server, reader catalogPromotionRe
 	mcp.AddTool(server, &mcp.Tool{
 		Meta: nil, InputSchema: nil, OutputSchema: nil, Icons: nil,
 		Name: "get_registry_promotion_candidate", Title: "Inspect Catalogue Promotion Candidate",
-		Description: "Refresh aggregate promotion eligibility for an exact organization, project and remote MCP server. Returns current source revision, eligibility reasons, bounded advertised authentication capabilities and delivery status without source URLs or credentials. Authentication discovery is metadata evidence, not a verified connection. Use the revision to prepare_registry_promotion; staff must independently review every public field before approval.",
+		Description: "Refresh aggregate promotion eligibility for an exact organization, project and remote MCP server. Returns current source revision, eligibility reasons, bounded advertised authentication capabilities and delivery status without source URLs or credentials. Authentication discovery is metadata evidence, not a verified connection. Use the revision with promote_registry_candidate; staff must independently review every public field before promotion.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(true), Title: ""},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input CatalogPromotionTargetInput) (*mcp.CallToolResult, CatalogPromotionCandidate, error) {
 		if reader == nil || !verifiedStaff(ctx) {

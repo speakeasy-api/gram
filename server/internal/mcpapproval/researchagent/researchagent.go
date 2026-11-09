@@ -556,7 +556,6 @@ func (r *Runner) executeTool(ctx context.Context, reportID uuid.UUID, call openr
 		env := toolconfig.ToolCallEnv{
 			SystemEnv:  nil,
 			UserConfig: nil,
-			OAuthToken: "",
 			GramEmail:  "",
 			// The report id keys the fetch tool's per-run budget.
 			GramChatID: reportID.String(),

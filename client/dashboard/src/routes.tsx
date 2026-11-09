@@ -571,15 +571,22 @@ const ROUTE_STRUCTURE = {
             title: "Agent Permissions",
             url: "permissions",
           },
+          // How the agent proves who it is to Speakeasy: its keys, the
+          // platforms that sign in as it, and issuing another key the way
+          // its first one was issued.
           credentials: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
+            url: "sign-in",
+          },
+          // The sections this one was renamed from. Kept so the links and
+          // bookmarks that name them still resolve: the page itself sends
+          // the old segment on to the new one.
+          legacyCredentials: {
+            title: "Agent Sign-in",
             url: "credentials",
           },
-          // The section this one was renamed from. Kept so the links and
-          // bookmarks that name it still resolve: the page itself sends the
-          // old segment on to the new one.
           provisioning: {
-            title: "Agent Credentials",
+            title: "Agent Sign-in",
             url: "provisioning",
           },
           sessions: {
@@ -650,6 +657,13 @@ const ROUTE_STRUCTURE = {
     title: "Watchdog",
     url: "watchdog",
     icon: "radar",
+    // Layout route: renders the signal list (index) or one signal's detail.
+    subPages: {
+      signal: {
+        title: "Signal",
+        url: ":ruleId",
+      },
+    },
   },
   // Retired page: old links and bookmarks, including its drill-downs, land on
   // Watchdog.

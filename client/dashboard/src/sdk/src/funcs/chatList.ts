@@ -118,6 +118,7 @@ async function $do(
     "min_risk_score": payload?.min_risk_score,
     "offset": payload?.offset,
     "pinned": payload?.pinned,
+    "pinned_first": payload?.pinned_first,
     "search": payload?.search,
     "sort_by": payload?.sort_by,
     "sort_order": payload?.sort_order,

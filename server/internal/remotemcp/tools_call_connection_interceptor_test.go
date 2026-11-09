@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
@@ -363,6 +367,92 @@ func TestRefusalHappened(t *testing.T) {
 
 	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
 	require.False(t, ok, "a call held for approval is not an end state")
+}
+
+// unknownToolCall serves connectionToolsCall through the catalog-backed authz
+// interceptor; the upstream lists only "other", so "protected" is unknown.
+func unknownToolCall(ctx context.Context, t *testing.T, rec *mcpconnectionattemptstest.Recording, store *fakeToolCatalogStore, catalog *toolCatalogSync) {
+	t.Helper()
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Error("an unknown tool must not reach the upstream")
+	}))
+	t.Cleanup(upstream.Close)
+
+	p := newKillswitchTestProxy(t, upstream.URL, NewToolsCallKillswitchInterceptor(continueCheckpoint(), catalogTestOrgID, catalogTestServerID, testenv.NewLogger(t)), newAuthzInterceptor(t, store, catalog))
+	p.ToolsCallRefusalInterceptors = recordingConnections(rec, "token").refusals()
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	rr := httptest.NewRecorder()
+	require.NoError(t, p.Post(rr, req))
+	require.Contains(t, rr.Body.String(), errToolNotOnUpstream.Message)
+}
+
+func newUnknownToolCatalog(t *testing.T) (*fakeToolCatalogStore, *toolCatalogSync, *atomic.Int64, *sdkmetric.ManualReader) {
+	t.Helper()
+
+	store := &fakeToolCatalogStore{catalog: map[string]string{}}
+	var listings atomic.Int64
+	catalog := newCatalogSync(store, func(context.Context, *http.Request) ([]*mcp.Tool, error) {
+		listings.Add(1)
+		return []*mcp.Tool{{Name: "other", InputSchema: map[string]any{}}}, nil
+	})
+	reader := sdkmetric.NewManualReader()
+	catalog.metrics = NewProxyMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
+	now := time.Unix(1_700_000_000, 0)
+	catalog.refreshes.now = func() time.Time { return now }
+	return store, catalog, &listings, reader
+}
+
+func lookupSkippedCount(t *testing.T, reader *sdkmetric.ManualReader) int64 {
+	t.Helper()
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	var total int64
+	for _, scope := range collected.ScopeMetrics {
+		for _, m := range scope.Metrics {
+			if sum, ok := m.Data.(metricdata.Sum[int64]); ok && m.Name == instrumentToolLookupSkipped {
+				for _, point := range sum.DataPoints {
+					total += point.Value
+				}
+			}
+		}
+	}
+	return total
+}
+
+func TestToolsCallConnections_UnknownToolRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	store, catalog, listings, reader := newUnknownToolCatalog(t)
+	ctx := blockDestructiveContext(t)
+
+	unknownToolCall(ctx, t, rec, store, catalog)
+	unknownToolCall(ctx, t, rec, store, catalog)
+
+	require.EqualValues(t, 1, listings.Load(), "the repeat falls inside the caller's own cooldown")
+	rec.RequireNothing()
+	require.Zero(t, lookupSkippedCount(t, reader), "the caller's own listing confirmed the tool is absent")
+}
+
+func TestToolsCallConnections_SkippedToolLookupIsCountedNotRecorded(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	store, catalog, listings, reader := newUnknownToolCatalog(t)
+	ctx := blockDestructiveContext(t)
+	// Another key on the same stripe started the cooldown.
+	catalog.refreshes.stripe(toolCatalogRefreshKey(ctx, catalogTestServerID)).Store(&toolCatalogRefreshClaim{key: "another caller", started: catalog.refreshes.now().UnixNano()})
+
+	unknownToolCall(ctx, t, rec, store, catalog)
+
+	require.Zero(t, listings.Load())
+	rec.RequireNothing()
+	require.EqualValues(t, 1, lookupSkippedCount(t, reader))
 }
 
 func TestToolsCallConnections_PreSendFailures(t *testing.T) {

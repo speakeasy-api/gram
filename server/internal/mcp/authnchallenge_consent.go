@@ -617,8 +617,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
@@ -631,9 +630,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 
-	if challengeState.Federation != nil {
+	if challengeState.Federation != nil || browserHandoffAtOrigin(challengeState) {
 		t.Continue()
-		return s.completeFederatedBrowserHandoff(w, r, challengeState)
+		return s.completeFederatedBrowserHandoff(w, r, endpoint, challengeState)
 	}
 
 	catalogReview := challengeState.CodeReconnect.reviewReady()
@@ -679,6 +678,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	subjectDisplay := resolveSubjectDisplay(ctx, s.db, *challengeState.Subject)
+
+	if err := s.connectPendingSignIn(ctx, logger, endpoint, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return err
+	}
 
 	autoRefreshPolicy := s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID)
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, autoRefreshPolicy)
@@ -730,7 +734,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		for i := range cards {
 			// An expired or unconnected card already names its action.
 			if cards[i].ClientID == failed && cards[i].Connected {
-				cards[i].ValidationNotice = noWorkingSignInMessage
+				cards[i].ValidationNotice = verifyNoticeMessage(r.URL.Query().Get("validate_notice"))
 			}
 		}
 	}
@@ -822,12 +826,8 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if r.URL.Query().Get("consent") != "required" && len(agentOptions) == 0 &&
 		consentReuseEligible(endpoint, challengeState) && consentBrowserMatches(r, challengeState, time.Now()) &&
 		consentRemoteFingerprint(endpoint, cards) != "" {
-		eligible, eligibilityErr := s.consentToolPickerEligible(ctx, endpoint)
 		lockedDown, lockdownErr := s.customDomainLockdownApplies(ctx, logger, endpoint.ProjectID)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "saved consent eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
-		if eligible && eligibilityErr == nil && lockdownErr == nil && !lockedDown {
+		if consentToolPickerEligible(endpoint) && lockdownErr == nil && !lockedDown {
 			if _, lookupErr := usersessions_repo.New(s.db).GetUserSessionConsentResource(ctx, consentResourceParams(endpoint, challengeState, clientRowID)); lookupErr == nil {
 				t.Continue()
 				return renderConsentReuse(w, endpoint, challengeState)
@@ -914,11 +914,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
 	if (!challengeState.FirstParty || catalogReview) && focusServer == "" {
-		var eligibilityErr error
-		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
-		if eligibilityErr != nil {
-			logger.WarnContext(ctx, "consent tool picker eligibility unavailable", attr.SlogError(eligibilityErr))
-		}
+		showToolsIsland = consentToolPickerEligible(endpoint)
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
@@ -1180,8 +1176,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(r, endpoint, challengeState)
-		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
+		return s.consentBrowserError(r, endpoint, challengeState, err)
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	issuerID := endpoint.UserSessionIssuerID.String()
@@ -1361,9 +1356,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnavailable, err, "resolve selected agent identity").LogWarn(ctx, logger)
 		}
-		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
+		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, consentRefreshAttribution(r, endpoint, pickState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, endpoint.proxiedServerID()); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				t.Refuse(ctx, remotesessions.ConnectionOutageHappened(err))
+				s.refuseRemoteSessionUnavailable(ctx, t, err)
 				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
 					return fmt.Errorf("check agent connections: %w", oops.WithBrowserProvider(oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable), remotesessions.OutageProviderHost(err)))
@@ -1396,12 +1391,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 	}
 	if selectedAgentID == "" && !reuse && (r.PostForm.Get("tool_filtering") == "on" || materializeGateway) {
-		eligible, eerr := s.consentToolPickerEligible(ctx, endpoint)
-		if eerr != nil {
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
-			return oops.E(oops.CodeUnavailable, eerr, "service temporarily unavailable").LogError(ctx, logger)
-		}
-		if !eligible {
+		if !consentToolPickerEligible(endpoint) {
 			t.Continue()
 			return oops.E(oops.CodeConflict, nil, "tool filtering is not available for this endpoint").LogWarn(ctx, logger)
 		}

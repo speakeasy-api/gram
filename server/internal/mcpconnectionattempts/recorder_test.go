@@ -115,6 +115,16 @@ func (r testRecorder) dropped(t *testing.T, reason dropReason) int64 {
 	return total
 }
 
+func (r testRecorder) droppedTotal(t *testing.T) int64 {
+	t.Helper()
+
+	var total int64
+	for reason := range newDropCounters() {
+		total += r.dropped(t, reason)
+	}
+	return total
+}
+
 func clickhouseConn(t *testing.T) driver.Conn {
 	t.Helper()
 

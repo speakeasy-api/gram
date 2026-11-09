@@ -42,8 +42,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/supporthandoff"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -105,6 +106,10 @@ type Service struct {
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
 
+	// projectRedeployer redeploys projects. Nil when this server has no
+	// Temporal connection.
+	projectRedeployer ProjectRedeployer
+
 	audit *audit.Logger
 
 	trial   trialemails.Notifier
@@ -113,12 +118,10 @@ type Service struct {
 	supportCoverage SupportCoverageReader
 	mcpServerHealth MCPServerHealthReader
 
+	// scopes reads and writes remote MCP server scope pins.
+	scopes *remotemcp.StaffScopes
 	// HookClientsCache shares snapshot storage with the nightly worker.
 	*HookClientsCache
-
-	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
-	// leaves those methods unavailable.
-	externalMCPMigrator *migration.Migrator
 }
 
 type BillingOperations interface {
@@ -249,7 +252,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -269,6 +272,7 @@ func NewService(
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
 		audit:                audit.NewLogger(),
+		scopes:               remotemcp.NewStaffScopes(logger, db, audit.NewLogger()),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
 			adminCache,
@@ -279,8 +283,6 @@ func NewService(
 		supportCoverage:  supportCoverage,
 		mcpServerHealth:  mcpServerHealth,
 		HookClientsCache: NewHookClientsCache(logger, adminCache, nil, nil),
-
-		externalMCPMigrator: nil,
 	}
 }
 
@@ -501,9 +503,6 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListGlobalIssuerConvergenceCandidates = service.preauthorizeAdmin(server.ListGlobalIssuerConvergenceCandidates)
 	server.GetGlobalIssuerMigratePreflight = service.preauthorizeAdmin(server.GetGlobalIssuerMigratePreflight)
 	server.MigrateToGlobalIssuer = service.strictAdminJSON(server.MigrateToGlobalIssuer, func() any { return new(adminserver.MigrateToGlobalIssuerRequestBody) })
-	server.ListExternalMcpMigrationCandidates = service.preauthorizeAdmin(server.ListExternalMcpMigrationCandidates)
-	server.PreviewExternalMcpMigration = service.strictAdminJSON(server.PreviewExternalMcpMigration, func() any { return new(adminserver.PreviewExternalMcpMigrationRequestBody) })
-	server.MigrateExternalMcpServers = service.strictAdminJSON(server.MigrateExternalMcpServers, func() any { return new(adminserver.MigrateExternalMcpServersRequestBody) })
 	server.UploadPlatformImage = service.preauthorizeAdmin(server.UploadPlatformImage)
 	server.ListRegistryEntries = service.preauthorizeAdmin(server.ListRegistryEntries)
 	server.GetRegistryEntry = service.preauthorizeAdmin(server.GetRegistryEntry)
@@ -517,6 +516,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetRegistryEntryPublished = service.strictAdminJSON(server.SetRegistryEntryPublished, func() any { return new(adminserver.SetRegistryEntryPublishedRequestBody) })
 	server.GetSupportMatrix = service.preauthorizeAdmin(server.GetSupportMatrix)
 	server.UpdateSupportMatrix = service.strictAdminJSON(server.UpdateSupportMatrix, func() any { return new(adminserver.UpdateSupportMatrixRequestBody) })
+	server.SetMcpServerScopePin = service.strictAdminJSON(server.SetMcpServerScopePin, func() any { return new(adminserver.SetMcpServerScopePinRequestBody) })
 	server.CreateSignupOffer = service.strictAdminJSON(server.CreateSignupOffer, func() any { return new(adminserver.CreateSignupOfferRequestBody) })
 	server.UpdateSignupOffer = service.strictAdminJSON(server.UpdateSignupOffer, func() any { return new(adminserver.UpdateSignupOfferRequestBody) })
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
@@ -553,7 +553,7 @@ func (w *adminCallbackWriter) WriteHeader(status int) {
 				SameSite: http.SameSiteLaxMode,
 			}
 			location := w.Header().Get("Location")
-			if strings.HasPrefix(location, "/admin-mcp/connect?state=") || strings.HasPrefix(location, "/admin-mcp/proposals/") {
+			if strings.HasPrefix(location, "/admin-mcp/connect?state=") {
 				mcpCookie.Value = cookie.Value
 			} else {
 				mcpCookie.MaxAge = -1
@@ -828,13 +828,24 @@ func (s *Service) GetProject(ctx context.Context, payload *gen.GetProjectPayload
 		return nil, oops.C(oops.CodeNotFound)
 	}
 
-	return adminProjectDetailFromIDRow(row), nil
+	detail := adminProjectDetailFromIDRow(row)
+	activeDeploymentID, err := deploymentsrepo.New(s.db).GetActiveDeploymentID(ctx, row.ID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return nil, oops.E(oops.CodeUnexpected, err, "lookup active deployment").LogError(ctx, s.logger)
+	default:
+		detail.ActiveDeploymentID = new(activeDeploymentID.String())
+	}
+
+	return detail, nil
 }
 
 func adminProjectDetailFromIDRow(row repo.AdminGetProjectDetailByIDRow) *gen.AdminProjectDetail {
 	logo := uuidPtr(row.LogoAssetID)
 	runner := conv.FromPGText[string](row.FunctionsRunnerVersion)
 	return &gen.AdminProjectDetail{
+		ActiveDeploymentID:     nil,
 		ID:                     row.ID.String(),
 		Name:                   row.Name,
 		Slug:                   row.Slug,

@@ -24,9 +24,8 @@ interface ToolExecutionContextValue {
   isToolAvailable: (toolName: string) => boolean;
 }
 
-const ToolExecutionContext = createContext<ToolExecutionContextValue | null>(
-  null,
-);
+export const ToolExecutionContext =
+  createContext<ToolExecutionContextValue | null>(null);
 
 interface ToolExecutionProviderProps {
   children: ReactNode;

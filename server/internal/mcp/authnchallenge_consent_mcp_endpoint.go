@@ -115,11 +115,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	// 404 matches how the island's absence hides the surface entirely.
-	eligible, err := s.consentToolPickerEligible(ctx, endpoint)
-	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
-	}
-	if !eligible {
+	if !consentToolPickerEligible(endpoint) {
 		return oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger)
 	}
 	// Mixed credentials are a confusion smell: the consent transport never
@@ -187,7 +183,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeBadRequest, nil, "gateway tools are captured when the consent page loads").LogWarn(ctx, logger)
 	}
 
-	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt)
+	draft, err := s.loadConsentInventoryDraft(ctx, endpoint, stateID, attempt, reconsentConsenter(challengeState))
 	if err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
 			return oops.E(oops.CodeFailedPrecondition, err, "server configuration changed; reload this page to review access").LogWarn(ctx, logger)
@@ -422,9 +418,13 @@ func (s *Service) serveConsentProxiedMCP(
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
 	backendIssuerID := serverRow.RemoteSessionIssuerID
 	var chosenClient uuid.UUID
+	var association *remotesessions.ServerAssociationIssuer
 	switch {
 	case auth == nil:
-		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		var resolved remotesessions.ServerAccessTokens
+		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
+		tokens = resolved.Tokens
+		association = &resolved.Association
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:
@@ -468,6 +468,17 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var upstreamToken remotesessions.UpstreamToken
 	if !chain {
+		backendIssuerID = s.directUpstreamIssuer(ctx, logger, directUpstreamIssuerInput{
+			organizationID:   endpoint.OrganizationID,
+			serverID:         serverRow.ID,
+			site:             upstreamIssuerSiteConsentPreview,
+			tokens:           tokens,
+			upstreamResource: endpoint.UpstreamResource,
+			tunneled:         serverRow.TunneledMcpServerID.Valid,
+			backendIssuerID:  backendIssuerID,
+			choiceGoverns:    chosenClient != uuid.Nil,
+			association:      association,
+		})
 		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
 		var routeErr *upstreamRoutingError
 		switch {
@@ -579,7 +590,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// returns, allowing its next tools/list request to capture a page in
 		// parallel. Re-read before storing the session id so a stale initialize
 		// draft cannot overwrite that newer capture.
-		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt)
+		freshDraft, ferr := s.loadConsentInventoryDraft(ctx, endpoint, challengeState.ID, draft.Attempt, reconsentConsenter(challengeState))
 		if ferr != nil {
 			s.logger.WarnContext(ctx, "reload consent inventory before recording session id", attr.SlogError(ferr))
 		} else if freshDraft.McpSessionID == "" {

@@ -530,6 +530,17 @@ func NewResolvedMcpEndpointFromMcpServer(
 	}
 }
 
+// proxiedServerID is the MCP server this endpoint serves directly when that
+// server's upstream clients are the ones its callers need. It is invalid for a
+// gateway, and for a hosted server, whose tools dispatch through every client
+// the issuer binds.
+func (e *ResolvedMcpEndpoint) proxiedServerID() uuid.NullUUID {
+	if e.ToolsetID.Valid || e.MetaMcpServerID.Valid {
+		return uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	return e.McpServerID
+}
+
 // connectResourceID is the mcp:connect resource id: the server or meta-server
 // fronting the endpoint, else the directly addressed toolset.
 func (e *ResolvedMcpEndpoint) connectResourceID() uuid.UUID {

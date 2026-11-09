@@ -48,6 +48,9 @@ var privateRoutes = []RouteSpec{
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/mcp/{mcpSlug}"},
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/mcp/{mcpSlug}"},
 	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/mcp/{mcpSlug}"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodDelete, Path: "/mcp/{mcpSlug}/"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodGet, Path: "/mcp/{mcpSlug}/"},
+	{Surface: RouteSurfaceMCP, ID: RouteRuntime, Method: http.MethodPost, Path: "/mcp/{mcpSlug}/"},
 	{Surface: RouteSurfaceMCP, ID: RouteInstall, Method: http.MethodGet, Path: "/mcp/{mcpSlug}/install"},
 	{Surface: RouteSurfaceMCP, ID: RouteInstallScript, Method: http.MethodGet, Path: "/mcp/install-page-{hash}.js"},
 	{Surface: RouteSurfaceMCP, ID: RouteProtectedResource, Method: http.MethodGet, Path: wellknown.OAuthProtectedResourcePath + "/mcp/{mcpSlug}"},
@@ -101,8 +104,18 @@ func IsPrivateRoute(method, requestPath string) bool {
 }
 
 func isReservedGlobalPath(method, requestPath string) bool {
-	if strings.HasSuffix(requestPath, "/") || strings.Contains(requestPath, "//") || strings.Contains(requestPath, "/./") || strings.Contains(requestPath, "/../") {
+	if strings.Contains(requestPath, "//") || strings.Contains(requestPath, "/./") || strings.Contains(requestPath, "/../") {
 		return true
+	}
+
+	// Only the slug-scoped runtime accepts a trailing slash; OAuth, metadata,
+	// and agent routes retain their exact paths.
+	if strings.HasSuffix(requestPath, "/") {
+		slug, runtimePrefix := strings.CutPrefix(requestPath, "/mcp/")
+		slug = strings.TrimSuffix(slug, "/")
+		if !runtimePrefix || slug == "" || strings.Contains(slug, "/") {
+			return true
+		}
 	}
 	for _, callback := range []string{
 		"/mcp/idp_callback",

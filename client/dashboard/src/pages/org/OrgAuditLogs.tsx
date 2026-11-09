@@ -41,6 +41,8 @@ import {
   VIEW_INSIGHTS,
   VIEW_OPTIONS,
 } from "@/lib/audit-views";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
+import { scopeLabel, type ScopeCatalogue } from "@/pages/access/scopeCatalogue";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -65,6 +67,7 @@ import {
   formatSubjectLabel,
   getActorLabel,
   renderVerb,
+  sensitiveScopesAdded,
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
@@ -259,6 +262,7 @@ function AuditLogRow({
   rowRef,
   highlightMatch,
   onFilterResource,
+  catalogue,
 }: {
   log: AuditLog;
   identities: ReturnType<typeof useAuditPrincipals>;
@@ -269,12 +273,17 @@ function AuditLogRow({
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
   onFilterResource?: (log: AuditLog) => void;
+  /** Read once by the list, so every row shares the one subscription. */
+  catalogue: ScopeCatalogue;
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  // A role or membership change that gave sensitive access says so on the
+  // row, named from the catalogue, so it can be found without opening the diff.
+  const sensitiveAdded = sensitiveScopesAdded(log);
 
   const rowContent = (
     <div className="group flex items-center gap-3 px-4 py-2.5">
@@ -316,6 +325,14 @@ function AuditLogRow({
               }
             >
               via {formatActingSurfaceLabel(log.actingSurface)}
+            </span>
+          )}
+          {sensitiveAdded.length > 0 && (
+            <span className="border-warning-softest text-default-warning ml-2 border px-1.5 py-0.5 align-middle text-xs">
+              Added sensitive access:{" "}
+              {sensitiveAdded
+                .map((scope) => scopeLabel(catalogue, scope))
+                .join(", ")}
             </span>
           )}
         </span>
@@ -547,6 +564,7 @@ export default function OrgAuditLogs(): React.JSX.Element {
 function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
+  const { catalogue } = useScopeCatalogue();
   const {
     values: rawFilterValues,
     setValue: setFilterValue,
@@ -1029,7 +1047,7 @@ function OrgAuditLogsInner() {
     <ResourceListPage
       scope="org:read"
       title="Audit Logs"
-      description="Review changes to your organization's configuration, and security activity such as agents' runtimes admitting their workload identity. Filter by project, action, or actor."
+      description="Review changes to your organization's configuration, and security activity such as machine access. Filter by project, action, or actor."
     >
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />
@@ -1219,6 +1237,7 @@ function OrgAuditLogsInner() {
                             }
                             orgSlug={orgSlug ?? ""}
                             timestampMode={tsMode}
+                            catalogue={catalogue}
                             isHighlighted={idx === currentLogIndex}
                             rowRef={(el) => {
                               if (el) logRefs.current.set(idx, el);
