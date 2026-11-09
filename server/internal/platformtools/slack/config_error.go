@@ -13,7 +13,7 @@ import (
 // from the server's environment in Speakeasy merged with any the client sends
 // in its MCP headers.
 func projectAdminMust(action string) string {
-	return fmt.Sprintf("An admin of the server's project must %s in the server's environment in Speakeasy, or the client in its MCP headers.", action)
+	return fmt.Sprintf("An admin of the server's project must %s in the server's environment in Speakeasy, or the client must send it in its MCP headers.", action)
 }
 
 // slackTokenRejectedCodes are the envelope codes Slack answers with when the

@@ -720,7 +720,7 @@ func TestServeAgentGateway_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *t
 	text, isError := metaToolResultText(t, rpc)
 	require.True(t, isError, text)
 	require.Contains(t, text, fmt.Sprintf("server %q failed to execute %q: server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN).", fx.granted, "platform_slack_search_channels"))
-	require.Contains(t, text, "An admin of the server's project must add it in the server's environment in Speakeasy, or the client in its MCP headers.")
+	require.Contains(t, text, "An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.")
 }
 
 // Called directly at /mcp/{slug}, the same Slack configuration gap answers
@@ -753,5 +753,5 @@ func TestServePublic_PlatformToolMissingSlackTokenSaysWhatToConfigure(t *testing
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response), w.Body.String())
 	require.Equal(t, oops.CodeFailedPrecondition.MCPCode(), response.Error.Code)
-	require.Equal(t, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment in Speakeasy, or the client in its MCP headers.", response.Error.Message)
+	require.Equal(t, "server not configured: missing environment variable SLACK_BOT_TOKEN (or SLACK_USER_TOKEN or SLACK_TOKEN). An admin of the server's project must add it in the server's environment in Speakeasy, or the client must send it in its MCP headers.", response.Error.Message)
 }
