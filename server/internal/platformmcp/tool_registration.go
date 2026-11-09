@@ -116,7 +116,15 @@ func registerCatalogRegistrationTool(reg *Registrar, registrations *Registration
 				dashboardSetupURL = ""
 			}
 		}
-		signInURL := registrations.signInURL(ctx, principal, result.Project, result.Registration, nextAction)
+		signInURL, err := registrations.signInURL(ctx, principal, result.Project, result.Registration, nextAction)
+		if err != nil {
+			// The card falls back to the dashboard setup link; the registration
+			// itself has committed and must not be reported as failed.
+			registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			if reg.logger != nil {
+				reg.logger.ErrorContext(ctx, "platform mcp catalog registration sign-in link failed after commit", attr.SlogError(err))
+			}
+		}
 		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, nextAction, cmp.Or(signInURL, dashboardSetupURL), result.Receipt.AlreadyRegistered, "")), RegisterCatalogMCPToolOutput{
 			ProjectSlug:         result.Project.Slug,
 			ProviderKey:         result.ProviderKey,
@@ -175,7 +183,15 @@ func registerRemoteRegistrationTool(reg *Registrar, registrations *RegistrationS
 				registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
 			}
 		}
-		signInURL := registrations.signInURL(ctx, principal, result.Project, result.Registration, result.NextAction)
+		signInURL, err := registrations.signInURL(ctx, principal, result.Project, result.Registration, result.NextAction)
+		if err != nil {
+			// The card falls back to the dashboard setup link; the registration
+			// itself has committed and must not be reported as failed.
+			registrations.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: lifecycleOutcome(err), State: ""})
+			if reg.logger != nil {
+				reg.logger.ErrorContext(ctx, "platform mcp remote registration sign-in link failed after commit", attr.SlogError(err))
+			}
+		}
 		return cardResult(serverCard(result.ServerName, registrations.cardLogo(ctx, principal, result.Project, result.Registration), result.Project, result.NextAction, cmp.Or(signInURL, result.DashboardSetupURL), result.Receipt.AlreadyRegistered, result.RemoteURL)), RegisterRemoteMCPToolOutput{
 			ProjectSlug:                 result.Project.Slug,
 			CanonicalURL:                result.RemoteURL,

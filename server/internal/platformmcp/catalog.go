@@ -413,10 +413,7 @@ func stringValue(value *string) string {
 }
 
 func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) CatalogCandidate {
-	name := entry.RegistrySpecifier
-	if entry.Title != nil && *entry.Title != "" {
-		name = *entry.Title
-	}
+	name := cmp.Or(strings.TrimSpace(conv.PtrValOr(entry.Title, "")), entry.RegistrySpecifier)
 	return CatalogCandidate{
 		ProviderKey: descriptor.ProviderKey,
 		CatalogRef:  entry.RegistrySpecifier,

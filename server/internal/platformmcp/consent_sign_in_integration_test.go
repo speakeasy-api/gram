@@ -179,9 +179,9 @@ func TestConsentSignInConnectorConnectsOnlyAPendingServerForAnAdmin(t *testing.T
 	require.Equal(t, []uuid.UUID{registrationID}, h.attachment.attached())
 }
 
-// A failed connection reaches the consent page, which says so instead of
-// rendering a page with nothing to connect.
-func TestConsentSignInConnectorReportsAFailedConnection(t *testing.T) {
+// A failed connection is returned to the consent page, which then shows an
+// error instead of a page with nothing to connect (covered in package mcp).
+func TestConsentSignInConnectorReturnsAFailedConnection(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()

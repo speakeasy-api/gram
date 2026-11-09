@@ -39,7 +39,7 @@ func (s *Service) connectPendingSignIn(ctx context.Context, logger *slog.Logger,
 	}
 	if err := s.pendingSignIn.ConnectPendingSignIn(ctx, state.Subject.ID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID); err != nil {
 		logger.ErrorContext(ctx, "connect pending sign-in provider", attr.SlogError(err))
-		return oops.E(oops.CodeUnavailable, err, "Speakeasy could not connect this MCP server's sign-in. Finish setup from the MCP server's page in the dashboard.")
+		return oops.E(oops.CodeUnavailable, err, "Speakeasy could not connect this MCP server's sign-in. In the dashboard, open the MCP server's Settings and finish sign-in setup in its Authentication section.")
 	}
 	return nil
 }

@@ -89,23 +89,27 @@ func (s *RegistrationService) WithSignInConnectLinks(db *pgxpool.Pool, serverURL
 // the sign-in provider and starts the provider's sign-in. It is the card's
 // Connect button. Empty for any other step, or when the consent page cannot
 // be linked; the dashboard setup link is then the way to finish.
-func (s *RegistrationService) signInURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID, nextAction string) string {
+func (s *RegistrationService) signInURL(ctx context.Context, principal Principal, project ResolvedProject, registrationID, nextAction string) (string, error) {
 	if s == nil || s.signInLinks == nil || nextAction != nextActionConnectSignIn {
-		return ""
+		return "", nil
 	}
 	parsedID, err := uuid.Parse(registrationID)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("parse registration id for sign-in link: %w", err)
 	}
 	slug, err := platformrepo.New(s.signInLinks.db).GetPlatformMCPRegistrationConnectSlug(ctx, platformrepo.GetPlatformMCPRegistrationConnectSlugParams{
 		RegistrationID: parsedID,
 		OrganizationID: principal.OrganizationID,
 		ProjectID:      project.ID,
 	})
-	if err != nil || slug == "" {
-		return ""
+	if errors.Is(err, pgx.ErrNoRows) {
+		// A custom-domain endpoint has no platform consent page to link.
+		return "", nil
 	}
-	return signInConnectURL(s.signInLinks.serverURL, slug)
+	if err != nil {
+		return "", fmt.Errorf("load platform mcp sign-in link endpoint: %w", err)
+	}
+	return signInConnectURL(s.signInLinks.serverURL, slug), nil
 }
 
 func signInConnectURL(serverURL *url.URL, endpointSlug string) string {
