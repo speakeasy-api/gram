@@ -203,7 +203,9 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		return nil, fmt.Errorf("list remembered auth clients: %w", err)
 	}
 	for _, row := range rememberedRows {
-		remembered[row.McpServerID] = row.AuthClientID
+		if row.AuthClientID.Valid {
+			remembered[row.McpServerID] = row.AuthClientID.UUID
+		}
 	}
 
 	byServer := map[uuid.UUID][]upstreamclientsrepo.ListServerConsentAuthClientsRow{}
@@ -522,13 +524,15 @@ func (s *Service) gatewayConsentServiceChoices(ctx context.Context, r *http.Requ
 	if len(choices) == 0 {
 		return choices, nil
 	}
-	rows, err := upstreamclientsrepo.New(s.db).ListRememberedUpstreamClients(ctx, upstreamclientsrepo.ListRememberedUpstreamClientsParams{SubjectUrn: subject.String(), OrganizationID: endpoint.OrganizationID, McpServerIds: ids})
+	rows, err := upstreamclientsrepo.New(s.db).ListRememberedAuthClients(ctx, upstreamclientsrepo.ListRememberedAuthClientsParams{SubjectUrn: subject.String(), OrganizationID: endpoint.OrganizationID, McpServerIds: ids})
 	if err != nil {
 		return nil, fmt.Errorf("list remembered upstream clients: %w", err)
 	}
 	remembered := make(map[uuid.UUID]uuid.UUID, len(rows))
 	for _, row := range rows {
-		remembered[row.McpServerID] = row.RemoteSessionClientID
+		if row.RemoteSessionClientID.Valid {
+			remembered[row.McpServerID] = row.RemoteSessionClientID.UUID
+		}
 	}
 	query := r.URL.Query()
 	for _, member := range members {
