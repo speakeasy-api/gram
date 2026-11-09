@@ -43,12 +43,51 @@ type HealthState struct {
 	UnhealthySince       *time.Time
 	CertificateExpiresAt *time.Time
 	ConsecutiveFailures  int32
+
+	// DNSConfiguration is the DNS observation recorded with this state. It
+	// never changes Status; it only decides whether a certificate issue is
+	// held back from alerting while DNS does not point at Speakeasy. Empty
+	// when the state was recorded without a DNS observation.
+	DNSConfiguration DNSConfigurationStatus
 }
 
 type HealthObservation struct {
 	Status               HealthStatus
 	Issue                HealthIssue
 	CertificateExpiresAt *time.Time
+
+	// DNSConfiguration is the DNS observation made alongside this health
+	// observation.
+	DNSConfiguration DNSConfigurationStatus
+}
+
+// isAlertHeldForDNS reports whether an unhealthy issue is expected because the
+// domain's DNS does not point at Speakeasy yet. A certificate cannot issue
+// until the hostname resolves to Speakeasy, so a domain verified ahead of a
+// DNS cutover reads certificate_missing or certificate_not_ready with nothing
+// wrong on our side. The alert waits until DNS matches. A failed, missing or
+// unconfigured DNS observation cannot tell, so it does not hold the alert. A
+// proxy hides the target and always reads unconfirmed, so a proxied domain's
+// certificate alerts stay held; the dashboard still shows the issue.
+func isAlertHeldForDNS(issue HealthIssue, dns DNSConfigurationStatus) bool {
+	if issue != HealthIssueCertificateMissing && issue != HealthIssueCertificateNotReady {
+		return false
+	}
+	switch dns {
+	case DNSConfigurationWrongTarget, DNSConfigurationUnconfirmed, DNSConfigurationNotFound:
+		return true
+	default:
+		return false
+	}
+}
+
+// isAlertable reports whether a state is a customer-actionable problem that
+// warrants an unhealthy alert: not a Speakeasy-side probe failure, and not a
+// certificate issue held while DNS does not point at Speakeasy.
+func isAlertable(state HealthState) bool {
+	return state.Status == HealthStatusUnhealthy &&
+		state.Issue != HealthIssueCheckFailed &&
+		!isAlertHeldForDNS(state.Issue, state.DNSConfiguration)
 }
 
 // DNSRemediation carries what a customer needs to fix DNS-shaped health
@@ -114,16 +153,18 @@ func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
 }
 
 func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
-	// Probe failures are Speakeasy-side and not customer-actionable.
-	if next.Status != HealthStatusUnhealthy || next.Issue == HealthIssueCheckFailed {
+	// Probe failures are Speakeasy-side and not customer-actionable, and a
+	// certificate cannot issue before DNS points at Speakeasy.
+	if !isAlertable(next) {
 		return false
 	}
 	if current.Status != HealthStatusUnhealthy {
 		return true
 	}
-	// Already unhealthy: a probe-failure episode must not swallow the alert for
-	// a real, customer-actionable issue discovered by a later successful probe.
-	return current.Issue == HealthIssueCheckFailed
+	// Already unhealthy: a probe-failure episode or a held certificate issue
+	// must not swallow the alert for a customer-actionable issue found by a
+	// later check, such as a certificate still not ready once DNS matches.
+	return !isAlertable(current)
 }
 
 // IsRetryOfUnhealthyTransition reports whether the persisted state shows that
@@ -137,7 +178,7 @@ func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {
 // episode resolving into a real issue — so the retry re-emits the same
 // notification args and the activity stays idempotent.
 func IsRetryOfUnhealthyTransition(current HealthState, checkedAt time.Time) bool {
-	if current.Status != HealthStatusUnhealthy || current.Issue == HealthIssueCheckFailed {
+	if !isAlertable(current) {
 		return false
 	}
 	checkedAt = checkedAt.UTC()
@@ -158,6 +199,7 @@ func ReconcileHealthState(current HealthState, observation HealthObservation, ch
 		UnhealthySince:       nil,
 		CertificateExpiresAt: observation.CertificateExpiresAt,
 		ConsecutiveFailures:  0,
+		DNSConfiguration:     observation.DNSConfiguration,
 	}
 	if observation.Status == HealthStatusHealthy {
 		return next
@@ -168,11 +210,12 @@ func ReconcileHealthState(current HealthState, observation HealthObservation, ch
 	if current.Status == HealthStatusUnhealthy {
 		next.ConsecutiveFailures = current.ConsecutiveFailures + 1
 		next.UnhealthySince = current.UnhealthySince
-		// A probe-failure episode resolving into a real issue marks the start of
-		// the confirmed outage. Re-anchoring UnhealthySince here also lets
+		// A probe-failure episode resolving into a real issue, or a held
+		// certificate issue becoming alertable once DNS matches, marks the start
+		// of the confirmed outage. Re-anchoring UnhealthySince here also lets
 		// IsRetryOfUnhealthyTransition recognize a retried commit of this
 		// (notifying) transition.
-		if current.Issue == HealthIssueCheckFailed && next.Issue != HealthIssueCheckFailed {
+		if (current.Issue == HealthIssueCheckFailed && next.Issue != HealthIssueCheckFailed) || (!isAlertable(current) && isAlertable(next)) {
 			next.UnhealthySince = &checkedAt
 		}
 		if next.UnhealthySince == nil {

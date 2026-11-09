@@ -202,6 +202,69 @@ func TestShouldNotifyUnhealthyTransitionCheckFailedThenActionableIssueNotifies(t
 	))
 }
 
+func TestShouldNotifyUnhealthyTransitionHoldsCertificateIssueUntilDNSMatches(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		issue  HealthIssue
+		dns    DNSConfigurationStatus
+		notify bool
+	}{
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationUnconfirmed, notify: false},
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationNotFound, notify: false},
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationWrongTarget, notify: false},
+		{issue: HealthIssueCertificateMissing, dns: DNSConfigurationUnconfirmed, notify: false},
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationMatched, notify: true},
+		// Without usable DNS evidence the alert keeps its previous behavior.
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationCheckFailed, notify: true},
+		{issue: HealthIssueCertificateNotReady, dns: DNSConfigurationNotConfigured, notify: true},
+		{issue: HealthIssueCertificateNotReady, dns: "", notify: true},
+		// Only issues a pending DNS cutover explains are held.
+		{issue: HealthIssueCertificateExpired, dns: DNSConfigurationUnconfirmed, notify: true},
+		{issue: HealthIssueResourceMissing, dns: DNSConfigurationNotFound, notify: true},
+	} {
+		t.Run(string(tc.issue)+"/"+string(tc.dns), func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.notify, ShouldNotifyUnhealthyTransition(
+				HealthState{Status: HealthStatusHealthy},
+				HealthState{Status: HealthStatusUnhealthy, Issue: tc.issue, DNSConfiguration: tc.dns},
+			))
+		})
+	}
+}
+
+func TestHeldCertificateIssueNotifiesOnceDNSMatches(t *testing.T) {
+	t.Parallel()
+
+	firstCheck := time.Date(2026, time.July, 21, 9, 0, 0, 0, time.UTC)
+	secondCheck := firstCheck.Add(24 * time.Hour)
+	thirdCheck := secondCheck.Add(24 * time.Hour)
+
+	held := ReconcileHealthState(HealthState{Status: HealthStatusHealthy}, HealthObservation{
+		Status:           HealthStatusUnhealthy,
+		Issue:            HealthIssueCertificateNotReady,
+		DNSConfiguration: DNSConfigurationUnconfirmed,
+	}, firstCheck)
+	require.False(t, ShouldNotifyUnhealthyTransition(HealthState{Status: HealthStatusHealthy}, held))
+	require.False(t, IsRetryOfUnhealthyTransition(held, firstCheck), "a retried commit of a held issue must not alert")
+
+	rearmed := ReconcileHealthState(held, HealthObservation{
+		Status:           HealthStatusUnhealthy,
+		Issue:            HealthIssueCertificateNotReady,
+		DNSConfiguration: DNSConfigurationMatched,
+	}, secondCheck)
+	require.True(t, ShouldNotifyUnhealthyTransition(held, rearmed))
+	require.Equal(t, &secondCheck, rearmed.UnhealthySince, "the alertable outage starts when DNS matches")
+	require.True(t, IsRetryOfUnhealthyTransition(rearmed, secondCheck), "a retried commit of the re-armed alert must re-emit it")
+
+	continuing := ReconcileHealthState(rearmed, HealthObservation{
+		Status:           HealthStatusUnhealthy,
+		Issue:            HealthIssueCertificateNotReady,
+		DNSConfiguration: DNSConfigurationMatched,
+	}, thirdCheck)
+	require.False(t, ShouldNotifyUnhealthyTransition(rearmed, continuing))
+	require.Equal(t, &secondCheck, continuing.UnhealthySince)
+}
+
 func TestIsRetryOfUnhealthyTransition(t *testing.T) {
 	t.Parallel()
 

@@ -107,6 +107,12 @@ func (c *CustomDomainHealth) List(ctx context.Context, args ListCustomDomainsFor
 	return targets, nil
 }
 
+// Check records one domain's DNS observation and infrastructure health and
+// returns the unhealthy alert to send, if any. It never deactivates or
+// unverifies a domain: TXT proves ownership, and DNS that points elsewhere
+// (a domain verified ahead of a migration, a proxy we cannot see through, or
+// DNS moved away later) keeps its ingress and certificate until an
+// organization administrator deletes the domain.
 func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHealthArgs) (NotifyCustomDomainUnhealthyArgs, error) {
 	var noNotification NotifyCustomDomainUnhealthyArgs
 
@@ -153,9 +159,16 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		Status:               customdomains.HealthStatusHealthy,
 		Issue:                "",
 		CertificateExpiresAt: nil,
+		DNSConfiguration:     "",
 	}
 	dnsObservation, dnsErr := customdomains.ObserveDNS(ctx, c.resolver, domain.Domain, customdomains.DNSRoutingTargets{SharedCNAME: c.expectedTarget, DomainTarget: domainTarget, TargetSuffix: c.targetSuffix, ARecords: c.expectedARecords})
 	if dnsErr != nil {
+		// A transient resolver failure (timeout, SERVFAIL) would otherwise
+		// replace the last good observation until the next sweep, so retry and
+		// record check_failed only once the retries are spent.
+		if !isFinalHealthCheckAttempt(ctx) {
+			return noNotification, fmt.Errorf("observe custom domain DNS: %w", dnsErr)
+		}
 		c.logger.WarnContext(ctx, "custom domain DNS audit incomplete", attr.SlogURLDomain(domain.Domain), attr.SlogError(dnsErr))
 	}
 	infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
@@ -163,6 +176,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		RootResourceName: rootResourceName, WellKnownRootResourceName: wellKnownRootResourceName,
 		CertSecretName: domain.CertSecretName.String, ProvisionerKind: k8s.ProvisionerKind(domain.ProvisionerKind),
 	})
+	observation.DNSConfiguration = dnsObservation.Status
 	if infrastructureErr != nil {
 		if !isFinalHealthCheckAttempt(ctx) {
 			return noNotification, fmt.Errorf("check custom domain infrastructure: %w", infrastructureErr)
@@ -390,6 +404,7 @@ func customDomainHealthState(domain customdomainsrepo.CustomDomain) customdomain
 		UnhealthySince:       nil,
 		CertificateExpiresAt: nil,
 		ConsecutiveFailures:  domain.ConsecutiveFailures.Int32,
+		DNSConfiguration:     conv.FromPGTextOrEmpty[customdomains.DNSConfigurationStatus](domain.DnsConfigurationStatus),
 	}
 	if state.Status == "" {
 		state.Status = customdomains.HealthStatusUnknown

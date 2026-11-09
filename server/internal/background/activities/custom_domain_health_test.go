@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/testsuite"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -203,6 +204,59 @@ func TestCustomDomainHealthCheckReportsInfrastructureDespiteDNSMismatch(t *testi
 	require.NoError(t, err)
 	require.Equal(t, "unhealthy", domain.HealthStatus.String)
 	require.Equal(t, string(customdomains.HealthIssueCertificateExpired), domain.HealthIssue.String)
+}
+
+func TestCustomDomainHealthCheckHoldsCertificateAlertUntilDNSMatches(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_health_cert_hold")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "migrating.example.com")
+
+	// Verified ahead of a migration: DNS still points at the previous
+	// provider, so the certificate cannot issue yet.
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{issue: k8s.CustomDomainInfrastructureIssueCertificateNotReady, resources: nil, provisioner: nil}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(mismatchResolverConfig("migrating.example.com")))
+	firstCheck := time.Now().UTC().Truncate(time.Microsecond)
+
+	notification, err := checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      firstCheck,
+	})
+	require.NoError(t, err)
+	require.Empty(t, notification.Issue, "no alert while DNS does not point at Speakeasy")
+
+	domain, err := repository.GetCustomDomainByIDAndOrganization(t.Context(), customdomainsrepo.GetCustomDomainByIDAndOrganizationParams{
+		ID:             domainID,
+		OrganizationID: "test-organization",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "unhealthy", domain.HealthStatus.String)
+	require.Equal(t, string(customdomains.HealthIssueCertificateNotReady), domain.HealthIssue.String)
+
+	// After the cutover DNS matches, but the certificate is still not ready.
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMERecordFunc: func(_ context.Context, host string) (string, error) {
+			if host == "migrating.example.com." {
+				return "custom-domain.example.com.", nil
+			}
+			return "", nil
+		},
+		LookupNetIPFunc: func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("5.6.7.8")}, nil
+		},
+		LookupTXTFunc: func(context.Context, string) ([]string, error) { return nil, nil },
+	}))
+
+	notification, err = checker.Check(t.Context(), activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      firstCheck.Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, customdomains.HealthIssueCertificateNotReady, notification.Issue)
 }
 
 func TestCustomDomainHealthCheckRetryReemitsNotification(t *testing.T) {
@@ -488,6 +542,38 @@ func TestCustomDomainHealthCheckFailedNeverAutoDisables(t *testing.T) {
 	require.True(t, domain.Activated)
 	require.Equal(t, "healthy", domain.HealthStatus.String)
 	require.Equal(t, "check_failed", domain.DnsConfigurationStatus.String)
+}
+
+func TestCustomDomainHealthCheckRetriesDNSFailureBeforeFinalAttempt(t *testing.T) {
+	t.Parallel()
+
+	conn, err := infra.CloneTestDatabase(t, "custom_domain_dns_failure_retry")
+	require.NoError(t, err)
+	repository := customdomainsrepo.New(conn)
+	domainID := createActivatedCustomDomain(t, repository, "test-organization", "dns-retry.example.com")
+
+	stubProvisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, testenv.NewLogger(t))
+	checker := activities.NewCustomDomainHealth(testenv.NewLogger(t), conn, &stubInfrastructureChecker{resources: nil, provisioner: stubProvisioner}, "custom-domain.example.com", nil, "", noopEmailService(t), nil)
+	checker.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{
+		LookupCNAMERecordFunc: func(context.Context, string) (string, error) { return "", errors.New("dns servfail") },
+		LookupNetIPFunc:       func(context.Context, string, string) ([]netip.Addr, error) { return nil, errors.New("dns servfail") },
+		LookupTXTFunc:         func(context.Context, string) ([]string, error) { return nil, nil },
+	}))
+
+	var suite testsuite.WorkflowTestSuite
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(checker.Check)
+	_, err = env.ExecuteActivity(checker.Check, activities.CheckCustomDomainHealthArgs{
+		CustomDomainID: domainID,
+		OrganizationID: "test-organization",
+		CheckedAt:      time.Now().UTC().Truncate(time.Microsecond),
+	})
+	require.ErrorContains(t, err, "observe custom domain DNS")
+
+	domain, err := repository.GetCustomDomainByDomain(t.Context(), "dns-retry.example.com")
+	require.NoError(t, err)
+	require.False(t, domain.DnsConfigurationStatus.Valid, "a retried attempt must not record the failed observation")
+	require.False(t, domain.DnsCheckedAt.Valid)
 }
 
 func TestFindOrphanCustomDomainResourcesFlagsUnknownDomains(t *testing.T) {
