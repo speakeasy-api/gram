@@ -288,7 +288,11 @@ func (s *RefreshService) FallbackResourceForClient(ctx context.Context, clientID
 	if err != nil {
 		return "", fmt.Errorf("list mcp servers for client: %w", err)
 	}
-	return clientUpstreamResource(rows), nil
+	resources := make([]string, 0, len(rows))
+	for _, row := range rows {
+		resources = append(resources, row.Url)
+	}
+	return clientUpstreamResource(resources), nil
 }
 
 // fallbackResourceForGrant derives the resource for a grant stored with none.
@@ -308,10 +312,10 @@ func (s *RefreshService) fallbackResourceForGrant(ctx context.Context, sess remo
 	if err != nil {
 		return "", fmt.Errorf("list mcp servers offering client: %w", err)
 	}
-	offering := make([]remotesessions_repo.ListOrganizationMcpServersForClientRow, 0, len(rows))
+	offering := make([]string, 0, len(rows))
 	for _, row := range rows {
 		if row.Offered {
-			offering = append(offering, remotesessions_repo.ListOrganizationMcpServersForClientRow{ID: row.ID, ProjectID: row.ProjectID, ProjectSlug: row.ProjectSlug, Name: row.Name, Slug: row.Slug, Url: row.Resource})
+			offering = append(offering, row.Resource)
 		}
 	}
 	if len(offering) > 0 {
@@ -347,15 +351,16 @@ func (s *RefreshService) ResourcesForClientsAtUpstream(ctx context.Context, orga
 	return resources, nil
 }
 
-// attachmentsForClients loads the MCP servers attached to each client in one
-// round trip, within organizationID. A client with no attachments has no entry.
+// attachmentsForClients loads the resources of the MCP servers attached to
+// each client in one round trip, within organizationID. A client with no
+// attachments has no entry.
 //
 // Where the organization enforces typed auth clients, the servers that offer a
 // client through one replace the servers behind its user session issuer links:
 // a client with an offer has its resource decided by the servers configured to
 // use it, linked to their sign-in or not. A client with no offer keeps the
 // servers behind its links.
-func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, error) {
+func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, organizationID string, clientIDs []uuid.UUID) (map[uuid.UUID][]string, error) {
 	rows, err := remotesessions_repo.New(db).ListOrganizationMcpServersForClients(ctx, remotesessions_repo.ListOrganizationMcpServersForClientsParams{
 		RemoteSessionClientIds: clientIDs,
 		OrganizationID:         organizationID,
@@ -363,7 +368,7 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 	if err != nil {
 		return nil, fmt.Errorf("list mcp servers for bound clients: %w", err)
 	}
-	attachments := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(clientIDs))
+	attachments := make(map[uuid.UUID][]string, len(clientIDs))
 	// Offered rows sort first for each client.
 	offered := make(map[uuid.UUID]bool, len(clientIDs))
 	for _, row := range rows {
@@ -372,14 +377,7 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 		} else if offered[row.ClientID] {
 			continue
 		}
-		attachments[row.ClientID] = append(attachments[row.ClientID], remotesessions_repo.ListOrganizationMcpServersForClientRow{
-			ID:          row.ID,
-			ProjectID:   row.ProjectID,
-			ProjectSlug: row.ProjectSlug,
-			Name:        row.Name,
-			Slug:        row.Slug,
-			Url:         row.Resource,
-		})
+		attachments[row.ClientID] = append(attachments[row.ClientID], row.Resource)
 	}
 	return attachments, nil
 }
@@ -388,13 +386,13 @@ func attachmentsForClients(ctx context.Context, db remotesessions_repo.DBTX, org
 // loaded attachments of every client bound to the endpoint: its own
 // derivation when it has one, otherwise a claim on upstream that stands only
 // while no sibling serves it.
-func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, clientID uuid.UUID, upstream string) string {
+func resourceAmongSiblings(attachments map[uuid.UUID][]string, clientID uuid.UUID, upstream string) string {
 	resource, claimable := claimableUpstream(attachments[clientID], upstream)
 	if !claimable {
 		return resource
 	}
-	for id, rows := range attachments {
-		if id != clientID && rowsServeUpstream(rows, resource) {
+	for id, resources := range attachments {
+		if id != clientID && resourcesServeUpstream(resources, resource) {
 			return ""
 		}
 	}

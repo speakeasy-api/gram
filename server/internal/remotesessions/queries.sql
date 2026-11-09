@@ -2439,7 +2439,9 @@ RETURNING s.remote_session_client_id, s.access_token_encrypted, s.refresh_token_
 -- clients, a live, enabled offer of the client within that organization also
 -- reaches two issuers, linked or not: the offering server's, and the sign-in the
 -- grant was consented through, which is how a gateway login reaches a member's
--- registration. The offer is judged as serving judges it: the registration and
+-- organization-level registration. A project-level registration still needs
+-- the tenancy rule below, which an organization-tier sign-in does not meet, so
+-- the sweep does not claim that grant. The offer is judged as serving judges it: the registration and
 -- its provider are in the offering project's or organization's reach. Everything
 -- else about eligibility is the same for these issuers. No agent attachment can
 -- name one, because an attachment requires a link, so only a live Speakeasy

@@ -93,9 +93,9 @@ func ResourceOwnersAmong(ctx context.Context, db remotesessions_repo.DBTX, organ
 	return ownersAmong(attachments, clientIDs, upstream), nil
 }
 
-func ownersAmong(attachments map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, ids []uuid.UUID, upstream string) map[uuid.UUID]bool {
+func ownersAmong(attachments map[uuid.UUID][]string, ids []uuid.UUID, upstream string) map[uuid.UUID]bool {
 	// Siblings are judged among each other only, as at login.
-	among := make(map[uuid.UUID][]remotesessions_repo.ListOrganizationMcpServersForClientRow, len(ids))
+	among := make(map[uuid.UUID][]string, len(ids))
 	for _, id := range ids {
 		if rows, ok := attachments[id]; ok {
 			among[id] = rows
