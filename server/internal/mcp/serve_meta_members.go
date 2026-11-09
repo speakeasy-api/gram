@@ -538,18 +538,11 @@ func (s *Service) memberConnectDecision(ctx context.Context, shadow *mandatorySh
 		return oops.E(oops.CodeForbidden, nil, "unrecognized server visibility %q", visibility), nil
 	}
 	requireErr := s.authz.Require(ctx, connect)
-	if requireErr != nil && !isMemberDenial(requireErr) {
+	if requireErr != nil && !isAccessDenial(requireErr) {
 		return nil, fmt.Errorf("require member connect: %w", requireErr)
 	}
 	shadow.recordServer(ctx, surface, requireErr == nil, authz.MandatoryServerPrivate, connect)
 	return requireErr, nil
-}
-
-// isMemberDenial reports a refusal to connect rather than a failure to
-// evaluate one.
-func isMemberDenial(err error) bool {
-	var oopsErr *oops.ShareableError
-	return errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized)
 }
 
 // memberConnectCheck is the mcp:connect check a member's grants answer.

@@ -74,7 +74,8 @@ func TestServeAgentGateway_RecordsChecksOnlyForNamedServers(t *testing.T) {
 	granted := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.granted).String()
 	denied := mcpServerBySlug(t, ctx, ti, *authCtx.ProjectID, fx.denied).String()
 	// A public server whose own toolset is private, which the agent holds no
-	// grant on: admission drops it before it reaches the denied servers.
+	// grant on: admission keeps it among the denied members, so naming it
+	// records its toolset's denial.
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
 	closed := seedHostedMetaMember(t, ctx, ti, decoy.ID, "closed hosted", 3, mcpservers.VisibilityPublic, "closed_tool")
 	setToolsetMcpPrivate(t, ctx, ti, closed.toolsetID, *authCtx.ProjectID)
