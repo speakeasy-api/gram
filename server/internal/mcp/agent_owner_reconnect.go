@@ -160,6 +160,35 @@ func (g metaGateContext) agentReconnectFor(member metaMember) agentReconnect {
 	return g.agentOwner.forMember(member)
 }
 
+// hasOAuthSignIn reports whether a member signs in through an upstream OAuth
+// client, which a person connects at the agent's sign-in step: it has a
+// derived or chosen sign-in issuer, a chosen client, or associated clients.
+// A member without one is reached with a credential configured on the server,
+// or none.
+func (m metaMember) hasOAuthSignIn() bool {
+	if m.upstreamNoAuth {
+		return false
+	}
+	return m.remoteSessionIssuerID.Valid || m.chosenClientID.Valid || len(m.associatedClients) > 0
+}
+
+// Short row details connection_status shows for an agent's member that a
+// person reconnects at the agent's sign-in step. The step's link is in the
+// status hint, so the row does not repeat it.
+const (
+	agentDetailNeedsReauth  = "needs re-authentication"
+	agentDetailNotConnected = "this agent has no connection to it"
+)
+
+// agentMemberError carries a short detail for connection_status rows beside
+// the full message a tool call returns.
+type agentMemberError struct {
+	error
+	detail string
+}
+
+func (e agentMemberError) Unwrap() error { return e.error }
+
 // agentMemberReconnectError is agentServerCredentialError for an agent
 // gateway member whose connection is missing or can no longer be used: a
 // person reconnects it, so the message says where. Without a link it keeps
@@ -169,7 +198,7 @@ func (g metaGateContext) agentMemberReconnectError(member metaMember) error {
 	if fix.url == "" {
 		return agentMemberCredentialError(member)
 	}
-	return &metaMemberError{message: fmt.Sprintf("server %q needs re-authentication: this agent's connection to it is missing or can no longer be used, and the agent cannot sign in itself. %s", member.slug, fix.ask("reconnect"))}
+	return agentMemberError{&metaMemberError{message: fmt.Sprintf("server %q needs re-authentication: this agent's connection to it is missing or can no longer be used, and the agent cannot sign in itself. %s", member.slug, fix.ask("reconnect"))}, agentDetailNeedsReauth}
 }
 
 // agentMemberAccessError is agentServerAccessError for an agent gateway

@@ -107,8 +107,9 @@
         state.className = "warn";
         state.textContent = s.status === "not_connected" ? "Not signed in" : (s.detail || "Needs attention");
         li.append(state);
-        // An agent cannot sign in itself: someone who can edit it reconnects on the agent's page.
-        const link = data.connectUrl || (data.reconnect && data.reconnect.url);
+        // An agent cannot sign in itself: someone who can edit it reconnects on the agent's
+        // page, which fixes only the rows the server marks.
+        const link = data.connectUrl || (s.reconnect && data.reconnect && data.reconnect.url);
         if (link) {
           const btn = document.createElement("button");
           btn.textContent = data.connectUrl ? "Connect" : "Reconnect";

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 )
 
 func gatewayTestMember(slug, name string, issuer uuid.UUID, projectID uuid.UUID) metaMember {
@@ -248,7 +249,7 @@ func TestMemberAuthFailure_AgentAsksAnEditor(t *testing.T) {
 	_, credential := errors.AsType[memberCredentialError](err)
 	require.True(t, credential, "a person fixes it; a retry does not")
 
-	err = memberAuthFailure(member, memberDial{anonymous: true, ownerReconnect: fix}, http.StatusUnauthorized)
+	err = memberAuthFailure(member, memberDial{anonymous: true, oauthSignIn: true, ownerReconnect: fix}, http.StatusUnauthorized)
 	require.ErrorContains(t, err, "this agent has no connection to it")
 	require.ErrorContains(t, err, "and connect it, then retry")
 
@@ -513,4 +514,48 @@ func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
 	require.Contains(t, page, `aria-label="Sign in to Source as"`)
 	require.Contains(t, page, `value="hide_server"`)
 	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
+}
+
+// connection_status offers a reconnect only on rows a reconnect fixes, and
+// gives those rows a short detail, since the hint carries the link. A server
+// whose credential is configured on the server, a refused use and a row that
+// could not be checked keep their own detail and get no Reconnect.
+func TestAgentConnectionReconnect_MarksOnlyRowsAReconnectFixes(t *testing.T) {
+	t.Parallel()
+
+	gate := metaGateContext{agentOwner: &agentOwnerReconnect{
+		agent: func() (string, error) { return "default", nil },
+		link:  func(string) agentReconnect { return testAgentReconnect() },
+	}}
+	oauth := gatewayTestMember("linear", "Linear", uuid.New(), uuid.New())
+	apiKey := gatewayTestMember("weather", "Weather", uuid.Nil, uuid.New())
+	refused := gatewayTestMember("github", "GitHub", uuid.New(), uuid.New())
+	unchecked := gatewayTestMember("notion", "Notion", uuid.New(), uuid.New())
+	never := gatewayTestMember("jira", "Jira", uuid.New(), uuid.New())
+	members := []metaMember{oauth, apiKey, refused, unchecked, never}
+
+	broken := gate.agentMemberReconnectError(oauth)
+	require.Equal(t, agentDetailNeedsReauth, memberErrorDetail(broken))
+	require.Contains(t, memberErrorMessage(broken), testAgentSignIn, "a tool call still reads the full message")
+	denied := gate.agentMemberAccessError(refused)
+
+	servers := []metamcp.ConnectionStatusServer{
+		{Slug: "linear", Status: metamcp.SignInError, Detail: memberErrorDetail(broken)},
+		{Slug: "weather", Status: metamcp.SignInNotConnected},
+		{Slug: "github", Status: metamcp.SignInError, Detail: memberErrorDetail(denied)},
+		{Slug: "notion", Status: metamcp.SignInError, Detail: memberCheckFailedDetail},
+		{Slug: "jira", Status: metamcp.SignInNotConnected},
+	}
+	reconnect := agentConnectionReconnect(gate, members, servers)
+	require.NotNil(t, reconnect)
+	require.Equal(t, testAgentSignIn, reconnect.URL)
+	marked := make([]bool, len(servers))
+	for i, server := range servers {
+		marked[i] = server.Reconnect
+	}
+	require.Equal(t, []bool{true, false, false, false, true}, marked)
+	require.Contains(t, servers[2].Detail, "review its permissions", "a refused use keeps the instruction that fixes it")
+
+	onlyRefused := []metamcp.ConnectionStatusServer{{Slug: "github", Status: metamcp.SignInError, Detail: memberErrorDetail(denied)}}
+	require.Nil(t, agentConnectionReconnect(gate, []metaMember{refused}, onlyRefused), "nothing to reconnect gives no link")
 }

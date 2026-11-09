@@ -193,4 +193,10 @@ func TestConnectionStatusText_AgentEditorReconnects(t *testing.T) {
 
 	result.Reconnect = nil
 	require.Contains(t, result.Text(), "ask the gateway's administrator", "a gateway with no agent keeps its wording")
+
+	// An agent with nothing a reconnect fixes reads each server's own detail.
+	result.Agent = true
+	text = result.Text()
+	require.Contains(t, text, "This agent cannot fix these servers itself. Each server above says who can")
+	require.NotContains(t, text, "administrator")
 }

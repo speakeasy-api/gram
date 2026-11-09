@@ -77,6 +77,10 @@ type ConnectionStatusServer struct {
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
 
+	// Reconnect marks a row on an agent gateway that reconnecting at the
+	// agent's sign-in step can fix.
+	Reconnect bool `json:"reconnect,omitempty"`
+
 	// Outage is what the view shows for SignInUnavailable; Detail stays the message for the AI app.
 	Outage *ConnectionStatusOutage `json:"outage,omitempty"`
 }
@@ -99,6 +103,10 @@ type ConnectionStatusResult struct {
 	// Reconnect is set on an agent gateway when a server needs signing in
 	// again: the agent cannot, so someone who can edit it reconnects it.
 	Reconnect *ConnectionStatusReconnect `json:"reconnect,omitempty"`
+
+	// Agent reports an agent gateway, which the agent cannot sign in to
+	// itself. Only the text hint reads it.
+	Agent bool `json:"-"`
 }
 
 // ConnectionStatusReconnect is where an agent's servers are reconnected.
@@ -188,6 +196,9 @@ func (r ConnectionStatusResult) Text() string {
 func (r ConnectionStatusResult) signInHint() string {
 	if r.ConnectURL != "" {
 		return fmt.Sprintf("\nTo sign in, open %s in a browser, then call %s again to refresh.\n", r.ConnectURL, ToolConnectionStatus)
+	}
+	if r.Reconnect == nil && r.Agent {
+		return fmt.Sprintf("\nThis agent cannot fix these servers itself. Each server above says who can, then call %s again to refresh.\n", ToolConnectionStatus)
 	}
 	if r.Reconnect == nil {
 		return "\nThis gateway has no sign-in page; ask the gateway's administrator to connect these servers.\n"

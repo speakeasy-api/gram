@@ -38,11 +38,12 @@ func (s *Service) handleMetaConnectionStatusCall(
 	for _, member := range members {
 		status, detail, outage := s.memberSignInStatus(ctx, logger, gate, member, requiresAuth)
 		servers = append(servers, metamcp.ConnectionStatusServer{
-			Slug:   member.slug,
-			Name:   member.name,
-			Status: status,
-			Detail: detail,
-			Outage: outage,
+			Slug:      member.slug,
+			Name:      member.name,
+			Status:    status,
+			Detail:    detail,
+			Reconnect: false,
+			Outage:    outage,
 		})
 	}
 	// A cached connection reports members its consent did not approve,
@@ -51,26 +52,28 @@ func (s *Service) handleMetaConnectionStatusCall(
 	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		for _, member := range gate.unapprovedMembers {
 			servers = append(servers, metamcp.ConnectionStatusServer{
-				Slug:   member.slug,
-				Name:   member.name,
-				Status: metamcp.SignInNeedsConsent,
-				Detail: catalogMemberNotApproved,
-				Outage: nil,
+				Slug:      member.slug,
+				Name:      member.name,
+				Status:    metamcp.SignInNeedsConsent,
+				Detail:    catalogMemberNotApproved,
+				Reconnect: false,
+				Outage:    nil,
 			})
 		}
 	}
 
 	for _, member := range gate.hiddenMembers {
 		servers = append(servers, metamcp.ConnectionStatusServer{
-			Slug:   member.slug,
-			Name:   member.name,
-			Status: metamcp.SignInHidden,
-			Detail: "",
-			Outage: nil,
+			Slug:      member.slug,
+			Name:      member.name,
+			Status:    metamcp.SignInHidden,
+			Detail:    "",
+			Reconnect: false,
+			Outage:    nil,
 		})
 	}
 
-	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers, Reconnect: agentConnectionReconnect(*gate, members, servers)}
+	payload := metamcp.ConnectionStatusResult{ConnectURL: gate.connectURL, Servers: servers, Reconnect: agentConnectionReconnect(*gate, members, servers), Agent: gate.agentOwner != nil && gate.connectURL == ""}
 	structured, err := json.Marshal(payload)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize connection_status result").LogError(ctx, logger)
@@ -103,24 +106,41 @@ func (s *Service) handleMetaConnectionStatusCall(
 }
 
 // agentConnectionReconnect is where an agent gateway's servers are
-// reconnected when one needs signing in: the first such server's page, or no
-// page when it could not be built. Every other gateway, and an agent whose
-// servers all work, gets nil.
+// reconnected, and it marks each row a reconnect can fix. It returns the
+// first such server's page, or no page when it could not be built. Every
+// other gateway, and an agent with nothing to reconnect, gets nil.
 func agentConnectionReconnect(gate metaGateContext, members []metaMember, servers []metamcp.ConnectionStatusServer) *metamcp.ConnectionStatusReconnect {
 	if gate.agentOwner == nil || gate.connectURL != "" {
 		return nil
 	}
+	var reconnect *metamcp.ConnectionStatusReconnect
 	for i, member := range members {
-		if status := servers[i].Status; status != metamcp.SignInNotConnected && status != metamcp.SignInError {
+		if !agentReconnectFixes(member, servers[i]) {
 			continue
 		}
-		if servers[i].Detail == memberCheckFailedDetail {
-			continue
+		servers[i].Reconnect = true
+		if reconnect == nil {
+			reconnect = &metamcp.ConnectionStatusReconnect{URL: gate.agentReconnectFor(member).url}
 		}
-		fix := gate.agentReconnectFor(member)
-		return &metamcp.ConnectionStatusReconnect{URL: fix.url}
 	}
-	return nil
+	return reconnect
+}
+
+// agentReconnectFixes reports whether reconnecting at the agent's sign-in
+// step can fix a row: a server with an OAuth sign-in that is not connected
+// or needs re-authentication. A server whose credential is configured on the
+// server, a refused use, a 403 and a row that could not be checked are
+// fixed elsewhere, and their own detail says where.
+func agentReconnectFixes(member metaMember, server metamcp.ConnectionStatusServer) bool {
+	switch server.Status {
+	case metamcp.SignInNotConnected:
+		return server.Detail == "" && member.hasOAuthSignIn()
+	case metamcp.SignInError:
+		// Only an agent reconnect error carries these details, and only a
+		// member with an OAuth sign-in raises one.
+		return server.Detail == agentDetailNeedsReauth || server.Detail == agentDetailNotConnected
+	}
+	return false
 }
 
 // memberSignInStatus classifies one member by its own routing rule. A member
@@ -233,7 +253,7 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 func memberFailureSignIn(gate metaGateContext, member metaMember, err error) (string, string, *metamcp.ConnectionStatusOutage) {
 	unavailable, ok := errors.AsType[memberUnavailableError](err)
 	if !ok {
-		return metamcp.SignInError, memberErrorMessage(err), nil
+		return metamcp.SignInError, memberErrorDetail(err), nil
 	}
 	name := cmp.Or(member.name, member.slug)
 	if unavailable.session == nil {
@@ -271,6 +291,16 @@ func (s *Service) staleMemberStatus(ctx context.Context, logger *slog.Logger, ga
 		return metamcp.SignInNeedsConsent, message, nil
 	}
 	return metamcp.SignInActionRequired, message, nil
+}
+
+// memberErrorDetail is a failed member's connection_status detail: the short
+// detail an agent error carries, since the status hint holds its link, or
+// else the full message.
+func memberErrorDetail(err error) string {
+	if agentErr, ok := errors.AsType[agentMemberError](err); ok {
+		return agentErr.detail
+	}
+	return memberErrorMessage(err)
 }
 
 func memberErrorMessage(err error) string {
