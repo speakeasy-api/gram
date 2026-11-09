@@ -102,7 +102,7 @@ func (s *Service) handlePlatformWorkloadGrant(ctx context.Context, w http.Respon
 	// no project_id). Persist the exact target in the immutable resource and
 	// marker so authentication never takes tenancy from caller headers.
 	session.Resource = resource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, tracker: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // authorizeWorkloadPlatform implements the builtin-only authentication
