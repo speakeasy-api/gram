@@ -22,6 +22,7 @@ type ExpiredUnread struct {
 }
 
 type ExpiredUnreadRepository interface {
+	ListExpiredUnreadProjects(context.Context, *uuid.UUID, int32) ([]uuid.UUID, error)
 	ListExpiredUnread(context.Context, uuid.UUID, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error)
 	ClaimExpiredUnread(context.Context, ExpiredUnread) (ExpiredUnread, bool, error)
 	FinalizeExpiredUnread(context.Context, ExpiredUnread) (bool, error)
@@ -31,10 +32,6 @@ type ExpiredUnreadRepository interface {
 type ExpiredUnreadCursor struct {
 	ExpiresAt time.Time
 	ID        uuid.UUID
-}
-
-type ExpiredUnreadProjectLister interface {
-	ListExpiredUnreadProjects(context.Context, *uuid.UUID, int32) ([]uuid.UUID, error)
 }
 
 type blobDeleter interface {
@@ -50,21 +47,22 @@ func NewExpiredUnreadCleaner(repository ExpiredUnreadRepository, blobs blobDelet
 	return &ExpiredUnreadCleaner{repository: repository, blobs: blobs}
 }
 
-// CleanAfter removes one ordered batch after cursor. The returned cursor always
-// advances past every selected row, including malformed or failed rows, so a
-// permanent leading failure cannot poison later batches in the same activity.
+// ListProjects returns one ordered page of project IDs after cursor. More is
+// true when the page is full and another page may exist.
 func (c *ExpiredUnreadCleaner) ListProjects(ctx context.Context, cursor *uuid.UUID, batchSize int32) ([]uuid.UUID, bool, error) {
-	lister, ok := c.repository.(ExpiredUnreadProjectLister)
-	if !ok {
-		return nil, false, fmt.Errorf("expired unread handoff project lister is not configured")
+	if c == nil || c.repository == nil {
+		return nil, false, fmt.Errorf("expired unread handoff cleaner is not configured")
 	}
-	projects, err := lister.ListExpiredUnreadProjects(ctx, cursor, batchSize)
+	projects, err := c.repository.ListExpiredUnreadProjects(ctx, cursor, batchSize)
 	if err != nil {
 		return nil, false, fmt.Errorf("list projects with expired unread handoffs: %w", err)
 	}
 	return projects, len(projects) == int(batchSize), nil
 }
 
+// CleanProjectAfter removes one ordered project batch after cursor. The returned
+// cursor advances past every selected row, including malformed or failed rows,
+// so a permanent leading failure cannot poison later batches in the activity.
 func (c *ExpiredUnreadCleaner) CleanProjectAfter(ctx context.Context, projectID uuid.UUID, cursor *ExpiredUnreadCursor) (*ExpiredUnreadCursor, bool, error) {
 	if c == nil || c.repository == nil || c.blobs == nil {
 		return cursor, false, fmt.Errorf("expired unread handoff cleaner is not configured")

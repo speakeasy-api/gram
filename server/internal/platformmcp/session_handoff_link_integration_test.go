@@ -112,4 +112,10 @@ func TestCreateSessionHandoffLinkReplaysSameKeyWithoutMintingAgain(t *testing.T)
 	require.NoError(t, err)
 	require.Equal(t, first, second)
 	require.Len(t, minter.inputs, 1)
+
+	differentTTL := 60
+	input.TTLSeconds = &differentTTL
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, input)
+	require.ErrorContains(t, err, "idempotency input hash conflict")
+	require.Len(t, minter.inputs, 1, "conflicting replay must not mint again")
 }

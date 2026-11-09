@@ -2696,6 +2696,11 @@ WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url;
 DELETE FROM session_handoff_upload_intents
 WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url;
 
+-- name: SetSessionHandoffUploadRegistryStateFixture :execrows
+UPDATE session_handoff_upload_intents
+SET state = @state
+WHERE project_id = sqlc.arg(project_id)::uuid AND blob_url = @blob_url;
+
 -- name: BackfillSessionHandoffUploadRegistryFixture :exec
 -- Project-scoped equivalent of the migration backfill for compatibility tests.
 INSERT INTO session_handoff_upload_intents (

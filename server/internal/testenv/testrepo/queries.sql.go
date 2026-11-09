@@ -7807,6 +7807,26 @@ func (q *Queries) SetRemoteSessionValidationTrackingFixture(ctx context.Context,
 	return err
 }
 
+const setSessionHandoffUploadRegistryStateFixture = `-- name: SetSessionHandoffUploadRegistryStateFixture :execrows
+UPDATE session_handoff_upload_intents
+SET state = $1
+WHERE project_id = $2::uuid AND blob_url = $3
+`
+
+type SetSessionHandoffUploadRegistryStateFixtureParams struct {
+	State     string
+	ProjectID uuid.UUID
+	BlobUrl   string
+}
+
+func (q *Queries) SetSessionHandoffUploadRegistryStateFixture(ctx context.Context, arg SetSessionHandoffUploadRegistryStateFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setSessionHandoffUploadRegistryStateFixture, arg.State, arg.ProjectID, arg.BlobUrl)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setStaleDelegationRefreshExpiryFixture = `-- name: SetStaleDelegationRefreshExpiryFixture :exec
 UPDATE trusted_issuer_sessions
 SET identity_assertion_encrypted = 'valid-assertion',

@@ -717,6 +717,77 @@ func TestSessionHandoffLinkTriggerLinksPendingIntentTransactionally(t *testing.T
 	require.Equal(t, "session-handoffs/pending.md", afterCommit.ObjectPath)
 }
 
+func TestSessionHandoffLinkTriggerDoesNotStealQuarantinedIntent(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	queries := repo.New(ti.conn)
+	fixtures := testrepo.New(ti.conn)
+	blobURL := "https://example.test/session-handoffs/" + uuid.NewString() + ".md"
+	_, err := queries.CreateSessionHandoffUploadIntent(ctx, repo.CreateSessionHandoffUploadIntentParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, ActorUserID: "trigger-user",
+		ObjectPath: "session-handoffs/quarantined.md", BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	changed, err := fixtures.SetSessionHandoffUploadRegistryStateFixture(ctx, testrepo.SetSessionHandoffUploadRegistryStateFixtureParams{
+		State: "quarantined", ProjectID: ti.projectID, BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, changed)
+
+	err = fixtures.InsertLegacySessionHandoffLinkFixture(ctx, testrepo.InsertLegacySessionHandoffLinkFixtureParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, SessionID: uuid.NewString(),
+		Token: strings.Repeat("cd", 32), BlobUrl: blobURL, CreatedByEmail: "",
+	})
+	require.ErrorContains(t, err, "session handoff blob registry tenant conflict")
+	registry, err := fixtures.GetSessionHandoffUploadRegistryFixture(ctx, testrepo.GetSessionHandoffUploadRegistryFixtureParams{
+		ProjectID: ti.projectID, BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "quarantined", registry.State)
+}
+
+func TestSessionHandoffLinkTriggerDoesNotStealConcurrentCleaningClaim(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	queries := repo.New(ti.conn)
+	fixtures := testrepo.New(ti.conn)
+	blobURL := "https://example.test/session-handoffs/" + uuid.NewString() + ".md"
+	_, err := queries.CreateSessionHandoffUploadIntent(ctx, repo.CreateSessionHandoffUploadIntentParams{
+		ProjectID: ti.projectID, OrganizationID: ti.orgID, ActorUserID: "trigger-user",
+		ObjectPath: "session-handoffs/cleaning.md", BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	changed, err := testrepo.New(tx).SetSessionHandoffUploadRegistryStateFixture(ctx, testrepo.SetSessionHandoffUploadRegistryStateFixtureParams{
+		State: "cleaning", ProjectID: ti.projectID, BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, changed)
+	started := make(chan struct{})
+	inserted := make(chan error, 1)
+	go func() {
+		close(started)
+		inserted <- fixtures.InsertLegacySessionHandoffLinkFixture(ctx, testrepo.InsertLegacySessionHandoffLinkFixtureParams{
+			ProjectID: ti.projectID, OrganizationID: ti.orgID, SessionID: uuid.NewString(),
+			Token: strings.Repeat("ef", 32), BlobUrl: blobURL, CreatedByEmail: "",
+		})
+	}()
+	<-started
+	select {
+	case err := <-inserted:
+		require.Failf(t, "insert completed before claim committed", "error: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	require.NoError(t, tx.Commit(ctx))
+	require.ErrorContains(t, <-inserted, "session handoff blob registry tenant conflict")
+	registry, err := fixtures.GetSessionHandoffUploadRegistryFixture(ctx, testrepo.GetSessionHandoffUploadRegistryFixtureParams{
+		ProjectID: ti.projectID, BlobUrl: blobURL,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cleaning", registry.State)
+}
+
 func TestSessionHandoffOldReplicaRegistryCleansAfterProjectDeletion(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestAgentService(t)

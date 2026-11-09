@@ -14855,6 +14855,7 @@ BEGIN
         updated_at = clock_timestamp()
     WHERE session_handoff_upload_intents.project_id = EXCLUDED.project_id
       AND session_handoff_upload_intents.organization_id = EXCLUDED.organization_id
+      AND session_handoff_upload_intents.state IN ('pending', 'linked')
     RETURNING id INTO registry_id;
     IF registry_id IS NULL THEN
       RAISE EXCEPTION 'session handoff blob registry tenant conflict'

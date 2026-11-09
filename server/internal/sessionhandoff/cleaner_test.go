@@ -12,11 +12,16 @@ import (
 )
 
 type cleanerRepositoryStub struct {
+	projects   []uuid.UUID
 	rows       []ExpiredUnread
 	listErr    error
 	deleteErr  error
 	claimLost  bool
 	deletedIDs []uuid.UUID
+}
+
+func (s *cleanerRepositoryStub) ListExpiredUnreadProjects(context.Context, *uuid.UUID, int32) ([]uuid.UUID, error) {
+	return s.projects, s.listErr
 }
 
 func (s *cleanerRepositoryStub) ListExpiredUnread(context.Context, uuid.UUID, *ExpiredUnreadCursor, int32) ([]ExpiredUnread, error) {
@@ -50,6 +55,23 @@ func (s *blobDeleterStub) Delete(_ context.Context, objectURL *url.URL) error {
 	}
 	s.deleted = append(s.deleted, objectURL)
 	return nil
+}
+
+func TestExpiredUnreadCleanerListProjects(t *testing.T) {
+	t.Parallel()
+	projects := []uuid.UUID{uuid.New(), uuid.New()}
+	listed, more, err := NewExpiredUnreadCleaner(&cleanerRepositoryStub{projects: projects}, nil).ListProjects(t.Context(), nil, 2)
+	require.NoError(t, err)
+	require.Equal(t, projects, listed)
+	require.True(t, more)
+}
+
+func TestExpiredUnreadCleanerListProjectsRejectsMissingRepository(t *testing.T) {
+	t.Parallel()
+	for _, cleaner := range []*ExpiredUnreadCleaner{nil, NewExpiredUnreadCleaner(nil, nil)} {
+		_, _, err := cleaner.ListProjects(t.Context(), nil, 100)
+		require.ErrorContains(t, err, "not configured")
+	}
 }
 
 func TestExpiredUnreadCleanerClean(t *testing.T) {

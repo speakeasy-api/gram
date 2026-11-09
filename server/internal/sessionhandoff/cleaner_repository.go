@@ -18,6 +18,8 @@ type PgxExpiredUnreadRepository struct {
 	queries *repo.Queries
 }
 
+var _ ExpiredUnreadRepository = (*PgxExpiredUnreadRepository)(nil)
+
 func NewPgxExpiredUnreadRepository(db *pgxpool.Pool) *PgxExpiredUnreadRepository {
 	return &PgxExpiredUnreadRepository{queries: repo.New(db)}
 }
