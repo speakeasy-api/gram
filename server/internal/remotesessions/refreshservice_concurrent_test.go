@@ -7,6 +7,8 @@
 package remotesessions_test
 
 import (
+	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -82,4 +84,92 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 		"scheduled and lazy callers for one session must collapse into a single upstream refresh")
 	require.Zero(t, upstream.consumedReplays(),
 		"a consumed refresh token was presented upstream %d time(s)", upstream.consumedReplays())
+}
+
+func TestRefreshNow_SiblingWaiterReacquiresSharedLock(t *testing.T) {
+	t.Parallel()
+	const resourceA = "https://a.example/mcp"
+	const resourceB = "https://b.example/mcp"
+	upstream := newRotatingUpstream()
+	entered := make(chan string, 2)
+	releaseA := make(chan struct{})
+	var releaseOnce sync.Once
+	release := func() { releaseOnce.Do(func() { close(releaseA) }) }
+	defer release()
+	handler := func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if r.Form.Get("grant_type") != "refresh_token" {
+			upstream.handler(w, r)
+			return
+		}
+		resource := r.Form.Get("resource")
+		entered <- resource
+		if resource == resourceA {
+			select {
+			case <-releaseA:
+			case <-r.Context().Done():
+				return
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"access_token":%q,"token_type":"Bearer","expires_in":3600,"refresh_token":"rotated"}`, resource)
+	}
+	ctx, env := newSyntheticExpiryEnv(t, "sibling-refresh-waiter", handler)
+	expandResourceGrantIndexes(t, ctx, env.db)
+	params := repo.UpsertRemoteSessionParams{
+		SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID,
+		AccessTokenEncrypted: env.session.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+		RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, Scopes: env.session.Scopes,
+		Resource: conv.ToPGText(resourceA),
+	}
+	a, err := env.q.UpsertRemoteSession(ctx, params)
+	require.NoError(t, err)
+	params.Resource = conv.ToPGText(resourceB)
+	b, err := env.q.UpsertRemoteSession(ctx, params)
+	require.NoError(t, err)
+	type result struct {
+		value remotesessions.RefreshResult
+		err   error
+	}
+	doneA := make(chan result, 1)
+	doneB := make(chan result, 1)
+	refresh := func(row repo.RemoteSession, resource string, done chan<- result) {
+		value, err := env.refresher.RefreshNow(ctx, row, resource, remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
+		done <- result{value, err}
+	}
+	go refresh(a, resourceA, doneA)
+	select {
+	case resource := <-entered:
+		require.Equal(t, resourceA, resource)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first refresh never started")
+	}
+	go refresh(b, resourceB, doneB)
+	select {
+	case resource := <-entered:
+		t.Fatalf("shared lock allowed overlapping refresh for %s", resource)
+	case <-time.After(300 * time.Millisecond):
+	}
+	release()
+	select {
+	case got := <-doneA:
+		require.NoError(t, got.err)
+		require.Equal(t, a.ID, got.value.Session.ID)
+		require.Equal(t, resourceA, got.value.AccessToken)
+	case <-time.After(5 * time.Second):
+		t.Fatal("first refresh did not finish")
+	}
+	select {
+	case got := <-doneB:
+		require.NoError(t, got.err)
+		require.Equal(t, b.ID, got.value.Session.ID)
+		require.Equal(t, resourceB, got.value.AccessToken)
+		require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, got.value.Outcome)
+	case <-time.After(3 * time.Second):
+		t.Fatal("sibling waiter did not reacquire the released lock promptly")
+	}
+	require.Equal(t, resourceB, <-entered)
 }

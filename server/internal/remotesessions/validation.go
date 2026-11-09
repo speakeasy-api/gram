@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -110,5 +109,5 @@ func (m *ChallengeManager) remoteSessionRefMatchesResource(ctx context.Context, 
 	if err != nil {
 		return false, fmt.Errorf("check focused verification source: %w", err)
 	}
-	return session.ID == ref.ID && session.UpdatedAt.Time.Equal(ref.UpdatedAt) && session.Resource.Valid && session.Resource.String != "" && strings.TrimRight(session.Resource.String, "/") == strings.TrimRight(resource, "/"), nil
+	return session.ID == ref.ID && session.UpdatedAt.Time.Equal(ref.UpdatedAt) && session.Resource.Valid && session.Resource.String != "" && sameUpstream(session.Resource.String, resource), nil
 }

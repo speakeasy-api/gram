@@ -50,43 +50,89 @@ resource's current tokens and consent generation.
 
 ## Required deployment order
 
-This is an application-first, schema-second rollout. It is not safe to deploy
-the index migration while old writers still use
+Use three separately reviewed PRs and release checkpoints: expand indexes,
+application compatibility, then contract indexes. The expand-only migration
+retains old uniqueness and supports old binaries. It is not safe to deploy the
+contract migration while old writers still use
 `ON CONFLICT (subject_urn, remote_session_client_id)`.
 
-Defer this application and the index migration until the enforcement rollout
-is proven. Both enforced and compatibility paths support this application;
+Keep this grant-cardinality work deferred until the enforcement rollout is
+proven. Both enforced and compatibility paths support this application;
 the enforcement flag is not an off-switch for expanded grant cardinality.
 Removing the old indexes enables multiple resource grants even with enforcement
-disabled. Keep independent-RSC setup until both releases are deployed and
+disabled. Keep independent-RSC setup until the complete rollout is deployed and
 validated.
 
-1. Deploy the compatibility application while retaining the old unique indexes.
-   It uses targetless conflict detection and updates only the exact resource.
-   Until the index migration, a second resource connection is temporarily refused
-   without changing the first resource's usable grant. Same-resource reconsent,
-   refresh and revocation continue to work.
-2. Verify the deployed compatibility revision and confirm every old application
-   and worker writer is gone. This is an explicit operational gate, not
-   something migration tooling can infer. The same application release includes
-   target-aware consent, readiness/actions, typed lifecycle methods and Platform
-   MCP status consumers. Prove that composition works safely on both old and
-   new schemas before index replacement.
-3. Promote the separately reviewed migration-only release. Apply its index
-   migrations in order: first create the
-   resource-qualified `NULLS NOT DISTINCT` indexes over the routing identity
-   (`rtrim(resource, '/')`), with `WHERE deleted IS FALSE`, while retaining the old
-   indexes, then remove the old indexes only after the new indexes are valid.
-   This avoids an interval with no grant uniqueness enforcement. NULL legacy
-   resources remain unique. Both resources can then retain independent grants.
-4. Verify actual production migration completion and a healthy compatibility
-   application. Do not bundle the compatibility application and index migration
-   into one release.
+1. Deploy the expand-only migration (#8738). Create the resource-qualified
+   `NULLS NOT DISTINCT` indexes over the routing identity (`rtrim(resource, '/')`),
+   with `WHERE deleted IS FALSE`, while retaining both old unique indexes.
+   Verify both replacement indexes are valid. Old uniqueness still prevents
+   multiple resource grants.
+2. Deploy the compatibility application (#8705) while retaining the old indexes.
+   It uses targetless conflict detection and updates an exact resource grant or
+   safely adopts a singleton NULL/bound transition. Until contract, a second
+   resource connection is temporarily refused without changing the first
+   resource's usable grant. Same-resource reconsent, refresh and revocation
+   continue to work.
+3. Verify the deployed compatibility revision and confirm every old application
+   and worker writer is gone. This is an explicit operational gate, not something
+   migration tooling can infer. Deploy and verify all required resource-qualified
+   consent, readiness/actions, typed lifecycle and Platform MCP status consumers.
+   Prove that composition works safely on both index shapes before contract.
+4. Promote the separate contract migration PR only after those checks pass.
+   Confirm both replacement indexes are valid, then remove the old indexes.
+   This preserves uniqueness throughout the transition; NULL legacy resources
+   remain unique. Verify actual migration completion and application health.
+   Keep contract in draft until its application and consumer prerequisites are
+   deployed and validated; do not bundle it with the compatibility release.
 5. Validate authorization, original/fresh/refreshed callers, resource-bound refresh,
    and revocation against both resources. Never weaken audience checks or replace
    this final simultaneous-resource contract with permanent early refusal.
 
-Do not roll back to an old writer after the index migration: its conflict target
+Do not roll back to an old writer after contract: its conflict target
 no longer exists, and its single-grant reader contract is no longer valid. A
 rollback requires an explicitly reviewed data/model plan that preserves active
 resource grants. No application-database migration is authorized by this document.
+
+## Failed concurrent index build
+
+A cancelled or timed-out `CREATE UNIQUE INDEX CONCURRENTLY` can leave an invalid
+index. Atlas can record a partially applied version, such as 0/2 statements.
+A retry then fails because the invalid index still owns its name. Do not add
+`IF NOT EXISTS`: that would retain the invalid index instead of repairing it.
+
+A human operator must select and verify the target environment before repair.
+Keep the compatible application running, and confirm that both old uniqueness
+indexes still exist. If either old index is missing, stop and investigate the
+rollout state before continuing. Do not retire the old indexes after a failed
+replacement build.
+
+Inspect both replacement indexes:
+
+```sql
+SELECT n.nspname AS schema_name, c.relname AS index_name,
+       i.indisvalid, i.indisready
+FROM pg_index AS i
+JOIN pg_class AS c ON c.oid = i.indexrelid
+JOIN pg_namespace AS n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public'
+  AND c.relname IN (
+    'remote_sessions_subject_client_resource_key',
+    'remote_sessions_subject_client_issuer_resource_key'
+  );
+```
+
+For each replacement index that exists with `indisvalid = false`, run its
+corresponding command below. Run only the commands for invalid indexes, outside
+any transaction. Leave valid replacement indexes and both old indexes intact.
+
+```sql
+DROP INDEX CONCURRENTLY public.remote_sessions_subject_client_resource_key;
+DROP INDEX CONCURRENTLY public.remote_sessions_subject_client_issuer_resource_key;
+```
+
+Rerun the original Atlas apply through the normal authorized deployment process.
+Do not bypass the failed version or edit Atlas revision records. Verify that both
+replacement indexes exist with `indisvalid = true` before proceeding to the
+migration that retires the old indexes. This procedure does not authorize access
+to, or changes in, any environment.

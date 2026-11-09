@@ -262,7 +262,7 @@ type agentMemberOutageTokens struct {
 }
 
 func (f *agentMemberOutageTokens) ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable, req.Resource)
 }
 
 // A handback to the upstream client choice reads the connection the permit

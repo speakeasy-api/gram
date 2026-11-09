@@ -1179,7 +1179,7 @@ func (m *ChallengeManager) RemoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
-	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false)
+	return m.remoteSessionStatuses(ctx, subject, projectID, organizationID, userSessionIssuerID, false, "")
 }
 
 // RemoteSessionStatusesForResource reports only the selected upstream audience.
@@ -1195,7 +1195,7 @@ func (m *ChallengeManager) OrganizationRemoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 ) (map[uuid.UUID]RemoteSessionState, error) {
-	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true)
+	return m.remoteSessionStatuses(ctx, subject, uuid.Nil, organizationID, userSessionIssuerID, true, "")
 }
 
 // OrganizationRemoteSessionStatusesForResource reports one audience across the
@@ -1211,7 +1211,7 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	organizationWide bool,
-	resources ...string,
+	resource string,
 ) (map[uuid.UUID]RemoteSessionState, error) {
 	if subject.IsZero() {
 		return map[uuid.UUID]RemoteSessionState{}, nil
@@ -1226,12 +1226,12 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return remoteSessionStates(rows, resources...), nil
+	return remoteSessionStates(rows, resource), nil
 }
 
 // remoteSessionStates keys each status row by its client.
-func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resources ...string) map[uuid.UUID]RemoteSessionState {
-	rows = selectRemoteSessionStatusRows(rows, firstResource(resources))
+func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, resource string) map[uuid.UUID]RemoteSessionState {
+	rows = selectRemoteSessionStatusRows(rows, resource)
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
 	for _, row := range rows {
 		var accessExpiresAt *time.Time
@@ -1341,7 +1341,7 @@ func (m *ChallengeManager) refreshRemoteSession(ctx context.Context, attribution
 	if err != nil {
 		return zero, fmt.Errorf("get consent remote session: %w", err)
 	}
-	if resource != "" && (!session.Resource.Valid || session.Resource.String == "" || strings.TrimRight(session.Resource.String, "/") != strings.TrimRight(resource, "/")) {
+	if resource != "" && (!session.Resource.Valid || session.Resource.String == "" || !sameUpstream(session.Resource.String, resource)) {
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 	if !session.RefreshTokenEncrypted.Valid || session.RefreshTokenEncrypted.String == "" {
@@ -2885,7 +2885,7 @@ func selectRemoteSessionStatusRows(rows []remotesessions_repo.ListRemoteSessionS
 	selected := make(map[uuid.UUID]remotesessions_repo.ListRemoteSessionStatusesForSubjectRow, len(rows))
 	ambiguous := make(map[uuid.UUID]bool)
 	for _, row := range rows {
-		if resource != "" && row.Resource.Valid && strings.TrimRight(row.Resource.String, "/") != strings.TrimRight(resource, "/") {
+		if resource != "" && row.Resource.Valid && !sameUpstream(row.Resource.String, resource) {
 			continue
 		}
 		previous, exists := selected[row.RemoteSessionClientID]

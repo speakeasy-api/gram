@@ -32,7 +32,7 @@ func requireServerRequires(t *testing.T, ctx context.Context, ti *testInstance, 
 
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	tokens, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, *auth.ProjectID, auth.ActiveOrganizationID, issuer, urn.NewUserSubject(auth.UserID), server, false)
+	tokens, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, *auth.ProjectID, auth.ActiveOrganizationID, issuer, urn.NewUserSubject(auth.UserID), server, false, "")
 	if len(clients) == 0 {
 		require.NoError(t, err)
 		require.Empty(t, tokens)

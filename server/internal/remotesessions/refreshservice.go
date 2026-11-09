@@ -831,19 +831,25 @@ func (s *RefreshService) refresh(
 	held, lockErr := acquire()
 
 	if lockErr == nil && !held {
-		winner, ok, wait := s.awaitRefreshedSession(ctx, q, sess)
+		winner, ok, wait := s.awaitRefreshedSession(ctx, q, sess, func() bool {
+			lockAcquiredAt = time.Now()
+			held, lockErr = acquire()
+			return held || lockErr != nil
+		})
 		switch {
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
 			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}
 		}
-		if err := ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil && !held {
 			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
 		}
 		// No POST while another request holds the lock: two presenting one token can revoke the family (RFC 9700 section 4.14.2).
-		lockAcquiredAt = time.Now()
-		held, lockErr = acquire()
+		if !held && lockErr == nil {
+			lockAcquiredAt = time.Now()
+			held, lockErr = acquire()
+		}
 		if lockErr == nil && !held {
 			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld}
 		}
@@ -1133,13 +1139,16 @@ func authorizationUsable(sess remotesessions_repo.RemoteSession, now time.Time) 
 
 // awaitRefreshedSession returns the session row and access token the lock
 // holder wrote, or a terminal inactive result if that exact row was revoked
-// or replaced. Reports false if the row has not moved within refreshWaitBudget,
+// or replaced. If a sibling held the shared lock, acquire lets this caller
+// continue as soon as it owns the lease, without adopting the sibling's row.
+// Reports false if the row has not moved within refreshWaitBudget,
 // rather than stranding the caller on a dead holder, and a wait when the holder
 // hit an outage that now paces this binding.
 func (s *RefreshService) awaitRefreshedSession(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
+	acquire func() bool,
 ) (RefreshResult, bool, time.Duration) {
 	var zero RefreshResult
 
@@ -1174,6 +1183,9 @@ func (s *RefreshService) awaitRefreshedSession(
 		if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
 			if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 				return zero, false, wait
+			}
+			if acquire() {
+				return zero, false, 0
 			}
 			continue
 		}

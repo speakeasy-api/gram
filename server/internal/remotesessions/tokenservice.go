@@ -211,7 +211,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 	subject urn.SessionSubject,
 	resource string,
 ) (string, error) {
-	resolved, err := m.resolveUpstreamToken(ctx, attribution, clientID, subject, resource)
+	resolved, err := m.resolveUpstreamToken(ctx, attribution, clientID, subject, resource, resource)
 	if errors.Is(err, ErrNoValidToken) {
 		return "", nil
 	}
@@ -230,7 +230,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 	attribution RefreshAttribution,
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
-	resource string,
+	resource, refreshResource string,
 ) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	// Workload credentials require a tenant-scoped owner lookup, just as
@@ -273,7 +273,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		return zero, fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	resolved, err := m.resolveCredentialToken(ctx, attribution, sess, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, sess, refreshResource)
 	if err == nil && resolved.Token != "" {
 		m.touchResolvedCredential(ctx, sess)
 	}
@@ -403,7 +403,7 @@ func (m *ChallengeManager) ResolveAuthorization(
 			Resource:       clientCredentialRequestResource(*bound, resource),
 		})
 	} else {
-		resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
+		resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, clientID, subject, resource, resource)
 	}
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
@@ -572,7 +572,7 @@ type availabilityCheckKey struct{}
 func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject, mcpServerID uuid.NullUUID) error {
 	checkCtx := context.WithValue(ctx, availabilityCheckKey{}, true)
 	if mcpServerID.Valid {
-		_, err := m.ResolveServerAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject, mcpServerID.UUID, false)
+		_, err := m.ResolveServerAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject, mcpServerID.UUID, false, "")
 		return err
 	}
 	_, err := m.ResolveAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject)
@@ -638,7 +638,7 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	subject urn.SessionSubject,
 	mcpServerID uuid.UUID,
 	skipUnusable bool,
-	resources ...string,
+	resource string,
 ) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
@@ -661,7 +661,7 @@ func (m *ChallengeManager) ResolveServerAccessTokens(
 	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
 		return !slices.Contains(required, client.ClientID)
 	})
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable, resources...)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable, resource)
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
@@ -704,12 +704,8 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 	subject urn.SessionSubject,
 	clientID uuid.UUID,
 	skipUnusable bool,
-	resources ...string,
+	resource string,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	return m.resolveClientAccessTokensForResource(ctx, attribution, projectID, organizationID, userSessionIssuerID, subject, clientID, skipUnusable, firstResource(resources))
-}
-
-func (m *ChallengeManager) resolveClientAccessTokensForResource(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, clientID uuid.UUID, skipUnusable bool, resource string) (map[uuid.UUID]UpstreamToken, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
 		return nil, fmt.Errorf("list remote_session_clients: %w", err)
@@ -739,7 +735,7 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	if len(clients) == 0 {
 		return nil, nil
 	}
-	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable, "")
 }
 
 // resolveClientTokens resolves the caller's credential for each of clients,
@@ -754,10 +750,8 @@ func (m *ChallengeManager) resolveClientTokens(
 	subject urn.SessionSubject,
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	skipUnusable bool,
-	resources ...string,
+	resource string,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	resource := firstResource(resources)
-
 	// Assert the per-(user_session_issuer, remote_session_issuer) uniqueness
 	// invariant up front, before resolving any tokens. Folding this into the
 	// token loop would let an unusable first client short-circuit with
@@ -802,7 +796,9 @@ func (m *ChallengeManager) resolveClientTokens(
 			// token with a new row's resource.
 			// Typed requests select by the server's resource before refresh.
 			// Legacy registration-only requests require a singleton grant.
-			resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, resource)
+			// Selection is not a refresh fallback: a legacy NULL grant keeps
+			// the refresher's original registration-based audience derivation.
+			resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, resource, "")
 		}
 		switch {
 		case errors.Is(err, ErrNoValidToken):
@@ -994,7 +990,7 @@ func (m *ChallengeManager) RemoteSessionsNeedReconnect(
 	if err != nil {
 		return false, fmt.Errorf("list remote_session_clients: %w", err)
 	}
-	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients, subject)
+	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients, subject, "")
 }
 
 // ClientNeedsReconnect is RemoteSessionsNeedReconnect for one client the
@@ -1007,7 +1003,7 @@ func (m *ChallengeManager) ClientNeedsReconnect(
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 	clientID uuid.UUID,
-	resources ...string,
+	resource string,
 ) (bool, error) {
 	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
 	if err != nil {
@@ -1019,7 +1015,7 @@ func (m *ChallengeManager) ClientNeedsReconnect(
 	if chosen < 0 {
 		return true, nil
 	}
-	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject, resources...)
+	return m.storedGrantsNeedReconnect(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clients[chosen:chosen+1], subject, resource)
 }
 
 // storedGrantsNeedReconnect reports whether the stored credential the caller
@@ -1035,9 +1031,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	userSessionIssuerID uuid.UUID,
 	clients []remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow,
 	subject urn.SessionSubject,
-	resources ...string,
+	resource string,
 ) (bool, error) {
-	resource := firstResource(resources)
 	// The auth client resolver serves principal credentials from the
 	// authorizing user's session, as resolveCallerUpstreamToken does. The
 	// sign-in lookup keeps its existing reconnect check unchanged, so behavior
@@ -1101,6 +1096,10 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 			return false, fmt.Errorf("get remote_session for reconnect check: %w", err)
 		}
 		if attached && sess.SubjectUrn.Kind != urn.SessionSubjectKindUser {
+			return true, nil
+		}
+		// A compatibility singleton from another audience is not readiness for this one.
+		if resource != "" && sess.Resource.Valid && !sameUpstream(sess.Resource.String, resource) {
 			return true, nil
 		}
 		if accessTokenUsable(sess, now) {

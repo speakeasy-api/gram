@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -161,10 +162,20 @@ func TestRemoteSessionResourceGrants_RefreshOnlySelectedAudience(t *testing.T) {
 	q := repo.New(ti.conn)
 	a, err := q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID, Resource: resourceA})
 	require.NoError(t, err)
+	// The fixture starts with a legacy NULL grant. Bind A before creating B;
+	// otherwise singleton reconsent correctly adopts that same row for B.
+	a, err = q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn: subject, UserSessionIssuerID: a.UserSessionIssuerID, RemoteSessionClientID: clientID,
+		AccessTokenEncrypted: a.AccessTokenEncrypted, AccessExpiresAt: a.AccessExpiresAt,
+		RefreshTokenEncrypted: a.RefreshTokenEncrypted, RefreshExpiresAt: a.RefreshExpiresAt,
+		AuthorizationExpiresAt: a.AuthorizationExpiresAt, Scopes: a.Scopes, Resource: conv.ToPGText(resourceA),
+	})
+	require.NoError(t, err)
 	encrypted, err := testenv.NewEncryptionClient(t).Encrypt([]byte("b-original"))
 	require.NoError(t, err)
 	b, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: a.UserSessionIssuerID, RemoteSessionClientID: clientID, AccessTokenEncrypted: encrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Resource: conv.ToPGText(resourceB), Scopes: []string{}})
 	require.NoError(t, err)
+	require.NotEqual(t, a.ID, b.ID, "refresh isolation needs two distinct audience grants")
 	token, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, resourceA)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", token)
@@ -360,4 +371,122 @@ func TestRemoteSessionResourceGrants_LegacyReferenceRemainsIndependentlyRevocabl
 	retainedB, err = q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: b.ID, SubjectUrn: subject, RemoteSessionClientID: f.clientID})
 	require.NoError(t, err)
 	require.Equal(t, b, retainedB)
+}
+
+func TestRemoteSessionResourceGrants_SingletonReconsent(t *testing.T) {
+	t.Parallel()
+	for _, expanded := range []bool{false, true} {
+		for _, bind := range []bool{false, true} {
+			t.Run(fmt.Sprintf("expanded=%t/bind=%t", expanded, bind), func(t *testing.T) {
+				t.Parallel()
+				ctx, f := newAuthClientTokenFixture(t, "singleton-reconsent")
+				if expanded {
+					expandResourceGrantIndexes(t, ctx, f.ti.conn)
+				}
+				auth, ok := contextvalues.GetAuthContext(ctx)
+				require.True(t, ok)
+				q := repo.New(f.ti.conn)
+				params := repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: "old-token", Scopes: []string{"old"}}
+				if !bind {
+					params.Resource = conv.ToPGText("https://audience.example/mcp")
+				}
+				original, err := q.UpsertRemoteSession(ctx, params)
+				require.NoError(t, err)
+				params.Resource = conv.ToPGTextEmpty("")
+				if bind {
+					params.Resource = conv.ToPGText("https://audience.example/mcp")
+				}
+				params.AccessTokenEncrypted = "new-token"
+				params.Scopes = []string{"new"}
+				repaired, err := q.UpsertRemoteSession(ctx, params)
+				require.NoError(t, err)
+				require.Equal(t, original.ID, repaired.ID)
+				require.Equal(t, original.GrantGeneration+1, repaired.GrantGeneration)
+				require.Equal(t, params.Resource, repaired.Resource)
+				require.Equal(t, "new-token", repaired.AccessTokenEncrypted)
+				require.Equal(t, []string{"new"}, repaired.Scopes)
+			})
+		}
+	}
+}
+
+func TestRemoteSessionResourceGrants_BackfillCollision(t *testing.T) {
+	t.Parallel()
+	for _, concurrent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("concurrent=%t", concurrent), func(t *testing.T) {
+			t.Parallel()
+			ctx, f := newAuthClientTokenFixture(t, "backfill-collision")
+			expandResourceGrantIndexes(t, ctx, f.ti.conn)
+			auth, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+			q := repo.New(f.ti.conn)
+			params := repo.UpsertRemoteSessionParams{SubjectUrn: urn.NewUserSubject(auth.UserID), UserSessionIssuerID: f.signInA, RemoteSessionClientID: f.clientID, AccessTokenEncrypted: "original", Scopes: []string{}}
+			// Multiple bound rows make an unbound consent a separate grant, not a
+			// singleton adoption. This also recreates pre-existing rollout data.
+			var legacy repo.RemoteSession
+			for _, resource := range []string{"https://other-a.example/mcp", "https://other-b.example/mcp", ""} {
+				params.Resource = conv.ToPGTextEmpty(resource)
+				row, err := q.UpsertRemoteSession(ctx, params)
+				require.NoError(t, err)
+				legacy = row
+			}
+			tx, err := f.ti.conn.Begin(ctx)
+			require.NoError(t, err)
+			defer func() { _ = tx.Rollback(ctx) }()
+			tq := q.WithTx(tx)
+			_, err = tq.LockRemoteSessionClientForSessionWrite(ctx, f.clientID)
+			require.NoError(t, err)
+			params.Resource = conv.ToPGText("https://target.example/mcp/")
+			sibling, err := tq.UpsertRemoteSession(ctx, params)
+			require.NoError(t, err)
+			if !concurrent {
+				require.NoError(t, tx.Commit(ctx))
+			}
+			type result struct {
+				row repo.RemoteSession
+				err error
+			}
+			done := make(chan result, 1)
+			go func() {
+				row, err := q.UpdateRemoteSessionTokensIfUnchanged(ctx, repo.UpdateRemoteSessionTokensIfUnchangedParams{
+					ID: legacy.ID, SubjectUrn: legacy.SubjectUrn, RemoteSessionClientID: f.clientID, ExpectedUpdatedAt: legacy.UpdatedAt,
+					AccessTokenEncrypted: "rotated-access", RefreshTokenEncrypted: conv.ToPGText("rotated-refresh"), RefreshTokenRotated: true,
+					Scopes: []string{"refreshed"}, BackfillResource: conv.ToPGText("https://target.example/mcp"),
+				})
+				done <- result{row, err}
+			}()
+			if concurrent {
+				select {
+				case <-done:
+					t.Fatal("CAS must wait for consent's registration lock")
+				case <-time.After(100 * time.Millisecond):
+				}
+				require.NoError(t, tx.Commit(ctx))
+			}
+			var got result
+			select {
+			case got = <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("CAS did not finish")
+			}
+			require.NoError(t, got.err)
+			require.Equal(t, legacy.ID, got.row.ID)
+			require.Equal(t, legacy.GrantGeneration, got.row.GrantGeneration)
+			require.False(t, got.row.Resource.Valid, "do not stamp a sibling audience")
+			require.Equal(t, "rotated-access", got.row.AccessTokenEncrypted)
+			require.Equal(t, "rotated-refresh", got.row.RefreshTokenEncrypted.String)
+			retained, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: sibling.ID, SubjectUrn: sibling.SubjectUrn, RemoteSessionClientID: f.clientID})
+			require.NoError(t, err)
+			require.Equal(t, sibling, retained)
+			// Exact reconsent must win over a live NULL sibling.
+			params.AccessTokenEncrypted = "exact-reconsent"
+			exact, err := q.UpsertRemoteSession(ctx, params)
+			require.NoError(t, err)
+			require.Equal(t, sibling.ID, exact.ID)
+			require.Equal(t, sibling.GrantGeneration+1, exact.GrantGeneration)
+			unchanged, err := q.GetActiveRemoteSessionByID(ctx, repo.GetActiveRemoteSessionByIDParams{ID: legacy.ID, SubjectUrn: legacy.SubjectUrn, RemoteSessionClientID: f.clientID})
+			require.NoError(t, err)
+			require.Equal(t, got.row, unchanged)
+		})
+	}
 }

@@ -75,7 +75,7 @@ func (m *ChallengeManager) ResolveAuthClientAccessTokens(ctx context.Context, re
 		// An attached caller reaches a person's connection through its
 		// attachment. A service account's token belongs to nobody, so no
 		// attachment applies to it.
-		return m.resolveClientAccessTokensForResource(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable, req.Resource)
+		return m.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable, req.Resource)
 	case err != nil:
 		return nil, err
 	}
@@ -462,8 +462,7 @@ func (m *ChallengeManager) reachableClient(ctx context.Context, projectID uuid.U
 // tenantUserRemoteSession selects a user's own session for clientID in the
 // tenant: through the user session issuer link, or, for the auth client
 // resolver, through any sign-in of the server's project or organization.
-func tenantUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, resources ...string) (remotesessions_repo.RemoteSession, error) {
-	resource := firstResource(resources)
+func tenantUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, resource string) (remotesessions_repo.RemoteSession, error) {
 	if lookup == lookupAuthClient {
 		sess, err := q.GetTenantUserRemoteSessionForClient(ctx, remotesessions_repo.GetTenantUserRemoteSessionForClientParams{
 			Resource:              resource,
@@ -498,8 +497,7 @@ func tenantUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries
 // by subject and client alone, which the sign-in link scopes, or, for the auth
 // client resolver, only when the consent came through the server's
 // organization.
-func activeUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string, resources ...string) (remotesessions_repo.RemoteSession, error) {
-	resource := firstResource(resources)
+func activeUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries, lookup tokenLookup, subject urn.SessionSubject, clientID, projectID uuid.UUID, organizationID string, resource string) (remotesessions_repo.RemoteSession, error) {
 	if lookup == lookupAuthClient {
 		sess, err := q.GetActiveRemoteSessionInTenant(ctx, remotesessions_repo.GetActiveRemoteSessionInTenantParams{
 			Resource:              resource,
@@ -525,11 +523,4 @@ func activeUserRemoteSession(ctx context.Context, q *remotesessions_repo.Queries
 		return sess, fmt.Errorf("get active remote_session: %w", err)
 	}
 	return sess, nil
-}
-
-func firstResource(resources []string) string {
-	if len(resources) == 0 {
-		return ""
-	}
-	return resources[0]
 }

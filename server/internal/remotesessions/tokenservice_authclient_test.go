@@ -113,7 +113,7 @@ func TestResolveClientAccessTokens_StillRequiresTheSignInLink(t *testing.T) {
 	subject := urn.NewUserSubject("ac-legacy-link-user")
 	f.consent(t, subject, f.signInA, f.clientID, "token-from-a")
 
-	_, err := f.mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, subject, f.clientID, false)
+	_, err := f.mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, subject, f.clientID, false, "")
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
 }
 

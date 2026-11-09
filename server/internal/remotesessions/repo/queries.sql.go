@@ -15911,6 +15911,124 @@ func (q *Queries) SoftDeleteTrustedIssuerSessionFixture(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
+const storeRemoteSessionTokensIfUnchanged = `-- name: StoreRemoteSessionTokensIfUnchanged :one
+UPDATE remote_sessions AS current
+SET
+    access_token_encrypted = $1,
+    access_expires_at = $2,
+    refresh_token_encrypted = $3,
+    authorization_expires_at = $4,
+    -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
+    refresh_expires_at = CASE
+        WHEN $5::boolean THEN $6
+        ELSE COALESCE($6, current.refresh_expires_at) END,
+    scopes = $7,
+    resource = COALESCE(current.resource, CASE WHEN NOT EXISTS (
+        SELECT 1 FROM remote_sessions sibling
+        WHERE sibling.subject_urn = $8
+          AND sibling.remote_session_client_id = $9
+          AND sibling.id <> $10 AND sibling.deleted IS FALSE
+          AND rtrim(sibling.resource, '/') = rtrim($11::text, '/')
+    ) THEN NULLIF($11::text, '') END),
+    -- JWT-derived display identity describes the access token being replaced;
+    -- the subject binding stays so a replacement token for another account is
+    -- still rejected. Higher ranked sources survive rotation until they restate.
+    upstream_email = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.upstream_email END,
+    upstream_display_name = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.upstream_display_name END,
+    identity_source = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.identity_source END,
+    -- A refreshed token has not been presented anywhere yet, and the stored
+    -- introspection answer described the token it replaces; a rotated refresh
+    -- token likewise retires the record of having introspected the old one.
+    last_validated_at = NULL,
+    validation_status = NULL,
+    validation_reason = NULL,
+    enrichment = CASE
+        WHEN $5::boolean
+        THEN ((((current.enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((current.enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
+    updated_at = clock_timestamp()
+WHERE current.id = $10
+  AND current.subject_urn = $8
+  AND current.remote_session_client_id = $9
+  AND current.deleted IS FALSE
+  AND current.updated_at = $12
+RETURNING current.id, current.grant_generation, current.subject_urn, current.user_session_issuer_id, current.remote_session_client_id, current.access_token_encrypted, current.access_expires_at, current.refresh_token_encrypted, current.authorization_expires_at, current.refresh_expires_at, current.scopes, current.resource, current.auto_refresh, current.last_refresh_attempt_at, current.last_used_at, current.upstream_subject, current.upstream_email, current.upstream_display_name, current.identity_source, current.enrichment, current.last_validated_at, current.validation_status, current.validation_reason, current.created_at, current.updated_at, current.deleted_at, current.deleted
+`
+
+type StoreRemoteSessionTokensIfUnchangedParams struct {
+	AccessTokenEncrypted   string
+	AccessExpiresAt        pgtype.Timestamptz
+	RefreshTokenEncrypted  pgtype.Text
+	AuthorizationExpiresAt pgtype.Timestamptz
+	RefreshTokenRotated    bool
+	RefreshExpiresAt       pgtype.Timestamptz
+	Scopes                 []string
+	SubjectUrn             urn.SessionSubject
+	RemoteSessionClientID  uuid.UUID
+	ID                     uuid.UUID
+	BackfillResource       pgtype.Text
+	ExpectedUpdatedAt      pgtype.Timestamptz
+}
+
+// Compare-and-swap write for the refresh path. Update-only on purpose: an
+// INSERT here would undo a revocation that landed mid-refresh. No rows means
+// another writer won or the session was revoked; both end in a re-auth challenge.
+// Keyed by id + (subject, client) + CAS only: the session's user_session_issuer_id
+// is provenance, never part of the credential's identity.
+// backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
+// The repository wrapper holds the registration lock across a fresh statement
+// snapshot so concurrent consent cannot claim the audience between check and write.
+// A sibling binding prevents stamping, but never prevents saving rotated tokens.
+// refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
+// every encryption, so they cannot say whether the provider echoed the same token.
+func (q *Queries) StoreRemoteSessionTokensIfUnchanged(ctx context.Context, arg StoreRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
+	row := q.db.QueryRow(ctx, storeRemoteSessionTokensIfUnchanged,
+		arg.AccessTokenEncrypted,
+		arg.AccessExpiresAt,
+		arg.RefreshTokenEncrypted,
+		arg.AuthorizationExpiresAt,
+		arg.RefreshTokenRotated,
+		arg.RefreshExpiresAt,
+		arg.Scopes,
+		arg.SubjectUrn,
+		arg.RemoteSessionClientID,
+		arg.ID,
+		arg.BackfillResource,
+		arg.ExpectedUpdatedAt,
+	)
+	var i RemoteSession
+	err := row.Scan(
+		&i.ID,
+		&i.GrantGeneration,
+		&i.SubjectUrn,
+		&i.UserSessionIssuerID,
+		&i.RemoteSessionClientID,
+		&i.AccessTokenEncrypted,
+		&i.AccessExpiresAt,
+		&i.RefreshTokenEncrypted,
+		&i.AuthorizationExpiresAt,
+		&i.RefreshExpiresAt,
+		&i.Scopes,
+		&i.Resource,
+		&i.AutoRefresh,
+		&i.LastRefreshAttemptAt,
+		&i.LastUsedAt,
+		&i.UpstreamSubject,
+		&i.UpstreamEmail,
+		&i.UpstreamDisplayName,
+		&i.IdentitySource,
+		&i.Enrichment,
+		&i.LastValidatedAt,
+		&i.ValidationStatus,
+		&i.ValidationReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const touchEMACredentialLastUsed = `-- name: TouchEMACredentialLastUsed :exec
 UPDATE remote_session_ema_credentials
 SET last_used_at = $1
@@ -17564,116 +17682,6 @@ func (q *Queries) UpdateRemoteSessionIssuerDiscoveredMetadata(ctx context.Contex
 	return i, err
 }
 
-const updateRemoteSessionTokensIfUnchanged = `-- name: UpdateRemoteSessionTokensIfUnchanged :one
-UPDATE remote_sessions
-SET
-    access_token_encrypted = $1,
-    access_expires_at = $2,
-    refresh_token_encrypted = $3,
-    authorization_expires_at = $4,
-    -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
-    refresh_expires_at = CASE
-        WHEN $5::boolean THEN $6
-        ELSE COALESCE($6, refresh_expires_at) END,
-    scopes = $7,
-    resource = COALESCE(resource, NULLIF($8::text, '')),
-    -- JWT-derived display identity describes the access token being replaced;
-    -- the subject binding stays so a replacement token for another account is
-    -- still rejected. Higher ranked sources survive rotation until they restate.
-    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
-    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
-    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
-    -- A refreshed token has not been presented anywhere yet, and the stored
-    -- introspection answer described the token it replaces; a rotated refresh
-    -- token likewise retires the record of having introspected the old one.
-    last_validated_at = NULL,
-    validation_status = NULL,
-    validation_reason = NULL,
-    enrichment = CASE
-        WHEN $5::boolean
-        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
-        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
-    updated_at = clock_timestamp()
-WHERE id = $9
-  AND subject_urn = $10
-  AND remote_session_client_id = $11
-  AND deleted IS FALSE
-  AND updated_at = $12
-RETURNING id, grant_generation, subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, access_expires_at, refresh_token_encrypted, authorization_expires_at, refresh_expires_at, scopes, resource, auto_refresh, last_refresh_attempt_at, last_used_at, upstream_subject, upstream_email, upstream_display_name, identity_source, enrichment, last_validated_at, validation_status, validation_reason, created_at, updated_at, deleted_at, deleted
-`
-
-type UpdateRemoteSessionTokensIfUnchangedParams struct {
-	AccessTokenEncrypted   string
-	AccessExpiresAt        pgtype.Timestamptz
-	RefreshTokenEncrypted  pgtype.Text
-	AuthorizationExpiresAt pgtype.Timestamptz
-	RefreshTokenRotated    bool
-	RefreshExpiresAt       pgtype.Timestamptz
-	Scopes                 []string
-	BackfillResource       pgtype.Text
-	ID                     uuid.UUID
-	SubjectUrn             urn.SessionSubject
-	RemoteSessionClientID  uuid.UUID
-	ExpectedUpdatedAt      pgtype.Timestamptz
-}
-
-// Compare-and-swap write for the refresh path. Update-only on purpose: an
-// INSERT here would undo a revocation that landed mid-refresh. No rows means
-// another writer won or the session was revoked; both end in a re-auth challenge.
-// Keyed by id + (subject, client) + CAS only: the session's user_session_issuer_id
-// is provenance, never part of the credential's identity.
-// backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
-// COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
-// refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
-// every encryption, so they cannot say whether the provider echoed the same token.
-func (q *Queries) UpdateRemoteSessionTokensIfUnchanged(ctx context.Context, arg UpdateRemoteSessionTokensIfUnchangedParams) (RemoteSession, error) {
-	row := q.db.QueryRow(ctx, updateRemoteSessionTokensIfUnchanged,
-		arg.AccessTokenEncrypted,
-		arg.AccessExpiresAt,
-		arg.RefreshTokenEncrypted,
-		arg.AuthorizationExpiresAt,
-		arg.RefreshTokenRotated,
-		arg.RefreshExpiresAt,
-		arg.Scopes,
-		arg.BackfillResource,
-		arg.ID,
-		arg.SubjectUrn,
-		arg.RemoteSessionClientID,
-		arg.ExpectedUpdatedAt,
-	)
-	var i RemoteSession
-	err := row.Scan(
-		&i.ID,
-		&i.GrantGeneration,
-		&i.SubjectUrn,
-		&i.UserSessionIssuerID,
-		&i.RemoteSessionClientID,
-		&i.AccessTokenEncrypted,
-		&i.AccessExpiresAt,
-		&i.RefreshTokenEncrypted,
-		&i.AuthorizationExpiresAt,
-		&i.RefreshExpiresAt,
-		&i.Scopes,
-		&i.Resource,
-		&i.AutoRefresh,
-		&i.LastRefreshAttemptAt,
-		&i.LastUsedAt,
-		&i.UpstreamSubject,
-		&i.UpstreamEmail,
-		&i.UpstreamDisplayName,
-		&i.IdentitySource,
-		&i.Enrichment,
-		&i.LastValidatedAt,
-		&i.ValidationStatus,
-		&i.ValidationReason,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.Deleted,
-	)
-	return i, err
-}
-
 const updateTestTrustedIssuerConfiguration = `-- name: UpdateTestTrustedIssuerConfiguration :exec
 UPDATE remote_session_issuers
 SET issuer = $1, jwks_uri = $2, updated_at = clock_timestamp()
@@ -17917,10 +17925,28 @@ UPDATE remote_sessions AS current SET
     updated_at = clock_timestamp()
 WHERE current.subject_urn = $13 AND current.remote_session_client_id = $14
     AND current.deleted IS FALSE
-    AND (current.resource IS NOT DISTINCT FROM $7 OR rtrim(current.resource, '/') = rtrim($7, '/'))
-  AND (SELECT count(*) FROM remote_sessions matching WHERE matching.subject_urn = $13 AND matching.remote_session_client_id = $14
-    AND matching.deleted IS FALSE
-    AND (matching.resource IS NOT DISTINCT FROM $7 OR rtrim(matching.resource, '/') = rtrim($7, '/'))) = 1
+    AND (
+        (current.resource IS NOT DISTINCT FROM $7 OR rtrim(current.resource, '/') = rtrim($7, '/'))
+        OR (
+            (current.resource IS NULL OR $7::text IS NULL)
+            AND (SELECT count(*) FROM remote_sessions singleton
+                WHERE singleton.subject_urn = $13
+                  AND singleton.remote_session_client_id = $14
+                  AND singleton.deleted IS FALSE) = 1
+            AND NOT EXISTS (
+                SELECT 1 FROM remote_sessions exact_match
+                WHERE exact_match.subject_urn = $13
+                  AND exact_match.remote_session_client_id = $14
+                  AND exact_match.deleted IS FALSE
+                  AND (exact_match.resource IS NOT DISTINCT FROM $7 OR rtrim(exact_match.resource, '/') = rtrim($7, '/'))
+            )
+        )
+    )
+    AND (SELECT count(*) FROM remote_sessions matching
+        WHERE matching.subject_urn = $13
+          AND matching.remote_session_client_id = $14
+          AND matching.deleted IS FALSE
+          AND (matching.resource IS NOT DISTINCT FROM $7 OR rtrim(matching.resource, '/') = rtrim($7, '/'))) <= 1
 RETURNING current.id, current.grant_generation, current.subject_urn, current.user_session_issuer_id, current.remote_session_client_id, current.access_token_encrypted, current.access_expires_at, current.refresh_token_encrypted, current.authorization_expires_at, current.refresh_expires_at, current.scopes, current.resource, current.auto_refresh, current.last_refresh_attempt_at, current.last_used_at, current.upstream_subject, current.upstream_email, current.upstream_display_name, current.identity_source, current.enrichment, current.last_validated_at, current.validation_status, current.validation_reason, current.created_at, current.updated_at, current.deleted_at, current.deleted
 ), inserted AS (
 INSERT INTO remote_sessions (
@@ -18022,6 +18048,7 @@ type UpsertRemoteSessionGrantRow struct {
 // preserving the provider-facing resource spelling and the existing source ID.
 // Targetless conflict detection supports both index generations: old-schema
 // cross-resource reuse returns no row without replacing another audience.
+// Exact reconsent wins; only a singleton may adopt a NULL/bound transition.
 func (q *Queries) UpsertRemoteSessionGrant(ctx context.Context, arg UpsertRemoteSessionGrantParams) (UpsertRemoteSessionGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertRemoteSessionGrant,
 		arg.AccessTokenEncrypted,

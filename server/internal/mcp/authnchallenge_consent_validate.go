@@ -358,7 +358,16 @@ func (s *Service) probeRemoteSession(
 			// Admission and either typed permission or the legacy sign-in link
 			// were checked above. The strict tenant selector must not adopt and
 			// refresh another audience's singleton grant before routing.
-			resolved, rerr = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject, RegistrationID: client.ID, Resource: resource, SkipUnusable: true, Attribution: attribution})
+			resolved, rerr = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+				ProjectID:           projectID,
+				OrganizationID:      endpoint.OrganizationID,
+				UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject:             subject,
+				RegistrationID:      client.ID,
+				Resource:            resource,
+				SkipUnusable:        true,
+				Attribution:         attribution,
+			})
 		default:
 			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		}

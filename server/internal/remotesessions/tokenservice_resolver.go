@@ -60,39 +60,40 @@ func principalAPIKeyAuthorizer(ctx context.Context, caller urn.SessionSubject) (
 }
 
 // resolveCallerUpstreamToken separates admission identity from credential
-// source. Only scoped callers can use attachments; a missing or revoked
-// attachment never falls back to the agent's or owner's grant, and a revoked
+// source. resource selects the stored grant; refreshResource is the explicit
+// provider fallback used only by the legacy single-token APIs. Only scoped
+// callers can use attachments; a missing or revoked attachment never falls back to the agent's or owner's grant, and a revoked
 // attachment never serves. An admitted agent principal reads its authorizer's
 // own connection only when the caller asks for exactly that user, after the
 // auth client check decided the agent's own mcp:auth for that owner.
-func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource, refreshResource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeWorkload {
-		return m.resolveWorkloadUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, caller, resource)
+		return m.resolveWorkloadUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, caller, resource, refreshResource)
 	}
 	// A subject alone is not authority to select a workload owner's grant.
 	if caller.Kind == urn.SessionSubjectKindWorkload {
 		return zero, ErrInvalidAuthorizationRequest
 	}
 	if credential, ok := principalcredential.FromContext(ctx); ok {
-		return m.resolveAuthorizerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, credential.Credential.AuthorizerUserID)
+		return m.resolveAuthorizerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, refreshResource, credential.Credential.AuthorizerUserID)
 	}
 	// The auth client check already decided the agent's own mcp:auth against
 	// the authorizer as the connection's owner, for a typed client or a
 	// handback to the upstream client choice; the key then reads exactly that
 	// user's connection, never an attachment or the agent's own.
 	if authorizer, ok := principalAPIKeyAuthorizer(ctx, caller); ok {
-		return m.resolveAuthorizerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, authorizer)
+		return m.resolveAuthorizerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, clientID, resource, refreshResource, authorizer)
 	}
 	principalID, attached, err := remoteSessionCallerPrincipal(ctx, caller)
 	if err != nil {
 		return zero, err
 	}
 	if !attached && lookup == lookupAuthClient {
-		return m.resolveTenantUpstreamToken(ctx, attribution, projectID, organizationID, clientID, caller, resource)
+		return m.resolveTenantUpstreamToken(ctx, attribution, projectID, organizationID, clientID, caller, resource, refreshResource)
 	}
 	if !attached {
-		return m.resolveUpstreamToken(ctx, attribution, clientID, caller, resource)
+		return m.resolveUpstreamToken(ctx, attribution, clientID, caller, resource, refreshResource)
 	}
 	if projectID == uuid.Nil || organizationID == "" || userSessionIssuerID == uuid.Nil || clientID == uuid.Nil {
 		return zero, ErrInvalidAuthorizationRequest
@@ -115,7 +116,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attri
 	if source.SubjectUrn.Kind != urn.SessionSubjectKindUser {
 		return zero, nil
 	}
-	resolved, err := m.resolveCredentialToken(ctx, attribution, source, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, source, refreshResource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
 	}
@@ -138,7 +139,7 @@ func (m *ChallengeManager) resolveCallerUpstreamToken(ctx context.Context, attri
 // resolveTenantUpstreamToken is resolveUpstreamToken for the auth client
 // resolver: a plain caller's own session, only when its consent came through
 // the server's organization.
-func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, clientID uuid.UUID, caller urn.SessionSubject, resource, refreshResource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	q := remotesessions_repo.New(m.db)
 	sess, err := activeUserRemoteSession(ctx, q, lookupAuthClient, caller, clientID, projectID, organizationID, resource)
@@ -148,7 +149,7 @@ func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attri
 	case err != nil:
 		return zero, err
 	}
-	resolved, err := m.resolveCredentialToken(ctx, attribution, sess, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, sess, refreshResource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
 	}
@@ -172,7 +173,7 @@ func (m *ChallengeManager) resolveTenantUpstreamToken(ctx context.Context, attri
 // on the fly: the session is the user's own, never bound to the credential's
 // principal. A credential with no authorizing user has no session to use.
 // This path never falls back to an owner or the principal's own sessions.
-func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, authorizerUserID string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, resource, refreshResource, authorizerUserID string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	if authorizerUserID == "" {
 		return zero, nil
@@ -186,7 +187,7 @@ func (m *ChallengeManager) resolveAuthorizerUpstreamToken(ctx context.Context, a
 	if err != nil {
 		return zero, fmt.Errorf("select authorizing user credential: %w", err)
 	}
-	resolved, err := m.resolveCredentialToken(ctx, attribution, selected, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, selected, refreshResource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
 	}
@@ -232,7 +233,7 @@ func (m *ChallengeManager) workloadCredentialOwner(ctx context.Context, projectI
 	return admission, nil
 }
 
-func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, attribution RefreshAttribution, lookup tokenLookup, projectID uuid.UUID, organizationID string, userSessionIssuerID, clientID uuid.UUID, caller urn.SessionSubject, resource, refreshResource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	admission, err := m.workloadCredentialOwner(ctx, projectID, organizationID, caller)
 	if err != nil {
@@ -247,7 +248,7 @@ func (m *ChallengeManager) resolveWorkloadUpstreamToken(ctx context.Context, att
 	if err != nil {
 		return zero, fmt.Errorf("select workload owner credential: %w", err)
 	}
-	resolved, err := m.resolveCredentialToken(ctx, attribution, selected, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, selected, refreshResource)
 	if err != nil || resolved.Token == "" {
 		return resolved, err
 	}

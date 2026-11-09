@@ -81,7 +81,14 @@ func TestConsentSessionRouting_DirectPersistedTargetReadiness(t *testing.T) {
 		strict, err := f.service.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, f.projectID, f.orgID, []uuid.UUID{f.registration}, resourceB)
 		require.NoError(t, err)
 		require.Empty(t, strict, "a display marker cannot enter strict state reads")
-		tokens, err := f.service.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: signIn, Subject: subject, RegistrationID: f.registration, Resource: resourceB})
+		tokens, err := f.service.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID:           f.projectID,
+			OrganizationID:      f.orgID,
+			UserSessionIssuerID: signIn,
+			Subject:             subject,
+			RegistrationID:      f.registration,
+			Resource:            resourceB,
+		})
 		require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
 		require.Empty(t, tokens, "a display marker cannot supply B's bearer")
 		changed, err := f.service.remoteChallengeMgr.SetAuthClientRemoteSessionAutoRefreshForResource(ctx, subject, f.projectID, f.orgID, f.registration, resourceB, false)

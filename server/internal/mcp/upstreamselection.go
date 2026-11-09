@@ -508,8 +508,8 @@ func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authenticatio
 		if client.connection.authorizer {
 			subject = urn.NewUserSubject(client.connection.owner)
 		}
-		resolved, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{Resource: endpoint.UpstreamResource,
-
+		resolved, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{
+			Resource:            endpoint.UpstreamResource,
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -573,8 +573,8 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	if authentication.chosenClient.Valid && (authentication.authClient != nil || authentication.checkedRegistration) {
 		// A typed auth client was checked against the server, which authorizes
 		// its registration without a sign-in link.
-		tokens, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{Resource: endpoint.UpstreamResource,
-
+		tokens, err := s.resolveResourceQualifiedTokens(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{
+			Resource:            endpoint.UpstreamResource,
 			ProjectID:           endpoint.ProjectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -762,8 +762,8 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution rem
 	// Under enforcement the resolver checked every chosen registration
 	// against the member, which authorizes it without a sign-in link.
 	if member.typedAuthClient || enforced {
-		tokens, err := s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
-
+		tokens, err := s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+			Resource:            "",
 			ProjectID:           member.projectID,
 			OrganizationID:      endpoint.OrganizationID,
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
@@ -777,8 +777,16 @@ func (s *Service) resolveChosenMemberTokens(ctx context.Context, attribution rem
 		}
 		return pinAttachedSession(tokens, pinned, false)
 	}
-	tokens, err := s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
-		Attribution: attribution, ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: handbackSubject(subject, authorizerOwner), RegistrationID: member.chosenClientID.UUID, SkipUnusable: true})
+	tokens, err := s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+		Resource:            "",
+		Attribution:         attribution,
+		ProjectID:           member.projectID,
+		OrganizationID:      endpoint.OrganizationID,
+		UserSessionIssuerID: endpoint.UserSessionIssuerID,
+		Subject:             handbackSubject(subject, authorizerOwner),
+		RegistrationID:      member.chosenClientID.UUID,
+		SkipUnusable:        true,
+	})
 	switch {
 	case errors.Is(err, remotesessions.ErrChosenClientUnbound):
 		return nil, fmt.Errorf("resolve chosen client: %w", err)
@@ -1111,11 +1119,15 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 					return true, nil
 				}
 				// An existing connection needs no Connect.
-				reconnect, err := s.resourceQualifiedNeedsReconnect(ctx, member.serverID, remotesessions.AuthClientTokenRequest{Resource: "",
-
-					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
-					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
-					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
+				reconnect, err := s.resourceQualifiedNeedsReconnect(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+					Resource:            "",
+					Attribution:         remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
+					ProjectID:           member.projectID,
+					OrganizationID:      gate.organizationID,
+					UserSessionIssuerID: gate.userSessionIssuerID,
+					Subject:             subject,
+					RegistrationID:      option.registrationID.UUID,
+					SkipUnusable:        false,
 				})
 				if err != nil {
 					return false, fmt.Errorf("check member connection: %w", err)

@@ -1515,6 +1515,7 @@ WHERE s.subject_urn = @subject_urn
 -- preserving the provider-facing resource spelling and the existing source ID.
 -- Targetless conflict detection supports both index generations: old-schema
 -- cross-resource reuse returns no row without replacing another audience.
+-- Exact reconsent wins; only a singleton may adopt a NULL/bound transition.
 WITH updated AS (
 UPDATE remote_sessions AS current SET
     grant_generation = current.grant_generation + 1,
@@ -1537,10 +1538,28 @@ UPDATE remote_sessions AS current SET
     updated_at = clock_timestamp()
 WHERE current.subject_urn = @subject_urn AND current.remote_session_client_id = @remote_session_client_id
     AND current.deleted IS FALSE
-    AND (current.resource IS NOT DISTINCT FROM @resource OR rtrim(current.resource, '/') = rtrim(@resource, '/'))
-  AND (SELECT count(*) FROM remote_sessions matching WHERE matching.subject_urn = @subject_urn AND matching.remote_session_client_id = @remote_session_client_id
-    AND matching.deleted IS FALSE
-    AND (matching.resource IS NOT DISTINCT FROM @resource OR rtrim(matching.resource, '/') = rtrim(@resource, '/'))) = 1
+    AND (
+        (current.resource IS NOT DISTINCT FROM @resource OR rtrim(current.resource, '/') = rtrim(@resource, '/'))
+        OR (
+            (current.resource IS NULL OR @resource::text IS NULL)
+            AND (SELECT count(*) FROM remote_sessions singleton
+                WHERE singleton.subject_urn = @subject_urn
+                  AND singleton.remote_session_client_id = @remote_session_client_id
+                  AND singleton.deleted IS FALSE) = 1
+            AND NOT EXISTS (
+                SELECT 1 FROM remote_sessions exact_match
+                WHERE exact_match.subject_urn = @subject_urn
+                  AND exact_match.remote_session_client_id = @remote_session_client_id
+                  AND exact_match.deleted IS FALSE
+                  AND (exact_match.resource IS NOT DISTINCT FROM @resource OR rtrim(exact_match.resource, '/') = rtrim(@resource, '/'))
+            )
+        )
+    )
+    AND (SELECT count(*) FROM remote_sessions matching
+        WHERE matching.subject_urn = @subject_urn
+          AND matching.remote_session_client_id = @remote_session_client_id
+          AND matching.deleted IS FALSE
+          AND (matching.resource IS NOT DISTINCT FROM @resource OR rtrim(matching.resource, '/') = rtrim(@resource, '/'))) <= 1
 RETURNING current.*
 ), inserted AS (
 INSERT INTO remote_sessions (
@@ -1588,17 +1607,19 @@ RETURNING *
 )
 SELECT * FROM updated UNION ALL SELECT * FROM inserted;
 
--- name: UpdateRemoteSessionTokensIfUnchanged :one
+-- name: StoreRemoteSessionTokensIfUnchanged :one
 -- Compare-and-swap write for the refresh path. Update-only on purpose: an
 -- INSERT here would undo a revocation that landed mid-refresh. No rows means
 -- another writer won or the session was revoked; both end in a re-auth challenge.
 -- Keyed by id + (subject, client) + CAS only: the session's user_session_issuer_id
 -- is provenance, never part of the credential's identity.
 -- backfill_resource stamps the refresh's RFC 8707 resource onto legacy NULL rows;
--- COALESCE never overwrites a stored binding and NULLIF keeps an empty backfill NULL.
+-- The repository wrapper holds the registration lock across a fresh statement
+-- snapshot so concurrent consent cannot claim the audience between check and write.
+-- A sibling binding prevents stamping, but never prevents saving rotated tokens.
 -- refresh_token_rotated is decided in Go on the plaintexts: ciphertexts differ on
 -- every encryption, so they cannot say whether the provider echoed the same token.
-UPDATE remote_sessions
+UPDATE remote_sessions AS current
 SET
     access_token_encrypted = @access_token_encrypted,
     access_expires_at = @access_expires_at,
@@ -1607,15 +1628,21 @@ SET
     -- A refresh that keeps the same refresh token and reports no deadline leaves the known one standing.
     refresh_expires_at = CASE
         WHEN @refresh_token_rotated::boolean THEN @refresh_expires_at
-        ELSE COALESCE(@refresh_expires_at, refresh_expires_at) END,
+        ELSE COALESCE(@refresh_expires_at, current.refresh_expires_at) END,
     scopes = @scopes,
-    resource = COALESCE(resource, NULLIF(sqlc.narg('backfill_resource')::text, '')),
+    resource = COALESCE(current.resource, CASE WHEN NOT EXISTS (
+        SELECT 1 FROM remote_sessions sibling
+        WHERE sibling.subject_urn = @subject_urn
+          AND sibling.remote_session_client_id = @remote_session_client_id
+          AND sibling.id <> @id AND sibling.deleted IS FALSE
+          AND rtrim(sibling.resource, '/') = rtrim(sqlc.narg('backfill_resource')::text, '/')
+    ) THEN NULLIF(sqlc.narg('backfill_resource')::text, '') END),
     -- JWT-derived display identity describes the access token being replaced;
     -- the subject binding stays so a replacement token for another account is
     -- still rejected. Higher ranked sources survive rotation until they restate.
-    upstream_email = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_email END,
-    upstream_display_name = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE upstream_display_name END,
-    identity_source = CASE WHEN identity_source = 'jwt_access_token' THEN NULL ELSE identity_source END,
+    upstream_email = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.upstream_email END,
+    upstream_display_name = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.upstream_display_name END,
+    identity_source = CASE WHEN current.identity_source = 'jwt_access_token' THEN NULL ELSE current.identity_source END,
     -- A refreshed token has not been presented anywhere yet, and the stored
     -- introspection answer described the token it replaces; a rotated refresh
     -- token likewise retires the record of having introspected the old one.
@@ -1624,15 +1651,15 @@ SET
     validation_reason = NULL,
     enrichment = CASE
         WHEN @refresh_token_rotated::boolean
-        THEN ((((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
-        ELSE (((enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
+        THEN ((((current.enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}') #- '{interfaces,refresh_introspection}'
+        ELSE (((current.enrichment - 'introspection') - 'jwt_access_token') #- '{interfaces,introspection}') #- '{interfaces,jwt_access_token}' END,
     updated_at = clock_timestamp()
-WHERE id = @id
-  AND subject_urn = @subject_urn
-  AND remote_session_client_id = @remote_session_client_id
-  AND deleted IS FALSE
-  AND updated_at = @expected_updated_at
-RETURNING *;
+WHERE current.id = @id
+  AND current.subject_urn = @subject_urn
+  AND current.remote_session_client_id = @remote_session_client_id
+  AND current.deleted IS FALSE
+  AND current.updated_at = @expected_updated_at
+RETURNING current.*;
 
 -- name: UpdateRemoteSessionIdentity :one
 -- Restates identity after a refresh or an enrichment interface, outside the
