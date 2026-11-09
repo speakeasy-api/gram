@@ -363,6 +363,9 @@ func (s *Service) consentChainingRequests(ctx context.Context, endpoint *Resolve
 	// client's binding, and for a tunneled backend routed by its own issuer.
 	requests := make(map[uuid.UUID][]identitychaining.Request, len(clients))
 	for _, c := range clients {
+		if routing.unroutableClients[c.ID] {
+			continue
+		}
 		choice := upstreamChoice{clientID: uuid.NullUUID{UUID: c.ID, Valid: true}, remoteSessionIssuerID: uuid.NullUUID{UUID: c.RemoteSessionIssuerID, Valid: true}}
 		req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 		if err != nil {

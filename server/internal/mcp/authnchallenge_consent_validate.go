@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -229,10 +231,118 @@ func (s *Service) probeRemoteSession(
 		}
 	}()
 
-	tokenProjectIDs, err := s.clientTokenProjectIDs(ctx, endpoint, client)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
+	var tokenProjectIDs []uuid.UUID
+	var err error
+	focusedID := uuid.Nil
+	resource := ""
+	qualified := false
+	typed := false
+
+	var committedResource string
+	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil {
+		stored, err := remotesessions_repo.New(s.db).GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{ID: expectedGrant.RemoteSessionID, SubjectUrn: subject, RemoteSessionClientID: client.ID})
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("%w: read committed verification source: %w", errValidationUnfinished, err)
+		}
+		if !stored.UpdatedAt.Time.Equal(expectedGrant.RemoteSessionUpdatedAt) {
+			return nil
+		}
+		committedResource = conv.FromPGTextOrEmpty[string](stored.Resource)
 	}
+	// A callback may have started on a gateway's general consent page. Recover
+	// only a unique admitted target from the exact committed grant, never the
+	// first member sharing its registration.
+	if endpoint.MetaMcpServerID.Valid && challengeState.FocusServer == "" && committedResource != "" {
+		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+		if err != nil {
+			return fmt.Errorf("load committed verification members: %w", err)
+		}
+		matches := 0
+		for _, member := range members {
+			if member.backend != metaMemberBackendProxied || !memberUsesClient(member, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+				continue
+			}
+			candidate, err := s.consentMemberResource(ctx, member)
+			if err != nil {
+				return err
+			}
+			if strings.TrimRight(candidate, "/") == strings.TrimRight(committedResource, "/") {
+				matches++
+				challengeState.FocusServer = member.slug
+			}
+		}
+		if matches != 1 {
+			logger.WarnContext(ctx, "committed grant verification skipped: no unique admitted member")
+			return nil
+		}
+	}
+	if endpoint.MetaMcpServerID.Valid && challengeState.FocusServer != "" {
+		var member chosenMetaMember
+		resource, member, err = s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, challengeState.FocusServer)
+		if err != nil {
+			if errors.Is(err, errConsentMemberTarget) {
+				err = fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
+			}
+			return oops.E(oops.CodeBadRequest, err, "This connection cannot be verified for this gateway member.").LogWarn(ctx, logger)
+		}
+		if committedResource != "" && strings.TrimRight(committedResource, "/") != strings.TrimRight(resource, "/") {
+			return nil
+		}
+		if !member.serverID.Valid || resource == "" {
+			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This gateway member does not support resource-qualified verification.").LogWarn(ctx, logger)
+		}
+		if member.serverID.Valid {
+			authorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, member)
+			if verifyHitStoreOutage(ctx, err) {
+				return fmt.Errorf("%w: %w", errValidationUnfinished, err)
+			}
+			if err != nil {
+				if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+					return oops.E(oops.CodeForbidden, err, "Connection is not authorized for this gateway member.").LogWarn(ctx, logger)
+				}
+				return oops.E(oops.CodeUnexpected, err, "authorize focused verification").LogError(ctx, logger)
+			}
+			qualified, typed = true, authorization != nil
+			focusedID = member.serverID.UUID
+			tokenProjectIDs = []uuid.UUID{member.projectID}
+		}
+	}
+
+	if !endpoint.MetaMcpServerID.Valid && endpoint.McpServerID.Valid && committedResource != "" && endpoint.UpstreamResource != "" {
+		if strings.TrimRight(committedResource, "/") != strings.TrimRight(endpoint.UpstreamResource, "/") {
+			return nil
+		}
+		authorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, chosenMetaMember{serverID: endpoint.McpServerID, projectID: endpoint.ProjectID})
+		if verifyHitStoreOutage(ctx, err) {
+			return fmt.Errorf("%w: authorize committed verification: %w", errValidationUnfinished, err)
+		}
+		if err != nil {
+			return fmt.Errorf("authorize committed verification: %w", err)
+		}
+		resource, qualified, typed = endpoint.UpstreamResource, true, authorization != nil
+		tokenProjectIDs = []uuid.UUID{endpoint.ProjectID}
+	}
+
+	if !qualified {
+		tokenProjectIDs, err = s.clientTokenProjectIDs(ctx, endpoint, client)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token projects for validation").LogError(ctx, logger)
+		}
+	}
+
+	if qualified && !typed {
+		linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
+		if err != nil {
+			return fmt.Errorf("check focused verification binding: %w", err)
+		}
+		if !linked {
+			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger)
+		}
+	}
+
 	var (
 		tokens         map[uuid.UUID]remotesessions.UpstreamToken
 		entry          remotesessions.UpstreamToken
@@ -240,7 +350,27 @@ func (s *Service) probeRemoteSession(
 		usable         bool
 	)
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		var resolved map[uuid.UUID]remotesessions.UpstreamToken
+		var rerr error
+		switch {
+
+		case qualified:
+			// Admission and either typed permission or the legacy sign-in link
+			// were checked above. The strict tenant selector must not adopt and
+			// refresh another audience's singleton grant before routing.
+			resolved, rerr = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+				ProjectID:           projectID,
+				OrganizationID:      endpoint.OrganizationID,
+				UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject:             subject,
+				RegistrationID:      client.ID,
+				Resource:            resource,
+				SkipUnusable:        true,
+				Attribution:         attribution,
+			})
+		default:
+			resolved, rerr = s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		}
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
@@ -260,19 +390,25 @@ func (s *Service) probeRemoteSession(
 				}
 				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
 			}
+			if qualified && candidate.Token == "" {
+				continue
+			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break
 		}
 	}
+
 	if !usable {
-		linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+		if !qualified {
+			linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+			}
+			if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
+				return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
+			}
 		}
-		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
-			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
-		}
-		return s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, skipped, tokenProjectIDs)
+		return s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client, skipped, tokenProjectIDs, resource)
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -281,7 +417,7 @@ func (s *Service) probeRemoteSession(
 	}
 	// Route the complete credential set, just as serving does. The target resolver
 	// separately proves that this card is the credential selected for the target.
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, focusedID)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -319,7 +455,12 @@ func (s *Service) probeRemoteSession(
 	go func() {
 		defer close(enriched)
 		var err error
-		if upstream, err = s.remoteChallengeMgr.EnrichRemoteSession(ctx, ref); err != nil {
+		if qualified {
+			upstream, err = s.remoteChallengeMgr.EnrichRemoteSessionForResource(ctx, ref, resource)
+		} else {
+			upstream, err = s.remoteChallengeMgr.EnrichRemoteSession(ctx, ref)
+		}
+		if err != nil {
 			logger.WarnContext(ctx, "remote session enrichment failed", attr.SlogError(err))
 		}
 	}()
@@ -333,11 +474,17 @@ func (s *Service) probeRemoteSession(
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
 	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
 
-	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
+	verdictRecord := remotesessions.RemoteSessionValidation{
 		Status: verdict,
 		Reason: reason,
 		At:     probedAt,
-	})
+	}
+	var written bool
+	if qualified {
+		written, err = s.remoteChallengeMgr.RecordRemoteSessionValidationForResource(ctx, ref, resource, verdictRecord)
+	} else {
+		written, err = s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, verdictRecord)
+	}
 	if err != nil {
 		return fmt.Errorf("%w: %w", errRemoteSessionVerdictNotRecorded, oops.E(oops.CodeUnexpected, err, "record remote session validation").LogError(ctx, logger))
 	}
@@ -392,8 +539,15 @@ func (s *Service) noUsableCredentialRefusal(
 	client remotesessions.Client,
 	skipped *remotesessions.SkippedClients,
 	projectIDs []uuid.UUID,
+	resources ...string,
 ) error {
-	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	var err error
+	if len(resources) > 0 && resources[0] != "" && len(projectIDs) == 1 {
+		statuses, err = s.remoteChallengeMgr.AuthClientRemoteSessionStatusesForResource(ctx, subject, projectIDs[0], endpoint.OrganizationID, []uuid.UUID{client.ID}, resources[0])
+	} else {
+		statuses, err = s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	}
 	if verifyHitStoreOutage(ctx, err) {
 		logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(err))
 		return fmt.Errorf("%w: read remote session status: %w", errValidationUnfinished, err)
@@ -482,6 +636,7 @@ func (s *Service) resolveValidationTarget(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	focusedID uuid.UUID,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -495,7 +650,7 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject, focusedID)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -512,6 +667,7 @@ func (s *Service) metaValidationTarget(
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
 	sessionID string,
 	subject urn.SessionSubject,
+	focusedID uuid.UUID,
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	rows, claimed, err := s.claimingMetaMembers(ctx, endpoint, client)
@@ -524,6 +680,9 @@ func (s *Service) metaValidationTarget(
 	entry := tokens[client.RemoteSessionIssuerID]
 	targetID := uuid.Nil
 	for _, row := range rows {
+		if focusedID != uuid.Nil && row.McpServerID != focusedID {
+			continue
+		}
 		// The dispatch selectors: a tunneled member takes only its own issuer's entry (tunneledIssuerToken).
 		routes := grantRoutesToUpstream(entry.Resource, row.UpstreamUrl, false)
 		if row.Tunneled {

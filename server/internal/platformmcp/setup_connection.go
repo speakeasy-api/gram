@@ -54,7 +54,7 @@ func (p *RemoteMCPReadinessProber) TestUserConnection(ctx context.Context, organ
 		return setupConnectionResult("configuration_required", "user_identity_client_required"), nil
 	}
 	subject := urn.NewUserSubject(userID)
-	reconnect, err := p.sessions.ClientNeedsReconnect(ctx, projectID, organizationID, userSessionIssuerID, subject, clients[0].ID)
+	reconnect, err := p.sessions.ClientNeedsReconnect(ctx, projectID, organizationID, userSessionIssuerID, subject, clients[0].ID, remote.Url)
 	if err != nil {
 		return nil, fmt.Errorf("check user authorization: %w", err)
 	}

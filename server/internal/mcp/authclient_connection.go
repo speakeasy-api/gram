@@ -64,6 +64,7 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return fallback, nil
 	}
 	conn, attached, err := lookup.AuthClientAttachedConnection(ctx, remotesessions.AuthClientTokenRequest{
+		Resource:            "",
 		ProjectID:           permit.ProjectID,
 		OrganizationID:      permit.OrganizationID,
 		UserSessionIssuerID: permit.UserSessionIssuerID,
@@ -130,7 +131,7 @@ func handbackSubject(subject urn.SessionSubject, authorizerOwner string) urn.Ses
 // upstreamTokenSource resolves a caller's upstream tokens for serving.
 type upstreamTokenSource interface {
 	ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error)
-	ResolveClientAccessTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error)
+	ResolveClientAccessTokens(ctx context.Context, attribution remotesessions.RefreshAttribution, projectID uuid.UUID, organizationID string, userSessionIssuerID uuid.UUID, subject urn.SessionSubject, remoteSessionClientID uuid.UUID, skipUnusable bool, resource string) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 }
 
 func (s *Service) upstreamTokenSource() upstreamTokenSource {

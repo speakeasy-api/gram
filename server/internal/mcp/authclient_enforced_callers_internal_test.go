@@ -828,7 +828,7 @@ func (r registrationTokens) ResolveAuthClientAccessTokens(_ context.Context, req
 	return r[req.RegistrationID].tokens, r[req.RegistrationID].err
 }
 
-func (r registrationTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, _ urn.SessionSubject, clientID uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (r registrationTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, _ urn.SessionSubject, clientID uuid.UUID, _ bool, _ string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	return r[clientID].tokens, r[clientID].err
 }
 

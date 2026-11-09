@@ -24,10 +24,21 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 			return nil, err
 		}
 	}
-	return chooseConsentUpstreamClientPicks(endpoint, members, cards), nil
+	qualified := make(map[uuid.UUID][]remoteSessionCard, len(members))
+	for i := range members {
+		memberCards := cards
+		if members[i].backend == metaMemberBackendProxied {
+			memberCards, err = s.buildRemoteSessionCardsForMember(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID), &members[i])
+			if err != nil {
+				return nil, err
+			}
+		}
+		qualified[members[i].serverID] = memberCards
+	}
+	return chooseConsentUpstreamClientPicks(endpoint, members, cards, qualified), nil
 }
 
-func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []metaMember, cards []remoteSessionCard) map[uuid.UUID]uuid.UUID {
+func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []metaMember, cards []remoteSessionCard, qualified ...map[uuid.UUID][]remoteSessionCard) map[uuid.UUID]uuid.UUID {
 	var usable []remoteSessionCard
 	for _, card := range cards {
 		switch cardStatus(card) {
@@ -49,8 +60,13 @@ func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []m
 	case endpoint.MetaMcpServerID.Valid:
 		for _, member := range members {
 			var candidates []remoteSessionCard
-			for _, card := range usable {
-				if cardServesMember(card, member) {
+			memberCards := usable
+			if len(qualified) > 0 && qualified[0] != nil {
+				memberCards = qualified[0][member.serverID]
+			}
+
+			for _, card := range memberCards {
+				if cardServesMember(card, member) && (cardStatus(card) == gatewayServerConnected || cardStatus(card) == gatewayServerChained || cardStatus(card) == gatewayServerChainPending) {
 					candidates = append(candidates, card)
 				}
 			}

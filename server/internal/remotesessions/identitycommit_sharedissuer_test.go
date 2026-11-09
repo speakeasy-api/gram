@@ -332,7 +332,7 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	})
 	require.NoError(t, err)
 
-	resolved, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, associated, false)
+	resolved, err := manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, associated, false, "")
 	require.NoError(t, err)
 	tokens := resolved.Tokens
 	require.Equal(t, "own-token", tokens[ownProvider].Token)
@@ -343,7 +343,7 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 
 	// The sibling's client belongs to no server yet, so nothing says it is not
 	// this server's: it stays required rather than being skipped.
-	_, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
+	_, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false, "")
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a client nothing explains stays fail-closed")
 	require.ErrorIs(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), remotesessions.ErrNoValidToken)
 
@@ -358,7 +358,7 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), rows)
-	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
+	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false, "")
 	require.NoError(t, err)
 	require.Empty(t, resolved.Tokens, "another server's credential is never resolved for this one")
 	require.Equal(t, remotesessions.ServerAssociationIssuer{Known: true, Providers: 0, Provider: uuid.NullUUID{}}, resolved.Association,

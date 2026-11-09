@@ -422,7 +422,7 @@ func (s *Service) serveConsentProxiedMCP(
 	switch {
 	case auth == nil:
 		var resolved remotesessions.ServerAccessTokens
-		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false)
+		resolved, err = s.remoteChallengeMgr.ResolveServerAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, serverRow.ID, false, endpoint.UpstreamResource)
 		tokens = resolved.Tokens
 		association = &resolved.Association
 	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
@@ -430,11 +430,15 @@ func (s *Service) serveConsentProxiedMCP(
 	case auth.choice.clientID.Valid:
 		backendIssuerID = auth.choice.remoteSessionIssuerID
 		chosenClient = auth.choice.clientID.UUID
-		tokens, err = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
-			Attribution: consentRefreshAttribution(r, endpoint, challengeState),
-			ProjectID:   endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
-			UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject,
-			RegistrationID: auth.choice.clientID.UUID, SkipUnusable: false,
+		tokens, err = s.resolveResourceQualifiedTokens(ctx, serverRow.ID, remotesessions.AuthClientTokenRequest{
+			Resource:            endpoint.UpstreamResource,
+			Attribution:         consentRefreshAttribution(r, endpoint, challengeState),
+			ProjectID:           endpoint.ProjectID,
+			OrganizationID:      endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject:             subject,
+			RegistrationID:      auth.choice.clientID.UUID,
+			SkipUnusable:        false,
 		})
 	default:
 		err = errConsentConfigurationChanged

@@ -192,8 +192,8 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	if organizationGateway && len(members) == 0 {
 		return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(oops.E(oops.CodeForbidden, authz.ErrDenied, "subject cannot access any gateway members"), ""))
 	}
-	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards)
-	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards)
+	picks := chooseConsentUpstreamClientPicks(endpoint, members, view.cards, view.memberCards)
+	memberAuth, err := s.gatewayConsentAuthChoices(ctx, r, endpoint, subject, members, view.cards, view.memberCards)
 	if err != nil {
 		return nil, nil, nil, oops.E(oops.CodeUnavailable, err, "read gateway credential choices").LogError(ctx, logger)
 	}
@@ -217,12 +217,27 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 	gate.memberChoices = &memberChoices{selector: nil, enforced: false, subject: subject, profile: false, unchosen: false, metaServerID: endpoint.MetaMcpServerID, onlyChosen: false, readOnly: false, chosen: nil, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 		if member.typedAuthClient {
-			return s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
-				ProjectID: member.projectID, OrganizationID: endpoint.OrganizationID, UserSessionIssuerID: endpoint.UserSessionIssuerID,
-				Subject: subject, RegistrationID: member.chosenClientID.UUID, SkipUnusable: true, Attribution: consentRefreshAttribution(r, endpoint, challengeState),
+			return s.resolveResourceQualifiedTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+				Resource:            "",
+				ProjectID:           member.projectID,
+				OrganizationID:      endpoint.OrganizationID,
+				UserSessionIssuerID: endpoint.UserSessionIssuerID,
+				Subject:             subject,
+				RegistrationID:      member.chosenClientID.UUID,
+				SkipUnusable:        true,
+				Attribution:         consentRefreshAttribution(r, endpoint, challengeState),
 			})
 		}
-		return s.remoteChallengeMgr.ResolveClientAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.chosenClientID.UUID, true)
+		return s.resolveResourceQualifiedLegacyTokens(ctx, member.serverID, remotesessions.AuthClientTokenRequest{
+			Resource:            "",
+			Attribution:         consentRefreshAttribution(r, endpoint, challengeState),
+			ProjectID:           member.projectID,
+			OrganizationID:      endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID,
+			Subject:             subject,
+			RegistrationID:      member.chosenClientID.UUID,
+			SkipUnusable:        true,
+		})
 	}, mu: sync.Mutex{}, byServer: map[uuid.UUID]*memberTokens{}}
 	var signInID uuid.UUID
 	if challengeState.SignInID != nil {

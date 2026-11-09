@@ -214,14 +214,14 @@ func TestNoUsableCredentialNotice(t *testing.T) {
 }
 
 // statusReadFailure refuses a card with no token while its state can't be read from pool.
-func statusReadFailure(t *testing.T, pool *pgxpool.Pool) error {
+func statusReadFailure(t *testing.T, pool *pgxpool.Pool, resources ...string) error {
 	t.Helper()
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
 	service := &Service{remoteChallengeMgr: remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})}
 	endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "org_1", UserSessionIssuerID: uuid.New()}
 	client := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
-	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID})
+	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID}, resources...)
 }
 
 // A store outage reading the card stops the check like any outage: retry notice, auth_check_unavailable row.
@@ -237,6 +237,38 @@ func TestNoUsableCredentialRefusal_StoreOutageStopsTheCheck(t *testing.T) {
 	failure, ok := classifyCheckFailure(t.Context(), refusal)
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeAuthCheckUnavailable, failure.code)
+}
+
+func TestNoUsableCredentialRefusal_ResourceStatusReadFailures(t *testing.T) {
+	t.Parallel()
+
+	for _, outage := range []bool{false, true} {
+		name := "read fault"
+		if outage {
+			name = "store outage"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			pool, err := pgxpool.New(t.Context(), "postgres://127.0.0.1:1/unused?connect_timeout=1")
+			require.NoError(t, err)
+			t.Cleanup(pool.Close)
+			if !outage {
+				pool.Close()
+			}
+			refusal := statusReadFailure(t, pool, "https://upstream.example/mcp")
+			failure, ok := classifyCheckFailure(t.Context(), refusal)
+			require.True(t, ok)
+			if outage {
+				require.ErrorIs(t, refusal, errValidationUnfinished)
+				require.Equal(t, mcpconnectionattempts.CodeAuthCheckUnavailable, failure.code)
+			} else {
+				require.NotErrorIs(t, refusal, errValidationUnfinished)
+				require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+				require.Equal(t, oauthui.ReasonCheckFailed, failure.page)
+			}
+		})
+	}
 }
 
 // Any other failure reading the card is ours: the our-side page and an internal_error row.

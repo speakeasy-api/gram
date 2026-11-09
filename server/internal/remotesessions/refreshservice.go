@@ -408,7 +408,8 @@ func refreshPostDeadline(lockAcquiredAt, now time.Time) time.Time {
 	return leaseEnd
 }
 
-// RefreshLockKey single-flights refreshes of one subject's grant on a client.
+// RefreshLockKey serializes a subject's resource grants on one registration.
+// Keep the shared key during rollout; row-specific reloads never adopt a sibling grant.
 func RefreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
 }
@@ -566,7 +567,8 @@ func (s *RefreshService) clearRefreshOutage(ctx context.Context, sess remotesess
 }
 
 // RefreshNow refreshes the upstream access token for sess, single-flighted per
-// (subject, client) binding so concurrent callers do not all present the same
+// (subject, client) binding, across its resource grants, so concurrent callers
+// do not all present the same
 // refresh token to a provider that rotates them. Losers wait for the winner's
 // write instead. The re-reads either side of the refresh cover what the lock
 // cannot: Redis down, the lease expiring, a holder that never writes, or one
@@ -829,19 +831,25 @@ func (s *RefreshService) refresh(
 	held, lockErr := acquire()
 
 	if lockErr == nil && !held {
-		winner, ok, wait := s.awaitRefreshedSession(ctx, q, sess)
+		winner, ok, wait := s.awaitRefreshedSession(ctx, q, sess, func() bool {
+			lockAcquiredAt = time.Now()
+			held, lockErr = acquire()
+			return held || lockErr != nil
+		})
 		switch {
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
 			return zero, nil, nil, &refreshDeferredError{wait: wait, why: refreshDeferralCooldown}
 		}
-		if err := ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil && !held {
 			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
 		}
 		// No POST while another request holds the lock: two presenting one token can revoke the family (RFC 9700 section 4.14.2).
-		lockAcquiredAt = time.Now()
-		held, lockErr = acquire()
+		if !held && lockErr == nil {
+			lockAcquiredAt = time.Now()
+			held, lockErr = acquire()
+		}
 		if lockErr == nil && !held {
 			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, why: refreshDeferralLockHeld}
 		}
@@ -889,7 +897,8 @@ func (s *RefreshService) refresh(
 	// the winner's fresh pair included, which nothing below can detect.
 	snapshotAt := sess.UpdatedAt.Time
 
-	current, currentErr := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+	current, currentErr := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
@@ -1048,7 +1057,8 @@ func (s *RefreshService) refresh(
 		// winner. Re-read it below and adopt that token instead of clearing it.
 	}
 
-	latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+	latest, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+		ID:                    sess.ID,
 		SubjectUrn:            sess.SubjectUrn,
 		RemoteSessionClientID: sess.RemoteSessionClientID,
 	})
@@ -1129,13 +1139,16 @@ func authorizationUsable(sess remotesessions_repo.RemoteSession, now time.Time) 
 
 // awaitRefreshedSession returns the session row and access token the lock
 // holder wrote, or a terminal inactive result if that exact row was revoked
-// or replaced. Reports false if the row has not moved within refreshWaitBudget,
+// or replaced. If a sibling held the shared lock, acquire lets this caller
+// continue as soon as it owns the lease, without adopting the sibling's row.
+// Reports false if the row has not moved within refreshWaitBudget,
 // rather than stranding the caller on a dead holder, and a wait when the holder
 // hit an outage that now paces this binding.
 func (s *RefreshService) awaitRefreshedSession(
 	ctx context.Context,
 	q *remotesessions_repo.Queries,
 	sess remotesessions_repo.RemoteSession,
+	acquire func() bool,
 ) (RefreshResult, bool, time.Duration) {
 	var zero RefreshResult
 
@@ -1154,7 +1167,8 @@ func (s *RefreshService) awaitRefreshedSession(
 		case <-ticker.C:
 		}
 
-		latest, err := q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
+		latest, err := q.GetActiveRemoteSessionByID(ctx, remotesessions_repo.GetActiveRemoteSessionByIDParams{
+			ID:                    sess.ID,
 			SubjectUrn:            sess.SubjectUrn,
 			RemoteSessionClientID: sess.RemoteSessionClientID,
 		})
@@ -1169,6 +1183,9 @@ func (s *RefreshService) awaitRefreshedSession(
 		if !latest.UpdatedAt.Time.After(sess.UpdatedAt.Time) {
 			if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 				return zero, false, wait
+			}
+			if acquire() {
+				return zero, false, 0
 			}
 			continue
 		}

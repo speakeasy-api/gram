@@ -127,7 +127,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 				t.Parallel()
 				checked := uuid.New()
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: checked}
-				s := &Service{upstreamTokens: source}
+				s := &Service{upstreamTokens: source, upstreamResource: func(context.Context, uuid.UUID, uuid.UUID) (string, error) { return "", nil }}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				agent := uuid.New()
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "pinned-member", backend: metaMemberBackendProxied,
@@ -262,7 +262,7 @@ type agentMemberOutageTokens struct {
 }
 
 func (f *agentMemberOutageTokens) ResolveAuthClientAccessTokens(ctx context.Context, req remotesessions.AuthClientTokenRequest) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable)
+	return f.ResolveClientAccessTokens(ctx, req.Attribution, req.ProjectID, req.OrganizationID, req.UserSessionIssuerID, req.Subject, req.RegistrationID, req.SkipUnusable, req.Resource)
 }
 
 // A handback to the upstream client choice reads the connection the permit
@@ -280,7 +280,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 					want = urn.NewUserSubject(owner)
 				}
 				source := &fakeUpstreamTokens{issuerID: uuid.New(), bound: uuid.New()}
-				s := &Service{upstreamTokens: source}
+				s := &Service{upstreamTokens: source, upstreamResource: func(context.Context, uuid.UUID, uuid.UUID) (string, error) { return "", nil }}
 				endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "test-org", UserSessionIssuerID: uuid.New()}
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,

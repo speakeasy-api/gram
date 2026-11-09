@@ -25,7 +25,7 @@ func (f *attributionUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Cont
 	return f.tokens(), nil
 }
 
-func (f *attributionUpstreamTokens) ResolveClientAccessTokens(_ context.Context, attribution remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, _ urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (f *attributionUpstreamTokens) ResolveClientAccessTokens(_ context.Context, attribution remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, _ urn.SessionSubject, _ uuid.UUID, _ bool, _ string) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.attribution = attribution
 	return f.tokens(), nil
 }

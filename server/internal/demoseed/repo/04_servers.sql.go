@@ -146,13 +146,13 @@ func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg Servers
 const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
    upstream_display_name, created_at, last_used_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
-        ARRAY['releases:read'], 'Fictional release account',
+        ARRAY['releases:read'], 'https://mcp.linear.app/mcp', 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes')
 `
 
@@ -2088,13 +2088,13 @@ func (q *Queries) ServersInsertUserSessionIssuers(ctx context.Context, arg Serve
 const serversInsertValidatedSession = `-- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
-   access_token_encrypted, access_expires_at, auto_refresh, scopes,
+   access_token_encrypted, access_expires_at, auto_refresh, scopes, resource,
    grant_generation, last_validated_at, validation_status, created_at, last_used_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
         'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], $5::bigint,
+        ARRAY['read'], 'https://mcp.linear.app/mcp', $5::bigint,
         CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
         NULLIF($6::text, ''), now() - make_interval(days => $8::int),
         now() - make_interval(hours => $7::int))

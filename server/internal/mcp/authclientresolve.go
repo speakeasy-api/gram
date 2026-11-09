@@ -886,7 +886,8 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 		// No-auth and headers-only choices hold no upstream session.
 		return false, none, true, nil
 	}
-	reconnect, err = s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
+	reconnect, err = s.resourceQualifiedNeedsReconnect(ctx, endpoint.McpServerID.UUID, remotesessions.AuthClientTokenRequest{
+		Resource:            endpoint.UpstreamResource,
 		ProjectID:           endpoint.ProjectID,
 		OrganizationID:      endpoint.OrganizationID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,

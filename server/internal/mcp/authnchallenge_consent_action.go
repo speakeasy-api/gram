@@ -172,6 +172,25 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		backURL += "&server=" + url.QueryEscape(focusServer)
 	}
 
+	actionResource := func(client remotesessions.Client) (uuid.UUID, string, error) {
+		projectID := endpoint.clientProjectID(client)
+		if !endpoint.MetaMcpServerID.Valid {
+			return projectID, "", nil
+		}
+		if focusServer == "" {
+			return uuid.Nil, "", oops.E(oops.CodeBadRequest, nil, "Choose a gateway member before changing its connection.").LogWarn(ctx, logger)
+		}
+		resource, member, err := s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, focusServer)
+		if err != nil {
+			return uuid.Nil, "", oops.E(oops.CodeBadRequest, err, "Connection is not available for this gateway member.").LogWarn(ctx, logger)
+		}
+		if !member.serverID.Valid || resource == "" {
+			return uuid.Nil, "", oops.E(oops.CodeBadRequest, nil, "This gateway member does not support a resource-qualified connection action.").LogWarn(ctx, logger)
+		}
+		projectID = member.projectID
+		return projectID, resource, nil
+	}
+
 	// Auto refresh is only the subject's choice while the organization lets
 	// them choose. Under either managed policy the posted value is ignored, so
 	// a crafted form can neither disable a required connection nor opt into
@@ -212,7 +231,16 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.clientProjectID(*client), endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
+		projectID, resource, err := actionResource(*client)
+		if err != nil {
+			return err
+		}
+		if resource != "" {
+			_, err = s.remoteChallengeMgr.DisconnectRemoteSessionForResource(ctx, subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID, resource)
+		} else {
+			_, err = s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID)
+		}
+		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
 		}
 		// Latch auto-connect off. Without this the redirect back to the consent
@@ -241,15 +269,19 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
-			ctx,
-			consentRefreshAttribution(r, endpoint, challengeState),
-			subject,
-			endpoint.clientProjectID(*client),
-			endpoint.OrganizationID,
-			endpoint.UserSessionIssuerID,
-			client.ID,
-		)
+
+		projectID, resource, err := actionResource(*client)
+		if err != nil {
+			return err
+		}
+		var result remotesessions.RefreshResult
+		var refreshErr error
+		if resource != "" {
+			result, refreshErr = s.remoteChallengeMgr.RefreshRemoteSessionForResource(ctx, consentRefreshAttribution(r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID, resource)
+		} else {
+			result, refreshErr = s.remoteChallengeMgr.RefreshRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID)
+		}
+
 		if refreshErr != nil {
 			switch {
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
@@ -276,6 +308,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
+		challengeState.FocusServer = focusServer
 		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
@@ -310,12 +343,42 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			http.Redirect(w, r, backURL, http.StatusSeeOther)
 			return nil
 		}
+
 		enabled := r.PostForm.Get("auto_refresh") == "on"
-		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.clientProjectID(clients[i]), endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
+		var focused *metaMember
+		if endpoint.MetaMcpServerID.Valid {
+			members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "resolve gateway member").LogError(ctx, logger)
+			}
+			for i := range members {
+				if members[i].slug == focusServer {
+					focused = &members[i]
+					break
+				}
+			}
+			if focused == nil {
+				return oops.E(oops.CodeBadRequest, nil, "Choose a gateway member before changing its connection preferences.").LogWarn(ctx, logger)
+			}
+		}
+		for _, client := range clients {
+			if focused != nil && !memberUsesClient(*focused, client.ID, client.RemoteSessionIssuerID, client.ProjectID) {
+				continue
+			}
+			projectID, resource, err := actionResource(client)
+			if err != nil {
+				return err
+			}
+			if resource != "" {
+				_, err = s.remoteChallengeMgr.SetRemoteSessionAutoRefreshForResource(ctx, subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID, resource, enabled)
+			} else {
+				_, err = s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID, enabled)
+			}
+			if err != nil {
 				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}
+
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
 		return nil
 
@@ -378,7 +441,12 @@ func (s *Service) buildRemoteConnectURL(
 			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return "", false, oops.E(oops.CodeUnexpected, cerr, "stamp consent subject context").LogError(ctx, logger)
 		}
-		clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
+		if focusServer != "" {
+			clientResource, resourceMember, rerr = s.focusedMetaMemberResource(ctx, endpoint, challengeState, client, focusServer)
+			claimedByMember = resourceMember.serverID.Valid || rerr != nil
+		} else {
+			clientResource, resourceMember, claimedByMember, rerr = s.resolveMetaMemberResource(memberCtx, logger, endpoint, client)
+		}
 	}
 	// Gate on the claim, not an empty resource: an ambiguous meta MCP has
 	// decided, and falling back would qualify the credential anyway. A
@@ -405,6 +473,11 @@ func (s *Service) buildRemoteConnectURL(
 		clientResource, rerr = s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, endpoint.OrganizationID, client.ID, boundIDs, endpoint.UpstreamResource)
 	}
 	if rerr != nil {
+		if errors.Is(rerr, errConsentMemberTarget) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest, mcpconnectionattempts.Detail("gateway_member_target_unavailable"))
+			return "", false, oops.E(oops.CodeBadRequest, rerr, "Connection is not available for this gateway member.").LogWarn(ctx, logger)
+		}
+
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return "", false, oops.E(oops.CodeUnexpected, rerr, "derive client upstream resource").LogError(ctx, logger)
 	}
