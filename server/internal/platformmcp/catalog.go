@@ -2,6 +2,7 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -291,7 +292,7 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 		CatalogCandidate: CatalogCandidate{
 			ProviderKey: descriptor.ProviderKey,
 			CatalogRef:  catalogRef,
-			Name:        details.Name,
+			Name:        cmp.Or(strings.TrimSpace(details.Title), details.Name),
 			Description: details.Description,
 			Version:     details.Version,
 			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,

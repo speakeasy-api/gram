@@ -851,6 +851,46 @@ WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
 
+-- name: GetPlatformMCPRegistrationAwaitingSignIn :one
+-- The live registration behind an MCP server whose sign-in provider is not
+-- connected yet, so the consent page can connect it before it lists sign-in
+-- options. No row once the server has a sign-in provider.
+SELECT registration.id, registration.catalog_provider, project.slug AS project_slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_servers AS server
+  ON server.id = registration.mcp_server_id
+ AND server.project_id = registration.project_id
+ AND server.deleted IS FALSE
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+WHERE registration.mcp_server_id = @mcp_server_id
+  AND registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+  AND server.remote_session_issuer_id IS NULL
+ORDER BY registration.id
+LIMIT 1;
+
+-- name: GetPlatformMCPRegistrationConnectSlug :one
+-- The platform endpoint slug a live registration's consent page is served at.
+-- Custom-domain endpoints have no platform consent page, so they return no row.
+SELECT endpoint.slug
+FROM platform_mcp_catalog_registrations AS registration
+JOIN mcp_endpoints AS endpoint
+  ON endpoint.id = registration.mcp_endpoint_id
+ AND endpoint.project_id = registration.project_id
+ AND endpoint.mcp_server_id = registration.mcp_server_id
+ AND endpoint.custom_domain_id IS NULL
+ AND endpoint.deleted IS FALSE
+WHERE registration.id = @registration_id
+  AND registration.organization_id = @organization_id
+  AND registration.project_id = @project_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE;
+
 -- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
 SELECT id, user_session_issuer_id
 FROM platform_mcp_catalog_registrations

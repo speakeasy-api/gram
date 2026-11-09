@@ -256,10 +256,36 @@ func (s *Service) CreateMcpServer(ctx context.Context, payload *gen.CreateMcpSer
 	return view, nil
 }
 
-// DefaultServerIconSetter schedules best-effort post-create icon discovery for
+// DefaultServerIconSetter runs best-effort post-create icon discovery for
 // remote-backed MCP servers.
 type DefaultServerIconSetter interface {
 	ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID)
+	SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID)
+}
+
+// defaultServerIconWait bounds how long a caller waits for an icon it needs
+// in its own response.
+const defaultServerIconWait = 5 * time.Second
+
+// SetDefaultRemoteServerIcon is ScheduleDefaultRemoteServerIcon for a caller
+// that shows the icon in its own response: it waits, up to
+// defaultServerIconWait, for the icon to be stored. Failures are logged and
+// swallowed, as they are for the scheduled discovery.
+func (s *Service) SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	if s == nil {
+		return
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, defaultServerIconWait)
+	defer cancel()
+	s.setDefaultServerIcon(waitCtx, s.logger.With(attr.SlogProjectID(projectID.String())), projectID, mcpServerID, serverIDs{
+		EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		RemoteMcpServerID:     uuid.NullUUID{UUID: remoteMCPServerID, Valid: true},
+		TunneledMcpServerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolsetID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		UnproxiedMcpServerID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+	})
 }
 
 // ScheduleDefaultRemoteServerIcon gives remote-MCP provisioning the same

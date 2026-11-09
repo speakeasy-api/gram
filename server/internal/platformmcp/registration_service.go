@@ -103,6 +103,7 @@ type RegistrationService struct {
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
 	logos                      *cardLogos
+	signInLinks                *signInConnectLinks
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
