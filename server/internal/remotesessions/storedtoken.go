@@ -125,6 +125,10 @@ func (m *ChallengeManager) renewedUnreadableAccess(ctx context.Context, sess rem
 		m.refresher.metrics.RecordStoredTokenUnreadable(ctx, remotesessionmetrics.StoredTokenAccess, remotesessionmetrics.StoredTokenHealed)
 		return res.AccessToken, res.Session, res.SourceUpdatedAt, nil
 	}
+	// Revoked or replaced meanwhile: the grant is gone, not unreadable, so it reads as never linked.
+	if err == nil && res.Outcome == remotesessionmetrics.RefreshOutcomeSessionInactive {
+		return "", sess, sess.UpdatedAt.Time, nil
+	}
 	if errors.Is(err, ErrRemoteSessionMisconfigured) {
 		return "", sess, sess.UpdatedAt.Time, fmt.Errorf("%w: %w", errStoredTokenHeldForAdministrator, err)
 	}

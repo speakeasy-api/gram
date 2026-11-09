@@ -827,7 +827,10 @@ func (s *RefreshService) refresh(
 			case errors.Is(currentErr, pgx.ErrNoRows), currentErr == nil && current.ID != sess.ID:
 				var inactive remotesessions_repo.RemoteSession
 				return RefreshResult{Session: inactive, AccessToken: "", SourceUpdatedAt: time.Time{}, Outcome: remotesessionmetrics.RefreshOutcomeSessionInactive, IssuerURL: ""}, nil, nil, nil
-			case currentErr == nil && current.UpdatedAt.Time.After(sess.UpdatedAt.Time):
+			case currentErr != nil:
+				// A store that can't answer says nothing about the token; it keeps its own classification.
+				return zero, nil, nil, fmt.Errorf("re-read active remote_session before refresh: %w", currentErr)
+			case current.UpdatedAt.Time.After(sess.UpdatedAt.Time):
 				if accessTokenLive(current, time.Now()) {
 					if plain, derr := s.enc.Decrypt(current.AccessTokenEncrypted); derr == nil {
 						return RefreshResult{Session: current, AccessToken: plain, SourceUpdatedAt: current.UpdatedAt.Time, Outcome: remotesessionmetrics.RefreshOutcomeAdoptedConcurrentWinner, IssuerURL: ""}, nil, nil, nil
