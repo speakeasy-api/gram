@@ -25,6 +25,7 @@ import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useSessionDateRange } from "@/hooks/useSessionDateRange";
 import { internalMcpUrl } from "@/hooks/useToolsetUrl";
 import { subjectHref } from "@/components/auditlogs/subject-href";
 import {
@@ -34,6 +35,8 @@ import {
 import {
   auditViewQuery,
   parseAuditView,
+  parseResourceFilter,
+  resourceFilterValue,
   VIEW_EMPTY,
   VIEW_INSIGHTS,
   VIEW_OPTIONS,
@@ -109,6 +112,14 @@ const AUDIT_LOG_FILTERS = defineFilters([
   { id: "action", label: "Action", kind: "select" },
   { id: "actor", label: "Actor", kind: "select" },
   { id: "surface", label: "Surface", kind: "select" },
+  {
+    id: "resource",
+    label: "Resource",
+    kind: "select",
+    description:
+      "Pick a resource from the list, or use the filter button beside one.",
+  },
+  { id: "date", label: "Date", kind: "daterange" },
 ]);
 
 function auditLogCountDescription(count?: number) {
@@ -247,6 +258,7 @@ function AuditLogRow({
   isHighlighted,
   rowRef,
   highlightMatch,
+  onFilterResource,
 }: {
   log: AuditLog;
   identities: ReturnType<typeof useAuditPrincipals>;
@@ -256,6 +268,7 @@ function AuditLogRow({
   isHighlighted?: boolean;
   rowRef?: (el: HTMLDivElement | null) => void;
   highlightMatch?: (text: string) => React.ReactNode;
+  onFilterResource?: (log: AuditLog) => void;
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
@@ -281,6 +294,18 @@ function AuditLogRow({
             {highlightMatch ? highlightMatch(verbText) : verbText}
           </span>{" "}
           {renderSubject(log, orgSlug, identities, projectSlug)}
+          {onFilterResource && (
+            <SimpleTooltip tooltip="Show only this resource">
+              <button
+                type="button"
+                onClick={() => onFilterResource(log)}
+                aria-label="Show only this resource"
+                className="text-muted-foreground hover:text-foreground ml-1 inline-flex align-middle opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+              >
+                <Icon name="filter" className="size-3.5" />
+              </button>
+            </SimpleTooltip>
+          )}
           {isNotableActingSurface(log.actingSurface) && (
             <span
               className="border-border text-muted-foreground ml-2 border px-1.5 py-0.5 align-middle text-xs whitespace-nowrap"
@@ -536,6 +561,9 @@ function OrgAuditLogsInner() {
       actor: rawFilterValues.actor === "all" ? null : rawFilterValues.actor,
       surface:
         rawFilterValues.surface === "all" ? null : rawFilterValues.surface,
+      resource:
+        rawFilterValues.resource === "all" ? null : rawFilterValues.resource,
+      date: rawFilterValues.date,
     }),
     [rawFilterValues],
   );
@@ -543,11 +571,17 @@ function OrgAuditLogsInner() {
   const selectedAction = filterValues.action ?? "all";
   const selectedActor = filterValues.actor ?? "all";
   const selectedSurface = filterValues.surface ?? "all";
+  const selectedResource = parseResourceFilter(filterValues.resource);
+  const { dates } = useSessionDateRange(filterValues.date);
+  // Presets keep an open upper bound so new entries still appear.
+  const dateTo = filterValues.date.customRange ? dates.to : undefined;
   const hasActiveFilters =
     selectedProjectSlug !== "all" ||
     selectedAction !== "all" ||
     selectedActor !== "all" ||
-    selectedSurface !== "all";
+    selectedSurface !== "all" ||
+    selectedResource !== null ||
+    dates.from !== undefined;
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
@@ -609,6 +643,10 @@ function OrgAuditLogsInner() {
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
     actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
+    subjectType: selectedResource?.subjectType,
+    subjectId: selectedResource?.subjectId,
+    from: dates.from,
+    to: dateTo,
     category,
     origin,
   });
@@ -619,6 +657,30 @@ function OrgAuditLogsInner() {
   );
 
   const identities = useAuditPrincipals(logs);
+
+  const resourceOptions = useMemo(() => {
+    const seen = new Map<string, { value: string; label: string }>();
+    for (const log of logs) {
+      const value = resourceFilterValue(log);
+      if (seen.has(value)) continue;
+      seen.set(value, {
+        value,
+        label: formatSubjectLabel(getSubjectLabel(log), log.subjectType),
+      });
+    }
+    if (filterValues.resource && !seen.has(filterValues.resource)) {
+      seen.set(filterValues.resource, {
+        value: filterValues.resource,
+        label: selectedResource?.subjectId ?? filterValues.resource,
+      });
+    }
+    return [...seen.values()];
+  }, [logs, filterValues.resource, selectedResource?.subjectId]);
+
+  const filterToResource = useCallback(
+    (log: AuditLog) => setFilterValue("resource", resourceFilterValue(log)),
+    [setFilterValue],
+  );
   const dateGroups = useMemo(
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
@@ -671,6 +733,16 @@ function OrgAuditLogsInner() {
         `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
       );
     }
+    if (selectedResource) {
+      parts.push(
+        `Filtered to resource: ${selectedResource.subjectType} ${selectedResource.subjectId}`,
+      );
+    }
+    if (dates.from) {
+      parts.push(
+        `Filtered to entries from ${dates.from.toISOString()}${dateTo ? ` to ${dateTo.toISOString()}` : ""}`,
+      );
+    }
     parts.push(VIEW_INSIGHTS[view]);
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
@@ -688,6 +760,9 @@ function OrgAuditLogsInner() {
     selectedAction,
     selectedActor,
     selectedSurface,
+    selectedResource,
+    dates.from,
+    dateTo,
     view,
     logs.length,
     dateGroups,
@@ -1013,6 +1088,7 @@ function OrgAuditLogsInner() {
                   label: option.displayName,
                   description: auditLogCountDescription(option.count),
                 })),
+                resource: resourceOptions,
               }}
               onChange={
                 setFilterValue as (id: string, value: FilterValue) => void
@@ -1144,6 +1220,11 @@ function OrgAuditLogsInner() {
                             }}
                             highlightMatch={
                               searchQuery ? highlightMatch : undefined
+                            }
+                            onFilterResource={
+                              filterValues.resource
+                                ? undefined
+                                : filterToResource
                             }
                           />
                         );

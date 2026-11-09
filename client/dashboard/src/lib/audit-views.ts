@@ -96,3 +96,19 @@ export function auditViewQuery(view: AuditView): {
       return { category: "configuration", origin: "user" };
   }
 }
+
+export function resourceFilterValue(log: {
+  subjectType: string;
+  subjectId: string;
+}): string {
+  return `${log.subjectType}:${log.subjectId}`;
+}
+
+export function parseResourceFilter(
+  value: string | null,
+): { subjectType: string; subjectId: string } | null {
+  if (!value) return null;
+  const sep = value.indexOf(":");
+  if (sep <= 0 || sep === value.length - 1) return null;
+  return { subjectType: value.slice(0, sep), subjectId: value.slice(sep + 1) };
+}

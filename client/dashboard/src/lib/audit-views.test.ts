@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { auditViewQuery, parseAuditView } from "./audit-views";
+import {
+  auditViewQuery,
+  parseAuditView,
+  parseResourceFilter,
+  resourceFilterValue,
+} from "./audit-views";
 
 describe("parseAuditView", () => {
   it("defaults to changes, including older configuration links", () => {
@@ -29,5 +34,27 @@ describe("auditViewQuery", () => {
     });
     expect(auditViewQuery("security")).toEqual({ category: "security" });
     expect(auditViewQuery("all")).toEqual({ category: "configuration" });
+  });
+});
+
+describe("resource filter", () => {
+  it("round-trips a subject, keeping colons in the id", () => {
+    const value = resourceFilterValue({
+      subjectType: "principal",
+      subjectId: "user:abc",
+    });
+    expect(value).toBe("principal:user:abc");
+    expect(parseResourceFilter(value)).toEqual({
+      subjectType: "principal",
+      subjectId: "user:abc",
+    });
+  });
+
+  it("rejects empty or malformed values", () => {
+    expect(parseResourceFilter(null)).toBeNull();
+    expect(parseResourceFilter("")).toBeNull();
+    expect(parseResourceFilter(":id")).toBeNull();
+    expect(parseResourceFilter("toolset:")).toBeNull();
+    expect(parseResourceFilter("toolset")).toBeNull();
   });
 });
