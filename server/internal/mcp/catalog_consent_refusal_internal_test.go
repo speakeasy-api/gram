@@ -222,8 +222,8 @@ func TestCatalogConsentCodeModeServersConnectAndCallAgree(t *testing.T) {
 			backend := &metaCodeBackend{service: s}
 			unnamed := catalogConsentMessage("", tc.detail, tc.remedy, gate.authentication.subject.Kind == urn.SessionSubjectKindUser)
 
-			state := backend.knownConnectionState(t.Context(), gate, member)
-			connect := backend.connectRefusal(t.Context(), gate, member)
+			state := backend.knownConnectionState(t.Context(), gate, member, nil)
+			_, connect := backend.connectRefusal(t.Context(), gate, member)
 			require.Empty(t, rec.Rows(), "discovery and connect record nothing")
 			call := backend.memberCallRefusal(t.Context(), gate, member)
 			if tc.remedy == staleChoiceAskAdmin {

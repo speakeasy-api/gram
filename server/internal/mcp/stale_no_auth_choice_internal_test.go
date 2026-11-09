@@ -262,9 +262,10 @@ func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
 	require.NotContains(t, text, "Reconnect this gateway")
 
 	backend := &metaCodeBackend{service: f.service}
-	require.Equal(t, want, backend.knownConnectionState(t.Context(), gate, member).Instructions)
+	require.Equal(t, want, backend.knownConnectionState(t.Context(), gate, member, nil).Instructions)
+	_, connectRefused := backend.connectRefusal(t.Context(), gate, member)
 	for name, refusal := range map[string]error{
-		"tools.connect": backend.connectRefusal(t.Context(), gate, member),
+		"tools.connect": connectRefused,
 		"helper":        backend.helperFailure(t.Context(), gate, member, member.upstreamUnavailable),
 	} {
 		refused, ok := errors.AsType[*codemode.MemberRefusalError](refusal)
@@ -324,8 +325,9 @@ func TestConnectOffersNoLinkWhenConsentCannotReplaceTheChoice(t *testing.T) {
 	t.Parallel()
 	backend := &metaCodeBackend{service: &Service{logger: testenv.NewLogger(t)}}
 	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
-	require.NoError(t, backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"}), "only a stale choice is refused")
-	err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)})
+	_, err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"})
+	require.NoError(t, err, "only a stale choice is refused")
+	_, err = backend.connectRefusal(t.Context(), gate, metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)})
 	refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
 	require.True(t, ok)
 	require.Contains(t, refused.Message, "Ask whoever set this up")

@@ -644,6 +644,24 @@ func (s *Service) catalogConsentRefusal(ctx context.Context, logger *slog.Logger
 	return catalogConsentMessage(server, consent.reason, remedy, person), remedy
 }
 
+// catalogApproval is one check of a member against its catalog; message and remedy are set when changed.
+type catalogApproval struct {
+	err     error
+	changed bool
+	message string
+	remedy  staleChoiceRemedy
+}
+
+// checkCatalogApproval validates member and words a changed approval, without recording it.
+func (s *Service) checkCatalogApproval(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) catalogApproval {
+	approval := catalogApproval{err: s.validateCatalogMember(ctx, gate, member), changed: false, message: "", remedy: staleChoiceReconnect}
+	if consent, ok := errors.AsType[catalogConsentError](approval.err); ok {
+		approval.changed = true
+		approval.message, approval.remedy = s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
+	}
+	return approval
+}
+
 // refuseCatalogConsentCall records and words a call refused because its approval no longer matches.
 func (s *Service) refuseCatalogConsentCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, consent catalogConsentError, named bool) (string, staleChoiceRemedy) {
 	message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, named)

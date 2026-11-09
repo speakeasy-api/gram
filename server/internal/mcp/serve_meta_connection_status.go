@@ -152,20 +152,19 @@ func notConnectedRow(gate *metaGateContext, oauthSignIn bool) metamcp.Connection
 func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) metamcp.ConnectionStatusServer {
 	if gate.catalog != nil {
 		// Live discovery checks the approval too, so a refused call never reads as ready.
-		err := s.validateCatalogMember(ctx, gate, member)
-		if consent, ok := errors.AsType[catalogConsentError](err); ok {
-			message, remedy := s.catalogConsentRefusal(ctx, logger, gate, member, consent, false)
-			if remedy == staleChoiceAskAdmin {
-				return signInRow(metamcp.SignInActionRequired, message, nil)
+		approval := s.checkCatalogApproval(ctx, logger, gate, member)
+		if approval.changed {
+			if approval.remedy == staleChoiceAskAdmin {
+				return signInRow(metamcp.SignInActionRequired, approval.message, nil)
 			}
-			return signInRow(metamcp.SignInNeedsConsent, message, nil)
+			return signInRow(metamcp.SignInNeedsConsent, approval.message, nil)
 		}
 		if gate.catalogRef.Mode == toolfilter.CatalogModeCached {
-			if err != nil {
-				if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+			if approval.err != nil {
+				if _, stale := errors.AsType[memberStaleChoiceError](approval.err); stale {
 					return s.staleMemberStatus(ctx, logger, gate, member)
 				}
-				return signInRow(metamcp.SignInNeedsConsent, memberErrorMessage(err), nil)
+				return signInRow(metamcp.SignInNeedsConsent, memberErrorMessage(approval.err), nil)
 			}
 			for _, outcome := range gate.catalog.MemberOutcomes {
 				if outcome.Slug == member.slug {
