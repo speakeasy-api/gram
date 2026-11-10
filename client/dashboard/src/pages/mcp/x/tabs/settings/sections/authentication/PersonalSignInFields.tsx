@@ -115,14 +115,13 @@ export function PersonalSignInFields({
           {
             value: "scratch",
             title: "New from scratch",
-            description:
-              "Set up a new sign-in with an authorization server for this credential.",
+            description: "Set up a new sign-in with an authorization server.",
           },
           {
             value: "existing",
             title: "New from existing",
             description:
-              "Start from a sign-in you already set up. This creates an independent copy of its settings, not a shared sign-in.",
+              "Copy a stored sign-in's settings into an independent one.",
           },
         ]}
       />
@@ -154,9 +153,10 @@ export function PersonalSignInFields({
               </Text>
             ) : null}
             <Text muted small className="block">
-              The sign-in you start from, the servers that use it, and the
-              people signed in through it stay as they are. People sign in again
-              for this credential.
+              This creates an independent copy of its settings, not a shared
+              sign-in. The sign-in you start from, the servers that use it, and
+              the people signed in through it stay as they are. People sign in
+              again for this credential.
             </Text>
           </div>
           {f.starting ? (

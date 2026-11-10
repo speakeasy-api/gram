@@ -736,6 +736,14 @@ describe("AddCredentialSheet", () => {
       fireEvent.click(
         screen.getByRole("radio", { name: /^Each person's own account/ }),
       );
+      expect(
+        screen.getByText(
+          "Copy a stored sign-in's settings into an independent one.",
+        ),
+      ).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^New from existing/ }),
+      );
 
       expect(
         screen.getByText(
