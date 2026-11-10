@@ -633,8 +633,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 }
 
 // seedAuthClients records Linear's two OAuth clients as the upstream OAuth
-// migration derives them (named here: left to the migration, both would be
-// named after their shared issuer), and two clients an administrator created: a token
+// migration derives them. Both sit under the fictional Example Workspace
+// Identity provider, not Linear's own sign-in, so they carry its name; left
+// to the migration, both would get the issuer's name and look identical.
+// It also records two clients an administrator created: a token
 // shared by two servers and a pass-through of the caller's own GitHub token,
 // with who may use the shared token, and the token chosen for an app that
 // signs in to Linear without a browser.
@@ -643,8 +645,8 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 	proj := s.projectID()
 
 	clients := []repo.ServersInsertAuthClientParams{
-		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
-		{ID: s.det("auth-client-linear-attachment"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear (attached sessions)", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("attachment-client"), Valid: true}},
+		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Example Workspace sign-in", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-linear-attachment"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Example Workspace attached sessions", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("attachment-client"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
