@@ -71,10 +71,12 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// when its current issuer cannot take the change: another MCP server signs in
 	// through the client bound to it, or, with target_server_only, it serves
 	// another MCP server at all. The new issuer keeps the current issuer's
-	// challenge mode, session duration and CIMD admission. People and MCP clients
-	// connected to the MCP server must connect again, and gateways that sign
-	// people in through the old issuer stop serving it. Has no effect when the
-	// save fits the current issuer. Requires project:write.
+	// challenge mode, session duration, host and CIMD admission, and is always the
+	// MCP server's own authorization server, so a server leaving a shared-mode
+	// issuer announces a different one. People and MCP clients connected to the
+	// MCP server must connect again, and gateways that sign people in through the
+	// old issuer stop serving it. Has no effect when the save fits the current
+	// issuer. Requires project:write.
 	DedicatedIssuer *bool `form:"dedicated_issuer,omitempty" json:"dedicated_issuer,omitempty" xml:"dedicated_issuer,omitempty"`
 	// How to provide the OAuth client.
 	ClientMode *string `form:"client_mode,omitempty" json:"client_mode,omitempty" xml:"client_mode,omitempty"`
@@ -5377,7 +5379,7 @@ func NewCommitServerIdentityConfigurationPayload(body *CommitServerIdentityConfi
 
 // NewGetServerIdentityImpactPayload builds a remoteSessions service
 // getServerIdentityImpact endpoint payload.
-func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, dedicatedIssuer *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
+func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *string, change string, providerID *string, clientID *string, dedicatedIssuer *bool, targetServerOnly *bool, sessionToken *string, apikeyToken *string, projectSlugInput *string) *remotesessions.GetServerIdentityImpactPayload {
 	v := &remotesessions.GetServerIdentityImpactPayload{}
 	v.UserSessionIssuerID = userSessionIssuerID
 	v.McpServerID = mcpServerID
@@ -5385,6 +5387,7 @@ func NewGetServerIdentityImpactPayload(userSessionIssuerID string, mcpServerID *
 	v.ProviderID = providerID
 	v.ClientID = clientID
 	v.DedicatedIssuer = dedicatedIssuer
+	v.TargetServerOnly = targetServerOnly
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

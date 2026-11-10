@@ -48,16 +48,18 @@ client there, in the same transaction, and returns the new issuer in
 when the save would unbind a client another MCP server signs in through. The
 flag requires `project:write`, never moves a server under upstream auth
 enforcement, and has no effect when the current issuer can take the save. The
-new issuer copies the challenge mode, session duration, CIMD admission mode and
-allowed CIMD document URLs of the issuer it leaves. It is its own authorization
-server on the MCP host, and it trusts no external identity provider: only an
+new issuer copies the challenge mode, session duration, choice of host, CIMD
+admission mode and allowed CIMD document URLs of the issuer it leaves. It is
+always the server's own authorization server, so a server leaving a shared-mode
+issuer announces a different one, and it trusts no external identity provider: only an
 organization-level issuer can, so a server on a trusting issuer is refused the
 repair. Sessions, registered MCP clients and consents belong to the issuer, so
 everyone connected to the moved server connects again. Gateways that sign
 people in through the old issuer stop serving it, the organization gateway
 included, unless the client the save links is bound to that issuer too.
 `remoteSessions.getServerIdentityImpact` with `dedicated_issuer: true` previews
-this and names those gateways.
+this and names those gateways; pass `target_server_only` there as well to
+preview a setup save. The preview requires `project:write`, as the save does.
 
 Inspect configured credentials through `listServerClientAssociations`, followed
 by `remoteSessionClients.get` for the linked client. The client view exposes the

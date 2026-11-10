@@ -28,19 +28,22 @@ RETURNING *;
 
 -- name: CreateDedicatedUserSessionIssuer :one
 -- Creates a project-owned issuer for one MCP server leaving the issuer it
--- shares, so the people who sign in to that server keep the same sign-in
--- behaviour: the challenge mode, session duration and CIMD admission mode are
--- the source issuer's. The new issuer serves one MCP server, so it is its own
--- authorization server on the MCP host. A trusted external issuer is not
--- carried over: only an organization-level issuer can hold one, and the
--- caller refuses a source that has it.
+-- shares. It copies the source issuer's challenge mode, session duration,
+-- CIMD admission mode and choice of host. It does not copy the authorization
+-- server mode or the pinned issuer URL: an issuer for one MCP server is that
+-- server's own authorization server, never a shared one, so a server leaving
+-- a shared-mode issuer announces a different authorization server afterwards.
+-- A trusted external issuer is not carried over either: only an
+-- organization-level issuer can hold one, and the caller refuses a source
+-- that has it.
 INSERT INTO user_session_issuers (
     project_id,
     organization_id,
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    use_authentication_host
 )
 SELECT
     @project_id::uuid,
@@ -48,7 +51,8 @@ SELECT
     @slug,
     source.authn_challenge_mode,
     source.session_duration,
-    source.client_id_metadata_admission_mode
+    source.client_id_metadata_admission_mode,
+    source.use_authentication_host
 FROM user_session_issuers AS source
 WHERE source.id = @source_user_session_issuer_id
   AND (source.project_id = @project_id::uuid OR (source.project_id IS NULL AND source.organization_id = @organization_id::text))

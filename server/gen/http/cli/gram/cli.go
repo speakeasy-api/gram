@@ -3117,6 +3117,7 @@ func ParseEndpoint(
 		remoteSessionsGetServerIdentityImpactProviderIDFlag          = remoteSessionsGetServerIdentityImpactFlags.String("provider-id", "", "")
 		remoteSessionsGetServerIdentityImpactClientIDFlag            = remoteSessionsGetServerIdentityImpactFlags.String("client-id", "", "")
 		remoteSessionsGetServerIdentityImpactDedicatedIssuerFlag     = remoteSessionsGetServerIdentityImpactFlags.String("dedicated-issuer", "", "")
+		remoteSessionsGetServerIdentityImpactTargetServerOnlyFlag    = remoteSessionsGetServerIdentityImpactFlags.String("target-server-only", "", "")
 		remoteSessionsGetServerIdentityImpactSessionTokenFlag        = remoteSessionsGetServerIdentityImpactFlags.String("session-token", "", "")
 		remoteSessionsGetServerIdentityImpactApikeyTokenFlag         = remoteSessionsGetServerIdentityImpactFlags.String("apikey-token", "", "")
 		remoteSessionsGetServerIdentityImpactProjectSlugInputFlag    = remoteSessionsGetServerIdentityImpactFlags.String("project-slug-input", "", "")
@@ -12157,7 +12158,7 @@ func ParseEndpoint(
 				data, err = remotesessionsc.BuildCommitServerIdentityConfigurationPayload(*remoteSessionsCommitServerIdentityConfigurationBodyFlag, *remoteSessionsCommitServerIdentityConfigurationSessionTokenFlag, *remoteSessionsCommitServerIdentityConfigurationApikeyTokenFlag, *remoteSessionsCommitServerIdentityConfigurationProjectSlugInputFlag)
 			case "get-server-identity-impact":
 				endpoint = c.GetServerIdentityImpact()
-				data, err = remotesessionsc.BuildGetServerIdentityImpactPayload(*remoteSessionsGetServerIdentityImpactUserSessionIssuerIDFlag, *remoteSessionsGetServerIdentityImpactMcpServerIDFlag, *remoteSessionsGetServerIdentityImpactChangeFlag, *remoteSessionsGetServerIdentityImpactProviderIDFlag, *remoteSessionsGetServerIdentityImpactClientIDFlag, *remoteSessionsGetServerIdentityImpactDedicatedIssuerFlag, *remoteSessionsGetServerIdentityImpactSessionTokenFlag, *remoteSessionsGetServerIdentityImpactApikeyTokenFlag, *remoteSessionsGetServerIdentityImpactProjectSlugInputFlag)
+				data, err = remotesessionsc.BuildGetServerIdentityImpactPayload(*remoteSessionsGetServerIdentityImpactUserSessionIssuerIDFlag, *remoteSessionsGetServerIdentityImpactMcpServerIDFlag, *remoteSessionsGetServerIdentityImpactChangeFlag, *remoteSessionsGetServerIdentityImpactProviderIDFlag, *remoteSessionsGetServerIdentityImpactClientIDFlag, *remoteSessionsGetServerIdentityImpactDedicatedIssuerFlag, *remoteSessionsGetServerIdentityImpactTargetServerOnlyFlag, *remoteSessionsGetServerIdentityImpactSessionTokenFlag, *remoteSessionsGetServerIdentityImpactApikeyTokenFlag, *remoteSessionsGetServerIdentityImpactProjectSlugInputFlag)
 			case "list-server-client-associations":
 				endpoint = c.ListServerClientAssociations()
 				data, err = remotesessionsc.BuildListServerClientAssociationsPayload(*remoteSessionsListServerClientAssociationsMcpServerIDFlag, *remoteSessionsListServerClientAssociationsSessionTokenFlag, *remoteSessionsListServerClientAssociationsApikeyTokenFlag, *remoteSessionsListServerClientAssociationsProjectSlugInputFlag)
@@ -26732,6 +26733,7 @@ func remoteSessionsGetServerIdentityImpactUsage() {
 	fmt.Fprint(os.Stderr, " -provider-id STRING")
 	fmt.Fprint(os.Stderr, " -client-id STRING")
 	fmt.Fprint(os.Stderr, " -dedicated-issuer BOOL")
+	fmt.Fprint(os.Stderr, " -target-server-only BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
@@ -26748,13 +26750,14 @@ func remoteSessionsGetServerIdentityImpactUsage() {
 	fmt.Fprintln(os.Stderr, `    -provider-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -client-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -dedicated-issuer BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -target-server-only BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions get-server-identity-impact --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --change \"attach\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --dedicated-issuer false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "remote-sessions get-server-identity-impact --user-session-issuer-id \"550e8400-e29b-41d4-a716-446655440000\" --mcp-server-id \"550e8400-e29b-41d4-a716-446655440000\" --change \"attach\" --provider-id \"550e8400-e29b-41d4-a716-446655440000\" --client-id \"550e8400-e29b-41d4-a716-446655440000\" --dedicated-issuer false --target-server-only false --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func remoteSessionsListServerClientAssociationsUsage() {

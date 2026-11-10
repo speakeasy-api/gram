@@ -189,10 +189,12 @@ type CommitServerIdentityConfigurationPayload struct {
 	// when its current issuer cannot take the change: another MCP server signs in
 	// through the client bound to it, or, with target_server_only, it serves
 	// another MCP server at all. The new issuer keeps the current issuer's
-	// challenge mode, session duration and CIMD admission. People and MCP clients
-	// connected to the MCP server must connect again, and gateways that sign
-	// people in through the old issuer stop serving it. Has no effect when the
-	// save fits the current issuer. Requires project:write.
+	// challenge mode, session duration, host and CIMD admission, and is always the
+	// MCP server's own authorization server, so a server leaving a shared-mode
+	// issuer announces a different one. People and MCP clients connected to the
+	// MCP server must connect again, and gateways that sign people in through the
+	// old issuer stop serving it. Has no effect when the save fits the current
+	// issuer. Requires project:write.
 	DedicatedIssuer *bool
 	// How to provide the OAuth client.
 	ClientMode string
@@ -409,8 +411,12 @@ type GetServerIdentityImpactPayload struct {
 	ClientID *string
 	// Preview a replace made with dedicated_issuer. When the issuer cannot take
 	// the change, the result describes moving mcp_server_id to a new issuer of its
-	// own instead of refusing.
+	// own instead of refusing. Requires project:write, as the save does.
 	DedicatedIssuer *bool
+	// Preview a replace made with target_server_only. With dedicated_issuer, an
+	// issuer that serves another MCP server is previewed as moving mcp_server_id
+	// off it.
+	TargetServerOnly *bool
 }
 
 // ListBindingsPayload is the payload type of the remoteSessions service

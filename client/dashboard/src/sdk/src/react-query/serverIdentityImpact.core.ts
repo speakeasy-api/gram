@@ -56,6 +56,7 @@ export function buildServerIdentityImpactQuery(
       providerId: request.providerId,
       clientId: request.clientId,
       dedicatedIssuer: request.dedicatedIssuer,
+      targetServerOnly: request.targetServerOnly,
       gramSession: request.gramSession,
       gramKey: request.gramKey,
       gramProject: request.gramProject,
@@ -92,6 +93,7 @@ export function queryKeyServerIdentityImpact(
     providerId?: string | undefined;
     clientId?: string | undefined;
     dedicatedIssuer?: boolean | undefined;
+    targetServerOnly?: boolean | undefined;
     gramSession?: string | undefined;
     gramKey?: string | undefined;
     gramProject?: string | undefined;

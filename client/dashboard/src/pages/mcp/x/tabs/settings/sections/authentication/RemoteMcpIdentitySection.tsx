@@ -562,7 +562,7 @@ export function RemoteMcpIdentitySectionBody({
           (actualMode !== "user" || userDraft.canSave)
         ) {
           // A pin or header edit alone must not recommit the connected client.
-          await userDraft.save(options);
+          if (!(await userDraft.save(options))) return;
         }
       }
       // A signing key client made for the Service Account choice and left
@@ -1027,6 +1027,16 @@ export function RemoteMcpIdentitySectionBody({
                 user session issuer, and one issuer serves one client. Speakeasy
                 can create a new issuer for this server and save your change
                 there.
+                {destructive
+                  ? ` ${removalConsequences({
+                      removingSelf,
+                      replacingSelf,
+                      leavingUser,
+                      leavingAgent,
+                      replacingClient,
+                      replacingCredential,
+                    })}`
+                  : null}
               </Dialog.Description>
             ) : sharedIssuerImpact.refusal !== undefined ? (
               <Dialog.Description>

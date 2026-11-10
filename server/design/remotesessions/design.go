@@ -85,6 +85,7 @@ var _ = Service("remoteSessions", func() {
 			Param("provider_id")
 			Param("client_id")
 			Param("dedicated_issuer")
+			Param("target_server_only")
 			security.SessionHeader()
 			security.ByKeyHeader()
 			security.ProjectHeader()
@@ -263,7 +264,7 @@ var CommitServerIdentityConfigurationForm = Type("CommitServerIdentityConfigurat
 	})
 	Attribute("target_server_only", Boolean, "Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.")
 	Attribute("create_provider", remotesessionissuers.CreateRemoteSessionIssuerForm, "A new project-scoped Remote Identity Provider to create.")
-	Attribute("dedicated_issuer", Boolean, "Let the save move the MCP server to a new user session issuer of its own when its current issuer cannot take the change: another MCP server signs in through the client bound to it, or, with target_server_only, it serves another MCP server at all. The new issuer keeps the current issuer's challenge mode, session duration and CIMD admission. People and MCP clients connected to the MCP server must connect again, and gateways that sign people in through the old issuer stop serving it. Has no effect when the save fits the current issuer. Requires project:write.")
+	Attribute("dedicated_issuer", Boolean, "Let the save move the MCP server to a new user session issuer of its own when its current issuer cannot take the change: another MCP server signs in through the client bound to it, or, with target_server_only, it serves another MCP server at all. The new issuer keeps the current issuer's challenge mode, session duration, host and CIMD admission, and is always the MCP server's own authorization server, so a server leaving a shared-mode issuer announces a different one. People and MCP clients connected to the MCP server must connect again, and gateways that sign people in through the old issuer stop serving it. Has no effect when the save fits the current issuer. Requires project:write.")
 	Attribute("client_mode", String, "How to provide the OAuth client.", func() {
 		Enum("auto", "existing", "manual")
 	})
@@ -296,7 +297,8 @@ var ServerIdentityImpactForm = Type("ServerIdentityImpactForm", func() {
 	Attribute("client_id", String, "An existing client being bound. Omit for a new client.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("dedicated_issuer", Boolean, "Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing.")
+	Attribute("dedicated_issuer", Boolean, "Preview a replace made with dedicated_issuer. When the issuer cannot take the change, the result describes moving mcp_server_id to a new issuer of its own instead of refusing. Requires project:write, as the save does.")
+	Attribute("target_server_only", Boolean, "Preview a replace made with target_server_only. With dedicated_issuer, an issuer that serves another MCP server is previewed as moving mcp_server_id off it.")
 
 	Required("user_session_issuer_id", "change")
 })

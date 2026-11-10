@@ -112,6 +112,7 @@ async function $do(
     "dedicated_issuer": payload.dedicated_issuer,
     "mcp_server_id": payload.mcp_server_id,
     "provider_id": payload.provider_id,
+    "target_server_only": payload.target_server_only,
     "user_session_issuer_id": payload.user_session_issuer_id,
   });
 

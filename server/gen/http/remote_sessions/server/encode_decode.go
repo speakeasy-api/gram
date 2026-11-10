@@ -1628,6 +1628,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 			providerID          *string
 			clientID            *string
 			dedicatedIssuer     *bool
+			targetServerOnly    *bool
 			sessionToken        *string
 			apikeyToken         *string
 			projectSlugInput    *string
@@ -1677,6 +1678,16 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 				dedicatedIssuer = &v
 			}
 		}
+		{
+			targetServerOnlyRaw := qp.Get("target_server_only")
+			if targetServerOnlyRaw != "" {
+				v, err2 := strconv.ParseBool(targetServerOnlyRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("target_server_only", targetServerOnlyRaw, "boolean"))
+				}
+				targetServerOnly = &v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1692,7 +1703,7 @@ func DecodeGetServerIdentityImpactRequest(mux goahttp.Muxer, decoder func(*http.
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, dedicatedIssuer, sessionToken, apikeyToken, projectSlugInput)
+		payload = NewGetServerIdentityImpactPayload(userSessionIssuerID, mcpServerID, change, providerID, clientID, dedicatedIssuer, targetServerOnly, sessionToken, apikeyToken, projectSlugInput)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

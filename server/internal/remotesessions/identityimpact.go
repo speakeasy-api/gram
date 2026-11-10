@@ -191,20 +191,40 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin access").LogError(ctx, logger)
 	}
-	if err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change); err != nil {
-		// The commit made with dedicated_issuer moves the server instead of
-		// refusing this, and changes no binding on the issuer it leaves.
-		if conv.PtrValOr(payload.DedicatedIssuer, false) && targetID.Valid && errors.Is(err, errClientServesOtherServer) {
-			if userIssuer.TrustedRemoteSessionIssuerID.Valid {
-				return nil, identityOopsError(identityRefusal(ErrIdentityConflict, nil, trustedIssuerNotDedicatedMessage), "preview identity change").LogError(ctx, logger)
-			}
-			dedicated, err := s.dedicatedIssuerImpact(ctx, q, orgID, userIssuerID, targetID.UUID, change, clientID)
-			if err != nil {
-				return nil, oops.E(oops.CodeUnexpected, err, "preview dedicated user session issuer").LogError(ctx, logger)
-			}
-			return &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DedicatedIssuer: dedicated}, nil
+	// The commit made with dedicated_issuer moves the server off an issuer
+	// that cannot take the change, and changes no binding on the issuer it
+	// leaves. It decides that the way planReplacement does.
+	mayDedicate := conv.PtrValOr(payload.DedicatedIssuer, false) && targetID.Valid && payload.Change == identityChangeReplace
+	dedicate := false
+	if mayDedicate {
+		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+			return nil, err
 		}
-		return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
+		if conv.PtrValOr(payload.TargetServerOnly, false) {
+			dedicate, err = issuerSharedWithoutEnforcement(ctx, s.db, orgID, userIssuerID, targetID.UUID)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "check shared sign-in configuration").LogError(ctx, logger)
+			}
+		}
+	}
+	if !dedicate {
+		err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change)
+		switch {
+		case mayDedicate && errors.Is(err, errClientServesOtherServer):
+			dedicate = true
+		case err != nil:
+			return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
+		}
+	}
+	if dedicate {
+		if userIssuer.TrustedRemoteSessionIssuerID.Valid {
+			return nil, identityOopsError(identityRefusal(ErrIdentityConflict, nil, trustedIssuerNotDedicatedMessage), "preview identity change").LogError(ctx, logger)
+		}
+		dedicated, err := s.dedicatedIssuerImpact(ctx, q, orgID, userIssuerID, targetID.UUID, change, clientID)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "preview dedicated user session issuer").LogError(ctx, logger)
+		}
+		return &gen.ServerIdentityImpactResult{Servers: []*gen.ServerIdentityImpactServer{}, HiddenServerCount: 0, DedicatedIssuer: dedicated}, nil
 	}
 
 	servers, err := q.ListOrganizationMCPServersForUserSessionIssuer(ctx, repo.ListOrganizationMCPServersForUserSessionIssuerParams{

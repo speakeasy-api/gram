@@ -18061,6 +18061,20 @@ SELECT EXISTS (
         AND sibling.project_id IS NULL
         AND sibling.deleted IS FALSE
     ) = 1
+    AND EXISTS (
+      SELECT 1
+      FROM organization_features AS opted_in
+      WHERE opted_in.organization_id = issuer.organization_id
+        AND opted_in.feature_name = 'organization_gateway_disabled'
+        AND opted_in.deleted IS TRUE
+    )
+    AND NOT EXISTS (
+      SELECT 1
+      FROM organization_features AS disabled
+      WHERE disabled.organization_id = issuer.organization_id
+        AND disabled.feature_name = 'organization_gateway_disabled'
+        AND disabled.deleted IS FALSE
+    )
 )::boolean AS serves_organization_gateway
 `
 
@@ -18070,7 +18084,9 @@ type UserSessionIssuerServesOrganizationGatewayParams struct {
 }
 
 // The organization gateway is served on the only organization-level user
-// session issuer its organization owns.
+// session issuer its organization owns, once an administrator has turned the
+// gateway on: organization_gateway_disabled is on until a soft-deleted row
+// records that opt-in.
 func (q *Queries) UserSessionIssuerServesOrganizationGateway(ctx context.Context, arg UserSessionIssuerServesOrganizationGatewayParams) (bool, error) {
 	row := q.db.QueryRow(ctx, userSessionIssuerServesOrganizationGateway, arg.ID, arg.OrganizationID)
 	var serves_organization_gateway bool

@@ -334,7 +334,7 @@ func BuildCommitServerIdentityConfigurationPayload(remoteSessionsCommitServerIde
 
 // BuildGetServerIdentityImpactPayload builds the payload for the
 // remoteSessions getServerIdentityImpact endpoint from CLI flags.
-func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactDedicatedIssuer string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
+func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUserSessionIssuerID string, remoteSessionsGetServerIdentityImpactMcpServerID string, remoteSessionsGetServerIdentityImpactChange string, remoteSessionsGetServerIdentityImpactProviderID string, remoteSessionsGetServerIdentityImpactClientID string, remoteSessionsGetServerIdentityImpactDedicatedIssuer string, remoteSessionsGetServerIdentityImpactTargetServerOnly string, remoteSessionsGetServerIdentityImpactSessionToken string, remoteSessionsGetServerIdentityImpactApikeyToken string, remoteSessionsGetServerIdentityImpactProjectSlugInput string) (*remotesessions.GetServerIdentityImpactPayload, error) {
 	var err error
 	var userSessionIssuerID string
 	{
@@ -395,6 +395,17 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 			}
 		}
 	}
+	var targetServerOnly *bool
+	{
+		if remoteSessionsGetServerIdentityImpactTargetServerOnly != "" {
+			var val bool
+			val, err = strconv.ParseBool(remoteSessionsGetServerIdentityImpactTargetServerOnly)
+			targetServerOnly = &val
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for targetServerOnly, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if remoteSessionsGetServerIdentityImpactSessionToken != "" {
@@ -420,6 +431,7 @@ func BuildGetServerIdentityImpactPayload(remoteSessionsGetServerIdentityImpactUs
 	v.ProviderID = providerID
 	v.ClientID = clientID
 	v.DedicatedIssuer = dedicatedIssuer
+	v.TargetServerOnly = targetServerOnly
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken
 	v.ProjectSlugInput = projectSlugInput

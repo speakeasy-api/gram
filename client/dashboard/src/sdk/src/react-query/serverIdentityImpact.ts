@@ -124,6 +124,7 @@ export function setServerIdentityImpactData(
       providerId?: string | undefined;
       clientId?: string | undefined;
       dedicatedIssuer?: boolean | undefined;
+      targetServerOnly?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;
@@ -146,6 +147,7 @@ export function invalidateServerIdentityImpact(
       providerId?: string | undefined;
       clientId?: string | undefined;
       dedicatedIssuer?: boolean | undefined;
+      targetServerOnly?: boolean | undefined;
       gramSession?: string | undefined;
       gramKey?: string | undefined;
       gramProject?: string | undefined;

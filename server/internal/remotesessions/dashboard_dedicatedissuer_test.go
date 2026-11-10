@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -113,6 +114,7 @@ func TestCommitServerIdentityConfigurationMovesTheServerToADedicatedIssuer(t *te
 			require.Equal(t, (3 * time.Hour).Microseconds(), issuer.SessionDuration.Microseconds)
 			require.Equal(t, conv.ToPGText("presets"), issuer.ClientIDMetadataAdmissionMode)
 			require.Equal(t, "endpoint", issuer.AuthorizationServerMode)
+			require.False(t, issuer.UseAuthenticationHost)
 			require.False(t, issuer.TrustedRemoteSessionIssuerID.Valid)
 			admitted, err := issuers.ListUserSessionIssuerCimdClientsByIssuerID(ctx, usersessionsrepo.ListUserSessionIssuerCimdClientsByIssuerIDParams{
 				ProjectID:           projectID,
@@ -355,14 +357,57 @@ func TestGetServerIdentityImpactForADedicatedIssuer(t *testing.T) {
 		userIssuerID := seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "dedicated-impact-org-issuer")
 		shared := seedSharedIssuerOn(t, ctx, ti, "dedicated-impact-org", "", userIssuerID)
 		providerID := createServerIdentityProvider(t, ctx, ti, "dedicated-impact-org-second-provider", "", false, []string{"none"})
-
 		preview := impactPayload(shared.userIssuerID, &shared.second, "replace", &providerID, nil)
 		preview.DedicatedIssuer = new(true)
+
+		// The gateway is off until an administrator turns it on, and a gateway
+		// that serves nothing has nothing to lose.
 		result, err := ti.service.GetServerIdentityImpact(ctx, preview)
+		require.NoError(t, err)
+		require.NotNil(t, result.DedicatedIssuer)
+		require.False(t, result.DedicatedIssuer.OrganizationGateway)
+
+		require.NoError(t, ti.features.SetFeatureEnabled(ctx, activeOrganizationID(t, ctx), productfeatures.FeatureOrganizationGatewayDisabled, false))
+		result, err = ti.service.GetServerIdentityImpact(ctx, preview)
 		require.NoError(t, err)
 		require.NotNil(t, result.DedicatedIssuer)
 		require.Empty(t, result.DedicatedIssuer.Gateways)
 		require.True(t, result.DedicatedIssuer.OrganizationGateway)
+	})
+
+	t.Run("previews a setup save leaving a shared issuer", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "dedicated-impact-setup-issuer")
+		sourceBackedTarget(t, ctx, ti, "dedicated-impact-setup-first", userIssuerID)
+		second, _ := sourceBackedTarget(t, ctx, ti, "dedicated-impact-setup-second", userIssuerID)
+		providerID := createServerIdentityProvider(t, ctx, ti, "dedicated-impact-setup-provider", "", false, []string{"none"})
+
+		preview := impactPayload(userIssuerID, &second, "replace", &providerID, nil)
+		preview.DedicatedIssuer = new(true)
+		result, err := ti.service.GetServerIdentityImpact(ctx, preview)
+		require.NoError(t, err)
+		require.Nil(t, result.DedicatedIssuer)
+
+		preview.TargetServerOnly = new(true)
+		result, err = ti.service.GetServerIdentityImpact(ctx, preview)
+		require.NoError(t, err)
+		require.NotNil(t, result.DedicatedIssuer)
+	})
+
+	t.Run("needs project write, as the save does", func(t *testing.T) {
+		t.Parallel()
+
+		ctx, ti := newTestService(t)
+		shared := seedSharedIssuer(t, ctx, ti, "dedicated-impact-authz", "")
+		providerID := createServerIdentityProvider(t, ctx, ti, "dedicated-impact-authz-second-provider", "", false, []string{"none"})
+		serverWriteCtx := withExactAccessGrants(t, ctx, ti.conn, authz.NewGrant(authz.ScopeMCPWrite, shared.second.String()))
+
+		preview := impactPayload(shared.userIssuerID, &shared.second, "replace", &providerID, nil)
+		preview.DedicatedIssuer = new(true)
+		_, err := ti.service.GetServerIdentityImpact(serverWriteCtx, preview)
+		requireOopsCode(t, err, oops.CodeForbidden)
 	})
 
 	t.Run("is absent when the issuer can take the change", func(t *testing.T) {

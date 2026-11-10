@@ -88,9 +88,11 @@ func Mint(
 
 // MintDedicated creates the user_session_issuer an MCP server moves to when it
 // leaves an issuer it shares with other servers, inside the caller's
-// transaction. The new issuer keeps the source issuer's sign-in settings and
-// the CIMD document URLs it admits, so moving the server changes which issuer
-// signs people in and nothing about how.
+// transaction. The new issuer keeps the source issuer's challenge mode,
+// session duration, choice of host, CIMD admission mode and the CIMD document
+// URLs it admits. It is always the server's own authorization server: a
+// source in shared mode is not copied in that respect, so a server leaving
+// one announces a different authorization server afterwards.
 func MintDedicated(
 	ctx context.Context,
 	dbtx pgx.Tx,

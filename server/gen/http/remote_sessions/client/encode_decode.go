@@ -1734,6 +1734,9 @@ func EncodeGetServerIdentityImpactRequest(encoder func(*http.Request) goahttp.En
 		if p.DedicatedIssuer != nil {
 			values.Add("dedicated_issuer", fmt.Sprintf("%v", *p.DedicatedIssuer))
 		}
+		if p.TargetServerOnly != nil {
+			values.Add("target_server_only", fmt.Sprintf("%v", *p.TargetServerOnly))
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}

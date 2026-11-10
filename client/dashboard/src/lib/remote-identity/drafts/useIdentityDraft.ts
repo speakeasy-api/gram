@@ -1185,11 +1185,13 @@ export function useUserIdentityDraft({
       // put the failure on screen, so the rejection is swallowed here rather
       // than surfacing twice or escaping as an unhandled rejection.
       try {
-        await runCommit({
+        const result = await runCommit({
           revision: selectionRevision.current,
           dedicatedIssuer: options?.dedicatedIssuer ?? false,
         });
-        return true;
+        // A refused registration or one needing manual setup wrote nothing,
+        // and onSuccess has already said so.
+        return !result.failure && !result.manualSetupRequired;
       } catch {
         /* reported by onError */
         return false;
