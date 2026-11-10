@@ -293,7 +293,7 @@ func TestNextSuccessPairsServerlessAttemptsOnlyOnTheSameConnection(t *testing.T)
 
 func TestIsConfigChange(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"mcp-server:update", "mcp-server:update-tool-metadata", "auth-client:attach-mcp-server", "meta-mcp:add_member", "remote-session-client:revoke-sessions", "plugin:server_update", "identity-provider-connection:submit-client-id", "remote-session:refresh", "mcp_approval_request:approve", "access_challenge:resolve", "killswitch:activate", "killswitch:deactivate", "agent:suspend", "agent:reassign", "identity-provider-connection:verify", "organization:webhooks_enabled", "access_member:update_role"} {
+	for _, action := range []string{"mcp-server:update", "mcp-server:update-tool-metadata", "auth-client:attach-mcp-server", "meta-mcp:add_member", "remote-session-client:revoke-sessions", "plugin:server_update", "identity-provider-connection:submit-client-id", "remote-session:refresh", "mcp_approval_request:approve", "access_challenge:resolve", "killswitch:activate", "killswitch:deactivate", "agent:suspend", "agent:reassign", "identity-provider-connection:verify", "organization:webhooks_enabled", "access_member:update_role", "mcp-server:promote-catalogue"} {
 		require.True(t, mcpconnectionattempts.IsConfigChange(action), action)
 	}
 	for _, action := range []string{"platform-mcp-diagnostics:user_status_read", "platform-mcp-diagnostics:attribution_read", "mcp-server:view", "chat_session:access", "chat_session:handoff_export", "risk_result:reveal_payload", "risk_result:unmask", "assistant:tool_call", "update", "update:", ""} {
