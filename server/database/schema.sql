@@ -11898,6 +11898,13 @@ CREATE TABLE IF NOT EXISTS risk_results (
   -- the primary (first) span; spans is the full set. NULL for legacy/empty rows.
   spans jsonb,
 
+  -- match and spans sealed under the organization's risk-evidence data
+  -- encryption key (package orgencryption). Once an organization is cut over,
+  -- its rows carry these instead of the plaintext match and spans; rows of
+  -- organizations not yet cut over leave them NULL.
+  match_encrypted TEXT,
+  spans_encrypted TEXT,
+
   -- Populated on rows that represent a message the scanner could not analyze
   -- after exhausting its retry budget
   dead_letter_reason TEXT,
@@ -11962,6 +11969,10 @@ COMMENT ON COLUMN risk_results.end_pos IS '@access: confidential';
 COMMENT ON COLUMN risk_results.confidence IS '@access: confidential';
 COMMENT ON COLUMN risk_results.tags IS '@access: confidential';
 COMMENT ON COLUMN risk_results.spans IS '@access: secret-restricted';
+COMMENT ON COLUMN risk_results.match_encrypted IS 'match sealed with the organization''s risk-evidence data encryption key.
+@access: secret-restricted';
+COMMENT ON COLUMN risk_results.spans_encrypted IS 'spans, as JSON, sealed with the organization''s risk-evidence data encryption key.
+@access: secret-restricted';
 COMMENT ON COLUMN risk_results.dead_letter_reason IS '@access: opaque-restricted';
 COMMENT ON COLUMN risk_results.excluded_at IS '@access: confidential';
 COMMENT ON COLUMN risk_results.excluded_exclusion_id IS '@access: confidential';

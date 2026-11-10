@@ -300,6 +300,12 @@ type RiskResult struct {
 	Tags []string
 	// @access: secret-restricted
 	Spans []byte
+	// match sealed with the organization's risk-evidence data encryption key.
+	// @access: secret-restricted
+	MatchEncrypted pgtype.Text
+	// spans, as JSON, sealed with the organization's risk-evidence data encryption key.
+	// @access: secret-restricted
+	SpansEncrypted pgtype.Text
 	// @access: opaque-restricted
 	DeadLetterReason pgtype.Text
 	// @access: confidential
