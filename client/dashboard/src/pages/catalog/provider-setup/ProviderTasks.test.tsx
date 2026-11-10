@@ -205,6 +205,7 @@ function SalesforceFixture({
   integration = "native",
   path = "own",
   salesforceServer = "sobject-reads",
+  salesforceDomain = "",
   saved = false,
   savedTokenEndpointAuthMethod,
 }: {
@@ -212,6 +213,7 @@ function SalesforceFixture({
   integration?: string;
   path?: string;
   salesforceServer?: string;
+  salesforceDomain?: string;
   saved?: boolean;
   savedTokenEndpointAuthMethod?: string;
 }) {
@@ -224,6 +226,7 @@ function SalesforceFixture({
       integration,
       path,
       salesforceServer,
+      salesforceDomain,
     },
   });
   return (
@@ -281,6 +284,48 @@ it("reuses shared app registration controls for the own-app instructions", () =>
   expect(screen.getByText("New External Client App")).toBeDefined();
   expect(screen.getByRole("radiogroup", { name: "OAuth app" })).toBeDefined();
   expect(screen.queryByText("Use Speakeasy’s app")).toBeNull();
+});
+it("validates My Domain before opening the app setup in that org", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  const input = screen.getByLabelText("Salesforce Domain (optional)");
+  await user.type(input, "example.salesforce.com.evil.test");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByText(/Enter your production org’s Current My Domain URL/),
+  ).toBeDefined();
+  await user.clear(input);
+  await user.type(input, "https://example.my.salesforce.com/");
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://example.my.salesforce.com");
+});
+it("corrects a pasted Developer Edition Setup URL in the domain field", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  const input = screen.getByLabelText("Salesforce Domain (optional)");
+  await user.click(input);
+  await user.paste(
+    "https://example-dev-ed.develop.my.salesforce-setup.com/lightning/setup/SetupOneHome/home",
+  );
+  await user.tab();
+  expect(input).toHaveProperty(
+    "value",
+    "https://example-dev-ed.develop.my.salesforce.com",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://example-dev-ed.develop.my.salesforce.com");
+});
+it("keeps standard production login when My Domain is blank", async () => {
+  const user = userEvent.setup();
+  render(<SalesforceFixture step="salesforce-org" />);
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    screen.getByRole("link", { name: "Open Salesforce" }).getAttribute("href"),
+  ).toBe("https://login.salesforce.com");
 });
 it("uses the real Salesforce callback and native scopes", () => {
   render(<SalesforceFixture step="oauth" />);
@@ -382,6 +427,7 @@ it("renders the published installation link and support handoff details", async 
   render(<SalesforceFixture step="choices" />);
   await user.click(screen.getByText("Sandbox", { exact: true }));
   await user.click(screen.getByText("Use Speakeasy’s app", { exact: true }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
   await user.click(screen.getByRole("button", { name: "Continue" }));
   expect(
     screen

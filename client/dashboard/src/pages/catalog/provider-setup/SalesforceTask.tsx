@@ -13,11 +13,13 @@ import {
   ProviderFieldInstructions,
   Section,
   SetupGroup,
+  SetupField,
 } from "./shared";
 import {
   salesforceConnection,
   salesforceServers,
   salesforceAppInstallationUrl,
+  salesforceMyDomain,
 } from "./salesforce";
 
 /** Provider instructions follow the current published Salesforce setup guide. */
@@ -143,6 +145,35 @@ export function SalesforceTask(): JSX.Element {
           )}
         </>
       );
+    case "salesforce-org":
+      return (
+        <>
+          <SetupField
+            field="salesforceDomain"
+            label="Salesforce Domain (optional)"
+            onBlur={() => {
+              const domain = salesforceMyDomain(
+                s.values.salesforceDomain,
+                s.values.environment,
+              );
+              if (domain && domain.origin !== s.values.salesforceDomain)
+                live.changeField({
+                  field: "salesforceDomain",
+                  value: domain.origin,
+                });
+            }}
+            placeholder={
+              s.values.environment === "sandbox"
+                ? "example--uat.sandbox.my.salesforce.com"
+                : "example.my.salesforce.com"
+            }
+          />
+          <p className="mt-4">
+            If your org requires signing in through its own domain. Leave this
+            blank to use standard login.
+          </p>
+        </>
+      );
     case "app":
       return (
         <>
@@ -155,11 +186,7 @@ export function SalesforceTask(): JSX.Element {
           <ExternalAction
             title="Open Salesforce"
             label="Open Salesforce"
-            href={
-              s.values.environment === "sandbox"
-                ? "https://test.salesforce.com/"
-                : "https://login.salesforce.com/"
-            }
+            href={connection?.issuer}
           />
           <InProvider
             actions={[
@@ -246,22 +273,10 @@ export function SalesforceTask(): JSX.Element {
                 .
               </>,
               <>
-                Leave{" "}
-                <strong>
-                  Require Proof Key for Code Exchange (PKCE) extension for
-                  Supported Authorization Flows
-                </strong>{" "}
-                deselected.
-              </>,
-              <>
                 Leave <strong>Require Secret for Web Server Flow</strong> and{" "}
-                <strong>Require Secret for Refresh Token Flow</strong> off for
-                this Consumer Key-only connection.
+                <strong>Require Secret for Refresh Token Flow</strong> off
               </>,
-              <>
-                Leave other editable security requirements off, as described in
-                the setup guide.
-              </>,
+              <>Leave other editable security requirements off</>,
               existing ? (
                 <>Save the changes.</>
               ) : (
@@ -309,7 +324,10 @@ export function SalesforceTask(): JSX.Element {
           <ExternalAction
             title="Install Speakeasy’s Salesforce app"
             label="Open Salesforce installation"
-            href={salesforceAppInstallationUrl(s.values.environment)}
+            href={salesforceAppInstallationUrl(
+              s.values.environment,
+              s.values.salesforceDomain,
+            )}
           />
           <InProvider
             actions={[

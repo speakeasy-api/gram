@@ -1,4 +1,4 @@
-import { salesforceConnection } from "./salesforce";
+import { salesforceConnection, salesforceMyDomain } from "./salesforce";
 /** Provider setup state only. Network actions live in the page integration. */
 export type Provider = "slack" | "github" | "salesforce";
 export const names = {
@@ -11,6 +11,7 @@ const defaultValues = {
   integration: "native",
   environment: "production",
   salesforceServer: "sobject-reads",
+  salesforceDomain: "",
   instanceUrl: "",
   path: "own",
   appChoice: "new",
@@ -58,6 +59,7 @@ export function steps(s: State): { id: string; title: string }[] {
     const start = [
       { id: "begin", title: "Setup plan" },
       { id: "choices", title: "Choose your connection" },
+      { id: "salesforce-org", title: "Salesforce organization" },
     ];
     if (s.values.path === "support")
       return [
@@ -121,11 +123,21 @@ export function validate(s: State): State["errors"] {
     s.provider === "salesforce" &&
     ["choices", "credentials"].includes(s.step)
   ) {
-    if (!salesforceConnection(s.values)) {
+    if (!salesforceConnection({ ...s.values, salesforceDomain: "" })) {
       errors.salesforceServer =
         "Choose a documented Salesforce server and environment.";
     }
   }
+  if (
+    s.provider === "salesforce" &&
+    ["salesforce-org", "credentials"].includes(s.step) &&
+    s.values.salesforceDomain.trim() &&
+    !salesforceMyDomain(s.values.salesforceDomain, s.values.environment)
+  )
+    errors.salesforceDomain =
+      s.values.environment === "sandbox"
+        ? "Enter your sandbox’s Current My Domain URL, such as example--uat.sandbox.my.salesforce.com."
+        : "Enter your production org’s Current My Domain URL, such as example.my.salesforce.com.";
   if (s.step === "credentials") {
     if (!s.values.clientId.trim())
       errors.clientId =
@@ -201,6 +213,7 @@ export function reduce(s: State, a: Action): State {
             "integration",
             "environment",
             "salesforceServer",
+            "salesforceDomain",
             "instanceUrl",
             "path",
           ].includes(a.field))

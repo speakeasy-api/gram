@@ -1,11 +1,19 @@
 import type { CatalogServer } from "../hooks";
 import type { RemoteMcpServerHeader } from "@gram/client/models/components/remotemcpserverheader";
 
-export function salesforceAppInstallationUrl(environment: string): string {
+export function salesforceAppInstallationUrl(
+  environment: string,
+  domain = "",
+): string | undefined {
+  const selected = domain.trim()
+    ? salesforceMyDomain(domain, environment)
+    : null;
+  if (domain.trim() && !selected) return undefined;
   const origin =
-    environment === "sandbox"
+    selected?.origin ??
+    (environment === "sandbox"
       ? "https://test.salesforce.com"
-      : "https://login.salesforce.com";
+      : "https://login.salesforce.com");
   return `${origin}/packaging/installPackage.apexp?p0=04tdM000000cNGXQA2`;
 }
 
@@ -65,6 +73,45 @@ function strictHttpsUrl(value: string): URL | null {
   } catch {
     return null;
   }
+}
+
+/** Normalize known Salesforce page hosts to their matching My Domain login. */
+export function salesforceMyDomain(
+  value: string,
+  environment: string,
+): {
+  origin: string;
+  name: string;
+  partition: "" | "sandbox" | "develop";
+} | null {
+  const input = value.trim();
+  let url: URL;
+  try {
+    url = new URL(input.includes("://") ? input : `https://${input}`);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== "https:" || url.port || url.username || url.password)
+    return null;
+  const hostname = url.hostname
+    .replace(/\.my\.salesforce-setup\.com$/, ".my.salesforce.com")
+    .replace(/\.lightning\.force\.com$/, ".my.salesforce.com");
+  const partition =
+    environment === "sandbox"
+      ? "sandbox"
+      : hostname.endsWith(".develop.my.salesforce.com")
+        ? "develop"
+        : "";
+  const suffix = `.${partition ? `${partition}.` : ""}my.salesforce.com`;
+  if (!hostname.endsWith(suffix)) return null;
+  const name = hostname.slice(0, -suffix.length);
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name)) return null;
+  if (
+    environment === "sandbox" &&
+    !/^[a-z0-9][a-z0-9-]*--[a-z0-9][a-z0-9-]*$/.test(name)
+  )
+    return null;
+  return { origin: `https://${hostname}`, name, partition };
 }
 
 /** Native MCP servers documented by the current Salesforce setup guide. */
@@ -139,7 +186,11 @@ export const salesforceServers = [
 function nativeUrl(
   server: (typeof salesforceServers)[number],
   environment: string,
+  domainName?: string,
+  partition = environment === "sandbox" ? "sandbox" : "",
 ): string {
+  if (domainName)
+    return `https://api.salesforce.com/platform/mcp/v1/d/${domainName}/${partition ? `${partition}/` : ""}${server.productionPath}`;
   return `https://api.salesforce.com/platform/mcp/v1/${environment === "sandbox" ? server.sandboxPath : server.productionPath}`;
 }
 
@@ -171,6 +222,7 @@ type Selection = {
   integration: string;
   environment: string;
   salesforceServer: string;
+  salesforceDomain?: string;
   instanceUrl: string;
   clientSecret?: string;
   path?: string;
@@ -194,6 +246,10 @@ export function salesforceSelectionForUrl(
   if (!url) return null;
   const clean = `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
   if (url.origin !== "https://api.salesforce.com") return null;
+  const scoped =
+    /^\/platform\/mcp\/v1\/d\/([^/]+)\/(?:(sandbox|develop)\/)?/.exec(
+      url.pathname,
+    );
   for (const server of salesforceServers) {
     for (const environment of ["production", "sandbox"]) {
       if (clean === nativeUrl(server, environment))
@@ -202,6 +258,23 @@ export function salesforceSelectionForUrl(
           environment,
           salesforceServer: server.id,
         };
+      if (scoped) {
+        const domain = salesforceMyDomain(
+          `https://${scoped[1]}${scoped[2] ? `.${scoped[2]}` : ""}.my.salesforce.com`,
+          environment,
+        );
+        if (
+          domain &&
+          clean ===
+            nativeUrl(server, environment, domain.name, domain.partition)
+        )
+          return {
+            integration: "native",
+            environment,
+            salesforceServer: server.id,
+            salesforceDomain: domain.origin,
+          };
+      }
     }
   }
   return null;
@@ -222,13 +295,18 @@ export function salesforceConnection(values: Selection): {
     (server) => server.id === values.salesforceServer,
   );
   if (!server) return null;
+  const domain = values.salesforceDomain?.trim()
+    ? salesforceMyDomain(values.salesforceDomain, values.environment)
+    : null;
+  if (values.salesforceDomain?.trim() && !domain) return null;
   const issuer =
-    values.environment === "sandbox"
+    domain?.origin ??
+    (values.environment === "sandbox"
       ? "https://test.salesforce.com"
-      : "https://login.salesforce.com";
+      : "https://login.salesforce.com");
   return {
     ...salesforceLogin(issuer),
-    url: nativeUrl(server, values.environment),
+    url: nativeUrl(server, values.environment, domain?.name, domain?.partition),
     instanceUrl: null,
     scopes: salesforceScopes(),
     authMethod: "none",

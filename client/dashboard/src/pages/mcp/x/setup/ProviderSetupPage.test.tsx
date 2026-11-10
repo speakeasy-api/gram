@@ -152,6 +152,27 @@ function completeButton() {
     name: "Complete setup",
   });
 }
+
+it.each(["slack", "github", "salesforce"])(
+  "keeps the %s credentials step marker in sync with saved configuration",
+  (provider) => {
+    mocks.provider = provider;
+    render(<Setup />);
+    const step = screen.getByRole("button", { name: /Enter app credentials$/ });
+    // Hydrated credentials are complete even without a recorded step visit.
+    expect(step.textContent).toBe("Enter app credentials");
+    act(() =>
+      mocks.dispatch({
+        type: "field",
+        field: "clientId",
+        value: "replacement",
+      }),
+    );
+    expect(step.textContent).toMatch(/^\d+Enter app credentials$/);
+    act(() => mocks.dispatch({ type: "connection", saved: true }));
+    expect(step.textContent).toBe("Enter app credentials");
+  },
+);
 function validate() {
   act(() => mocks.dispatch({ type: "connection", tested: true }));
 }

@@ -5,6 +5,7 @@ import {
   salesforceSelectionForUrl,
   salesforceInstance,
   salesforceAppInstallationUrl,
+  salesforceMyDomain,
 } from "./salesforce";
 import {
   setupProviderForUrl,
@@ -13,6 +14,121 @@ import {
 } from "@/pages/mcp/x/setup/provider-setup";
 
 describe("documented Salesforce connection contract", () => {
+  it.each([
+    [
+      "production",
+      "https://example.my.salesforce-setup.com/lightning/setup/SetupOneHome/home",
+      "https://example.my.salesforce.com",
+      "",
+    ],
+    [
+      "production",
+      "https://example-dev-ed.develop.my.salesforce-setup.com/",
+      "https://example-dev-ed.develop.my.salesforce.com",
+      "develop/",
+    ],
+    [
+      "sandbox",
+      "example--uat.sandbox.lightning.force.com/lightning/page/home",
+      "https://example--uat.sandbox.my.salesforce.com",
+      "sandbox/",
+    ],
+    [
+      "production",
+      "https://EXAMPLE.my.salesforce.com/path?source=setup#details",
+      "https://example.my.salesforce.com",
+      "",
+    ],
+  ])(
+    "normalizes a pasted %s Salesforce page URL",
+    (environment, input, origin, partition) => {
+      const domain = salesforceMyDomain(input, environment);
+      expect(domain?.origin).toBe(origin);
+      const s = initialState("salesforce");
+      Object.assign(s.values, { environment, salesforceDomain: input });
+      const connection = salesforceConnection(s.values);
+      const name =
+        environment === "sandbox"
+          ? "example--uat"
+          : partition
+            ? "example-dev-ed"
+            : "example";
+      expect(connection?.url).toBe(
+        `https://api.salesforce.com/platform/mcp/v1/d/${name}/${partition}platform/sobject-reads`,
+      );
+      expect(connection?.authorizationEndpoint).toBe(
+        `${origin}/services/oauth2/authorize`,
+      );
+      expect(salesforceSelectionForUrl(connection?.url)).toMatchObject({
+        environment,
+        salesforceDomain: origin,
+      });
+    },
+  );
+  it.each([
+    [
+      "production",
+      "example.my.salesforce.com",
+      "d/example/platform/sobject-reads",
+      "sobject-reads",
+    ],
+    [
+      "sandbox",
+      "example--uat.sandbox.my.salesforce.com",
+      "d/example--uat/sandbox/platform/sobject-reads",
+      "sobject-reads",
+    ],
+    [
+      "sandbox",
+      "example--uat.sandbox.my.salesforce.com",
+      "d/example--uat/sandbox/data/data360",
+      "data360",
+    ],
+  ])(
+    "uses My Domain for %s login and MCP routing",
+    (environment, hostname, path, salesforceServer) => {
+      const s = initialState("salesforce");
+      Object.assign(s.values, {
+        environment,
+        salesforceDomain: hostname,
+        salesforceServer,
+      });
+      const url = `https://api.salesforce.com/platform/mcp/v1/${path}`;
+      const issuer = `https://${hostname}`;
+      expect(salesforceConnection(s.values)).toMatchObject({
+        url,
+        issuer,
+        authorizationEndpoint: `${issuer}/services/oauth2/authorize`,
+        tokenEndpoint: `${issuer}/services/oauth2/token`,
+        instanceUrl: null,
+        authMethod: "none",
+      });
+      expect(salesforceSelectionForUrl(url)).toMatchObject({
+        environment,
+        salesforceDomain: issuer,
+        salesforceServer,
+      });
+      expect(setupProviderForUrl(url)).toBe("salesforce");
+    },
+  );
+
+  it.each([
+    "https://example.my.salesforce.com.evil.test",
+    "http://example.my.salesforce.com",
+    "https://example.my.salesforce-setup.com.evil.test/path",
+    "https://u:p@example.my.salesforce.com",
+    "https://example.my.salesforce.com:8443",
+    "https://example--uat.sandbox.my.salesforce.com",
+  ])("blocks invalid or mismatched My Domain input: %s", (salesforceDomain) => {
+    const s = initialState("salesforce");
+    Object.assign(s.values, { salesforceDomain });
+    expect(salesforceConnection(s.values)).toBeNull();
+    expect(
+      validate({ ...s, step: "salesforce-org" }).salesforceDomain,
+    ).toBeTruthy();
+    // Environment choices remain editable so a mismatched domain can be corrected next.
+    expect(validate({ ...s, step: "choices" })).toEqual({});
+  });
   it.each([
     ["production", "login.salesforce.com"],
     ["sandbox", "test.salesforce.com"],
@@ -129,6 +245,7 @@ describe("documented Salesforce connection contract", () => {
     for (const [field, value] of [
       ["environment", "sandbox"],
       ["salesforceServer", "sobject-all"],
+      ["salesforceDomain", "example.my.salesforce.com"],
     ] as const) {
       const s = initialState("salesforce");
       s.values.clientId = "key";
@@ -152,6 +269,7 @@ describe("documented Salesforce connection contract", () => {
     expect(steps(s).map((x) => x.id)).toEqual([
       "begin",
       "choices",
+      "salesforce-org",
       "app",
       "oauth",
       "security",
@@ -204,6 +322,7 @@ describe("documented Salesforce connection contract", () => {
     Object.assign(s.values, {
       environment: "sandbox",
       salesforceServer: "sobject-deletes",
+      salesforceDomain: "https://example--uat.sandbox.my.salesforce.com",
       clientId: "key",
       clientSecret: "secret",
     });
@@ -216,6 +335,9 @@ describe("documented Salesforce connection contract", () => {
     const restored = loadProviderProgress("salesforce", "sf");
     expect(restored.values.environment).toBe("sandbox");
     expect(restored.values.salesforceServer).toBe("sobject-deletes");
+    expect(restored.values.salesforceDomain).toBe(
+      "https://example--uat.sandbox.my.salesforce.com",
+    );
     expect(restored.values.clientId).toBe("");
     expect(restored.values.clientSecret).toBe("");
     expect(restored.saved || restored.authorized || restored.tested).toBe(

@@ -309,30 +309,34 @@ function StepRail(): JSX.Element {
       className="row-start-1 min-w-0 lg:sticky lg:top-[calc(var(--page-sticky-top,0px)+24px)] lg:col-start-2 lg:row-start-1"
     >
       <ol className="flex flex-wrap gap-x-[18px] gap-y-3 lg:block">
-        {steps(s).map((step, index) => (
-          <li
-            key={step.id}
-            className="relative text-xs lg:pb-3 lg:after:absolute lg:after:top-6 lg:after:bottom-0.5 lg:after:left-[11px] lg:after:w-px lg:after:bg-border lg:last:pb-0 lg:last:after:hidden"
-          >
-            <button
-              type="button"
-              className="flex items-center gap-3 text-left"
-              aria-current={s.step === step.id ? "step" : undefined}
-              onClick={() => dispatch({ type: "goto", step: step.id })}
+        {steps(s).map((step, index) => {
+          const completed =
+            step.id === "credentials" ? s.saved : s.done.includes(step.id);
+          return (
+            <li
+              key={step.id}
+              className="relative text-xs lg:pb-3 lg:after:absolute lg:after:top-6 lg:after:bottom-0.5 lg:after:left-[11px] lg:after:w-px lg:after:bg-border lg:last:pb-0 lg:last:after:hidden"
             >
-              <span
-                className={`relative z-1 grid size-6 shrink-0 place-items-center border font-mono text-[11px] ${s.step === step.id ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground"}`}
+              <button
+                type="button"
+                className="flex items-center gap-3 text-left"
+                aria-current={s.step === step.id ? "step" : undefined}
+                onClick={() => dispatch({ type: "goto", step: step.id })}
               >
-                {s.done.includes(step.id) ? (
-                  <Check className="size-3" aria-hidden />
-                ) : (
-                  index + 1
-                )}
-              </span>
-              <span className="text-sm">{step.title}</span>
-            </button>
-          </li>
-        ))}
+                <span
+                  className={`relative z-1 grid size-6 shrink-0 place-items-center border font-mono text-[11px] ${s.step === step.id ? "border-foreground bg-foreground text-background" : "bg-card text-muted-foreground"}`}
+                >
+                  {completed ? (
+                    <Check className="size-3" aria-hidden />
+                  ) : (
+                    index + 1
+                  )}
+                </span>
+                <span className="text-sm">{step.title}</span>
+              </button>
+            </li>
+          );
+        })}
       </ol>
     </nav>
   );

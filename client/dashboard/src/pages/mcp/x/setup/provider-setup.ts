@@ -84,6 +84,7 @@ export function saveProviderProgress(key: string, state: State): void {
             ? {
                 environment: state.values.environment,
                 salesforceServer: state.values.salesforceServer,
+                salesforceDomain: state.values.salesforceDomain,
                 path: state.values.path,
                 appChoice: state.values.appChoice,
                 configurationPending: state.configChanged,
@@ -168,7 +169,11 @@ export function loadProviderProgress(
       initial.configChanged =
         "configurationPending" in values &&
         values.configurationPending === true;
-      for (const field of ["environment", "salesforceServer"] as const) {
+      for (const field of [
+        "environment",
+        "salesforceServer",
+        "salesforceDomain",
+      ] as const) {
         const candidate = (values as Record<string, unknown>)[field];
         if (
           (!defaults ||
@@ -193,6 +198,7 @@ export function loadProviderProgress(
         initial.values.environment = defaults?.environment ?? "production";
         initial.values.salesforceServer =
           defaults?.salesforceServer ?? "sobject-reads";
+        initial.values.salesforceDomain = defaults?.salesforceDomain ?? "";
       }
     }
     // Resolve branch-specific steps after restoring choices.

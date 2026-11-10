@@ -123,6 +123,7 @@ export function SetupField({
   disabled = false,
   value,
   type,
+  onBlur,
 }: {
   field: FieldName;
   label: string;
@@ -131,6 +132,7 @@ export function SetupField({
   disabled?: boolean;
   value?: string;
   type?: string;
+  onBlur?: () => void;
 }): JSX.Element {
   const { s, dispatch, live } = useSetup();
   const id = `setup-${s.provider}-${field}`,
@@ -172,6 +174,7 @@ export function SetupField({
         aria-invalid={!!error}
         aria-describedby={error ? `${id}-error` : undefined}
         onChange={(value) => live.changeField({ field, value })}
+        onBlur={onBlur}
       />
       {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
     </Field>

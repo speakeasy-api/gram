@@ -119,6 +119,14 @@ function Credentials() {
           <Correction step="choices">Review connection choices</Correction>
         </Alert>
       )}
+      {s.provider === "salesforce" && s.errors.salesforceDomain && (
+        <Alert variant="error">
+          {s.errors.salesforceDomain}{" "}
+          <Correction step="salesforce-org">
+            Review Salesforce domain
+          </Correction>
+        </Alert>
+      )}
       <InProvider
         actions={credentialInstructions(
           s.provider,

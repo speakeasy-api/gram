@@ -227,6 +227,7 @@ export function useProviderConnection(
         dispatch({
           type: "source",
           values: {
+            salesforceDomain: "",
             ...salesforceSelectionForUrl(source.url),
             instanceUrl: source.instanceUrl ?? "",
           },

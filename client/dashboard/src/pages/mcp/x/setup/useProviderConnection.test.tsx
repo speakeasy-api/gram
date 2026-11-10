@@ -1432,22 +1432,68 @@ describe("Slack permission choice hydration", () => {
 });
 
 describe("Salesforce shared actions", () => {
+  it("hydrates externally selected My Domain endpoints and clears the domain when returning to a standard endpoint", async () => {
+    const source = {
+      url: "https://api.salesforce.com/platform/mcp/v1/platform/sobject-reads",
+      instanceUrl: "",
+    };
+    const mounted = mount("salesforce", {}, source);
+    await waitFor(() => expect(mounted.result.current.loading).toBe(false));
+    mounted.rerender({
+      mcpServer: server,
+      currentSource: {
+        ...source,
+        url: "https://api.salesforce.com/platform/mcp/v1/d/example--uat/sandbox/platform/sobject-all",
+      },
+    });
+    await waitFor(() =>
+      expect(mounted.result.current.state.values.salesforceDomain).toBe(
+        "https://example--uat.sandbox.my.salesforce.com",
+      ),
+    );
+    expect(mounted.result.current.state.values.environment).toBe("sandbox");
+    expect(mounted.result.current.state.values.salesforceServer).toBe(
+      "sobject-all",
+    );
+    mounted.rerender({ mcpServer: server, currentSource: source });
+    await waitFor(() =>
+      expect(mounted.result.current.state.values.salesforceDomain).toBe(""),
+    );
+    expect(mounted.result.current.state.values.environment).toBe("production");
+    expect(mounted.result.current.state.saved).toBe(false);
+  });
   it.each([
     [
       "production",
       "sobject-mutations",
       "platform/sobject-mutations",
       "https://login.salesforce.com",
+      "",
     ],
     [
       "sandbox",
       "data360",
       "data/sandbox/data360",
       "https://test.salesforce.com",
+      "",
+    ],
+    [
+      "sandbox",
+      "sobject-reads",
+      "d/example--uat/sandbox/platform/sobject-reads",
+      "https://example--uat.sandbox.my.salesforce.com",
+      "example--uat.sandbox.my.salesforce.com",
+    ],
+    [
+      "production",
+      "sobject-reads",
+      "d/example-dev-ed/develop/platform/sobject-reads",
+      "https://example-dev-ed.develop.my.salesforce.com",
+      "https://example-dev-ed.develop.my.salesforce-setup.com/",
     ],
   ])(
     "registers the %s OAuth provider and saves a native public client",
-    async (environment, salesforceServer, path, issuer) => {
+    async (environment, salesforceServer, path, issuer, salesforceDomain) => {
       mocks.provider.mockRejectedValue({ statusCode: 404 });
       const s = initialState("salesforce");
       const { result } = mount("salesforce", {
@@ -1456,6 +1502,7 @@ describe("Salesforce shared actions", () => {
           ...s.values,
           environment,
           salesforceServer,
+          salesforceDomain,
           clientId: "key",
         },
       });
