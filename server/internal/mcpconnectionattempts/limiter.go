@@ -96,7 +96,7 @@ func newOnceLimiter() *onceLimiter {
 }
 
 func onceKeyOf(row Row) onceKey {
-	// An anonymous subject is new on every request, so it can't separate callers, nor can one anyone can mint.
+	// Anonymous subjects and refused ones anyone can mint can't tell callers apart, so they fold.
 	subject := row.SubjectURN
 	if strings.HasPrefix(subject, string(urn.SessionSubjectKindAnonymous)+":") || row.foldSubjects != "" {
 		subject = ""
