@@ -100,7 +100,10 @@ func TestUpdateMcpEndpoint_RootSlugRenameRetainsMapping(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, updated.IsDomainRoot)
 
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "after", route.RootSlug)
 	require.Equal(t, endpoint.ID, route.RootMcpEndpointID)

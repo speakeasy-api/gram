@@ -95,3 +95,21 @@ func TestIETFRegistryIsComplete(t *testing.T) {
 	}
 	require.Len(t, ietfRegisteredCodes, len(declared), "ietfRegisteredCodes holds entries with no Code constant")
 }
+
+func TestRegisteredCodeLabel(t *testing.T) {
+	t.Parallel()
+	for code := range ietfRegisteredCodes {
+		require.Equal(t, code, RegisteredCodeLabel(code))
+	}
+	for _, code := range []string{
+		"interaction_required", "login_required", "account_selection_required",
+		"consent_required", "invalid_request_uri", "invalid_request_object",
+		"request_not_supported", "request_uri_not_supported", "registration_not_supported",
+	} {
+		require.Equal(t, code, RegisteredCodeLabel(code))
+		require.False(t, IsIETFRegisteredCode(code), "OIDC codes must not expand the IETF registry")
+	}
+	for _, code := range []string{"", "caller-controlled-error", "Login_Required", "login_required ", "invalid_grant_extra"} {
+		require.Equal(t, "unregistered", RegisteredCodeLabel(code), code)
+	}
+}

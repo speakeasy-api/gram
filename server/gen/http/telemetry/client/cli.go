@@ -757,7 +757,7 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 	{
 		err = json.Unmarshal([]byte(telemetryGetProjectOverviewBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"from\": \"2025-12-19T10:00:00Z\",\n      \"include_usage\": false,\n      \"to\": \"2025-12-19T11:00:00Z\"\n   }'")
 		}
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.from", body.From, goa.FormatDateTime))
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.to", body.To, goa.FormatDateTime))
@@ -784,8 +784,15 @@ func BuildGetProjectOverviewPayload(telemetryGetProjectOverviewBody string, tele
 		}
 	}
 	v := &telemetry.GetProjectOverviewPayload{
-		From: body.From,
-		To:   body.To,
+		From:         body.From,
+		To:           body.To,
+		IncludeUsage: body.IncludeUsage,
+	}
+	{
+		var zero bool
+		if v.IncludeUsage == zero {
+			v.IncludeUsage = false
+		}
 	}
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
@@ -3269,6 +3276,37 @@ func BuildGetMcpServerActivityPayload(telemetryGetMcpServerActivityBody string, 
 	v.ApikeyToken = apikeyToken
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildGetOrgMcpServerActivityPayload builds the payload for the telemetry
+// getOrgMcpServerActivity endpoint from CLI flags.
+func BuildGetOrgMcpServerActivityPayload(telemetryGetOrgMcpServerActivityBody string, telemetryGetOrgMcpServerActivitySessionToken string) (*telemetry.GetOrgMcpServerActivityPayload, error) {
+	var err error
+	var body GetOrgMcpServerActivityRequestBody
+	{
+		err = json.Unmarshal([]byte(telemetryGetOrgMcpServerActivityBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"recent_window_days\": 2\n   }'")
+		}
+	}
+	var sessionToken *string
+	{
+		if telemetryGetOrgMcpServerActivitySessionToken != "" {
+			sessionToken = &telemetryGetOrgMcpServerActivitySessionToken
+		}
+	}
+	v := &telemetry.GetOrgMcpServerActivityPayload{
+		RecentWindowDays: body.RecentWindowDays,
+	}
+	{
+		var zero int
+		if v.RecentWindowDays == zero {
+			v.RecentWindowDays = 14
+		}
+	}
+	v.SessionToken = sessionToken
 
 	return v, nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/fixtures/fixturerepo"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -68,13 +69,12 @@ func seedWorkloadIssuer(t *testing.T, ctx context.Context, ti *testInstance, org
 func assignAgentToWorkload(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, issuerID uuid.UUID, subject string, agentID uuid.UUID) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := ti.conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `
-		INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, organizationID, issuerID, subject, agentID).Scan(&id)
+	id, err := fixturerepo.New(ti.conn).CreateWorkloadAgentAssignment(ctx, fixturerepo.CreateWorkloadAgentAssignmentParams{
+		OrganizationID:   organizationID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+		AgentID:          agentID,
+	})
 	require.NoError(t, err)
 
 	return id
@@ -83,8 +83,7 @@ func assignAgentToWorkload(t *testing.T, ctx context.Context, ti *testInstance, 
 func unassignWorkloadAgent(t *testing.T, ctx context.Context, ti *testInstance, id uuid.UUID) {
 	t.Helper()
 
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		ctx, `UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = $1`, id)
+	err := fixturerepo.New(ti.conn).SoftDeleteWorkloadAgentAssignment(ctx, id)
 	require.NoError(t, err)
 }
 

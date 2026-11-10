@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { RequireScope } from "@/components/require-scope";
@@ -43,7 +44,6 @@ import {
   Code,
   FileCode,
   Globe,
-  Loader2,
   Plus,
   Server,
   Trash2,
@@ -645,7 +645,7 @@ export function GatewayMembersSection({
             >
               {mutating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Remove server</Button.Text>
@@ -725,15 +725,13 @@ export function AddServersSheet({
     }
     const server = candidate.server;
     const classification = classifyMemberServer(server);
-    const restriction = server.builtinBackend
-      ? "Built-in servers cannot be added to a gateway."
-      : server.unproxiedMcpServerId
-        ? "Direct-connect servers cannot be added to a gateway."
-        : !server.slug
-          ? "A server slug is required before adding."
-          : classification === "disabled"
-            ? "Disabled: excluded until enabled."
-            : STATUS_BY_CLASSIFICATION[classification].why;
+    const restriction = server.unproxiedMcpServerId
+      ? "Direct-connect servers cannot be added to a gateway."
+      : !server.slug
+        ? "A server slug is required before adding."
+        : classification === "disabled"
+          ? "Disabled: excluded until enabled."
+          : STATUS_BY_CLASSIFICATION[classification].why;
     return {
       value: key,
       label: candidateName(candidate) || "MCP server",
@@ -751,10 +749,7 @@ export function AddServersSheet({
           : "Excluded",
       description: `${server.slug || "No slug"} · ${restriction}`,
       disabled:
-        !canWrite ||
-        !server.slug ||
-        Boolean(server.unproxiedMcpServerId) ||
-        Boolean(server.builtinBackend),
+        !canWrite || !server.slug || Boolean(server.unproxiedMcpServerId),
     };
   });
   const submit = (values: string[]) =>

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { RULE_CATEGORY_META } from "./policy-data";
 import { riskCategoryFilterOptions } from "./risk-category-options";

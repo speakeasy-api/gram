@@ -1,5 +1,11 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
-import React, { Fragment, useEffect, useState, type ReactNode } from "react";
+import React, {
+  Fragment,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   ArrowDownIcon,
   ArrowUpIcon,
@@ -207,13 +213,27 @@ function ToolbarSearch({
   className,
 }: ToolbarSearchProps): JSX.Element {
   const [local, setLocal] = useState(value);
+  // Values sent this burst that the parent hasn't rendered; their echoes are stale.
+  const sent = useRef<string[]>([]);
 
   // Sync when value changes externally (back/forward, clear-all).
-  useEffect(() => setLocal(value), [value]);
+  useEffect(() => {
+    const i = sent.current.lastIndexOf(value);
+    if (i === -1) {
+      sent.current = [];
+      setLocal(value);
+    } else {
+      sent.current =
+        i === sent.current.length - 1 ? [] : sent.current.slice(i + 1);
+    }
+  }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), debounceMs);
+    if (local === (sent.current.at(-1) ?? value)) return;
+    const timer = setTimeout(() => {
+      sent.current = local === value ? [] : [...sent.current, local];
+      onChange(local);
+    }, debounceMs);
     return () => clearTimeout(timer);
   }, [local, value, debounceMs, onChange]);
 

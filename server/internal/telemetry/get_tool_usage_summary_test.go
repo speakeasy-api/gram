@@ -1129,3 +1129,58 @@ func TestGetToolUsageUsers_ManagedAgentAttribution(t *testing.T) {
 		}
 	}
 }
+
+// An agent identity page filters every tool-usage section by one agent id. The
+// identity filter is pushed into the trace_summaries scan (see
+// toolUsageScanIdentityFilter), so each section must answer for that agent
+// alone — the same rows an unfiltered read would have, minus everyone else's.
+func TestGetToolUsageSections_FilterByAgentIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	agentA := uuid.NewString()
+	agentB := uuid.NewString()
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-30 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, agentID: agentA,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, agentID: agentA,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-10 * time.Minute),
+		toolsetSlug: "crm", toolName: "lookup", statusCode: 200, agentID: agentB,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-5 * time.Minute),
+		toolsetSlug: "crm", toolName: "lookup", statusCode: 200, userEmail: "human@example.com",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	agentFilter := []*gen.ToolUsageUserFilter{{Kind: "agent_id", Key: agentA}}
+
+	totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), totals.Totals.EventCount)
+
+	targets, err := ti.service.GetToolUsageTargets(ctx, &gen.GetToolUsageTargetsPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, targets.Targets, 1)
+	require.Equal(t, "payments", targets.Targets[0].TargetID)
+	require.Equal(t, int64(2), targets.Targets[0].EventCount)
+
+	series, err := ti.service.GetToolUsageTargetTimeSeries(ctx, &gen.GetToolUsageTargetTimeSeriesPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	var seriesCalls int64
+	for _, point := range series.TargetTimeSeries {
+		require.Equal(t, "payments", point.TargetID)
+		seriesCalls += point.EventCount
+	}
+	require.Equal(t, int64(2), seriesCalls)
+}

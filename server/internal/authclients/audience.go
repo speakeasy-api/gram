@@ -334,7 +334,33 @@ func readAudience(ctx context.Context, db repo.DBTX, client repo.McpAuthClient) 
 	type entryKey struct{ principal, level, appliesTo, project string }
 	seen := make(map[entryKey]struct{})
 	entries := make([]*types.AuthClientAudienceEntry, 0, len(own)+len(broad))
+	// A deleted agent can never act again, so its rule decides nothing and is
+	// not listed. A rule naming this client then drops out of the next save,
+	// which replaces this client's rules; organization-wide rows are left to
+	// the surface that owns them.
+	deletedAgents := make(map[string]struct{})
+	checked := make(map[string]struct{})
+	for _, grant := range slices.Concat(own, broad) {
+		if _, done := checked[grant.PrincipalUrn]; done {
+			continue
+		}
+		checked[grant.PrincipalUrn] = struct{}{}
+		principal, err := urn.ParsePrincipal(grant.PrincipalUrn)
+		if err != nil || principal.Type != urn.PrincipalTypeAgent {
+			continue
+		}
+		err = authz.ValidatePrincipal(ctx, db, client.OrganizationID, principal)
+		switch {
+		case errors.Is(err, authz.ErrPrincipalNotFound):
+			deletedAgents[grant.PrincipalUrn] = struct{}{}
+		case err != nil:
+			return nil, fmt.Errorf("check agent principal: %w", err)
+		}
+	}
 	add := func(grant authz.Grant, appliesTo string) {
+		if _, deleted := deletedAgents[grant.PrincipalUrn]; deleted {
+			return
+		}
 		level := LevelUse
 		if grant.Scope == authz.ScopeMCPBlockedAuth {
 			level = LevelBlocked

@@ -5,6 +5,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/setupguides"
 )
 
 // suggestedMetadata supplies editable staff-only drafts from observed metadata.
@@ -20,7 +22,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 	title = conv.TruncateString(title, maxPublicDisplayCharacters)
 	title = strings.TrimSpace(title)
 	result := &PublicMetadata{Name: "", Title: title, Description: "", URL: "", DocumentationURL: "", DocsSlug: "", AuthMode: ""}
-	if source.RemoteSessionIssuerID.Valid {
+	if remotesessions.AssociationIssuerFromProviders(source.AssociationProviderIds).Providers > 0 {
 		result.AuthMode = "oauth"
 	} else if !source.RequiresUpstreamAuth && !source.UpstreamAuthPending {
 		result.AuthMode = "none"
@@ -47,6 +49,12 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 				if len(name) <= 200 {
 					result.Name = name
 				}
+			}
+			// A guide that already documents this exact endpoint is the right
+			// guide, whatever the source is called, so reuse its slug rather than
+			// requesting a duplicate under a title-derived one.
+			if guide, ok := setupguides.ForEndpoint(result.URL); ok {
+				result.DocsSlug = guide.Slug
 			}
 		}
 	}

@@ -542,8 +542,11 @@ type GetIssuerMigratePreflightResponseBody struct {
 	CimdClientCount int `form:"cimd_client_count" json:"cimd_client_count" xml:"cimd_client_count"`
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount int `form:"remote_session_count" json:"remote_session_count" xml:"remote_session_count"`
-	// Active OAuth client ids already present on both issuers. Non-empty blocks
-	// migration.
+	// Active OAuth client ids present on both issuers that cannot be merged.
+	// Non-empty blocks migration. A client resolved from the same Client ID
+	// Metadata Document on both issuers is not listed: it merges onto the target's
+	// client, keeping its sessions and consents, unless an issuance selection
+	// profile pins the source client to the source issuer.
 	ConflictingClientIds []string `form:"conflicting_client_ids" json:"conflicting_client_ids" xml:"conflicting_client_ids"`
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.

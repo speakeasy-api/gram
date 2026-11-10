@@ -47,7 +47,7 @@ type ListRecentToolCallsInput struct {
 	ProjectID   string `json:"project_id,omitempty" jsonschema:"project ID to inspect; supply exactly one project selector"`
 	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"project slug to inspect; supply exactly one project selector"`
 	Window      string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
-	Outcome     string `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, error, blocked, or pending"`
+	Outcome     string `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, error, blocked, or pending; pending means no result was reported; a call still pending ten minutes after it started most likely ended without reporting one, and Tool logs show it as Unknown"`
 	// AgentID selects only calls attributed to this authenticated agent.
 	AgentID string `json:"agent_id,omitempty" jsonschema:"optional exact agent UUID; filters authenticated gateway and hook calls without selecting user identities"`
 
@@ -60,7 +60,7 @@ type RecentToolCall struct {
 	TargetType string `json:"target_type"`
 	TargetKind string `json:"target_kind"`
 	Target     string `json:"target,omitempty"`
-	Outcome    string `json:"outcome"`
+	Outcome    string `json:"outcome" jsonschema:"success, error, blocked, or pending; pending means no result was reported; a call still pending ten minutes after it started most likely ended without reporting one, and Tool logs show it as Unknown"`
 	Client     string `json:"client,omitempty"`
 	// AgentID is present only for the trusted agent identity in Tool Logs.
 	AgentID string `json:"agent_id,omitempty"`
@@ -119,7 +119,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 	if err != nil {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call matchers: %w", err)
 	}
-	metaMCPMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, r.db, project.ID)
+	metaMCPMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, r.db, r.authz, principal.OrganizationID, project.ID)
 	if err != nil {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("load recent tool call gateway matchers: %w", err)
 	}

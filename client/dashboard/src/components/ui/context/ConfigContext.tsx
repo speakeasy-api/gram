@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { PREFERRED_THEME_STORAGE_KEY } from "@/lib/local-storage-keys";
-import { ConfigContext, ConfigContextType } from "./config";
+import type { ConfigContextType } from "./config";
+import { ConfigContext } from "./config";
 
 export interface ConfigProviderProps extends ConfigContextType {
   children: React.ReactNode;

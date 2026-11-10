@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -45,6 +46,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		McpServerID:        targetID.String(),
+		TargetServerOnly:   new(true),
 		ProviderID:         nil,
 		CreateProvider:     serverIdentityProviderForm("manual-provider", nil, false),
 		ClientMode:         "manual",
@@ -606,6 +608,12 @@ func TestCommitServerIdentityConfigurationReplacesCurrentClientAtomically(t *tes
 	detachAuditAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientDetachUserSessionIssuer)
 	require.NoError(t, err)
 	require.Equal(t, detachAuditBefore+1, detachAuditAfter)
+	require.Equal(t, []uuid.UUID{replacementClient.ID}, associatedClients(t, ctx, ti.conn, projectIDFromContext(t, ctx), targetID),
+		"the replaced client's association goes with its binding")
+	require.Equal(t,
+		[]uuid.UUID{authclientbackfill.OAuthClientID(activeOrganizationID(t, ctx), replacementClient.ID, authclientbackfill.TypeRemoteSession)},
+		offeredAuthClients(t, ctx, ti.conn, targetID),
+		"and so does the typed link derived from it")
 }
 
 func TestCommitServerIdentityConfigurationLocksUserSessionIssuerBeforeReplacingBindings(t *testing.T) {

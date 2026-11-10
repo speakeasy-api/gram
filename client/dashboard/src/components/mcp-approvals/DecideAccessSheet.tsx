@@ -1,7 +1,7 @@
 import { RequireScope } from "@/components/require-scope";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { MultiSelect } from "@/components/ui/MultiSelect";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
 import {
@@ -399,9 +399,7 @@ export function DecideAccessSheet({
               }
             >
               <Button.LeftIcon>
-                {isSubmitting && (
-                  <Icon name="loader-circle" className="animate-spin" />
-                )}
+                {isSubmitting && <Spinner className="mr-0" />}
               </Button.LeftIcon>
               <Button.Text>
                 {decision === "approved" ? "Approve Server" : "Deny Server"}

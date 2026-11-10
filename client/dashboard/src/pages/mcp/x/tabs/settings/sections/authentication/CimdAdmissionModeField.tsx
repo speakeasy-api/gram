@@ -1,5 +1,6 @@
 import { RequireScope } from "@/components/require-scope";
 import { Button } from "@/components/ui/Button";
+import { Spinner } from "@/components/ui/Spinner";
 import { FieldError } from "@/components/ui/Field";
 import { Label } from "@/components/ui/Label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/RadioGroup";
@@ -14,7 +15,6 @@ import { useUpdateUserSessionIssuerMutation } from "@gram/client/react-query/upd
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useId, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { AllowedClientsDialog } from "./AllowedClientsDialog";
@@ -234,7 +234,7 @@ export function CimdAdmissionModeField({
             >
               {update.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0" />
                 </Button.LeftIcon>
               )}
               <Button.Text>{update.isPending ? "Saving" : "Save"}</Button.Text>

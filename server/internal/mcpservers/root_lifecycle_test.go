@@ -214,7 +214,10 @@ func TestDeleteMcpServer_ClearsRootMappingWithEndpointCascade(t *testing.T) {
 
 	err = ti.service.DeleteMcpServer(ctx, &gen.DeleteMcpServerPayload{ID: server.ID})
 	require.NoError(t, err)
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domainID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	_, err = mcpendpointsrepo.New(ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{
@@ -268,7 +271,10 @@ func requireRootCleared(t *testing.T, ctx context.Context, ti *testInstance, dom
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domainID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domainID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	endpoint, err := mcpendpointsrepo.New(ti.conn).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{

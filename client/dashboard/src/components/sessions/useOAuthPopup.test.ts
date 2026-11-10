@@ -53,3 +53,36 @@ it.each(["focus", "poll"])(
     });
   },
 );
+
+it("cancels preparation without redirecting a subsequently opened popup", async () => {
+  let finish!: (url: string) => void;
+  const first = {
+    closed: false,
+    location: { href: "" },
+    focus: vi.fn(),
+    close: vi.fn(),
+    opener: window,
+  };
+  const second = { ...first, location: { href: "" }, close: vi.fn() };
+  vi.spyOn(window, "open")
+    .mockReturnValueOnce(first as unknown as Window)
+    .mockReturnValueOnce(second as unknown as Window);
+  const { result } = renderHook(() => useOAuthPopup(vi.fn()));
+  act(() => {
+    result.current.open(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+  });
+  await act(async () => {});
+  act(() => result.current.cancel());
+  expect(first.close).toHaveBeenCalledTimes(1);
+  act(() => {
+    result.current.open("https://second.example/connect");
+  });
+  await act(async () => finish("https://cancelled.example/connect"));
+  expect(first.location.href).toBe("");
+  expect(second.location.href).toBe("https://second.example/connect");
+});

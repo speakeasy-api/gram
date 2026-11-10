@@ -19,7 +19,7 @@ type GatewayOptions struct {
 	DiscoveryMode *metamcp.DiscoveryMode `json:"discovery_mode,omitempty"`
 }
 
-// CatalogMode chooses live discovery or the immutable consent catalog.
+// CatalogMode chooses live discovery or the consent catalog.
 type CatalogMode string
 
 const (
@@ -31,7 +31,7 @@ const (
 
 // CatalogReference binds a connection to its server-owned consent catalog.
 type CatalogReference struct {
-	// ID identifies one immutable catalog in the connection store.
+	// ID identifies one catalog in the connection store.
 	ID uuid.UUID `json:"id"`
 	// Mode determines whether discovery reads the stored or live definitions.
 	Mode CatalogMode `json:"mode"`
@@ -172,6 +172,17 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	if p == nil {
 		return []byte("null"), nil
 	}
+	selectionSize := 0
+	if p.Selection != nil {
+		size, err := selectionJSONSize(p.Selection.Resource, p.Selection.GrantID, p.Selection.Allow)
+		if err != nil {
+			return nil, err
+		}
+		if size > selectionMaxWriteBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
+		}
+		selectionSize = size
+	}
 	if p.Gateway == nil {
 		if p.Selection == nil || p.Resource != p.Selection.Resource {
 			return nil, fmt.Errorf("session policy has no valid selection")
@@ -183,6 +194,9 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 		raw, err := json.Marshal(&selection)
 		if err != nil {
 			return nil, fmt.Errorf("marshal selection: %w", err)
+		}
+		if len(raw) > selectionMaxWriteBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
 		}
 		return raw, nil
 	}
@@ -204,9 +218,21 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 	if policy.Catalog != nil {
 		version = 2
 	}
+	if policy.Selection != nil {
+		header, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: nil, Catalog: policy.Catalog})
+		if err != nil {
+			return nil, fmt.Errorf("measure gateway policy: %w", err)
+		}
+		if len(header)+len(`,"selection":`)+selectionSize > selectionMaxWriteBytes {
+			return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
+		}
+	}
 	raw, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: policy.Selection, Catalog: policy.Catalog})
 	if err != nil {
 		return nil, fmt.Errorf("marshal gateway policy: %w", err)
+	}
+	if len(raw) > selectionMaxWriteBytes {
+		return nil, fmt.Errorf("session policy exceeds %d bytes", selectionMaxWriteBytes)
 	}
 	return raw, nil
 }

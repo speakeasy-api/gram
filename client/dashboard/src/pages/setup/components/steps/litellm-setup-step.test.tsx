@@ -5,8 +5,8 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ReactNode } from "react";
 import type { LiteLLMInstance } from "@gram/client/models/components/litellminstance.js";
 import { LiteLLMSetupStep } from "./litellm-setup-step";
 
@@ -62,23 +62,8 @@ vi.mock("@/contexts/Auth", () => ({
     ],
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    aiIntegrations: {
-      href: () => "/acme/ai-integrations",
-      Link: ({
-        children,
-        className,
-      }: {
-        children: ReactNode;
-        className?: string;
-      }) => (
-        <a href="/acme/ai-integrations" className={className}>
-          {children}
-        </a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -140,7 +125,9 @@ afterEach(() => {
 });
 
 function renderStep() {
-  return render(<LiteLLMSetupStep onComplete={() => {}} />);
+  return render(<LiteLLMSetupStep onComplete={() => {}} />, {
+    wrapper: MemoryRouter,
+  });
 }
 
 describe("LiteLLMSetupStep", () => {

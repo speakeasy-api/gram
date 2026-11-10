@@ -1,6 +1,6 @@
 import type { GramChatMessage } from "@/elements/lib/messageConverter";
-import { MODELS } from "@/elements/lib/models";
-import {
+import type { MODELS } from "@/elements/lib/models";
+import type {
   AssistantTool,
   ImageMessagePartComponent,
   ReasoningGroupComponent,
@@ -8,15 +8,14 @@ import {
   TextMessagePartComponent,
   ToolCallMessagePartComponent,
 } from "@assistant-ui/react";
-import { ChatTransport, LanguageModel, UIMessage } from "ai";
-import {
-  type ComponentPropsWithoutRef,
+import type { ChatTransport, LanguageModel, UIMessage } from "ai";
+import type {
   ComponentType,
   Dispatch,
   PropsWithChildren,
   SetStateAction,
-  type ReactNode,
 } from "react";
+import { type ComponentPropsWithoutRef, type ReactNode } from "react";
 import type { Plugin } from "./plugins";
 
 /**

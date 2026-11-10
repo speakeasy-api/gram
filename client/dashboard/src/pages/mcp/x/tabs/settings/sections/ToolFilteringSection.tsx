@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
 import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { handleError } from "@/lib/errors";
@@ -24,7 +25,6 @@ import {
 import { useUpdateMcpServerMutation } from "@gram/client/react-query/updateMcpServer.js";
 import { Button } from "@/components/ui/Button";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -181,7 +181,7 @@ export function ToolFilteringSection({
                 >
                   {createGroup.isPending && (
                     <Button.LeftIcon>
-                      <Loader2 className="size-4 animate-spin" />
+                      <Spinner className="mr-0 size-4" />
                     </Button.LeftIcon>
                   )}
                   <Button.Text>

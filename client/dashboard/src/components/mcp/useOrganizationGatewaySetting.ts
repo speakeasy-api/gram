@@ -27,8 +27,8 @@ export type OrganizationGatewaySetting = {
 
 /**
  * The Organization Gateway's on/off state and the switch that changes it. The stored
- * product feature turns the gateway off, so "on" is its inverse. The gateway detail page uses this state; enabling it requires an
- * assignment review before calling setOn.
+ * product feature turns the gateway off, so "on" is its inverse. The gateway
+ * detail page uses this state.
  */
 export function useOrganizationGatewaySetting({
   organizationId,

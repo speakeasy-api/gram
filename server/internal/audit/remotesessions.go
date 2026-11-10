@@ -31,6 +31,7 @@ type LogRemoteSessionDeleteEvent struct {
 func (l *Logger) LogRemoteSessionDelete(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionDeleteEvent) error {
 	action := ActionRemoteSessionDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -69,6 +70,7 @@ type LogRemoteSessionRefreshEvent struct {
 func (l *Logger) LogRemoteSessionRefresh(ctx context.Context, dbtx repo.DBTX, event LogRemoteSessionRefreshEvent) error {
 	action := ActionRemoteSessionRefresh
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

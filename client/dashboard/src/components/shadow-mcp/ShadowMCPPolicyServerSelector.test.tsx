@@ -799,7 +799,9 @@ describe("ShadowMCPPolicyServerSelector", () => {
         onRetry={onRetry}
       />,
     );
-    expect(screen.getByText("Loading Shadow MCP inventory…")).toBeTruthy();
+    expect(
+      screen.getByRole("status", { name: "Loading Shadow MCP inventory" }),
+    ).toBeTruthy();
     expect(
       (
         screen.getByRole("button", {

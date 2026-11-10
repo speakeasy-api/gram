@@ -16,7 +16,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -57,7 +56,7 @@ func (s limitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var result any
 	switch envelope.Method {
-	case methodServerDiscover:
+	case "server/discover":
 		// Refusing the probe sends the SDK to the legacy initialize handshake.
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -68,9 +67,7 @@ func (s limitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			"serverInfo":      map[string]any{"name": "limit", "version": "1.0.0"},
 		}
 	case "tools/list":
-		result = map[string]any{"tools": []any{map[string]any{"name": "lookup", "inputSchema": map[string]any{"type": "object"}}}}
-	case "tools/call":
-		result = callResult("ok")
+		result = listResult("lookup")
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 		return
@@ -82,8 +79,8 @@ func (s limitServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": envelope.ID, "result": result})
 }
 
-func callResult(text string) map[string]any {
-	return map[string]any{"content": []any{map[string]any{"type": "text", "text": text}}}
+func listResult(toolName string) map[string]any {
+	return map[string]any{"tools": []any{map[string]any{"name": toolName, "inputSchema": map[string]any{"type": "object"}}}}
 }
 
 // writeEndless answers with status and contentType, then streams prefix and
@@ -125,7 +122,7 @@ func sseEvent(t *testing.T, id json.RawMessage, method string, payload any) stri
 	return "event: message\ndata: " + string(data) + "\n\n"
 }
 
-func newLimitClient(t *testing.T, ctx context.Context, handler http.Handler, transport types.TransportType, opts *ClientOptions) (*Client, error) {
+func newLimitClient(t *testing.T, ctx context.Context, handler http.Handler, opts *ClientOptions) (*Client, error) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
@@ -133,7 +130,7 @@ func newLimitClient(t *testing.T, ctx context.Context, handler http.Handler, tra
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 
-	c, err := NewClient(ctx, testenv.NewLogger(t), policy, server.URL, transport, opts)
+	c, err := NewClient(ctx, testenv.NewLogger(t), policy, server.URL, opts)
 	if c != nil {
 		t.Cleanup(func() { _ = c.Close() })
 	}
@@ -141,7 +138,7 @@ func newLimitClient(t *testing.T, ctx context.Context, handler http.Handler, tra
 }
 
 func limitOptions(maxResponseBytes int64) *ClientOptions {
-	return &ClientOptions{DisableRetries: true, MaxMessageBytes: testMessageLimit, MaxResponseBytes: maxResponseBytes}
+	return &ClientOptions{MaxMessageBytes: testMessageLimit, MaxResponseBytes: maxResponseBytes}
 }
 
 func requireRejectedEndless(t *testing.T, ctx context.Context, err error, written *atomic.Int64) {
@@ -200,14 +197,14 @@ func TestNewClientRejectsOversizedHandshakeJSON(t *testing.T) {
 
 	var written atomic.Int64
 	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != methodServerDiscover && method != "initialize" {
+		if method != "server/discover" && method != "initialize" {
 			return false
 		}
 		writeEndless(w, http.StatusOK, "application/json", jsonPrefix(id), &written)
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
+	c, err := newLimitClient(t, ctx, server, limitOptions(0))
 	require.Nil(t, c)
 	requireRejectedEndless(t, ctx, err, &written)
 }
@@ -226,7 +223,7 @@ func TestListToolsRejectsOversizedJSON(t *testing.T) {
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
+	c, err := newLimitClient(t, ctx, server, limitOptions(0))
 	require.NoError(t, err)
 
 	tools, err := c.ListTools(ctx)
@@ -234,50 +231,28 @@ func TestListToolsRejectsOversizedJSON(t *testing.T) {
 	requireRejectedEndless(t, ctx, err, &written)
 }
 
-func TestCallToolRejectsOversizedJSON(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
-	var written atomic.Int64
-	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != "tools/call" {
-			return false
-		}
-		writeEndless(w, http.StatusOK, "application/json", jsonPrefix(id), &written)
-		return true
-	}}
-
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
-	require.NoError(t, err)
-
-	result, err := c.CallTool(ctx, "lookup", json.RawMessage(`{}`), nil)
-	require.Nil(t, result)
-	requireRejectedEndless(t, ctx, err, &written)
-}
-
 // The SDK reads a non-2xx body whole to surface a JSON-RPC error, whatever its
 // content type, so an error body labeled as an event stream gets the whole-body
 // cap rather than the per-event one.
-func TestCallToolRejectsOversizedErrorBody(t *testing.T) {
+func TestListToolsRejectsOversizedErrorBody(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	var written atomic.Int64
 	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != "tools/call" {
+		if method != "tools/list" {
 			return false
 		}
 		writeEndless(w, http.StatusBadRequest, "text/event-stream", `{"jsonrpc":"2.0","id":`+string(id)+`,"error":{"code":-32600,"message":"`, &written)
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
+	c, err := newLimitClient(t, ctx, server, limitOptions(0))
 	require.NoError(t, err)
 
-	result, err := c.CallTool(ctx, "lookup", json.RawMessage(`{}`), nil)
-	require.Nil(t, result)
+	tools, err := c.ListTools(ctx)
+	require.Nil(t, tools)
 	requireRejectedEndless(t, ctx, err, &written)
 }
 
@@ -296,7 +271,7 @@ func TestListToolsDefaultLimitRejectsOversizedJSON(t *testing.T) {
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, nil)
+	c, err := newLimitClient(t, ctx, server, nil)
 	require.NoError(t, err)
 
 	tools, err := c.ListTools(ctx)
@@ -307,13 +282,13 @@ func TestListToolsDefaultLimitRejectsOversizedJSON(t *testing.T) {
 
 // A long-lived stream may carry far more than one message's worth of bytes in
 // total, as long as each event stays under the cap.
-func TestCallToolAcceptsSSEStreamLargerThanMessageLimit(t *testing.T) {
+func TestListToolsAcceptsSSEStreamLargerThanMessageLimit(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != "tools/call" {
+		if method != "tools/list" {
 			return false
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -322,27 +297,27 @@ func TestCallToolAcceptsSSEStreamLargerThanMessageLimit(t *testing.T) {
 		for range 4 * testMessageLimit / len(notification) {
 			_, _ = io.WriteString(w, notification)
 		}
-		_, _ = io.WriteString(w, sseEvent(t, id, "", callResult("streamed")))
+		_, _ = io.WriteString(w, sseEvent(t, id, "", listResult("streamed")))
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
+	c, err := newLimitClient(t, ctx, server, limitOptions(0))
 	require.NoError(t, err)
 
-	result, err := c.CallTool(ctx, "lookup", json.RawMessage(`{}`), nil)
+	tools, err := c.ListTools(ctx)
 	require.NoError(t, err)
-	require.Len(t, result.Content, 1)
-	require.JSONEq(t, `{"type":"text","text":"streamed"}`, string(result.Content[0]))
+	require.Len(t, tools, 1)
+	require.Equal(t, "streamed", tools[0].Name)
 }
 
-func TestCallToolRejectsOversizedSSEEvent(t *testing.T) {
+func TestListToolsRejectsOversizedSSEEvent(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	var written atomic.Int64
 	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != "tools/call" {
+		if method != "tools/list" {
 			return false
 		}
 		small := sseEvent(t, nil, "notifications/message", map[string]any{"level": "info", "data": "fits"})
@@ -350,23 +325,23 @@ func TestCallToolRejectsOversizedSSEEvent(t *testing.T) {
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(0))
+	c, err := newLimitClient(t, ctx, server, limitOptions(0))
 	require.NoError(t, err)
 
-	result, err := c.CallTool(ctx, "lookup", json.RawMessage(`{}`), nil)
-	require.Nil(t, result)
+	tools, err := c.ListTools(ctx)
+	require.Nil(t, tools)
 	requireRejectedEndless(t, ctx, err, &written)
 }
 
 // Probes keep their aggregate cap: a stream of individually small events still
 // fails once the whole response exceeds MaxResponseBytes.
-func TestCallToolTotalLimitRejectsLongSSEStream(t *testing.T) {
+func TestListToolsTotalLimitRejectsLongSSEStream(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 
 	server := limitServer{respond: func(w http.ResponseWriter, method string, id json.RawMessage) bool {
-		if method != "tools/call" {
+		if method != "tools/list" {
 			return false
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
@@ -375,15 +350,15 @@ func TestCallToolTotalLimitRejectsLongSSEStream(t *testing.T) {
 		for range 4 * testMessageLimit / len(notification) {
 			_, _ = io.WriteString(w, notification)
 		}
-		_, _ = io.WriteString(w, sseEvent(t, id, "", callResult("streamed")))
+		_, _ = io.WriteString(w, sseEvent(t, id, "", listResult("streamed")))
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(2*testMessageLimit))
+	c, err := newLimitClient(t, ctx, server, limitOptions(2*testMessageLimit))
 	require.NoError(t, err)
 
-	result, err := c.CallTool(ctx, "lookup", json.RawMessage(`{}`), nil)
-	require.Nil(t, result)
+	tools, err := c.ListTools(ctx)
+	require.Nil(t, tools)
 	require.ErrorIs(t, err, ErrResponseTooLarge)
 	require.NoError(t, ctx.Err())
 }
@@ -403,30 +378,13 @@ func TestListToolsTotalLimitRejectsJSONUnderMessageLimit(t *testing.T) {
 		return true
 	}}
 
-	c, err := newLimitClient(t, ctx, server, types.TransportTypeStreamableHTTP, limitOptions(testMessageLimit/4))
+	c, err := newLimitClient(t, ctx, server, limitOptions(testMessageLimit/4))
 	require.NoError(t, err)
 
 	tools, err := c.ListTools(ctx)
 	require.Nil(t, tools)
 	require.ErrorIs(t, err, ErrResponseTooLarge)
 	require.NoError(t, ctx.Err())
-}
-
-// The legacy SSE transport reads its endpoint from the first event of the
-// hanging GET, so connecting must already be bounded.
-func TestNewClientRejectsOversizedLegacySSEEndpointEvent(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
-	defer cancel()
-
-	var written atomic.Int64
-	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		writeEndless(w, http.StatusOK, "text/event-stream", "event: endpoint\ndata: /", &written)
-	})
-
-	c, err := newLimitClient(t, ctx, handler, types.TransportTypeSSE, limitOptions(0))
-	require.Nil(t, c)
-	requireRejectedEndless(t, ctx, err, &written)
 }
 
 func TestSSEEventLimiter(t *testing.T) {

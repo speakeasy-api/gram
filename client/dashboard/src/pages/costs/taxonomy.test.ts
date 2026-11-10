@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Dimension } from "@gram/client/models/components/queryfilter.js";
 import { describe, expect, it } from "vitest";
 import { displayName, llmTokens } from "./taxonomy";

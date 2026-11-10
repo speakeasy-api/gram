@@ -441,3 +441,39 @@ func TestMCPSecurity_SkipsEmptyTrustedOrigins(t *testing.T) {
 
 	require.NoError(t, err, "an unset server-url or site-url flag must not break startup")
 }
+
+func TestMCPSecurity_TrailingSlash(t *testing.T) {
+	t.Parallel()
+
+	for _, path := range []string{
+		"/mcp/petstore/",
+		"/mcp/idp_callback/",
+		"/mcp/remote_login_callback/",
+		"/mcp/remote_login_bind/",
+		"/mcp/install-page-hash.js/",
+	} {
+		t.Run(path, func(t *testing.T) {
+			t.Parallel()
+
+			for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodDelete} {
+				req := mcpPost(path)
+				req.Method = method
+				req.Header.Set("Origin", hostileOrigin)
+				req.Header.Set("Sec-Fetch-Site", "cross-site")
+				rec, reached := serveMCPSecurity(t, req)
+				require.False(t, reached, method)
+				require.Equal(t, http.StatusForbidden, rec.Code, method)
+			}
+
+			req := mcpPost(path)
+			req.Header.Set("Content-Type", "text/plain")
+			rec, reached := serveMCPSecurity(t, req)
+			require.False(t, reached)
+			require.Equal(t, http.StatusUnsupportedMediaType, rec.Code)
+
+			rec, reached = serveMCPSecurity(t, mcpPost(path))
+			require.True(t, reached)
+			require.Equal(t, http.StatusOK, rec.Code)
+		})
+	}
+}

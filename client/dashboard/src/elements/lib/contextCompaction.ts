@@ -1,5 +1,5 @@
 import type { ModelMessage } from "ai";
-import { MODELS } from "./models";
+import type { MODELS } from "./models";
 
 type KnownModelId = (typeof MODELS)[number];
 

@@ -488,7 +488,7 @@ var _ fmt.GoStringer = (*FederatedProvider)(nil)
 // Preflight only known local availability; never sign or contact KMS at authorize.
 func (m *ChallengeManager) preflightFederatedSigner(p *FederatedProvider) error {
 	if p.client.TokenEndpointAuthMethod.String == string(TokenEndpointAuthMethodPrivateKeyJWT) && !tokenEndpointSignerAvailable(m.assertions) {
-		return ErrFederatedUnavailable
+		return errors.Join(ErrFederatedUnavailable, ErrFederatedSigning)
 	}
 	return nil
 }
@@ -496,7 +496,7 @@ func (m *ChallengeManager) preflightFederatedSigner(p *FederatedProvider) error 
 func classifyFederatedExchangeError(err error) error {
 	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
 		if errors.Is(err, errTokenEndpointSigningUnavailable) {
-			return ErrFederatedUnavailable
+			return errors.Join(ErrFederatedUnavailable, ErrFederatedSigning)
 		}
 		// A missing, deleted, or unusable signing key fails every attempt the
 		// same way, so it is the administrator's to repair.

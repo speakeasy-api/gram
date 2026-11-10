@@ -103,7 +103,7 @@ type WorkOSClient interface {
 	EnsureOrgExternalID(ctx context.Context, workosOrgID, gramOrgID string) error
 	UpdateOrganizationExternalID(ctx context.Context, workosOrgID, externalID string) error
 	CreateOrganization(ctx context.Context, name, gramOrgID string) (string, error)
-	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (string, error)
+	CreateOrganizationMembership(ctx context.Context, workosUserID, workosOrgID, roleSlug string) (*workos.Member, error)
 	GetOrgMembership(ctx context.Context, workosUserID, workosOrgID string) (*workos.Member, error)
 	UpdateMemberRoles(ctx context.Context, membershipID string, roleSlugs []string) (*workos.Member, error)
 	GetUserByEmail(ctx context.Context, email string) (*workos.User, error)
@@ -303,7 +303,14 @@ func (r *Resolver) UpsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo) 
 
 // UpsertUserFromIDPWithResult also reports whether login reactivated a user
 // previously deleted by WorkOS.
-func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDPUserInfo) (_ UpsertUserResult, err error) {
+func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDPUserInfo) (UpsertUserResult, error) {
+	return r.upsertUserFromIDP(ctx, idpUser, nil)
+}
+
+// upsertUserFromIDP is UpsertUserFromIDPWithResult with optional sign-up
+// attribution, which is attached to the first-time sign-up event when this
+// call creates the user.
+func (r *Resolver) upsertUserFromIDP(ctx context.Context, idpUser *IDPUserInfo, attribution *SignupAttribution) (_ UpsertUserResult, err error) {
 	ctx, span := r.tracer.Start(ctx, "identity.upsertUserFromIDP")
 	defer func() {
 		if err != nil {
@@ -351,10 +358,10 @@ func (r *Resolver) UpsertUserFromIDPWithResult(ctx context.Context, idpUser *IDP
 	}
 
 	if user.WasCreated {
-		if err := r.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, map[string]any{
-			"email":        user.Email,
-			"display_name": user.DisplayName,
-		}); err != nil {
+		properties := attribution.Properties()
+		properties["email"] = user.Email
+		properties["display_name"] = user.DisplayName
+		if err := r.posthog.CaptureEvent(ctx, "is_first_time_user_signup", user.Email, properties); err != nil {
 			r.logger.ErrorContext(ctx, "failed to capture is_first_time_user_signup event", attr.SlogError(err))
 		}
 
@@ -480,6 +487,11 @@ type IDPLoginOptions struct {
 	// Support logins set it so a platform admin's session never reconciles
 	// memberships against WorkOS.
 	SkipMembershipSync bool
+
+	// Attribution is where a dashboard sign-up came from. Attached to the
+	// first-time sign-up event when this login creates the user; nil for
+	// ordinary logins and for flows that don't start on the sign-up page.
+	Attribution *SignupAttribution
 }
 
 // IDPLoginResult is the Speakeasy identity established by CompleteIDPLogin.
@@ -523,7 +535,7 @@ type IDPMembershipRole struct {
 // an organization access check made right after cannot disagree with WorkOS
 // or with a cached organization list.
 func (r *Resolver) CompleteIDPLogin(ctx context.Context, idpUser *IDPUserInfo, opts IDPLoginOptions) (IDPLoginResult, error) {
-	upserted, err := r.UpsertUserFromIDPWithResult(ctx, idpUser)
+	upserted, err := r.upsertUserFromIDP(ctx, idpUser, opts.Attribution)
 	if err != nil {
 		return IDPLoginResult{}, err
 	}
@@ -916,7 +928,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		return ProvisionedOrganization{}, fmt.Errorf("provision organization in WorkOS: %w", err)
 	}
 
-	membershipID, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
+	membership, err := r.workosClient.CreateOrganizationMembership(ctx, user.WorkosID.String, created.WorkOSOrganizationID, "admin")
 	if err != nil {
 		return ProvisionedOrganization{}, fmt.Errorf("create WorkOS organization membership: %w", err)
 	}
@@ -925,7 +937,7 @@ func (r *Resolver) ProvisionOrgInWorkOS(ctx context.Context, orgName, gramUserID
 		WorkOSOrganizationID: created.WorkOSOrganizationID,
 		GramOrganizationID:   created.GramOrganizationID,
 		WorkOSUserID:         user.WorkosID.String,
-		WorkOSMembershipID:   membershipID,
+		WorkOSMembershipID:   membership.ID,
 	}, nil
 }
 

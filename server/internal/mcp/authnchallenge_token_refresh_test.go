@@ -30,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -605,15 +607,15 @@ func TestHandleToken_RefreshReplayExpiresBackToInvalidGrant(t *testing.T) {
 	require.NoError(t, first.err)
 	require.Equal(t, http.StatusOK, first.code, first.body)
 
-	replayKey, lockKey := refreshReplayKeys(issuer.ID, refreshToken)
-	// Both keys expire at the grace boundary. Removing them models the state
-	// after that TTL without making the test wait for wall-clock expiration.
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	expired := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, expired.err)
 	require.Equal(t, http.StatusBadRequest, expired.code)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, expired.body)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
 }
 
 func TestHandleToken_RefreshRotationAdoptsCachedWinnerAfterLockLoss(t *testing.T) {
@@ -986,4 +988,13 @@ func refreshReplayKeys(issuerID uuid.UUID, refreshToken string) (replayKey, lock
 	refreshHash := sha256.Sum256([]byte(refreshToken))
 	replayKey = "userSessionRefreshReplay:" + issuerID.String() + ":" + base64.RawURLEncoding.EncodeToString(refreshHash[:])
 	return replayKey, "lock:" + replayKey
+}
+
+// expireRefreshReplay removes the replay entry and lock a refresh left behind,
+// as the grace TTL would, without waiting for wall-clock expiration.
+func expireRefreshReplay(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, refreshToken string) {
+	t.Helper()
+	replayKey, lockKey := refreshReplayKeys(issuerID, refreshToken)
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
 }

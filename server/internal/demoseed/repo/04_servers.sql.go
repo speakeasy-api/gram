@@ -131,8 +131,10 @@ type ServersInsertAttachmentClientParams struct {
 // The client sits under Linear's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
-// Reserved example endpoints, an invalid ciphertext and no refresh token
-// prevent this display fixture from becoming a usable upstream credential.
+// Reserved example endpoints and no refresh token keep this display fixture
+// from becoming a usable upstream credential while its dummy access token,
+// encrypted at seed time, reads as connected. A held re-check lease keeps the
+// idle re-check from presenting it anywhere.
 func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg ServersInsertAttachmentClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAttachmentClient,
 		arg.ID,
@@ -147,13 +149,13 @@ const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession 
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
+        $5::text, now() + $6::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes')
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years')
 `
 
 type ServersInsertAttachmentSessionParams struct {
@@ -161,6 +163,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	ExpiresIn             pgtype.Interval
 }
 
@@ -170,6 +173,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.ExpiresIn,
 	)
 	return err
@@ -1371,12 +1375,6 @@ type ServersInsertLinearRemoteSessionIssuerParams struct {
 	OrgID     string
 }
 
-// Leave instructions NULL so Settings starts with the editable built-in
-// instructions, matching the gateway's initialize and server/discover text.
-// Remote MCP identity modes: Linear uses per-user OAuth through a
-// project-scoped CIMD client, Slack carries one inert shared Service Account
-// credential, and GitHub intentionally has no upstream identity. The demo
-// values are display fixtures only and cannot authenticate to any service.
 func (q *Queries) ServersInsertLinearRemoteSessionIssuer(ctx context.Context, arg ServersInsertLinearRemoteSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertLinearRemoteSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
@@ -1502,6 +1500,25 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 		arg.SlackMemberID,
 		arg.SlackServerID,
 	)
+	return err
+}
+
+const serversInsertNotionUserSessionIssuer = `-- name: ServersInsertNotionUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  ($1::uuid, $2::uuid, $3::text, 'notion',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
+`
+
+type ServersInsertNotionUserSessionIssuerParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertNotionUserSessionIssuer(ctx context.Context, arg ServersInsertNotionUserSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertNotionUserSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err
 }
 
@@ -1846,6 +1863,104 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 	return err
 }
 
+const serversInsertSignInExampleEndpoints = `-- name: ServersInsertSignInExampleEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, NULL,
+   $3::uuid, $4::text),
+  ($5::uuid, $2::uuid, NULL,
+   $6::uuid, $7::text)
+`
+
+type ServersInsertSignInExampleEndpointsParams struct {
+	NotionEndpointID   uuid.UUID
+	ProjectID          uuid.UUID
+	NotionServerID     uuid.UUID
+	NotionSlug         string
+	DeepwikiEndpointID uuid.UUID
+	DeepwikiServerID   uuid.UUID
+	DeepwikiSlug       string
+}
+
+// Each gets an endpoint of its own, as a server added in the dashboard does:
+// the endpoint is where its sign-in page lives.
+func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg ServersInsertSignInExampleEndpointsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleEndpoints,
+		arg.NotionEndpointID,
+		arg.ProjectID,
+		arg.NotionServerID,
+		arg.NotionSlug,
+		arg.DeepwikiEndpointID,
+		arg.DeepwikiServerID,
+		arg.DeepwikiSlug,
+	)
+	return err
+}
+
+const serversInsertSignInExampleMCPServers = `-- name: ServersInsertSignInExampleMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  ($1::uuid, $2::uuid, 'Notion', 'notion',
+   NULL, $3::uuid, $4::uuid, 'private'),
+  ($5::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+   NULL, $6::uuid, $7::uuid, 'private')
+`
+
+type ServersInsertSignInExampleMCPServersParams struct {
+	NotionID          uuid.UUID
+	ProjectID         uuid.UUID
+	RemoteNotionID    uuid.UUID
+	IssuerNotionID    uuid.UUID
+	DeepwikiID        uuid.UUID
+	RemoteDeepwikiID  uuid.UUID
+	IssuerWorkforceID uuid.UUID
+}
+
+// DeepWiki takes no credential, so it sits under the shared workforce issuer
+// like GitHub, with no upstream client to sign in through.
+func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg ServersInsertSignInExampleMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleMCPServers,
+		arg.NotionID,
+		arg.ProjectID,
+		arg.RemoteNotionID,
+		arg.IssuerNotionID,
+		arg.DeepwikiID,
+		arg.RemoteDeepwikiID,
+		arg.IssuerWorkforceID,
+	)
+	return err
+}
+
+const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  ($1::uuid, $2::uuid, 'Notion', 'notion',
+   'streamable-http', 'https://mcp.notion.com/mcp'),
+  ($3::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+   'streamable-http', 'https://mcp.deepwiki.com/mcp')
+`
+
+type ServersInsertSignInExampleRemoteMCPServersParams struct {
+	NotionID   uuid.UUID
+	ProjectID  uuid.UUID
+	DeepwikiID uuid.UUID
+}
+
+// Leave instructions NULL so Settings starts with the editable built-in
+// instructions, matching the gateway's initialize and server/discover text.
+// Remote MCP identity modes: Linear uses per-user OAuth through a
+// project-scoped CIMD client, Slack carries one inert shared Service Account
+// credential, and GitHub intentionally has no upstream identity. The demo
+// values are display fixtures only and cannot authenticate to any service.
+// Two more vendor remotes for the agent MCP sign-in tab, both real and
+// connectable: Notion signs each caller in to their own account once an
+// admin sets up its sign-in from the server's page (Speakeasy registers a
+// client with Notion then; the seed holds no credential), and DeepWiki is a
+// public server that needs no sign-in at all.
+func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID, arg.DeepwikiID)
+	return err
+}
+
 const serversInsertSlackIdentityHeader = `-- name: ServersInsertSlackIdentityHeader :exec
 INSERT INTO remote_mcp_server_headers
   (id, remote_mcp_server_id, name, description, is_required, is_secret, value)
@@ -2089,15 +2204,16 @@ const serversInsertValidatedSession = `-- name: ServersInsertValidatedSession :e
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], $5::bigint,
-        CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
-        NULLIF($6::text, ''), now() - make_interval(days => $8::int),
-        now() - make_interval(hours => $7::int))
+        $5::text, now() + interval '7 days', false,
+        ARRAY['read'], $6::bigint,
+        CASE WHEN $7::text <> '' THEN now() - make_interval(hours => $8::int) END,
+        NULLIF($7::text, ''), now() - make_interval(days => $9::int),
+        now() - make_interval(hours => $8::int), now() + interval '10 years')
 `
 
 type ServersInsertValidatedSessionParams struct {
@@ -2105,6 +2221,7 @@ type ServersInsertValidatedSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	GrantGeneration       int64
 	Status                string
 	HoursAgo              int32
@@ -2113,8 +2230,9 @@ type ServersInsertValidatedSessionParams struct {
 
 // Upstream sessions on Linear's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: an invalid ciphertext and
-// no refresh token. grant_generation above 1 records re-authorizations.
+// validation state. Inert like the session above: no refresh token, and a held
+// re-check lease, renewed by each reseed, keeps the idle re-check from
+// presenting the dummy token to Linear and overwriting the seeded verdicts. grant_generation above 1 records re-authorizations.
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {
@@ -2123,6 +2241,7 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.GrantGeneration,
 		arg.Status,
 		arg.HoursAgo,
@@ -2131,28 +2250,67 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
-const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
+const serversPickGatewayGitHubCredential = `-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1::uuid
+  AND ac.organization_id = $2::text
+  AND sel.project_id = $3::uuid
+  AND sel.organization_id = $2::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY($4::uuid[])
+  AND sel.mcp_server_id = $5::uuid
+  AND sel.deleted IS FALSE
+`
+
+type ServersPickGatewayGitHubCredentialParams struct {
+	AuthClientID  uuid.UUID
+	OrgID         string
+	ProjectID     uuid.UUID
+	CredentialIds []uuid.UUID
+	McpServerID   uuid.UUID
+}
+
+// Sets the organization gateway's seeded GitHub choices to the caller's own
+// GitHub token. The server offers two credentials, so a choice that names
+// neither resolves to no credential under enforcement.
+func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.CredentialIds,
+		arg.McpServerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const serversStampRemoteSessionIssuer = `-- name: ServersStampRemoteSessionIssuer :exec
 UPDATE mcp_servers
 SET remote_session_issuer_id = $1::uuid
 WHERE id = $2::uuid
   AND project_id = $3::uuid
 `
 
-type ServersStampLinearRemoteSessionIssuerParams struct {
+type ServersStampRemoteSessionIssuerParams struct {
 	RemoteSessionIssuerID uuid.UUID
 	McpServerID           uuid.UUID
 	ProjectID             uuid.UUID
 }
 
-// mcp_servers.remote_session_issuer_id is denormalized from the live client
-// bindings, and the app recomputes it after the commit that writes them
-// (ResyncMCPServerRemoteSessionIssuers). Seeding the binding in SQL never
-// goes through that path, so stamp what the resync would derive: exactly one
-// remote issuer is bound to this server's user session issuer (the
-// attachment fixture's client below sits under the same one). Left NULL,
-// upstream token routing fails closed and Linear reads as having no identity.
-func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
+// mcp_servers.remote_session_issuer_id is denormalized from a server's client
+// associations, and the app recomputes it after the commit that writes them
+// (ResyncMCPServerRemoteSessionIssuers). Seeding them in SQL never goes through
+// that path, so stamp what the resync would derive. Left NULL, upstream token
+// routing fails closed and the server reads as having no identity.
+func (q *Queries) ServersStampRemoteSessionIssuer(ctx context.Context, arg ServersStampRemoteSessionIssuerParams) error {
+	_, err := q.db.Exec(ctx, serversStampRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
 }
 

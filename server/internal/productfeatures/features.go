@@ -10,6 +10,9 @@ import (
 type Feature string
 
 const (
+	// FeatureProviderSetup is the temporary staff-managed rollout for provider setup.
+	// It defaults off and is never included in signup, trial, or demo bundles.
+	FeatureProviderSetup  Feature = "provider_setup"
 	FeatureLogs           Feature = "logs"
 	FeatureToolIOLogs     Feature = "tool_io_logs"
 	FeatureSessionCapture Feature = "session_capture"

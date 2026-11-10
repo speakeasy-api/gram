@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { InferenceSpendCap } from "@gram/client/models/components/inferencespendcap.js";
 import { describe, expect, it } from "vitest";

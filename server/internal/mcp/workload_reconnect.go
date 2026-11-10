@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -49,6 +50,10 @@ func (b *WorkloadReconnectBinding) authorize(userID string, impersonated bool, n
 	return nil
 }
 
+func (b *WorkloadReconnectBinding) expired(now time.Time) bool {
+	return b != nil && !now.Before(b.ExpiresAt)
+}
+
 // consumeWorkloadReconnect exchanges the opaque, single-use browser entry
 // ticket for the ordinary first-party challenge. No identity comes from URL
 // parameters; resource and owner were recorded after workload admission.
@@ -66,6 +71,9 @@ func (s *Service) consumeWorkloadReconnect(r *http.Request, endpoint *ResolvedMc
 	}
 	b := state.WorkloadReconnect
 	if b == nil || !b.Ticket || b.ClientID == uuid.Nil || b.OwnerUserID == "" || !time.Now().Before(b.ExpiresAt) {
+		if b != nil && b.Ticket && b.expired(time.Now()) {
+			s.recordTicketExpired(r, endpoint, state, mcpconnectionattempts.AppWorkload)
+		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
 	}
 	if err := endpoint.ValidateChallenge(r.Context(), state.Endpoint, state.UserSessionIssuerID); err != nil {
@@ -131,6 +139,7 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 	}
 	now := time.Now()
 	ticket := AuthnChallengeState{
+		ConnectPendingSignIn:     false,
 		ConsentBrowserHash:       "",
 		FederatedBinding:         nil,
 		DelegationRetryUsed:      false,

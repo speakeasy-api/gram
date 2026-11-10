@@ -20,6 +20,8 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   "claude-code-desktop": "Claude Code Desktop",
   cowork: "Claude Cowork",
   "claude-cowork": "Claude Cowork",
+  kit: "Kit",
+  "ahp-harness:kit": "Kit",
   cursor: "Cursor",
   // The device agent's IDE deeplink target — the same Cursor surface as the
   // cursor CLI, reached via the desktop app.
@@ -45,6 +47,9 @@ const PRODUCT_SURFACE_LABELS: Record<string, string> = {
   gemini: "Gemini",
   glean: "Glean",
   bedrock: "AWS Bedrock",
+  // Sessions from the built-in Speakeasy Slack app. The server stamps this
+  // surface from the trigger source; other assistant sessions stay "assistants".
+  "speakeasy-slack": "Speakeasy Slackbot",
   "aws-bedrock": "AWS Bedrock",
 };
 

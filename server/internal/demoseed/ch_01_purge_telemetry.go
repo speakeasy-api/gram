@@ -84,6 +84,7 @@ func (s *seeder) chPurgeAndTelemetry(ctx context.Context, ch driver.Conn) error 
 		{"cursor usage metrics", s.chCursorUsageRows},
 		{"cursor hook rows", s.chCursorHookRows},
 		{"work units scores", s.chWorkUnitRows},
+		{"hooks fleet rows", s.chHookFleetRows},
 	}
 	for _, ins := range inserts {
 		if err := s.chInsertTelemetry(ctx, ch, ins.rows()); err != nil {
@@ -127,6 +128,11 @@ var chPurgeOrgTables = []string{
 	"agent_events",
 	"sigint_readings",
 	"sigint_readings_v2",
+	"mcp_connection_events",
+	// Target of mcp_connection_attempt_summaries_mv.
+	"mcp_connection_attempt_summaries",
+	// Target of hook_install_summaries_mv.
+	"hook_install_summaries",
 }
 
 // chPurge runs the scoped deletes: telemetry source + every MV target + the
@@ -161,7 +167,10 @@ func (s *seeder) chPurge(ctx context.Context, ch driver.Conn) error {
 				+ (SELECT count() FROM billing_meter_daily_summaries WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings WHERE organization_id = ?)
 				+ (SELECT count() FROM sigint_readings_v2 WHERE organization_id = ?)
-		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
+				+ (SELECT count() FROM mcp_connection_events WHERE organization_id = ?)
+				+ (SELECT count() FROM mcp_connection_attempt_summaries WHERE organization_id = ?)
+				+ (SELECT count() FROM hook_install_summaries WHERE organization_id = ?)
+		`, projectID, s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID(), s.orgID()).Scan(&remaining)
 		if err != nil {
 			return 0, fmt.Errorf("count remaining demo telemetry, meter ledger, summary, and sensor reading rows: %w", err)
 		}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -20,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -53,10 +55,13 @@ type connectionRecovery struct {
 	UserSessionIssuerID uuid.UUID `json:"user_session_issuer_id"`
 	McpServerID         uuid.UUID `json:"mcp_server_id"`
 	McpSlug             string    `json:"mcp_slug"`
-	ServerName          string    `json:"server_name"`
-	AuthClientID        uuid.UUID `json:"auth_client_id"`
-	RegistrationID      uuid.UUID `json:"registration_id"`
-	CreatedAt           time.Time `json:"created_at"`
+	// UpstreamResource is the server's upstream, which the link's registration
+	// uses as its resource for this exact offer.
+	UpstreamResource string    `json:"upstream_resource,omitempty"`
+	ServerName       string    `json:"server_name"`
+	AuthClientID     uuid.UUID `json:"auth_client_id"`
+	RegistrationID   uuid.UUID `json:"registration_id"`
+	CreatedAt        time.Time `json:"created_at"`
 	// BrowserCookieID and BrowserHash bind a login entry to the browser that
 	// started it: its callback must carry the host-only cookie they name.
 	// BrowserHop records that the cookie was set on another callback host
@@ -77,9 +82,16 @@ func (c connectionRecovery) expired() bool {
 }
 
 var (
-	errRecoveryNotSignedIn = errors.New("connection recovery requires a signed-in user")
-	errRecoveryOtherUser   = errors.New("connection recovery link belongs to another user")
-	errRecoveryNoAccess    = errors.New("connection recovery user may not use the client")
+	errRecoveryLoginExpired = errors.New("connection login expired")
+	errRecoveryNotSignedIn  = errors.New("connection recovery requires a signed-in user")
+	errRecoveryOtherUser    = errors.New("connection recovery link belongs to another user")
+
+	errRecoveryWrongLogin         = errors.New("connection login does not match its link")
+	errRecoveryNoBrowserBinding   = errors.New("connection login has no browser binding")
+	errRecoveryOtherBrowser       = errors.New("connection login callback is from another browser")
+	errRecoveryBrowserUnconfirmed = errors.New("connection login browser was not confirmed")
+
+	errRecoveryNoAccess = errors.New("connection recovery user may not use the client")
 	// errRecoveryUnavailable: the server no longer offers the link's client
 	// on the same registration, or the client cannot be used.
 	errRecoveryUnavailable = errors.New("connection recovery client is no longer available")
@@ -89,7 +101,7 @@ var (
 // connection for the chosen personal client is missing or expired, with a
 // link only that user can complete. It reports false for any other caller or
 // client, which keep the ordinary answer.
-func (s *Service) connectionRecoveryError(ctx context.Context, authentication *issuerGateAuthentication) (error, bool) {
+func (s *Service) connectionRecoveryError(ctx context.Context, authentication *issuerGateAuthentication, cause error) (error, bool) {
 	res := authentication.authClient
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok || authenticated.Credential.AuthorizerUserID == "" || res == nil || res.outcome != authClientResolved ||
@@ -114,7 +126,7 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 	recovery := connectionRecovery{
 		ID: token, OrganizationID: endpoint.OrganizationID, UserID: userID, ProjectID: endpoint.ProjectID,
 		UserSessionIssuerID: endpoint.UserSessionIssuerID, McpServerID: endpoint.McpServerID.UUID, McpSlug: endpoint.Slug,
-		ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
+		UpstreamResource: endpoint.UpstreamResource, ServerName: res.serverName, AuthClientID: res.clientID, RegistrationID: authentication.chosenClient.UUID, CreatedAt: time.Now(),
 		BrowserCookieID: "", BrowserHash: "", BrowserHop: false,
 	}
 	if err := s.connectionRecoveryCache.Store(ctx, recovery); err != nil {
@@ -136,7 +148,7 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 		"Send this link privately to that person only; it works only for them, signed in to Speakeasy, and expires in 15 minutes. "+
 		"If you cannot reach them privately, do not post the link: ask them to open Speakeasy and %s %s instead.\n\n%s",
 		heading, action, name, action, name, link)
-	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession)
+	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession, cause)
 	// Not logged: the message carries the link, and the rejection above is
 	// already recorded without it.
 	return oops.E(oops.CodeFailedPrecondition, nil, "%s", message), true
@@ -156,27 +168,41 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	token := chi.URLParam(r, "token")
 	if token == "" {
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 	recovery, err := s.connectionRecoveryCache.Get(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() || recovery.ID != token {
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
+	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
+		if errors.Is(err, errRecoveryNotSignedIn) {
+			t.Continue()
+		} else {
+			t.Refuse(ctx, recoveryHappened(err))
+		}
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
 	// Used once, and only by the person it names.
 	recovery, err = s.connectionRecoveryCache.GetAndDelete(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() {
-		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
+		if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		} else {
+			t.Continue()
+		}
+		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, recovery.ProjectID, recovery.OrganizationID, []uuid.UUID{recovery.RegistrationID})
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "load connection client").LogError(ctx, s.logger)
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
-		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
+		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage, contextvalues.ConnectionReferenceLine(r.Context()))
 	}
 	login := recovery
 	login.ID = uuid.NewString()
@@ -186,6 +212,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	// login browser hop when that host is not this one.
 	browser, err := generateOpaqueToken()
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "bind connection login").LogError(ctx, s.logger)
 	}
 	login.BrowserCookieID = uuid.NewString()
@@ -197,10 +224,26 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	login.BrowserHop = !sameOrigin(callbackOrigin, linkOrigin)
 	if err := s.connectionRecoveryCache.Store(ctx, login); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
+	typedAuthorization, resource, err := s.connectionRecoveryTypedLogin(ctx, recovery, login.ID, subject)
+	if errors.Is(err, remotesessions.ErrTypedAuthorizationDenied) {
+		t.Refuse(ctx, remotesessions.TypedAuthorizationHappened(err))
+		s.logger.InfoContext(ctx, "connection link refused: typed login not authorized", attr.SlogAuthClientID(recovery.AuthClientID.String()), attr.SlogError(err))
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, contextvalues.ConnectionReferenceLine(ctx))
+	}
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+		return oops.E(oops.CodeUnexpected, err, "authorize connection login").LogError(ctx, s.logger)
+	}
+	attempt := mcpconnectionattempts.Begin(recoveryScope(recovery))
+	t.Attach(attempt)
+	t.Consumed()
+	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     false,
 		ID:                  login.ID,
 		ProjectID:           recovery.ProjectID,
@@ -215,26 +258,79 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		FinalRedirectURI:    s.platformBaseURL(ctx).JoinPath(connectionRecoveryDonePath).String(),
 		ConsentURL:          "",
 		ConsentServer:       "",
-		Resource:            "",
+		Resource:            resource,
 		AutoRefresh:         nil,
 		Authority:           networkingress.Authority{Surface: "", BaseURL: "", OrganizationID: "", NetworkIngressID: uuid.Nil, NamespaceKind: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		BrowserCookieID:     "",
 		BrowserHash:         "",
+		Attempt:             attempt,
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
+		ClientName:          "",
 	}, clients[0])
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 	}
 	target := authorizationURL
 	if login.BrowserHop {
 		target, err = s.startConnectionRecoveryHop(ctx, login, browser, callbackOrigin, linkOrigin, authorizationURL)
 		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 		}
 	} else {
 		http.SetCookie(w, federatedBrowserCookie(login.BrowserCookieID, browser, int(login.TTL().Seconds())))
 	}
+	t.Continue()
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
+}
+
+// connectionRecoveryTypedLogin is what a link's login carries where typed auth
+// clients are enforced: the exact offer the link names, which authorizes the
+// login in place of a user session issuer link, and the server's upstream
+// resource, falling back to its offers when absent. Elsewhere it returns nil and no resource,
+// and the login relies on the link. A refused login returns remotesessions.ErrTypedAuthorizationDenied
+// here, before the person signs in to the provider, as it would at the callback.
+func (s *Service) connectionRecoveryTypedLogin(ctx context.Context, recovery connectionRecovery, loginID string, subject urn.SessionSubject) (*remotesessions.TypedAuthorization, string, error) {
+	enforced, err := s.consentAuthChoicesEnforced(ctx, recovery.OrganizationID)
+	if err != nil || !enforced {
+		return nil, "", err
+	}
+	authorization := &remotesessions.TypedAuthorization{
+		OrganizationID:        recovery.OrganizationID,
+		ProjectID:             recovery.ProjectID,
+		ServerID:              recovery.McpServerID,
+		AuthClientID:          recovery.AuthClientID,
+		RemoteSessionClientID: recovery.RegistrationID,
+		Subject:               subject,
+	}
+	//nolint:exhaustruct // Validate only authorization before minting the full OAuth state.
+	state := remotesessions.RemoteLoginState{
+		TypedAuthorization:    authorization,
+		ParentChallengeID:     loginID,
+		OrganizationID:        recovery.OrganizationID,
+		ProjectID:             recovery.ProjectID,
+		RemoteSessionClientID: recovery.RegistrationID,
+		Subject:               &subject,
+		McpServerID:           uuid.NullUUID{UUID: recovery.McpServerID, Valid: true},
+		UserSessionIssuerID:   recovery.UserSessionIssuerID,
+	}
+	if err := s.ValidateRemoteLoginTypedAuthorization(ctx, state); err != nil {
+		return nil, "", err
+	}
+	if recovery.UpstreamResource != "" {
+		return authorization, recovery.UpstreamResource, nil
+	}
+	offered, err := s.typedOfferedRegistrations(ctx, recovery.OrganizationID, []uuid.UUID{recovery.McpServerID})
+	if err != nil {
+		return nil, "", err
+	}
+	resource, err := s.remoteChallengeMgr.ResourceForClientAtUpstream(ctx, recovery.OrganizationID, recovery.RegistrationID, offered[recovery.McpServerID], recovery.UpstreamResource)
+	if err != nil {
+		return nil, "", fmt.Errorf("derive connection resource: %w", err)
+	}
+	return authorization, resource, nil
 }
 
 // startConnectionRecoveryHop carries a connection login's browser to its
@@ -292,18 +388,18 @@ func (s *Service) validateConnectionRecoveryHopOwner(r *http.Request, state remo
 // browser passed the hop's confirm stop.
 func (s *Service) validateConnectionRecoveryBrowser(r *http.Request, login connectionRecovery) error {
 	if login.BrowserCookieID == "" || login.BrowserHash == "" {
-		return errors.New("connection login has no browser binding")
+		return errRecoveryNoBrowserBinding
 	}
 	cookie, err := r.Cookie(federationCookieName(login.BrowserCookieID))
 	if err != nil || subtle.ConstantTimeCompare([]byte(sha256Hex(cookieValue(cookie))), []byte(login.BrowserHash)) != 1 {
-		return errors.New("connection login callback is from another browser")
+		return errRecoveryOtherBrowser
 	}
 	if !login.BrowserHop {
 		return nil
 	}
 	confirmed, err := s.remoteLoginHopCache.Get(r.Context(), "remoteLoginHop:"+remoteLoginHopConfirmedID(login.BrowserCookieID))
 	if err != nil || confirmed.Phase != remoteLoginHopConfirmed || !confirmed.ConnectionRecovery || confirmed.CookieID != login.BrowserCookieID || confirmed.ParentChallengeID != login.ID {
-		return errors.New("connection login browser was not confirmed")
+		return errRecoveryBrowserUnconfirmed
 	}
 	return nil
 }
@@ -320,12 +416,18 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	ctx := r.Context()
 	key := "connectionRecovery:" + remote.ParentChallengeID
 	login, err := s.connectionRecoveryCache.Get(ctx, key)
-	if err != nil || login.expired() || login.ID != remote.ParentChallengeID {
-		return true, errors.New("connection login expired")
+	if err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("load recovery login: %w", err)
+	}
+	if login.expired() || login.ID != remote.ParentChallengeID {
+		return true, errRecoveryLoginExpired
 	}
 	if remote.Subject == nil || remote.Subject.Kind != urn.SessionSubjectKindUser || remote.Subject.ID != login.UserID ||
 		remote.RemoteSessionClientID != login.RegistrationID || remote.OrganizationID != login.OrganizationID {
-		return true, errors.New("connection login does not match its link")
+		return true, errRecoveryWrongLogin
 	}
 	if err := s.validateConnectionRecoveryBrowser(r, login); err != nil {
 		return true, err
@@ -345,8 +447,13 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		return true, err
 	}
 	// Used up only once it has passed, so a stray callback cannot spend it.
-	if _, err := s.connectionRecoveryCache.GetAndDelete(ctx, key); err != nil {
-		return true, errors.New("connection login expired")
+	// Reserve the ending atomically: CompleteRemoteLogin records this callback's
+	// verdict; a late callback cannot claim a second, expired ending.
+	if _, err := s.connectionRecoveryCache.GetAndDeleteMarking(ctx, key, attemptEndMarker(remote.Attempt), connectionAttemptEndTTL); err != nil {
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return true, errRecoveryLoginExpired
+		}
+		return true, fmt.Errorf("consume recovery login: %w", err)
 	}
 	return true, nil
 }
@@ -437,22 +544,22 @@ func (s *Service) answerConnectionRecoveryRefusal(w http.ResponseWriter, r *http
 		http.Redirect(w, r, login.String(), http.StatusFound)
 		return nil
 	case errors.Is(err, errRecoveryOtherUser):
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryOtherUserPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryOtherUserPage, "")
 	case errors.Is(err, errRecoveryNoAccess):
 		s.logger.InfoContext(r.Context(), "connection link refused: no access", attr.SlogAuthClientID(recovery.AuthClientID.String()))
-		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage)
+		return renderConnectionRecoveryPage(w, http.StatusForbidden, connectionRecoveryNoAccessPage, contextvalues.ConnectionReferenceLine(r.Context()))
 	case errors.Is(err, errRecoveryUnavailable):
 		s.logger.InfoContext(r.Context(), "connection link refused: client unavailable", attr.SlogAuthClientID(recovery.AuthClientID.String()))
-		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
+		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage, contextvalues.ConnectionReferenceLine(r.Context()))
 	default:
 		return oops.E(oops.CodeUnexpected, err, "check connection link").LogError(r.Context(), s.logger)
 	}
 }
 
 // HandleConnectionRecoveryDone is where a connection link's login returns.
-func (s *Service) HandleConnectionRecoveryDone(w http.ResponseWriter, _ *http.Request) error {
+func (s *Service) HandleConnectionRecoveryDone(w http.ResponseWriter, r *http.Request) error {
 	w.Header().Set("Cache-Control", "no-store")
-	return renderConnectionRecoveryPage(w, http.StatusOK, connectionRecoveryDonePage)
+	return renderConnectionRecoveryPage(w, http.StatusOK, connectionRecoveryDonePage, contextvalues.ConnectionReferenceLine(r.Context()))
 }
 
 type connectionRecoveryPage struct {
@@ -497,13 +604,17 @@ p{margin:0;line-height:1.5;color:#444}
 @media (prefers-color-scheme:dark){body{background:#0a0a0a;color:#eee}main{background:#141414;border-color:#2a2a2a}p{color:#bbb}}
 </style>
 </head>
-<body><main><h1>{{.Title}}</h1><p>{{.Message}}</p></main></body>
+<body><main><h1>{{.Title}}</h1><p>{{.Message}}</p>{{if .ReferenceLine}}<p style="margin-top:12px;font-size:12px;word-break:break-all">{{.ReferenceLine}}</p>{{end}}</main></body>
 </html>`))
 
-func renderConnectionRecoveryPage(w http.ResponseWriter, status int, page connectionRecoveryPage) error {
+func renderConnectionRecoveryPage(w http.ResponseWriter, status int, page connectionRecoveryPage, referenceLine string) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	if err := connectionRecoveryTemplate.Execute(w, page); err != nil {
+	view := struct {
+		connectionRecoveryPage
+		ReferenceLine string
+	}{page, referenceLine}
+	if err := connectionRecoveryTemplate.Execute(w, view); err != nil {
 		return fmt.Errorf("render connection page: %w", err)
 	}
 	return nil

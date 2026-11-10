@@ -127,6 +127,26 @@ type CustomDomain struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType string
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string
 }
 
 // An MCP endpoint registered under a custom domain, with its parent MCP server

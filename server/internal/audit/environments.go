@@ -35,6 +35,7 @@ type LogEnvironmentCreateEvent struct {
 func (l *Logger) LogEnvironmentCreate(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentCreateEvent) error {
 	action := ActionEnvironmentCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -87,6 +88,7 @@ func (l *Logger) LogEnvironmentUpdate(ctx context.Context, dbtx repo.DBTX, event
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -126,6 +128,7 @@ type LogEnvironmentDeleteEvent struct {
 func (l *Logger) LogEnvironmentDelete(ctx context.Context, dbtx repo.DBTX, event LogEnvironmentDeleteEvent) error {
 	action := ActionEnvironmentDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

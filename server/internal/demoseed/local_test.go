@@ -34,7 +34,7 @@ func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
-	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), spec)
+	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), testenv.NewEncryptionClient(t), spec)
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, spec.OrgID))
 }

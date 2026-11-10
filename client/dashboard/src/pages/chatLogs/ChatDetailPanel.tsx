@@ -10,7 +10,6 @@ import {
   ChevronUp,
   GitBranch,
   Info,
-  Loader2,
   Pin,
   Search,
   SlidersHorizontal,
@@ -105,13 +104,19 @@ import {
   buildClaudeUsageByMessageId,
   formatTokenCount,
   formatUsageCost,
+  isCostUnknown,
+  totalTokensFor,
+  UNKNOWN_COST_EXPLANATION,
 } from "./claudeUsage";
 import { filterPanelTelemetryLogs, filterToolLogs } from "./chatLogFilters";
+import { UnknownCost } from "./UnknownCost";
 import { WorkUnitsHeaderMetrics } from "./WorkUnitsMetrics";
 import { formatWorkUnits, workUnitsEfficiency } from "./workUnits";
 import { ToolCallsView } from "./chatLogViews";
 import { EffectsView } from "./EffectsView";
 import { exportTraceDataAsJson } from "./chatExport";
+import { Skeleton } from "@/components/ui/Skeleton";
+import { Spinner } from "@/components/ui/Spinner";
 
 const PANEL_TELEMETRY_LOG_LIMIT = 100;
 
@@ -171,15 +176,6 @@ function findingKey(r: RiskResult): string {
 
 function getTraceId(chatId: string): string {
   return `trace-${chatId.slice(0, 3)}`;
-}
-
-function totalTokensFor(chat: {
-  totalTokens?: number;
-  totalInputTokens?: number;
-  totalOutputTokens?: number;
-}): number {
-  if (chat.totalTokens && chat.totalTokens > 0) return chat.totalTokens;
-  return (chat.totalInputTokens || 0) + (chat.totalOutputTokens || 0);
 }
 
 // ChatDetailErrorFallback is the defensive backstop for unexpected
@@ -312,6 +308,7 @@ function SessionSummary({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
   const {
     costPerUnit: workUnitsCostPerUnit,
     tokensPerUnit: workUnitsTokensPerUnit,
@@ -342,7 +339,14 @@ function SessionSummary({
                   {formatUsageCost(chat.totalCost!)}
                 </span>
               )}
-              {hasCost && tokens > 0 && (
+              {/* A bare dash, not the tooltip one: it sits inside the popover
+                  trigger, and the popover says why the cost is missing. */}
+              {costUnknown && (
+                <span className="tabular-nums" aria-label="Unknown cost">
+                  —
+                </span>
+              )}
+              {(hasCost || costUnknown) && tokens > 0 && (
                 <span aria-hidden className="text-muted-foreground/40">
                   |
                 </span>
@@ -414,8 +418,17 @@ function SessionSummary({
               <MetaRow label="Tool calls">{toolCount}</MetaRow>
             )}
             <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+              <TotalCostValue
+                cost={chat.totalCost}
+                hasCost={hasCost}
+                costUnknown={costUnknown}
+              />
             </MetaRow>
+            {costUnknown && (
+              <p className="text-muted-foreground py-1.5 text-xs">
+                {UNKNOWN_COST_EXPLANATION}
+              </p>
+            )}
             {chat.totalInputTokens !== undefined && (
               <MetaRow label="Input tokens">
                 {chat.totalInputTokens.toLocaleString()}
@@ -459,6 +472,31 @@ function HeaderMetadataBadge({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * The session's total cost in its details: the figure, a dash when its agent
+ * does not report cost (the explanation follows the row), or "unknown" when
+ * no usage arrived at all.
+ */
+function TotalCostValue({
+  cost,
+  hasCost,
+  costUnknown,
+}: {
+  cost: number | undefined;
+  hasCost: boolean;
+  costUnknown: boolean;
+}): JSX.Element {
+  if (hasCost && cost !== undefined) return <>{formatUsageCost(cost)}</>;
+  if (costUnknown) {
+    return (
+      <span className="tabular-nums" aria-label="Unknown cost">
+        —
+      </span>
+    );
+  }
+  return <>unknown</>;
+}
+
 function ChatDetailMetadataBadges({
   chat,
   messageCount,
@@ -471,6 +509,7 @@ function ChatDetailMetadataBadges({
 }) {
   const tokens = totalTokensFor(chat);
   const hasCost = chat.totalCost !== undefined && chat.totalCost > 0;
+  const costUnknown = isCostUnknown(chat);
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -509,6 +548,11 @@ function ChatDetailMetadataBadges({
       {hasCost && (
         <HeaderMetadataBadge>
           {formatUsageCost(chat.totalCost!)}
+        </HeaderMetadataBadge>
+      )}
+      {costUnknown && (
+        <HeaderMetadataBadge>
+          <UnknownCost />
         </HeaderMetadataBadge>
       )}
       {tokens > 0 && (
@@ -1122,7 +1166,7 @@ function SessionSummarySection({
         >
           <Button.LeftIcon>
             {summarize.isPending ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Spinner className="mr-0 size-3.5" />
             ) : (
               <Sparkles className="size-3.5" />
             )}
@@ -1745,8 +1789,17 @@ function ChatDetailPanel({
   if (chatLoading) {
     return (
       <div className="p-8">
-        <SheetTitle>Loading</SheetTitle>
-        <SheetDescription>Fetching chat session details...</SheetDescription>
+        <SheetTitle className="sr-only">Loading</SheetTitle>
+        <SheetDescription className="sr-only">
+          Fetching chat session details...
+        </SheetDescription>
+        <Skeleton>
+          <div className="h-7 w-64" />
+          <div className="h-4 w-40" />
+          <div className="mt-4 h-24 w-full" />
+          <div className="h-24 w-full" />
+          <div className="h-24 w-full" />
+        </Skeleton>
       </div>
     );
   }
@@ -1889,7 +1942,7 @@ function ChatDetailPanel({
               className="text-muted-foreground hover:text-foreground inline-flex cursor-pointer items-center gap-1.5 text-xs font-medium transition-colors disabled:cursor-default"
             >
               {loadingAllMessages ? (
-                <Loader2 className="size-3.5 animate-spin" />
+                <Spinner className="mr-0 size-3.5" />
               ) : (
                 <ChevronsDown className="size-3.5" />
               )}
