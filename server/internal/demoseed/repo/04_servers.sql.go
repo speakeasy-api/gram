@@ -627,7 +627,7 @@ const serversInsertEMAVendorIssuer = `-- name: ServersInsertEMAVendorIssuer :exe
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, token_endpoint, name,
    grant_types_supported, authorization_grant_profiles_supported,
-   token_endpoint_auth_methods_supported)
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
 VALUES
   ($1::uuid, $2::uuid, $3::text,
    'enterprise-sign-in-auth', 'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture',
@@ -635,7 +635,7 @@ VALUES
    'Enterprise Sign-In Authorization Server',
    ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
    ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-   ARRAY['client_secret_post'])
+   ARRAY['client_secret_post'], now() - interval '2 hours')
 `
 
 type ServersInsertEMAVendorIssuerParams struct {
@@ -645,6 +645,10 @@ type ServersInsertEMAVendorIssuerParams struct {
 }
 
 // The server's authorization server accepts ID-JAGs from a confidential client.
+// Identity chaining trusts its JWT-bearer and ID-JAG support only from a
+// discovered document, so the row records when that document was read;
+// without it the binding reads as incomplete metadata and the consent page
+// offers an interactive sign-in the server does not have.
 func (q *Queries) ServersInsertEMAVendorIssuer(ctx context.Context, arg ServersInsertEMAVendorIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAVendorIssuer, arg.ID, arg.ProjectID, arg.OrgID)
 	return err

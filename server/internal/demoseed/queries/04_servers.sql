@@ -494,11 +494,15 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
 
 -- The server's authorization server accepts ID-JAGs from a confidential client.
+-- Identity chaining trusts its JWT-bearer and ID-JAG support only from a
+-- discovered document, so the row records when that document was read;
+-- without it the binding reads as incomplete metadata and the consent page
+-- offers an interactive sign-in the server does not have.
 -- name: ServersInsertEMAVendorIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, token_endpoint, name,
    grant_types_supported, authorization_grant_profiles_supported,
-   token_endpoint_auth_methods_supported)
+   token_endpoint_auth_methods_supported, metadata_fetched_at)
 VALUES
   (@id::uuid, @project_id::uuid, @org_id::text,
    'enterprise-sign-in-auth', 'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture',
@@ -506,7 +510,7 @@ VALUES
    'Enterprise Sign-In Authorization Server',
    ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
    ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-   ARRAY['client_secret_post']);
+   ARRAY['client_secret_post'], now() - interval '2 hours');
 
 -- name: ServersInsertEMAVendorClient :exec
 INSERT INTO remote_session_clients
