@@ -12,7 +12,7 @@ import { useSession } from "@/contexts/Auth";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useMissingRequiredEnvVars } from "@/hooks/useMissingEnvironmentVariables";
 import { useMcpUrl } from "@/hooks/useToolsetUrl";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { McpEnvironmentConfigInput } from "@gram/client/models/components/mcpenvironmentconfiginput.js";
 import { useCreateEnvironmentMutation } from "@gram/client/react-query/createEnvironment.js";
@@ -40,9 +40,11 @@ import { EnvironmentVariableRow } from "./EnvironmentVariableRow";
 import { OAuthDetailsModal } from "./OAuthDetailsModal";
 import { ConnectOAuthModal } from "./oauth-wizard";
 import { PageSection } from "./PageSection";
-import {
+import type {
   EnvVarState,
   EnvironmentVariable,
+} from "./environmentVariableUtils";
+import {
   getValueForEnvironment,
   hasEntryInEnvironment,
   isSecretInEnvironment,

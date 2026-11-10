@@ -177,6 +177,10 @@ WHERE organization_id = $1
     $2::uuid IS NULL
     OR project_id = $2::uuid
   )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
+  )
 GROUP BY action
 ORDER BY count DESC, action ASC
 `
@@ -184,6 +188,7 @@ ORDER BY count DESC, action ASC
 type ListAuditActionFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditActionFacetsRow struct {
@@ -195,7 +200,7 @@ type ListAuditActionFacetsRow struct {
 // Assistant activity and internal events are excluded:
 // facets power the platform audit feed, which hides them (see ListAuditLogs).
 func (q *Queries) ListAuditActionFacets(ctx context.Context, arg ListAuditActionFacetsParams) ([]ListAuditActionFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActionFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -224,6 +229,10 @@ WITH filtered_logs AS (
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
+    )
+    AND (
+      $3::text IS NULL
+      OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
     )
 ), actor_counts AS (
   SELECT
@@ -270,6 +279,7 @@ ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC
 type ListAuditActorFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditActorFacetsRow struct {
@@ -286,7 +296,7 @@ type ListAuditActorFacetsRow struct {
 // ListAuditLogs is: the directory spans every tenant, and a facet label is
 // read by whoever can read the feed.
 func (q *Queries) ListAuditActorFacets(ctx context.Context, arg ListAuditActorFacetsParams) ([]ListAuditActorFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditActorFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}
@@ -363,15 +373,21 @@ WHERE a.organization_id = $1
     $11::text IS NULL
     OR COALESCE(a.acting_surface, 'unknown') = $11::text
   )
+  -- Origin splits the log by who initiated a change: 'system' is Speakeasy
+  -- acting on its own (background jobs), 'user' is everything else.
+  AND (
+    $12::text IS NULL
+    OR ($12::text = 'system') = (a.acting_surface IS NOT DISTINCT FROM 'system')
+  )
   -- Half-open window, so consecutive ranges neither double-count a row nor
   -- drop one that lands exactly on a boundary.
   AND (
-    $12::timestamptz IS NULL
-    OR a.created_at >= $12::timestamptz
+    $13::timestamptz IS NULL
+    OR a.created_at >= $13::timestamptz
   )
   AND (
-    $13::timestamptz IS NULL
-    OR a.created_at < $13::timestamptz
+    $14::timestamptz IS NULL
+    OR a.created_at < $14::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -389,6 +405,7 @@ type ListAuditLogsParams struct {
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
+	Origin                 pgtype.Text
 	CreatedFrom            pgtype.Timestamptz
 	CreatedTo              pgtype.Timestamptz
 }
@@ -448,6 +465,7 @@ func (q *Queries) ListAuditLogs(ctx context.Context, arg ListAuditLogsParams) ([
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
+		arg.Origin,
 		arg.CreatedFrom,
 		arg.CreatedTo,
 	)
@@ -505,6 +523,10 @@ WHERE organization_id = $1
     $2::uuid IS NULL
     OR project_id = $2::uuid
   )
+  AND (
+    $3::text IS NULL
+    OR ($3::text = 'system') = (acting_surface IS NOT DISTINCT FROM 'system')
+  )
 GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 `
@@ -512,6 +534,7 @@ ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC
 type ListAuditSurfaceFacetsParams struct {
 	OrganizationID string
 	ProjectID      uuid.NullUUID
+	Origin         pgtype.Text
 }
 
 type ListAuditSurfaceFacetsRow struct {
@@ -529,7 +552,7 @@ type ListAuditSurfaceFacetsRow struct {
 // nulls from before attribution and rows the application wrote as 'unknown',
 // and grouping on the raw column would return two facets with the same label.
 func (q *Queries) ListAuditSurfaceFacets(ctx context.Context, arg ListAuditSurfaceFacetsParams) ([]ListAuditSurfaceFacetsRow, error) {
-	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID)
+	rows, err := q.db.Query(ctx, listAuditSurfaceFacets, arg.OrganizationID, arg.ProjectID, arg.Origin)
 	if err != nil {
 		return nil, err
 	}

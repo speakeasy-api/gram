@@ -19,7 +19,8 @@ import {
 import { SkeletonTable } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { Stack } from "@/components/ui/Stack";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
 import { getServerURL } from "@/lib/utils";
@@ -34,7 +35,8 @@ import { useRevokeLiteLLMInstanceMutation } from "@gram/client/react-query/revok
 import { useRotateLiteLLMInstanceKeyMutation } from "@gram/client/react-query/rotateLiteLLMInstanceKey.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Network, Plus, RefreshCw } from "lucide-react";
-import { FormEvent, useState } from "react";
+import type { FormEvent } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useLiteLLMInstanceProjects } from "./use-litellm-instance-projects";

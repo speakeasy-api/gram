@@ -1,7 +1,8 @@
 /* eslint-disable react-refresh/only-export-components */
 import * as React from "react";
 import { CalendarIcon, ChevronDown, Zap } from "lucide-react";
-import { generateText, LanguageModel, Output } from "ai";
+import type { LanguageModel } from "ai";
+import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { z } from "zod";
 

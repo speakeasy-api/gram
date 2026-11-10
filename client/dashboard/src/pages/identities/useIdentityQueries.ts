@@ -24,10 +24,8 @@ import { useMembers } from "@gram/client/react-query/members.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
-import {
-  buildGetUserMetricsSummaryQuery,
-  useGetUserMetricsSummary,
-} from "@gram/client/react-query/getUserMetricsSummary.js";
+import type { useGetUserMetricsSummary } from "@gram/client/react-query/getUserMetricsSummary.js";
+import { buildGetUserMetricsSummaryQuery } from "@gram/client/react-query/getUserMetricsSummary.js";
 import { buildRiskUserBreakdownQuery } from "@gram/client/react-query/riskUserBreakdown.js";
 import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
 import type { RiskRuleBreakdownEntry } from "@gram/client/models/components/riskrulebreakdownentry.js";

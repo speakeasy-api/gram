@@ -222,7 +222,10 @@ func TestDeleteMetaMcpServer_RootAutoClearsAndAudits(t *testing.T) {
 	require.Equal(t, endpoint.ID.String(), beforeSnapshot["RootMcpEndpointID"])
 	require.Nil(t, afterSnapshot["RootMcpEndpointID"])
 
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, uuid.Nil, route.RootMcpEndpointID)
 	require.Empty(t, route.RootSlug)

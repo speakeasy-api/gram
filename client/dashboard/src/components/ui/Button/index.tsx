@@ -4,9 +4,9 @@ import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 import { Icon } from "../Icon";
-import { IconName } from "../Icon/names";
+import type { IconName } from "../Icon/names";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../Tooltip";
-import {
+import type {
   ButtonSize,
   ButtonVariant,
   ButtonContext,

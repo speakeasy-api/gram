@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
-import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
+import type { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import {
   listedMcpServers,
   type ListedMcpServer,
