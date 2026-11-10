@@ -1280,15 +1280,6 @@ functions_tool_counts as (
     FROM function_tool_definitions
     WHERE deployment_id = $1 AND deleted IS FALSE
     GROUP BY deployment_id
-),
-external_mcp_tool_counts as (
-    SELECT
-        ema.deployment_id,
-        COUNT(DISTINCT emtd.id) as tool_count
-    FROM external_mcp_tool_definitions emtd
-    JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
-    WHERE ema.deployment_id = $1 AND emtd.deleted IS FALSE AND ema.deleted IS FALSE
-    GROUP BY ema.deployment_id
 )
 SELECT
   deployments.id, deployments.seq, deployments.user_id, deployments.project_id, deployments.organization_id, deployments.idempotency_key, deployments.cloned_from, deployments.github_repo, deployments.github_pr, deployments.github_sha, deployments.external_id, deployments.external_url, deployments.created_at, deployments.updated_at,
@@ -1312,13 +1303,7 @@ SELECT
   package_versions.prerelease as package_version_prerelease,
   package_versions.build as package_version_build,
   COALESCE(openapiv3_tool_counts.tool_count, 0) as openapiv3_tool_count,
-  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count,
-  COALESCE(external_mcp_tool_counts.tool_count, 0) as external_mcp_tool_count,
-  external_mcp_attachments.id as external_mcp_id,
-  external_mcp_attachments.registry_id as external_mcp_registry_id,
-  external_mcp_attachments.name as external_mcp_name,
-  external_mcp_attachments.slug as external_mcp_slug,
-  external_mcp_attachments.registry_server_specifier as external_mcp_registry_server_specifier
+  COALESCE(functions_tool_counts.tool_count, 0) as functions_tool_count
 FROM deployments
 LEFT JOIN deployments_openapiv3_assets ON deployments.id = deployments_openapiv3_assets.deployment_id
 LEFT JOIN deployments_functions ON deployments.id = deployments_functions.deployment_id
@@ -1328,8 +1313,6 @@ LEFT JOIN packages ON deployments_packages.package_id = packages.id
 LEFT JOIN package_versions ON deployments_packages.version_id = package_versions.id
 LEFT JOIN openapiv3_tool_counts ON deployments.id = openapiv3_tool_counts.deployment_id
 LEFT JOIN functions_tool_counts ON deployments.id = functions_tool_counts.deployment_id
-LEFT JOIN external_mcp_tool_counts ON deployments.id = external_mcp_tool_counts.deployment_id
-LEFT JOIN external_mcp_attachments ON deployments.id = external_mcp_attachments.deployment_id AND external_mcp_attachments.deleted IS FALSE
 WHERE deployments.id = $1 AND deployments.project_id = $2
 `
 
@@ -1339,34 +1322,28 @@ type GetDeploymentWithAssetsParams struct {
 }
 
 type GetDeploymentWithAssetsRow struct {
-	Deployment                         Deployment
-	Status                             string
-	DeploymentsOpenapiv3AssetID        uuid.NullUUID
-	DeploymentsOpenapiv3AssetStoreID   uuid.NullUUID
-	DeploymentsOpenapiv3AssetName      pgtype.Text
-	DeploymentsOpenapiv3AssetSlug      pgtype.Text
-	DeploymentsFunctionsID             uuid.NullUUID
-	DeploymentsFunctionsAssetID        uuid.NullUUID
-	DeploymentsFunctionsName           pgtype.Text
-	DeploymentsFunctionsSlug           pgtype.Text
-	DeploymentsFunctionsRuntime        pgtype.Text
-	DeploymentsFunctionsScale          pgtype.Int4
-	DeploymentsFunctionsMemoryMib      pgtype.Int4
-	DeploymentPackageID                uuid.NullUUID
-	PackageName                        pgtype.Text
-	PackageVersionMajor                pgtype.Int8
-	PackageVersionMinor                pgtype.Int8
-	PackageVersionPatch                pgtype.Int8
-	PackageVersionPrerelease           pgtype.Text
-	PackageVersionBuild                pgtype.Text
-	Openapiv3ToolCount                 int64
-	FunctionsToolCount                 int64
-	ExternalMcpToolCount               int64
-	ExternalMcpID                      uuid.NullUUID
-	ExternalMcpRegistryID              uuid.NullUUID
-	ExternalMcpName                    pgtype.Text
-	ExternalMcpSlug                    pgtype.Text
-	ExternalMcpRegistryServerSpecifier pgtype.Text
+	Deployment                       Deployment
+	Status                           string
+	DeploymentsOpenapiv3AssetID      uuid.NullUUID
+	DeploymentsOpenapiv3AssetStoreID uuid.NullUUID
+	DeploymentsOpenapiv3AssetName    pgtype.Text
+	DeploymentsOpenapiv3AssetSlug    pgtype.Text
+	DeploymentsFunctionsID           uuid.NullUUID
+	DeploymentsFunctionsAssetID      uuid.NullUUID
+	DeploymentsFunctionsName         pgtype.Text
+	DeploymentsFunctionsSlug         pgtype.Text
+	DeploymentsFunctionsRuntime      pgtype.Text
+	DeploymentsFunctionsScale        pgtype.Int4
+	DeploymentsFunctionsMemoryMib    pgtype.Int4
+	DeploymentPackageID              uuid.NullUUID
+	PackageName                      pgtype.Text
+	PackageVersionMajor              pgtype.Int8
+	PackageVersionMinor              pgtype.Int8
+	PackageVersionPatch              pgtype.Int8
+	PackageVersionPrerelease         pgtype.Text
+	PackageVersionBuild              pgtype.Text
+	Openapiv3ToolCount               int64
+	FunctionsToolCount               int64
 }
 
 func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeploymentWithAssetsParams) ([]GetDeploymentWithAssetsRow, error) {
@@ -1414,12 +1391,6 @@ func (q *Queries) GetDeploymentWithAssets(ctx context.Context, arg GetDeployment
 			&i.PackageVersionBuild,
 			&i.Openapiv3ToolCount,
 			&i.FunctionsToolCount,
-			&i.ExternalMcpToolCount,
-			&i.ExternalMcpID,
-			&i.ExternalMcpRegistryID,
-			&i.ExternalMcpName,
-			&i.ExternalMcpSlug,
-			&i.ExternalMcpRegistryServerSpecifier,
 		); err != nil {
 			return nil, err
 		}
@@ -1630,20 +1601,6 @@ fn_counts AS (
   FROM function_tool_definitions
   WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
   GROUP BY deployment_id
-),
-ema_counts AS (
-  SELECT deployment_id, COUNT(*) AS c
-  FROM external_mcp_attachments
-  WHERE deployment_id IN (SELECT id FROM paged) AND deleted IS FALSE
-  GROUP BY deployment_id
-),
-emtd_counts AS (
-  SELECT ema.deployment_id, COUNT(*) AS c
-  FROM external_mcp_tool_definitions emtd
-  JOIN external_mcp_attachments ema ON emtd.external_mcp_attachment_id = ema.id
-  WHERE ema.deployment_id IN (SELECT id FROM paged)
-    AND ema.deleted IS FALSE AND emtd.deleted IS FALSE
-  GROUP BY ema.deployment_id
 )
 SELECT
   p.id,
@@ -1653,9 +1610,7 @@ SELECT
   COALESCE(oa.c, 0) AS openapiv3_asset_count,
   COALESCE(ht.c, 0) AS openapiv3_tool_count,
   COALESCE(fn.asset_c, 0) AS functions_asset_count,
-  COALESCE(fn.tool_c, 0) AS functions_tool_count,
-  COALESCE(ema.c, 0) AS external_mcp_asset_count,
-  COALESCE(emtd.c, 0) AS external_mcp_tool_count
+  COALESCE(fn.tool_c, 0) AS functions_tool_count
 FROM paged p
 LEFT JOIN LATERAL (
   SELECT status FROM deployment_statuses
@@ -1666,8 +1621,6 @@ LEFT JOIN LATERAL (
 LEFT JOIN oa_counts   oa   ON oa.deployment_id   = p.id
 LEFT JOIN http_counts ht   ON ht.deployment_id   = p.id
 LEFT JOIN fn_counts   fn   ON fn.deployment_id   = p.id
-LEFT JOIN ema_counts  ema  ON ema.deployment_id  = p.id
-LEFT JOIN emtd_counts emtd ON emtd.deployment_id = p.id
 ORDER BY p.id DESC
 `
 
@@ -1677,16 +1630,14 @@ type ListDeploymentsParams struct {
 }
 
 type ListDeploymentsRow struct {
-	ID                    uuid.UUID
-	UserID                string
-	CreatedAt             pgtype.Timestamptz
-	Status                string
-	Openapiv3AssetCount   int64
-	Openapiv3ToolCount    int64
-	FunctionsAssetCount   int64
-	FunctionsToolCount    int64
-	ExternalMcpAssetCount int64
-	ExternalMcpToolCount  int64
+	ID                  uuid.UUID
+	UserID              string
+	CreatedAt           pgtype.Timestamptz
+	Status              string
+	Openapiv3AssetCount int64
+	Openapiv3ToolCount  int64
+	FunctionsAssetCount int64
+	FunctionsToolCount  int64
 }
 
 func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams) ([]ListDeploymentsRow, error) {
@@ -1707,8 +1658,6 @@ func (q *Queries) ListDeployments(ctx context.Context, arg ListDeploymentsParams
 			&i.Openapiv3ToolCount,
 			&i.FunctionsAssetCount,
 			&i.FunctionsToolCount,
-			&i.ExternalMcpAssetCount,
-			&i.ExternalMcpToolCount,
 		); err != nil {
 			return nil, err
 		}

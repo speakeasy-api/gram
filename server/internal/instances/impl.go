@@ -218,7 +218,6 @@ func (s *Service) GetInstance(ctx context.Context, payload *gen.GetInstanceForm)
 		SecurityVariables:            toolset.SecurityVariables,
 		ServerVariables:              toolset.ServerVariables,
 		FunctionEnvironmentVariables: toolset.FunctionEnvironmentVariables,
-		ExternalMcpHeaderDefinitions: toolset.ExternalMcpHeaderDefinitions,
 		Tools:                        toolset.Tools,
 		PromptTemplates:              promptTemplates,
 		McpServers:                   mcpServers,

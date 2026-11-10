@@ -1076,7 +1076,7 @@ describe("useRemoteMcpInstallWorkflow", () => {
       data: {
         mcpServers: [
           {
-            toolset: { registrySpecifier: "test/server", externalMcpSlugs: [] },
+            toolset: { registrySpecifier: "test/server" },
           },
         ],
       },

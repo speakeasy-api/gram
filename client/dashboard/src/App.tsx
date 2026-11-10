@@ -242,8 +242,8 @@ const RouteProvider = () => {
   // section. Stored client-side (localStorage), scoped per workspace.
   // matchesCurrent uses exact segment counts, so the active top-level route is
   // the real current page. We record the EXACT path (not the section base) so a
-  // detail page like /sources/externalmcp/notion is its own entry — labelled by
-  // the item slug ("notion") rather than the section ("Sources").
+  // detail page like /sources/openapi/petstore is its own entry — labelled by
+  // the item slug ("petstore") rather than the section ("Sources").
   useEffect(() => {
     // Wait until the user id resolves before recording — otherwise the early
     // write lands on the shared anonymous key instead of the per-user one.

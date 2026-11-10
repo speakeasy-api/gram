@@ -10689,10 +10689,6 @@ components:
         active_deployment_id:
           type: string
           description: Deployment a redeploy would clone. Send it back as expected_active_deployment_id.
-        external_mcps:
-          type: integer
-          description: External MCP sources the new deployment would drop.
-          format: int64
         function_assets:
           type: integer
           description: Function sources whose runners would be deployed again.
@@ -10723,7 +10719,6 @@ components:
         - openapi_assets
         - function_assets
         - packages
-        - external_mcps
     AdminProjectRedeployResult:
       type: object
       properties:

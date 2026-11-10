@@ -1358,20 +1358,13 @@ function buildAssistantTools(deps: ToolDeps) {
           const res = await sdk.tools.list({
             urnPrefix: urn_prefix,
             limit,
-            toolTypes: [
-              "http",
-              "function",
-              "prompt",
-              "platform",
-              "externalmcp",
-            ],
+            toolTypes: ["http", "function", "prompt", "platform"],
           });
           return okResult({
             tools: res.tools.map((t) => {
               const def =
                 t.httpToolDefinition ??
                 t.functionToolDefinition ??
-                t.externalMcpToolDefinition ??
                 t.platformToolDefinition;
               const prompt = t.promptTemplate;
               return {
@@ -1380,7 +1373,6 @@ function buildAssistantTools(deps: ToolDeps) {
                 tool_urn:
                   t.httpToolDefinition?.toolUrn ??
                   t.functionToolDefinition?.toolUrn ??
-                  t.externalMcpToolDefinition?.toolUrn ??
                   t.platformToolDefinition?.toolUrn,
               };
             }),

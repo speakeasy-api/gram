@@ -90,7 +90,7 @@ func TestProjectRedeployApplies(t *testing.T) {
 	require.Equal(t, active.String(), receipt.SourceDeploymentID)
 	require.NotEqual(t, active.String(), receipt.DeploymentID)
 	require.Equal(t, "Project redeploy", receipt.ProjectName)
-	require.Contains(t, receipt.SideEffects, "External MCP sources are not carried over")
+	require.Equal(t, projectRedeploySideEffects, receipt.SideEffects)
 
 	require.Len(t, redeployer.prepared, 1)
 	staff, ok := contextvalues.GetAdminAuthContext(ctx)

@@ -18,7 +18,6 @@ import {
   MCPToolFilterScopesPanel,
 } from "@/pages/mcp/MCPToolFilterScopesPanel";
 import { AddToolsDialog } from "@/pages/toolsets/AddToolsDialog";
-import { ServerTabContent } from "@/pages/toolsets/ServerTab";
 import { ToolsetEmptyState } from "@/pages/toolsets/ToolsetEmptyState";
 import { useRoutes } from "@/routes";
 import {
@@ -87,7 +86,6 @@ export function HostedToolsTab({
   }, [effectiveActiveTag, toolFilters]);
 
   // Check if this is an external MCP proxy server
-  const isExternalMcpProxy = fullToolset?.kind === "external-mcp-proxy";
 
   // Check if we have orphaned tool URNs (URNs exist but tools were deleted)
   const hasOrphanedTools =
@@ -176,11 +174,6 @@ export function HostedToolsTab({
     },
   });
 
-  // For external MCP proxy servers, show the server info instead of tools list
-  if (isExternalMcpProxy && fullToolset) {
-    return <ServerTabContent toolset={fullToolset} />;
-  }
-
   const groupFilterItems = grouped.map((group) => ({
     label: group.key,
     value: group.key,
@@ -205,32 +198,30 @@ export function HostedToolsTab({
 
   return (
     <Stack className="mb-4">
-      {!isExternalMcpProxy && (
-        <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-4"
-        >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <PageEyebrow />
-            <h1 className="text-display-sm font-thin">Tools</h1>
-          </div>
-          <Stack direction="horizontal" gap={2}>
-            {canWrite && (
-              <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Tools</Button.Text>
-              </Button>
-            )}
-          </Stack>
+      <Stack
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <PageEyebrow />
+          <h1 className="text-display-sm font-thin">Tools</h1>
+        </div>
+        <Stack direction="horizontal" gap={2}>
+          {canWrite && (
+            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Tools</Button.Text>
+            </Button>
+          )}
         </Stack>
-      )}
+      </Stack>
 
       {/* Read-only tool filtering scopes panel (only when filtering enabled) */}
-      {!isExternalMcpProxy && filteringEnabled && toolFilters && (
+      {filteringEnabled && toolFilters && (
         <MCPToolFilterScopesPanel
           filters={toolFilters}
           activeTag={effectiveActiveTag}
@@ -239,7 +230,7 @@ export function HostedToolsTab({
       )}
 
       {/* Group filter */}
-      {!isExternalMcpProxy && groupFilterItems.length > 1 && (
+      {groupFilterItems.length > 1 && (
         <div className="relative mb-4 w-full">
           <MultiSelect
             options={groupFilterItems}
@@ -285,7 +276,7 @@ export function HostedToolsTab({
       )}
 
       {/* Add Tools Dialog */}
-      {fullToolset && !isExternalMcpProxy && (
+      {fullToolset && (
         <AddToolsDialog
           open={addToolsDialogOpen}
           onOpenChange={setAddToolsDialogOpen}

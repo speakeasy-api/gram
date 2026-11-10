@@ -2425,10 +2425,6 @@ WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
 
--- name: CreateExternalMCPAttachmentFixture :exec
-INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
-VALUES (@deployment_id, @name, @slug, @registry_server_specifier);
-
 -- name: ExpireUserSessionFixture :execrows
 -- Test-only fixture: expires a session without waiting for its access token TTL.
 UPDATE user_sessions

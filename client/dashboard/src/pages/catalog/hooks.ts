@@ -1,7 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
-import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import {
   listedMcpServers,
@@ -10,12 +9,10 @@ import {
 import {
   catalogInstances,
   catalogServerInstallState,
-  liveCatalogExternalMcp,
   normalizedUrlSet,
   type CatalogInstallState,
 } from "@/pages/catalog/catalogInstall";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
-import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
@@ -88,9 +85,8 @@ function useListMCPCatalogImpl(
 export function useListMCPCatalog(
   search?: string,
   registryId?: string,
-  // Callers that only need the catalog conditionally (e.g. only for
-  // external-MCP-backed toolsets) can defer the fetch entirely rather than
-  // always paying for it on mount.
+  // Callers that only need the catalog conditionally can defer the fetch
+  // entirely rather than always paying for it on mount.
   options?: CatalogQueryOptions,
 ): ReturnType<typeof useListMCPCatalogImpl> {
   return useListMCPCatalogImpl(search, registryId, options);
@@ -103,15 +99,13 @@ export function useListMCPCatalog(
  *
  * Current installs are remote or unproxied MCP servers matched by endpoint
  * URL. Older installs are MCP servers whose toolset records the catalog
- * specifier, or a deployment attachment one of those servers still selects.
- * An attachment left behind after that server is deleted does not count.
+ * specifier.
  *
  * Lookups are keyed by project. A lookup that is still loading or has failed
  * leaves the state "unknown" instead of claiming the server is not added.
  */
 export function useCatalogInstallations(projectSlug?: string): {
   installState: (server: CatalogServer) => CatalogInstallState;
-  liveExternalMcp: (server: CatalogServer) => DeploymentExternalMCP | undefined;
   /** Undefined until every lookup has data. */
   instances: (server: CatalogServer) => ListedMcpServer[] | undefined;
 } {
@@ -129,12 +123,7 @@ export function useCatalogInstallations(projectSlug?: string): {
     undefined,
     queryOptions,
   );
-  const deploymentQuery = useLatestDeployment(
-    projectRequest,
-    undefined,
-    queryOptions,
-  );
-  // Server summaries carry the catalog specifier and external-MCP slugs.
+  // Server summaries carry the catalog specifier.
   // The full toolset list includes every tool definition, which this check
   // does not need.
   const serversQuery = useMcpServers(projectRequest, undefined, queryOptions);
@@ -155,64 +144,36 @@ export function useCatalogInstallations(projectSlug?: string): {
       ),
     [unproxiedQuery.data?.unproxiedMcpServers],
   );
-  const serverEvidence = useMemo(() => {
+  const originSpecifiers = useMemo(() => {
     const originSpecifiers = new Set<string>();
-    const referencedExternalMcpSlugs = new Set<string>();
     for (const server of serversQuery.data?.mcpServers ?? []) {
       const specifier = server.toolset?.registrySpecifier;
       if (specifier) originSpecifiers.add(specifier);
-      for (const slug of server.toolset?.externalMcpSlugs ?? []) {
-        if (slug) referencedExternalMcpSlugs.add(slug);
-      }
     }
-    return { originSpecifiers, referencedExternalMcpSlugs };
+    return originSpecifiers;
   }, [serversQuery.data?.mcpServers]);
 
-  const externalMcps = deploymentQuery.data?.deployment?.externalMcps;
   const ready = useMemo(
     () => ({
       remote: remoteQuery.data !== undefined,
       unproxied: unproxiedQuery.data !== undefined,
       servers: serversQuery.data !== undefined,
-      deployment: deploymentQuery.data !== undefined,
     }),
-    [
-      remoteQuery.data,
-      unproxiedQuery.data,
-      serversQuery.data,
-      deploymentQuery.data,
-    ],
+    [remoteQuery.data, unproxiedQuery.data, serversQuery.data],
   );
   const evidence = useMemo(
     () => ({
       remoteUrls,
       unproxiedUrls,
-      originSpecifiers: serverEvidence.originSpecifiers,
-      referencedExternalMcpSlugs: serverEvidence.referencedExternalMcpSlugs,
+      originSpecifiers,
     }),
-    [remoteUrls, unproxiedUrls, serverEvidence],
+    [remoteUrls, unproxiedUrls, originSpecifiers],
   );
 
   const installState = useCallback(
     (server: CatalogServer) =>
-      catalogServerInstallState(server, evidence, externalMcps ?? [], ready),
-    [evidence, externalMcps, ready],
-  );
-  const liveExternalMcp = useCallback(
-    (server: CatalogServer) => {
-      if (!ready.servers || !ready.deployment) return undefined;
-      return liveCatalogExternalMcp(
-        server,
-        externalMcps ?? [],
-        evidence.referencedExternalMcpSlugs,
-      );
-    },
-    [
-      evidence.referencedExternalMcpSlugs,
-      externalMcps,
-      ready.deployment,
-      ready.servers,
-    ],
+      catalogServerInstallState(server, evidence, ready),
+    [evidence, ready],
   );
 
   const remoteUrlById = useMemo(
@@ -238,12 +199,7 @@ export function useCatalogInstallations(projectSlug?: string): {
   );
   const instances = useCallback(
     (server: CatalogServer) => {
-      if (
-        !ready.remote ||
-        !ready.unproxied ||
-        !ready.servers ||
-        !ready.deployment
-      ) {
+      if (!ready.remote || !ready.unproxied || !ready.servers) {
         return undefined;
       }
       const matched = new Set(
@@ -252,13 +208,12 @@ export function useCatalogInstallations(projectSlug?: string): {
           listed.map((entry) => entry.server),
           remoteUrlById,
           unproxiedUrlById,
-          externalMcps ?? [],
         ),
       );
       return listed.filter((entry) => matched.has(entry.server));
     },
-    [ready, listed, remoteUrlById, unproxiedUrlById, externalMcps],
+    [ready, listed, remoteUrlById, unproxiedUrlById],
   );
 
-  return { installState, liveExternalMcp, instances };
+  return { installState, instances };
 }

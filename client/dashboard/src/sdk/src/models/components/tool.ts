@@ -8,10 +8,6 @@ import { safeParse } from "../../lib/schemas.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
-  ExternalMCPToolDefinition,
-  ExternalMCPToolDefinition$inboundSchema,
-} from "./externalmcptooldefinition.js";
-import {
   FunctionToolDefinition,
   FunctionToolDefinition$inboundSchema,
 } from "./functiontooldefinition.js";
@@ -29,13 +25,9 @@ import {
 } from "./prompttemplate.js";
 
 /**
- * A polymorphic tool - can be an HTTP tool, function tool, prompt template, or external MCP proxy
+ * A polymorphic tool - can be an HTTP tool, function tool, prompt template, or platform tool
  */
 export type Tool = {
-  /**
-   * A proxy tool that references an external MCP server
-   */
-  externalMcpToolDefinition?: ExternalMCPToolDefinition | undefined;
   /**
    * A function tool
    */
@@ -57,9 +49,6 @@ export type Tool = {
 /** @internal */
 export const Tool$inboundSchema: z.ZodMiniType<Tool, unknown> = z.pipe(
   z.object({
-    external_mcp_tool_definition: z.optional(
-      ExternalMCPToolDefinition$inboundSchema,
-    ),
     function_tool_definition: z.optional(FunctionToolDefinition$inboundSchema),
     http_tool_definition: z.optional(HTTPToolDefinition$inboundSchema),
     platform_tool_definition: z.optional(PlatformToolDefinition$inboundSchema),
@@ -67,7 +56,6 @@ export const Tool$inboundSchema: z.ZodMiniType<Tool, unknown> = z.pipe(
   }),
   z.transform((v) => {
     return remap$(v, {
-      "external_mcp_tool_definition": "externalMcpToolDefinition",
       "function_tool_definition": "functionToolDefinition",
       "http_tool_definition": "httpToolDefinition",
       "platform_tool_definition": "platformToolDefinition",

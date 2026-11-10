@@ -16,8 +16,7 @@ import {
   type McpServerKind,
 } from "./mcp-server-kind";
 import { SpeakeasyMark } from "./OrganizationGatewayCard";
-import { AlertTriangleIcon, Link2, Network } from "lucide-react";
-import { useHostedMcpOAuthConfigStatus } from "../sources/sources-hooks";
+import { Link2, Network } from "lucide-react";
 
 /** Table rows of the /mcp listing; gateways and servers share Name, Kind, Address, Contents. */
 
@@ -171,14 +170,10 @@ export function MCPServerTableRow({
   const routes = useRoutes();
   const hosted = kind === "hosted";
   const toolset = hosted ? server.toolset : undefined;
-  const oauthStatus = useHostedMcpOAuthConfigStatus({
-    toolset,
-    userSessionIssuerId: server.userSessionIssuerId,
-  });
   const name = mcpServerDisplayName(server);
   return (
     <DotRow
-      href={mcpServerHref(routes, server, oauthStatus)}
+      href={mcpServerHref(routes, server)}
       ariaLabel={`Open MCP server ${name}`}
       icon={
         <SourceMcpIcon
@@ -187,16 +182,7 @@ export function MCPServerTableRow({
         />
       }
     >
-      <NameCell name={name}>
-        {oauthStatus === "required-unconfigured" && (
-          <Badge variant="warning">
-            <Badge.LeftIcon>
-              <AlertTriangleIcon />
-            </Badge.LeftIcon>
-            <Badge.Text>OAuth Required</Badge.Text>
-          </Badge>
-        )}
-      </NameCell>
+      <NameCell name={name} />
       <td className={CELL}>
         <Badge variant="neutral">{MCP_SERVER_KIND_LABEL[kind]}</Badge>
       </td>

@@ -901,28 +901,6 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 	return err
 }
 
-const createExternalMCPAttachmentFixture = `-- name: CreateExternalMCPAttachmentFixture :exec
-INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
-VALUES ($1, $2, $3, $4)
-`
-
-type CreateExternalMCPAttachmentFixtureParams struct {
-	DeploymentID            uuid.UUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-}
-
-func (q *Queries) CreateExternalMCPAttachmentFixture(ctx context.Context, arg CreateExternalMCPAttachmentFixtureParams) error {
-	_, err := q.db.Exec(ctx, createExternalMCPAttachmentFixture,
-		arg.DeploymentID,
-		arg.Name,
-		arg.Slug,
-		arg.RegistryServerSpecifier,
-	)
-	return err
-}
-
 const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
 INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
 SELECT s.project_id, s.id, $1::uuid, $2

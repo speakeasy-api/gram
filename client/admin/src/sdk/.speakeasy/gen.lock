@@ -1130,7 +1130,7 @@ examples:
           project_id: "<id>"
       responses:
         "200":
-          application/json: {"active_deployment_id": "<id>", "external_mcps": 350939, "function_assets": 680909, "openapi_assets": 613857, "organization_id": "<id>", "packages": 444954, "project_id": "<id>", "project_name": "<value>"}
+          application/json: {"active_deployment_id": "<id>", "function_assets": 680909, "openapi_assets": 613857, "organization_id": "<id>", "packages": 444954, "project_id": "<id>", "project_name": "<value>"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

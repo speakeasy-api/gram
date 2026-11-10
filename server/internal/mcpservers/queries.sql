@@ -896,16 +896,6 @@ SELECT
       WHERE u.urn LIKE 'tools:platform:%'
       ORDER BY u.urn
     )::text[] AS platform_tool_urns
-  , ARRAY(
-      SELECT DISTINCT split_part(u.urn, ':', 3) AS slug
-      FROM unnest(lv.tool_urns) AS u(urn)
-      WHERE u.urn LIKE 'tools:externalmcp:%'
-      ORDER BY slug
-    )::text[] AS external_mcp_slugs
-  , (
-      EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn LIKE 'tools:externalmcp:%:proxy')
-      AND NOT EXISTS (SELECT 1 FROM unnest(lv.tool_urns) AS u(urn) WHERE u.urn NOT LIKE 'tools:externalmcp:%:proxy')
-    )::boolean AS external_mcp_proxy_only
   , COALESCE(origin.origin_registry_specifier, '')::text AS registry_specifier
 FROM toolsets t
 LEFT JOIN LATERAL (

@@ -3,8 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   catalogInstances,
   catalogServerInstallState,
-  externalMcpSlugFromToolUrn,
-  liveCatalogExternalMcp,
   type CatalogInstallEvidence,
   type CatalogInstallReady,
 } from "./catalogInstall";
@@ -14,61 +12,35 @@ const github = {
   remotes: [{ url: "https://api.githubcopilot.com/mcp/" }],
 };
 
-const attachment = {
-  slug: "github",
-  registryServerSpecifier: github.registrySpecifier,
-};
-
 const emptyEvidence: CatalogInstallEvidence = {
   remoteUrls: new Set(),
   unproxiedUrls: new Set(),
   originSpecifiers: new Set(),
-  referencedExternalMcpSlugs: new Set(),
 };
 
 const allReady: CatalogInstallReady = {
   remote: true,
   unproxied: true,
   servers: true,
-  deployment: true,
 };
 
 function stateFor(
   evidence: Partial<CatalogInstallEvidence>,
   ready: Partial<CatalogInstallReady> = {},
-  externalMcps: (typeof attachment)[] = [],
 ) {
   return catalogServerInstallState(
     github,
     { ...emptyEvidence, ...evidence },
-    externalMcps,
     { ...allReady, ...ready },
   );
 }
-
-describe("externalMcpSlugFromToolUrn", () => {
-  it("reads the source slug from any tool name", () => {
-    expect(externalMcpSlugFromToolUrn("tools:externalmcp:github:proxy")).toBe(
-      "github",
-    );
-    expect(
-      externalMcpSlugFromToolUrn("tools:externalmcp:github:listRepos"),
-    ).toBe("github");
-  });
-
-  it("ignores other tool kinds", () => {
-    expect(
-      externalMcpSlugFromToolUrn("tools:http:github:proxy"),
-    ).toBeUndefined();
-  });
-});
 
 describe("catalogServerInstallState", () => {
   it("matches a remote URL before the other lookups finish", () => {
     expect(
       stateFor(
         { remoteUrls: new Set(["https://api.githubcopilot.com/mcp"]) },
-        { unproxied: false, servers: false, deployment: false },
+        { unproxied: false, servers: false },
       ),
     ).toBe("added");
   });
@@ -87,7 +59,6 @@ describe("catalogServerInstallState", () => {
           ...emptyEvidence,
           remoteUrls: new Set(["https://mcp.example.com/b"]),
         },
-        [],
         allReady,
       ),
     ).toBe("added");
@@ -104,34 +75,19 @@ describe("catalogServerInstallState", () => {
 
   it("stays unknown until every lookup has data", () => {
     expect(stateFor({}, { remote: false })).toBe("unknown");
+    expect(stateFor({}, { unproxied: false })).toBe("unknown");
     expect(stateFor({}, { servers: false })).toBe("unknown");
-    expect(stateFor({}, { deployment: false })).toBe("unknown");
   });
 
   it("is not-added only after every lookup succeeded with no match", () => {
     expect(stateFor({})).toBe("not-added");
   });
 
-  it("does not treat a deployment attachment with no server as installed", () => {
-    expect(stateFor({}, {}, [attachment])).toBe("not-added");
-    expect(
-      liveCatalogExternalMcp(github, [attachment], new Set()),
-    ).toBeUndefined();
-  });
-
-  it("treats an attachment as installed when a server still selects its slug", () => {
-    expect(
-      stateFor({ referencedExternalMcpSlugs: new Set(["github"]) }, {}, [
-        attachment,
-      ]),
-    ).toBe("added");
-  });
-
-  it("treats a server catalog origin as installed without an attachment", () => {
+  it("treats a server catalog origin as installed", () => {
     expect(
       stateFor(
         { originSpecifiers: new Set([github.registrySpecifier]) },
-        { deployment: false },
+        { remote: false, unproxied: false },
       ),
     ).toBe("added");
   });
@@ -141,7 +97,6 @@ describe("catalogServerInstallState", () => {
       stateFor({
         remoteUrls: new Set(["https://mcp.other.example/mcp"]),
         originSpecifiers: new Set(["com.other/server"]),
-        referencedExternalMcpSlugs: new Set(["other"]),
       }),
     ).toBe("not-added");
   });
@@ -157,46 +112,32 @@ describe("catalogInstances", () => {
       ["r1", "https://api.githubcopilot.com/mcp"],
       ["r2", "https://example.com/mcp"],
     ]);
-    expect(catalogInstances(github, [remote, other], urls, noUrls, [])).toEqual(
-      [remote],
-    );
+    expect(catalogInstances(github, [remote, other], urls, noUrls)).toEqual([
+      remote,
+    ]);
   });
 
   it("matches an unproxied server by endpoint URL", () => {
     const unproxied = { id: "a", unproxiedMcpServerId: "u1" };
     const urls = new Map([["u1", "https://api.githubcopilot.com/mcp/"]]);
-    expect(catalogInstances(github, [unproxied], noUrls, urls, [])).toEqual([
+    expect(catalogInstances(github, [unproxied], noUrls, urls)).toEqual([
       unproxied,
     ]);
   });
 
-  it("matches an older install by toolset origin or attachment slug", () => {
+  it("matches an older install by toolset origin", () => {
     const origin = {
       id: "a",
-      toolset: {
-        registrySpecifier: github.registrySpecifier,
-        externalMcpSlugs: [],
-      },
+      toolset: { registrySpecifier: github.registrySpecifier },
     };
-    const attached = { id: "b", toolset: { externalMcpSlugs: ["github"] } };
-    const unrelated = { id: "c", toolset: { externalMcpSlugs: ["linear"] } };
+    const unrelated = { id: "b", toolset: { registrySpecifier: "other/mcp" } };
     expect(
-      catalogInstances(github, [origin, attached, unrelated], noUrls, noUrls, [
-        attachment,
-      ]),
-    ).toEqual([origin, attached]);
-  });
-
-  it("ignores an attachment slug that belongs to another entry", () => {
-    const attached = { id: "a", toolset: { externalMcpSlugs: ["github"] } };
-    const otherEntry = { slug: "github", registryServerSpecifier: "other/mcp" };
-    expect(
-      catalogInstances(github, [attached], noUrls, noUrls, [otherEntry]),
-    ).toEqual([]);
+      catalogInstances(github, [origin, unrelated], noUrls, noUrls),
+    ).toEqual([origin]);
   });
 
   it("does not match a server whose remote is no longer listed", () => {
     const orphan = { id: "a", remoteMcpServerId: "gone" };
-    expect(catalogInstances(github, [orphan], noUrls, noUrls, [])).toEqual([]);
+    expect(catalogInstances(github, [orphan], noUrls, noUrls)).toEqual([]);
   });
 });

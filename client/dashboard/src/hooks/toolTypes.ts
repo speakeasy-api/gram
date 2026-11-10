@@ -1,5 +1,4 @@
 import { asResource, asTools } from "@/lib/toolTypes";
-import { Tool as GeneratedTool } from "@gram/client/models/components/tool.js";
 import {
   ListToolsRequest,
   ListToolsSecurity,
@@ -35,17 +34,6 @@ import {
   useToolset as useToolsetQuery,
 } from "@gram/client/react-query/toolset.js";
 
-type ToolsetKind = "default" | "external-mcp-proxy";
-
-function detectToolsetKind(tools: GeneratedTool[]): ToolsetKind {
-  const hasExternalMcpProxy = tools.some(
-    (t) =>
-      t.externalMcpToolDefinition !== undefined &&
-      t.externalMcpToolDefinition.type === "proxy",
-  );
-  return hasExternalMcpProxy ? "external-mcp-proxy" : "default";
-}
-
 function useToolsetImpl(
   toolsetSlug: string | undefined,
   options?: QueryHookOptions<ToolsetQueryData, ToolsetQueryError>,
@@ -55,7 +43,6 @@ function useToolsetImpl(
     enabled: !!toolsetSlug && (options?.enabled ?? true),
   });
 
-  const kind = detectToolsetKind(result.data?.tools ?? []);
   const tools = asTools(result.data?.tools ?? []);
 
   return {
@@ -63,7 +50,6 @@ function useToolsetImpl(
     data: result.data
       ? {
           ...result.data,
-          kind,
           tools,
           rawTools: result.data.tools ?? [],
           resources: result.data.resources?.map(asResource) ?? [],

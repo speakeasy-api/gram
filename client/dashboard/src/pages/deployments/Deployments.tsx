@@ -57,8 +57,6 @@ type DeploymentSummary = {
   openapiv3ToolCount: number;
   functionsAssetCount: number;
   functionsToolCount: number;
-  externalMcpAssetCount: number;
-  externalMcpToolCount: number;
 };
 
 function useDeploymentActions(
@@ -265,19 +263,13 @@ function DeploymentsTable() {
     {
       key: "assetCount",
       header: "Assets",
-      render: (row) =>
-        row.openapiv3AssetCount +
-        row.functionsAssetCount +
-        row.externalMcpAssetCount,
+      render: (row) => row.openapiv3AssetCount + row.functionsAssetCount,
       width: "150px",
     },
     {
       key: "toolCount",
       header: "Tools",
-      render: (row) =>
-        row.openapiv3ToolCount +
-        row.functionsToolCount +
-        row.externalMcpToolCount,
+      render: (row) => row.openapiv3ToolCount + row.functionsToolCount,
       width: "120px",
     },
     {

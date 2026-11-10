@@ -3047,8 +3047,6 @@ type GetProjectRedeployPreviewResponseBody struct {
 	FunctionAssets int `form:"function_assets" json:"function_assets" xml:"function_assets"`
 	// Packages carried into the new deployment.
 	Packages int `form:"packages" json:"packages" xml:"packages"`
-	// External MCP sources the new deployment would drop.
-	ExternalMcps int `form:"external_mcps" json:"external_mcps" xml:"external_mcps"`
 }
 
 // RedeployProjectResponseBody is the type of the "admin" service
@@ -27743,7 +27741,6 @@ func NewGetProjectRedeployPreviewResponseBody(res *admin.AdminProjectRedeployPre
 		OpenapiAssets:      res.OpenapiAssets,
 		FunctionAssets:     res.FunctionAssets,
 		Packages:           res.Packages,
-		ExternalMcps:       res.ExternalMcps,
 	}
 	return body
 }

@@ -1,8 +1,7 @@
-import { attachmentToURNPrefix, mcpServerRouteParam } from "@/lib/sources";
+import { mcpServerRouteParam } from "@/lib/sources";
 import type { Deployment } from "@gram/client/models/components/deployment.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
-import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import type { TunneledMcpServer } from "@gram/client/models/components/tunneledmcpserver.js";
 import type { UnproxiedMcpServer } from "@gram/client/models/components/unproxiedmcpserver.js";
 
@@ -12,7 +11,6 @@ export type LegacySourceKind =
   | "openapi"
   | "http"
   | "function"
-  | "externalmcp"
   | "remotemcp"
   | "tunneledmcp"
   | "unproxiedmcp";
@@ -21,7 +19,6 @@ const LEGACY_SOURCE_KINDS: readonly string[] = [
   "openapi",
   "http",
   "function",
-  "externalmcp",
   "remotemcp",
   "tunneledmcp",
   "unproxiedmcp",
@@ -39,21 +36,18 @@ export function parseLegacySourceKind(
 export function legacySourceKindLookups(kind: LegacySourceKind | undefined): {
   deployment: boolean;
   mcpServers: boolean;
-  toolsets: boolean;
 } {
   switch (kind) {
     case "openapi":
     case "http":
     case "function":
-      return { deployment: true, mcpServers: false, toolsets: false };
+      return { deployment: true, mcpServers: false };
     case "remotemcp":
     case "tunneledmcp":
     case "unproxiedmcp":
-      return { deployment: false, mcpServers: true, toolsets: false };
-    case "externalmcp":
-      return { deployment: false, mcpServers: false, toolsets: true };
+      return { deployment: false, mcpServers: true };
     case undefined:
-      return { deployment: false, mcpServers: false, toolsets: false };
+      return { deployment: false, mcpServers: false };
   }
 }
 
@@ -63,7 +57,6 @@ export type LegacySourceLookup = {
   remoteMcpServers: RemoteMcpServer[];
   tunneledMcpServers: TunneledMcpServer[];
   unproxiedMcpServers: UnproxiedMcpServer[];
-  toolsets: ToolsetEntry[];
 };
 
 export type LegacySourceTarget =
@@ -71,8 +64,6 @@ export type LegacySourceTarget =
   | { kind: "source"; assetId: string }
   /** /mcp/:mcpServerSlug, the server fronting a remote/tunneled/unproxied source. */
   | { kind: "mcp-server"; routeParam: string }
-  /** /mcp/:toolsetSlug, the toolset carrying an external MCP's tools. */
-  | { kind: "toolset"; slug: string }
   | { kind: "sources-list" }
   | { kind: "mcp-list" };
 
@@ -146,21 +137,6 @@ export function resolveLegacySourceRedirect(
             (server) => server.unproxiedMcpServerId === source.id,
           ),
       );
-    }
-    case "externalmcp": {
-      // A catalog-imported source contributes one URN per registry tool
-      // (`tools:externalmcp:<slug>:<toolName>`); only the no-tools fallback
-      // uses `:proxy`. The source-scoped prefix matches both shapes.
-      const prefix = attachmentToURNPrefix("externalmcp", sourceSlug);
-      const toolsets = lookup.toolsets.filter((candidate) =>
-        candidate.toolUrns.some((urn) => urn.startsWith(prefix)),
-      );
-      // Several servers can carry the same external MCP; picking one would
-      // land on an arbitrary server, so the list is the honest target.
-      const [toolset] = toolsets;
-      return toolset && toolsets.length === 1
-        ? { kind: "toolset", slug: toolset.slug }
-        : { kind: "mcp-list" };
     }
     case undefined:
       return { kind: "sources-list" };

@@ -9,11 +9,9 @@ import { Stack } from "@/components/ui/Stack";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
 import { useSession } from "@/contexts/Auth";
-import { useFetcher } from "@/contexts/Fetcher";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { Toolset } from "@/lib/toolTypes";
-import { getServerURL } from "@/lib/utils";
 import { useProductTier } from "@/hooks/useProductTier";
 import type { RemoteSessionIssuerDraft } from "@gram/client/models/components/remotesessionissuerdraft.js";
 import { buildFetchRemoteSessionIssuerMetadataMutation } from "@gram/client/react-query/fetchRemoteSessionIssuerMetadata.js";
@@ -25,8 +23,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import { AutoConfigureLoader } from "./AutoConfigureLoader";
-import { AutoRegisterFailedStep } from "./AutoRegisterFailedStep";
 import { ExternalOAuthForm } from "./ExternalOAuthForm";
 import { validateProviderIssuerUrl } from "./externalOAuthMetadata";
 import { VerifiedOAuthMetadata } from "./VerifiedOAuthMetadata";
@@ -36,7 +32,7 @@ import {
   selectWizardTitle,
   WizardContext,
 } from "./machine";
-import type { DiscoveredOAuth, Input as WizardInput } from "./machine-types";
+import type { Input as WizardInput } from "./machine-types";
 import { PathSelection } from "./PathSelection";
 import { ProxyCredentialsForm } from "./ProxyCredentialsForm";
 import { ProxyMetadataForm } from "./ProxyMetadataForm";
@@ -338,14 +334,10 @@ function WizardBody({
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const session = useSession();
-  const { fetch: authedFetch } = useFetcher();
-
-  const discovered = useDiscoveredOAuth(toolset);
-
   const provided = useMemo(
     () =>
       oauthWizardMachine.provide({
-        actors: createWizardServices(client, authedFetch),
+        actors: createWizardServices(client),
         actions: {
           invalidateOnExternalSuccess: () => {
             void invalidateAllToolset(queryClient);
@@ -371,11 +363,10 @@ function WizardBody({
           },
         },
       }),
-    [client, queryClient, telemetry, toolsetSlug, authedFetch],
+    [client, queryClient, telemetry, toolsetSlug],
   );
 
   const input: WizardInput = {
-    discovered,
     initialPath,
     toolsetId: toolset.id,
     toolsetSlug,
@@ -403,7 +394,6 @@ function WizardSteps({
   const hasMultipleOAuth2AuthCode = oauth2SecurityCount > 1;
 
   const isProxyCreating = state.matches({ proxy: "submitting" });
-  const isAutoRegistering = state.context.autoRegistering;
 
   return (
     <>
@@ -423,15 +413,9 @@ function WizardSteps({
 
       {state.matches({ proxy: "metadata" }) && <ProxyMetadataForm />}
 
-      {(state.matches({ proxy: "registering" }) ||
-        (isProxyCreating && isAutoRegistering)) && <AutoConfigureLoader />}
-
-      {state.matches({ proxy: "autoRegisterFailed" }) && (
-        <AutoRegisterFailedStep error={state.context.error} onClose={onClose} />
+      {(state.matches({ proxy: "credentials" }) || isProxyCreating) && (
+        <ProxyCredentialsForm />
       )}
-
-      {(state.matches({ proxy: "credentials" }) ||
-        (isProxyCreating && !isAutoRegistering)) && <ProxyCredentialsForm />}
 
       {state.matches({ proxy: "fatalError" }) && (
         <FatalErrorStep error={state.context.error} onClose={onClose} />
@@ -447,41 +431,6 @@ function WizardSteps({
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function useDiscoveredOAuth(toolset: Toolset): DiscoveredOAuth | null {
-  return useMemo<DiscoveredOAuth | null>(() => {
-    const baseURL = getServerURL();
-    const mcpSlug = toolset.mcpSlug;
-    for (const tool of toolset.rawTools) {
-      const def = tool.externalMcpToolDefinition;
-      if (!def?.requiresOauth) continue;
-      if (!def.oauthAuthorizationEndpoint && !def.oauthTokenEndpoint) continue;
-
-      const metadata: Record<string, unknown> = {
-        issuer: `${baseURL}/mcp/${mcpSlug}`,
-        response_types_supported: ["code"],
-        grant_types_supported: ["authorization_code", "refresh_token"],
-        code_challenge_methods_supported: ["S256"],
-      };
-      if (def.oauthAuthorizationEndpoint)
-        metadata.authorization_endpoint = def.oauthAuthorizationEndpoint;
-      if (def.oauthTokenEndpoint)
-        metadata.token_endpoint = def.oauthTokenEndpoint;
-      if (def.oauthRegistrationEndpoint)
-        metadata.registration_endpoint = def.oauthRegistrationEndpoint;
-      if (def.oauthScopesSupported?.length)
-        metadata.scopes_supported = def.oauthScopesSupported;
-
-      return {
-        slug: def.slug,
-        name: def.registryServerName,
-        version: def.oauthVersion,
-        metadata,
-      };
-    }
-    return null;
-  }, [toolset.rawTools, toolset.mcpSlug]);
-}
 
 // ---------------------------------------------------------------------------
 // Public wrapper (handles free-tier gating)

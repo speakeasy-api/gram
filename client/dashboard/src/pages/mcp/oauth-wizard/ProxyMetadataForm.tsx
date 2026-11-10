@@ -13,7 +13,6 @@ export function ProxyMetadataForm(): JSX.Element {
   const send = actorRef.send.bind(actorRef);
   const proxy = WizardContext.useSelector((s) => s.context.proxy);
   const error = WizardContext.useSelector((s) => s.context.error);
-  const discovered = WizardContext.useSelector((s) => s.context.discovered);
 
   const setField = (key: ProxyFormKey, value: string) =>
     send({ type: "FIELD_PROXY", key, value });
@@ -36,40 +35,6 @@ export function ProxyMetadataForm(): JSX.Element {
               Book a meeting
             </Link>
           </Text>
-
-          {discovered && !proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 flex items-start justify-between gap-4 border p-4">
-              <div>
-                <Text small className="font-medium">
-                  OAuth detected from {discovered.name}
-                </Text>
-                <Text muted small className="mt-1">
-                  We discovered OAuth {discovered.version} metadata from this
-                  server. You can use it to pre-fill the endpoints below.
-                </Text>
-              </div>
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={() => send({ type: "APPLY_DISCOVERED" })}
-              >
-                Apply
-              </Button>
-            </div>
-          )}
-          {proxy.prefilled && (
-            <div className="border-border bg-muted/50 mb-4 border p-4">
-              <Text small className="font-medium">
-                Pre-filled from detected OAuth metadata
-              </Text>
-              <Text muted small className="mt-1">
-                This form has been pre-filled with information Speakeasy
-                detected about this server's OAuth requirements. Please review
-                carefully and refer to the MCP server or API's documentation to
-                confirm these values are correct.
-              </Text>
-            </div>
-          )}
 
           {error && <Text className="mb-4 text-sm text-red-500!">{error}</Text>}
 

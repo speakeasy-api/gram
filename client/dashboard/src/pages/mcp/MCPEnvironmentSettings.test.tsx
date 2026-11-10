@@ -5,11 +5,6 @@ import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const oauthState = vi.hoisted(() => ({ status: "configured" }));
-
-vi.mock("@/components/sources/sources-hooks", () => ({
-  useExternalMcpOAuthConfigStatus: () => oauthState.status,
-}));
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ activeOrganizationId: "org-1" }),
 }));
@@ -126,7 +121,6 @@ import { MCPAuthenticationTab } from "./MCPEnvironmentSettings";
 
 afterEach(() => {
   cleanup();
-  oauthState.status = "configured";
 });
 
 describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
@@ -215,43 +209,4 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
       "https://current.example.com",
     );
   });
-});
-
-describe("unknown external MCP authentication", () => {
-  it.each([0, 1])(
-    "preserves uncertainty with %i advertised OAuth flows",
-    (oauth2SecurityCount) => {
-      oauthState.status = "unknown";
-      const toolset = {
-        slug: "server",
-        mcpSlug: "server",
-        mcpEnabled: true,
-        mcpIsPublic: true,
-        oauthEnablementMetadata: { oauth2SecurityCount },
-      } as unknown as Parameters<typeof MCPAuthenticationTab>[0]["toolset"];
-      render(
-        <QueryClientProvider client={new QueryClient()}>
-          <TooltipProvider>
-            <MCPAuthenticationTab toolset={toolset} />
-          </TooltipProvider>
-        </QueryClientProvider>,
-        { wrapper: MemoryRouter },
-      );
-      expect(
-        screen.getByText("Upstream authentication requirements are unknown"),
-      ).toBeTruthy();
-      expect(screen.queryByText("OAuth is not applicable")).toBeNull();
-      expect(screen.getByTestId("authentication-section-body")).toBeTruthy();
-      const setup = screen.queryByRole("button", {
-        name: "Configure External OAuth",
-      });
-      if (oauth2SecurityCount > 0) {
-        expect(setup).toBeTruthy();
-        fireEvent.click(setup!);
-        expect(screen.getByTestId("oauth-review-dialog")).toBeTruthy();
-      } else {
-        expect(setup).toBeNull();
-      }
-    },
-  );
 });

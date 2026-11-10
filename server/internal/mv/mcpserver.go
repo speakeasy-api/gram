@@ -50,10 +50,6 @@ func BuildMcpServerListView(servers []repo.McpServer) []*types.McpServer {
 // BuildMcpServerToolsetSummaryView converts a toolset summary row into the
 // API type.
 func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *types.McpServerToolsetSummary {
-	slugs := row.ExternalMcpSlugs
-	if slugs == nil {
-		slugs = []string{}
-	}
 	return &types.McpServerToolsetSummary{
 		ID:                    row.ID.String(),
 		Slug:                  row.Slug,
@@ -61,8 +57,6 @@ func BuildMcpServerToolsetSummaryView(row repo.ListToolsetSummariesByIDsRow) *ty
 		Description:           conv.FromPGText[string](row.Description),
 		ToolCount:             int(row.ToolCount) + platformtools.CountTools(row.PlatformToolUrns),
 		ToolSelectionMode:     row.ToolSelectionMode,
-		ExternalMcpSlugs:      slugs,
-		ExternalMcpProxyOnly:  row.ExternalMcpProxyOnly,
 		ExternalOauthServerID: conv.FromNullableUUID(row.ExternalOauthServerID),
 		RegistrySpecifier:     conv.PtrEmpty(row.RegistrySpecifier),
 		HostingMcpServerID:    nil,
