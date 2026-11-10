@@ -19,9 +19,9 @@ import (
 // hour, across every organization, with its own last seven closed days. It is
 // computed when asked and stored nowhere. Only ended attempts count, in the window as
 // in the baseline, so a provider fault someone is still retrying is not yet a failure.
-// The demo organization is left out of both. Status reads provider-side failure codes
-// only, so an outage that only leaves people abandoned on the provider's sign-in page
-// is not detected; abandons are reported per step but not judged. Customer outage messages can later
+// The demo organization is left out of both. An outage that only leaves people
+// abandoned on the provider's sign-in page shows as abandons at its sign-in steps
+// above their own baseline, which can make a provider elevated but never an outage. Customer outage messages can later
 // make a status-only read (Window: OutageWindow, TrendDays: 0) behind a short cache;
 // until then only staff see it.
 
@@ -79,7 +79,8 @@ const (
 	// ProviderOutage meets every outage threshold.
 	ProviderOutage ProviderStatus = "outage"
 
-	// ProviderElevated meets the rate threshold and one of the two count thresholds.
+	// ProviderElevated meets the rate threshold and one of the two count thresholds, or
+	// has many people stopping at the provider's sign-in.
 	ProviderElevated ProviderStatus = "elevated"
 
 	// ProviderNormal had attempts and is not elevated.
@@ -108,6 +109,15 @@ type ProviderCounts struct {
 
 	// BaselineFailures ended on a provider-side reason in the baseline days.
 	BaselineFailures uint64
+
+	// SignInAbandons ended abandoned at a provider sign-in step in the window.
+	SignInAbandons uint64
+
+	// SignInAbandonOrganizations had such an abandon in the window.
+	SignInAbandonOrganizations int
+
+	// BaselineSignInAbandons ended abandoned at a provider sign-in step in the baseline days.
+	BaselineSignInAbandons uint64
 }
 
 // Rate is the window's provider-side failure rate.
@@ -116,13 +126,23 @@ func (c ProviderCounts) Rate() float64 { return ratio(c.Failures, c.Attempts) }
 // BaselineRate is the baseline's provider-side failure rate.
 func (c ProviderCounts) BaselineRate() float64 { return ratio(c.BaselineFailures, c.BaselineAttempts) }
 
-// Status applies the outage thresholds.
-func (c ProviderCounts) Status() ProviderStatus {
-	if c.Attempts == 0 {
-		return ProviderQuiet
-	}
-	baseline := c.BaselineRate()
-	if c.Rate() < max(OutageRateMultiple*baseline, baseline+OutageRateIncrease) {
+// SignInAbandonRate is the window's rate of attempts abandoned at a provider sign-in step.
+func (c ProviderCounts) SignInAbandonRate() float64 { return ratio(c.SignInAbandons, c.Attempts) }
+
+// BaselineSignInAbandonRate is the same rate over the baseline days.
+func (c ProviderCounts) BaselineSignInAbandonRate() float64 {
+	return ratio(c.BaselineSignInAbandons, c.BaselineAttempts)
+}
+
+// aboveBaseline applies the rate threshold: OutageRateMultiple times the baseline and
+// OutageRateIncrease above it.
+func aboveBaseline(rate, baseline float64) bool {
+	return rate >= max(OutageRateMultiple*baseline, baseline+OutageRateIncrease)
+}
+
+// failureStatus applies the outage thresholds to provider-side failures.
+func (c ProviderCounts) failureStatus() ProviderStatus {
+	if !aboveBaseline(c.Rate(), c.BaselineRate()) {
 		return ProviderNormal
 	}
 	enoughFailures := c.Failures >= OutageMinFailures
@@ -137,6 +157,36 @@ func (c ProviderCounts) Status() ProviderStatus {
 	}
 }
 
+// SignInAbandonsElevated reports many people stopping at the provider's sign-in: the
+// abandon rate above its own baseline, with both count guards met. Someone closing
+// the tab looks the same, so abandons alone never make an outage.
+func (c ProviderCounts) SignInAbandonsElevated() bool {
+	return aboveBaseline(c.SignInAbandonRate(), c.BaselineSignInAbandonRate()) &&
+		c.SignInAbandons >= OutageMinFailures && c.SignInAbandonOrganizations >= OutageMinOrganizations
+}
+
+// Status applies the outage thresholds to failures, and lets sign-in abandons raise it to elevated.
+func (c ProviderCounts) Status() ProviderStatus {
+	if c.Attempts == 0 {
+		return ProviderQuiet
+	}
+	status := c.failureStatus()
+	if status == ProviderNormal && c.SignInAbandonsElevated() {
+		return ProviderElevated
+	}
+	return status
+}
+
+// FailuresElevated reports that failures alone make the status elevated or worse.
+func (c ProviderCounts) FailuresElevated() bool {
+	return c.Attempts > 0 && c.failureStatus() != ProviderNormal
+}
+
+// isProviderSignInStep is a step taken at the provider's own sign-in.
+func isProviderSignInStep(step string) bool {
+	return step == StepProviderSignIn.String() || step == StepProviderToken.String()
+}
+
 func ratio(part, whole uint64) float64 {
 	if whole == 0 {
 		return 0
@@ -145,7 +195,7 @@ func ratio(part, whole uint64) float64 {
 }
 
 // noProviderCounts is a provider with nothing counted.
-var noProviderCounts = ProviderCounts{Attempts: 0, Failures: 0, Organizations: 0, BaselineAttempts: 0, BaselineFailures: 0}
+var noProviderCounts = ProviderCounts{Attempts: 0, Failures: 0, Organizations: 0, BaselineAttempts: 0, BaselineFailures: 0, SignInAbandons: 0, SignInAbandonOrganizations: 0, BaselineSignInAbandons: 0}
 
 // ProviderHealthQuery selects what Read returns.
 type ProviderHealthQuery struct {
@@ -247,15 +297,16 @@ func ValidProviderLabel(label string) bool {
 
 // providerTally accumulates one provider's attempts.
 type providerTally struct {
-	counts        ProviderCounts
-	organizations map[string]struct{}
-	failures      map[[2]string]uint64
-	abandoned     map[string]uint64
-	loops         uint64
+	counts               ProviderCounts
+	organizations        map[string]struct{}
+	abandonOrganizations map[string]struct{}
+	failures             map[[2]string]uint64
+	abandoned            map[string]uint64
+	loops                uint64
 }
 
 func newProviderTally() *providerTally {
-	return &providerTally{counts: noProviderCounts, organizations: map[string]struct{}{}, failures: map[[2]string]uint64{}, abandoned: map[string]uint64{}, loops: 0}
+	return &providerTally{counts: noProviderCounts, organizations: map[string]struct{}{}, abandonOrganizations: map[string]struct{}{}, failures: map[[2]string]uint64{}, abandoned: map[string]uint64{}, loops: 0}
 }
 
 // providerAttempt is one attempt reduced in ClickHouse to what provider health needs.
@@ -495,15 +546,21 @@ func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
 		return
 	}
 	weight := max(a.Weight, 1)
+	ending := a.End(now)
 	t.counts.Attempts += weight
-	if meaning, ok := MeaningOf(a.End(now).Reason); ok && meaning.WhoFixes == WhoProvider {
+	if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
 		t.counts.Failures += weight
 		t.organizations[a.OrganizationID] = struct{}{}
+	}
+	if ending.Outcome == OutcomeAbandoned && isProviderSignInStep(ending.Step) {
+		t.counts.SignInAbandons += weight
+		t.abandonOrganizations[a.OrganizationID] = struct{}{}
 	}
 }
 
 func (t *providerTally) report(provider string, daily []ProviderDay) ProviderHealthReport {
 	t.counts.Organizations = len(t.organizations)
+	t.counts.SignInAbandonOrganizations = len(t.abandonOrganizations)
 	status := t.counts.Status()
 	if provider == LabelOther {
 		status = ProviderNotChecked
@@ -539,17 +596,17 @@ func (t *providerTally) report(provider string, daily []ProviderDay) ProviderHea
 func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provider string, keep func(string) (string, bool), tally func(string) *providerTally) error {
 	today := now.Truncate(24 * time.Hour)
 	where, args := dailyProviderFilter(provider, "day >= toDate(?) AND day < toDate(?)", []any{today.AddDate(0, 0, -outageBaselineDays), today})
-	rows, err := h.conn.Query(ctx, `SELECT provider, reason, sum(attempts) AS reason_attempts
+	rows, err := h.conn.Query(ctx, `SELECT provider, step, outcome, reason, sum(attempts) AS reason_attempts
 	FROM `+OutcomesDailyTable+` WHERE `+where+` AND provider != ''
-	GROUP BY provider, reason`, args...)
+	GROUP BY provider, step, outcome, reason`, args...)
 	if err != nil {
 		return fmt.Errorf("query provider baseline: %w", err)
 	}
 	defer o11y.NoLogDefer(func() error { return rows.Close() })
 	for rows.Next() {
-		var stored, reason string
+		var stored, step, outcome, reason string
 		var attempts uint64
-		if err := rows.Scan(&stored, &reason, &attempts); err != nil {
+		if err := rows.Scan(&stored, &step, &outcome, &reason, &attempts); err != nil {
 			return fmt.Errorf("scan provider baseline: %w", err)
 		}
 		label, ok := keep(stored)
@@ -560,6 +617,9 @@ func (h *ProviderHealth) readBaseline(ctx context.Context, now time.Time, provid
 		t.counts.BaselineAttempts += attempts
 		if meaning, ok := MeaningOf(reason); ok && meaning.WhoFixes == WhoProvider {
 			t.counts.BaselineFailures += attempts
+		}
+		if Outcome(outcome) == OutcomeAbandoned && isProviderSignInStep(step) {
+			t.counts.BaselineSignInAbandons += attempts
 		}
 	}
 	if err := rows.Err(); err != nil {

@@ -486,5 +486,5 @@ func TestBuildDayCountsTheProviderThatEndedTheAttempt(t *testing.T) {
 	f.build(day)
 	require.Equal(t, map[string]uint64{
 		"linear.app|dcr||provider_token|failed|provider_unavailable|": 3,
-	}, f.stored(mainTable, day))
+	}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

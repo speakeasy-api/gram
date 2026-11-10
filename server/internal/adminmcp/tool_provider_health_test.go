@@ -88,7 +88,7 @@ func TestDescribeProviderHealth_ReturnsPlainCounts(t *testing.T) {
 		Provider: "accounts.google.com",
 		Status:   "outage",
 		Summary:  "accounts.google.com looks down: 6 of 10 attempts in the last hour failed on its side, in 3 organizations. Usually 1% fail.",
-		LastHour: ProviderHealthLastHour{Attempts: 10, ProviderFailures: 6, OrganizationsAffected: 3, FailureRate: 0.6, UsualFailureRate: new(0.01)},
+		LastHour: ProviderHealthLastHour{Attempts: 10, ProviderFailures: 6, OrganizationsAffected: 3, FailureRate: 0.6, UsualFailureRate: new(0.01), UsualSignInAbandonRate: new(0.0)},
 		Failures: []ProviderHealthFailure{{
 			Step: "provider_refresh", Reason: "provider_unavailable", WhatHappened: "The service is temporarily unavailable.", WhoFixes: "provider", Attempts: 6,
 		}},
@@ -185,4 +185,24 @@ func TestDescribeProviderHealth_SaysWhenThereIsNoUsualRate(t *testing.T) {
 	require.Nil(t, entry.LastHour.UsualFailureRate)
 	require.Equal(t, "mcp.linear.app is failing more than usual: 1 of 1 attempt in the last hour failed on its side, in 1 organization. There is no usual rate yet.", entry.Summary)
 	require.Equal(t, []ProviderHealthFailure{{Step: "provider_token", Reason: "other", WhatHappened: "Unknown reason.", WhoFixes: "unknown", Attempts: 1}}, entry.Failures)
+}
+
+func TestDescribeProviderHealth_SaysWhenManyStoppedAtSignIn(t *testing.T) {
+	t.Parallel()
+
+	reads := &recordingProviderHealthReader{recordingOrganizationReader: &recordingOrganizationReader{}, reports: []mcpconnectionattempts.ProviderHealthReport{{
+		Provider: "accounts.google.com",
+		Status:   mcpconnectionattempts.ProviderElevated,
+		Counts: mcpconnectionattempts.ProviderCounts{Attempts: 10, Failures: 0, Organizations: 0, BaselineAttempts: 100, BaselineFailures: 0,
+			SignInAbandons: 6, SignInAbandonOrganizations: 3, BaselineSignInAbandons: 2},
+	}}}
+	_, data, isError := callProviderHealthTool(t, reads, true, `{}`)
+	require.False(t, isError)
+
+	var out ProviderHealthOutput
+	require.NoError(t, json.Unmarshal(data, &out))
+	entry := out.Providers[0]
+	require.Equal(t, "accounts.google.com may be having problems: many people stopped at its sign-in. 6 of 10 attempts in the last hour stopped there and never came back, in 3 organizations. Usually 2% stop there.", entry.Summary)
+	require.Equal(t, uint64(6), entry.LastHour.SignInAbandons)
+	require.Equal(t, new(0.02), entry.LastHour.UsualSignInAbandonRate)
 }

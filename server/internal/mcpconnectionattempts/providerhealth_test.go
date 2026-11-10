@@ -30,6 +30,11 @@ func TestProviderCounts_Status(t *testing.T) {
 		{"no baseline", ProviderCounts{Attempts: 10, Failures: 5, Organizations: 3, BaselineAttempts: 0, BaselineFailures: 0}, ProviderOutage},
 		{"one threshold", ProviderCounts{Attempts: 100, Failures: 5, Organizations: 1, BaselineAttempts: 100, BaselineFailures: 5}, ProviderNormal},
 		{"healthy", ProviderCounts{Attempts: 50, Failures: 0, Organizations: 0, BaselineAttempts: 300, BaselineFailures: 1}, ProviderNormal},
+		{"sign-in abandons above baseline", ProviderCounts{Attempts: 10, SignInAbandons: 6, SignInAbandonOrganizations: 3, BaselineAttempts: 100, BaselineSignInAbandons: 2}, ProviderElevated},
+		{"too few sign-in abandons", ProviderCounts{Attempts: 4, SignInAbandons: 4, SignInAbandonOrganizations: 3, BaselineAttempts: 100, BaselineSignInAbandons: 0}, ProviderNormal},
+		{"sign-in abandons in two organizations", ProviderCounts{Attempts: 10, SignInAbandons: 8, SignInAbandonOrganizations: 2, BaselineAttempts: 100, BaselineSignInAbandons: 0}, ProviderNormal},
+		{"sign-in abandons near their baseline", ProviderCounts{Attempts: 10, SignInAbandons: 5, SignInAbandonOrganizations: 3, BaselineAttempts: 100, BaselineSignInAbandons: 40}, ProviderNormal},
+		{"sign-in abandons alone never make an outage", ProviderCounts{Attempts: 100, SignInAbandons: 100, SignInAbandonOrganizations: 20, BaselineAttempts: 100, BaselineSignInAbandons: 0}, ProviderElevated},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -322,4 +327,36 @@ func TestProviderHealth_RelabelsStoredDailyProviders(t *testing.T) {
 	}
 	require.True(t, found)
 	require.NotContains(t, fmt.Sprintf("%+v", report), stray)
+}
+
+func TestProviderHealth_ManySignInAbandonsAreElevatedNotAnOutage(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.vercel.com")
+	f.writeDay(2, string(OutcomeConnected), "", "", 100)
+	orgs := []string{"org-" + uuid.NewString(), "org-" + uuid.NewString(), "org-" + uuid.NewString()}
+	for i := range 6 {
+		f.write(f.attempt(orgs[i%len(orgs)], 70*time.Minute), f.step(StepProviderSignIn, ResultAccepted, false))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderElevated, report.Status)
+	require.Equal(t, uint64(6), report.Counts.SignInAbandons)
+	require.Equal(t, 3, report.Counts.SignInAbandonOrganizations)
+	require.Zero(t, report.Counts.Failures)
+	require.True(t, report.Counts.SignInAbandonsElevated())
+	require.False(t, report.Counts.FailuresElevated())
+}
+
+func TestProviderHealth_FewSignInAbandonsStayNormal(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "vercel.com")
+	org := "org-" + uuid.NewString()
+	for range 6 {
+		f.write(f.attempt(org, 70*time.Minute), f.step(StepProviderSignIn, ResultAccepted, false))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, ProviderNormal, report.Status, "one organization's closed tabs cannot trip it")
 }

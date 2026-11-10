@@ -131,6 +131,18 @@ type ProviderHealthLastHour struct {
 
 	// UsualFailureRate is the same rate over the baseline, null when the baseline has no attempts.
 	UsualFailureRate *float64 `json:"usual_failure_rate"`
+
+	// SignInAbandons stopped at the provider's sign-in and never came back.
+	SignInAbandons uint64 `json:"sign_in_abandons"`
+
+	// SignInAbandonOrganizations is how many organizations had one. A count only.
+	SignInAbandonOrganizations int `json:"sign_in_abandon_organizations"`
+
+	// SignInAbandonRate is sign-in abandons over attempts.
+	SignInAbandonRate float64 `json:"sign_in_abandon_rate"`
+
+	// UsualSignInAbandonRate is the same rate over the baseline, null when the baseline has no attempts.
+	UsualSignInAbandonRate *float64 `json:"usual_sign_in_abandon_rate"`
 }
 
 // ProviderHealthFailure is one way attempts ended failed.
@@ -184,7 +196,7 @@ func registerProviderHealthTools(server *mcp.Server, health ProviderHealthReader
 		Name:  "describe_provider_health",
 		Title: "Describe Provider Health",
 		Description: "Show whether known MCP sign-in providers (Google, Microsoft, Linear, Notion, ...) are failing across all organizations: is it us, the app or the provider? " +
-			"Status compares the last hour's ended attempts that failed on the provider's side with the same provider's last 7 closed days: outage meets the rate threshold and both count thresholds in thresholds, elevated the rate and one count, normal had ended attempts and is neither, quiet had none, and other (unlisted providers, many in one) is not_checked. Attempts count by when they ended: one that stops without a final row ends when its 60-minute live window does, so it reaches status one to two hours after it happened. Status reads failure codes only: an outage that only leaves people abandoned on the provider's sign-in page is not detected, so check abandoned too. " +
+			"Status compares the last hour's ended attempts that failed on the provider's side with the same provider's last 7 closed days: outage meets the rate threshold and both count thresholds in thresholds, elevated the rate and one count, normal had ended attempts and is neither, quiet had none, and other (unlisted providers, many in one) is not_checked. Attempts count by when they ended: one that stops without a final row ends when its 60-minute live window does, so it reaches status one to two hours after it happened. Many people stopping at the provider's sign-in (sign_in_abandons above their usual rate, with at least as many attempts and organizations as the failure rule needs) also makes it elevated, never outage, because someone closing the tab looks the same. " +
 			"failures, reconnect_loops and abandoned cover window_hours; daily and the baseline come from the 13-month table, which lags by up to a day and counts a provider used by fewer than 3 organizations that day under other. The demo organization is left out. " +
 			"Counts only: no organization, project, person or server is named. organizations_affected can be 1 or 2, so treat every number here as staff-only and never share it, or anything worked out from it, with customers.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), IdempotentHint: true, OpenWorldHint: new(false), Title: ""},
@@ -263,6 +275,8 @@ func providerHealthEntry(report mcpconnectionattempts.ProviderHealthReport) Prov
 			Attempts: report.Counts.Attempts, ProviderFailures: report.Counts.Failures,
 			OrganizationsAffected: report.Counts.Organizations,
 			FailureRate:           report.Counts.Rate(), UsualFailureRate: usualFailureRate(report.Counts),
+			SignInAbandons: report.Counts.SignInAbandons, SignInAbandonOrganizations: report.Counts.SignInAbandonOrganizations,
+			SignInAbandonRate: report.Counts.SignInAbandonRate(), UsualSignInAbandonRate: usualSignInAbandonRate(report.Counts),
 		},
 		Failures:       failures,
 		ReconnectLoops: report.ReconnectLoops,
@@ -282,8 +296,15 @@ func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) st
 		return fmt.Sprintf("%s looks down: %d of %s in the last hour failed on its side, in %s. %s",
 			report.Provider, c.Failures, countOf(c.Attempts, "attempt"), countOf(c.Organizations, "organization"), usual)
 	case mcpconnectionattempts.ProviderElevated:
-		return fmt.Sprintf("%s is failing more than usual: %d of %s in the last hour failed on its side, in %s. %s",
+		if c.SignInAbandonsElevated() && !c.FailuresElevated() {
+			return signInAbandonSummary(report.Provider, c)
+		}
+		summary := fmt.Sprintf("%s is failing more than usual: %d of %s in the last hour failed on its side, in %s. %s",
 			report.Provider, c.Failures, countOf(c.Attempts, "attempt"), countOf(c.Organizations, "organization"), usual)
+		if c.SignInAbandonsElevated() {
+			summary += " Many people also stopped at its sign-in."
+		}
+		return summary
 	case mcpconnectionattempts.ProviderNormal:
 		return fmt.Sprintf("%s looks normal: %d of %s in the last hour failed on its side.", report.Provider, c.Failures, countOf(c.Attempts, "attempt"))
 	case mcpconnectionattempts.ProviderQuiet:
@@ -291,6 +312,24 @@ func providerHealthSummary(report mcpconnectionattempts.ProviderHealthReport) st
 	default:
 		return "Providers not on the known list are counted together as other and not checked for outages."
 	}
+}
+
+// signInAbandonSummary says a provider is elevated because many people stopped at its sign-in.
+func signInAbandonSummary(provider string, c mcpconnectionattempts.ProviderCounts) string {
+	usual := "There is no usual rate yet."
+	if rate := usualSignInAbandonRate(c); rate != nil {
+		usual = fmt.Sprintf("Usually %s stop there.", percent(*rate))
+	}
+	return fmt.Sprintf("%s may be having problems: many people stopped at its sign-in. %d of %s in the last hour stopped there and never came back, in %s. %s",
+		provider, c.SignInAbandons, countOf(c.Attempts, "attempt"), countOf(c.SignInAbandonOrganizations, "organization"), usual)
+}
+
+// usualSignInAbandonRate is the baseline sign-in abandon rate, nil when the baseline has no attempts.
+func usualSignInAbandonRate(c mcpconnectionattempts.ProviderCounts) *float64 {
+	if c.BaselineAttempts == 0 {
+		return nil
+	}
+	return new(c.BaselineSignInAbandonRate())
 }
 
 // percent shows a rate, with one decimal below 1% and a floor below 0.1%, so a small rate never reads as none.
