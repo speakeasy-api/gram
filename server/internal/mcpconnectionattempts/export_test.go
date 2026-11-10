@@ -624,6 +624,31 @@ func TestExportRows_PublishesEveryLevelForTheRelayToFilter(t *testing.T) {
 	require.ElementsMatch(t, []log.Severity{log.SeverityWarn, log.SeverityError, log.SeverityInfo}, severities)
 }
 
+func TestExportRows_NearlyFullQueueKeepsRoomForErrors(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{block: make(chan struct{})}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportInFlight(4))
+
+	rows := make([]Row, 0, 6)
+	for range 5 {
+		rows = append(rows, exportTestRow(t, CodeNoServerAccess, true))
+	}
+	rows = append(rows, exportTestRow(t, CodeIDPUnavailable, true))
+	recorder.exportRows(rows)
+
+	require.Equal(t, int64(2), notExported(t, recorder, notExportedReserved))
+	require.Zero(t, notExported(t, recorder, notExportedQueueFull))
+	close(sink.block)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	severities := make([]log.Severity, 0, 4)
+	for _, published := range sink.snapshot() {
+		severities = append(severities, published.record.Severity())
+	}
+	require.ElementsMatch(t, []log.Severity{log.SeverityWarn, log.SeverityWarn, log.SeverityWarn, log.SeverityError}, severities)
+}
+
 // panicResult settles at once and panics when read.
 type panicResult struct{ ready chan struct{} }
 
