@@ -107,6 +107,7 @@ import {
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  shadowMCPReviewSelectionState,
   shadowMCPReviewSummary,
   type ShadowMCPDecisionConflict,
   type ShadowMCPReviewSummary,
@@ -3970,6 +3971,10 @@ export function StandardPolicyEditor({
                     disposition: shadowMCPDisposition,
                     selectedURLs: selectedShadowMCPURLs,
                     servers: inventoryQuery.data ?? [],
+                    selectionState: shadowMCPReviewSelectionState(
+                      shadowMCPSelectionInitialized,
+                      inventoryQuery.isError,
+                    ),
                   })
                 : undefined
             }

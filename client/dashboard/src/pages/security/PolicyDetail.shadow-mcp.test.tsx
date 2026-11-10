@@ -412,6 +412,106 @@ describe("StandardPolicyEditor Shadow MCP review", () => {
     expect(page.getByText("Allowed servers")).toBeTruthy();
     await waitFor(() => expect(page.getByText("GitHub")).toBeTruthy());
   });
+
+  function renderReview(
+    disposition: "allow_all" | "block_all",
+    inventory: ShadowMCPInventoryServer[] | undefined,
+    listShadowMCPInventory = vi.fn(),
+  ) {
+    vi.mocked(useSdkClient).mockReturnValue({
+      access: { listShadowMCPInventory },
+    } as unknown as ReturnType<typeof useSdkClient>);
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    if (inventory) {
+      queryClient.setQueryData(
+        shadowMCPPolicyInventoryQueryKey("project-1"),
+        inventory,
+      );
+    }
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor
+              policy={{
+                ...blockingPolicyWithDirtyDraftName(),
+                shadowMcpDisposition: disposition,
+              }}
+            />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return within(view.container);
+  }
+
+  it("says an empty allowed list blocks every server", async () => {
+    const page = renderReview("block_all", [
+      inventoryServer({ allowedPolicyIds: [] }),
+    ]);
+
+    expect(page.getByText("Allowed servers")).toBeTruthy();
+    await waitFor(() =>
+      expect(page.getByText("None. Every server is blocked.")).toBeTruthy(),
+    );
+    expect(page.queryByText("GitHub")).toBeNull();
+  });
+
+  it("lists the blocked servers of an allow_all policy", async () => {
+    const page = renderReview("allow_all", [
+      inventoryServer({
+        access: "blocked",
+        allowedPolicyIds: [],
+        blockedPolicyIds: ["policy-1"],
+      }),
+    ]);
+
+    expect(page.getByText("Allow all servers")).toBeTruthy();
+    expect(page.getByText("Blocked servers")).toBeTruthy();
+    await waitFor(() => expect(page.getByText("GitHub")).toBeTruthy());
+  });
+
+  it("says an empty blocked list keeps every server available", async () => {
+    const page = renderReview("allow_all", [
+      inventoryServer({ allowedPolicyIds: [] }),
+    ]);
+
+    expect(page.getByText("Blocked servers")).toBeTruthy();
+    await waitFor(() =>
+      expect(
+        page.getByText("None. Every server stays available."),
+      ).toBeTruthy(),
+    );
+  });
+
+  it("does not show an empty list while the servers load", () => {
+    const page = renderReview(
+      "block_all",
+      undefined,
+      vi.fn(() => new Promise(() => {})),
+    );
+
+    expect(page.getByText("Allowed servers")).toBeTruthy();
+    expect(page.getByText("Loading servers…")).toBeTruthy();
+    expect(page.queryByText("None. Every server is blocked.")).toBeNull();
+  });
+
+  it("does not show an empty list when the servers fail to load", async () => {
+    const page = renderReview(
+      "allow_all",
+      undefined,
+      vi.fn(() => Promise.reject(new Error("inventory unavailable"))),
+    );
+
+    await waitFor(() =>
+      expect(
+        page.getByText("Could not load servers. Reload the page to try again."),
+      ).toBeTruthy(),
+    );
+    expect(page.queryByText("None. Every server stays available.")).toBeNull();
+  });
 });
 
 describe("StandardPolicyEditor allow_all posture lock", () => {

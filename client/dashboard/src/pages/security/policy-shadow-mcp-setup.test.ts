@@ -12,6 +12,7 @@ import {
   shadowMCPSelectionBaselineForUpdate,
   shadowMCPSelectionIsDirty,
   shadowMCPSelectionIsInitialized,
+  shadowMCPReviewSelectionState,
   shadowMCPReviewSummary,
 } from "./policy-shadow-mcp-setup";
 
@@ -424,5 +425,29 @@ describe("shadowMCPReviewSummary", () => {
     });
     expect(summary.servers).toEqual([]);
     expect(summary.emptyText).toBe("None. Every server is blocked.");
+  });
+
+  it("hides the selection until it is known", () => {
+    const selectedURLs = new Set(["https://github.example.com/mcp"]);
+    const loading = shadowMCPReviewSummary({
+      disposition: "allow_all",
+      selectedURLs,
+      servers,
+      selectionState: shadowMCPReviewSelectionState(false, false),
+    });
+    expect(loading.listLabel).toBe("Blocked servers");
+    expect(loading.servers).toEqual([]);
+    expect(loading.emptyText).toBe("Loading servers…");
+
+    const failed = shadowMCPReviewSummary({
+      disposition: "block_all",
+      selectedURLs,
+      servers,
+      selectionState: shadowMCPReviewSelectionState(false, true),
+    });
+    expect(failed.servers).toEqual([]);
+    expect(failed.emptyText).toMatch(/^Could not load servers/);
+
+    expect(shadowMCPReviewSelectionState(true, true)).toBe("ready");
   });
 });

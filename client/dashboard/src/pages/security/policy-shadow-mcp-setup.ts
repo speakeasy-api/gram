@@ -18,7 +18,9 @@ export const SHADOW_MCP_DISPOSITION_TITLE: Record<
 };
 
 /** What the Review step shows for a blocking Shadow MCP policy: its default
- *  behavior and the servers that are exceptions to it. */
+ *  behavior and the servers that are exceptions to it. `emptyText` shows when
+ *  `servers` is empty: what an empty list means, or why the list is not known
+ *  yet. */
 export interface ShadowMCPReviewSummary {
   behavior: string;
   listLabel: string;
@@ -26,10 +28,23 @@ export interface ShadowMCPReviewSummary {
   emptyText: string;
 }
 
+/** Whether the editor knows the policy's server selection yet. Until the
+ *  server inventory loads, the selection is empty but not known to be empty. */
+export type ShadowMCPReviewSelectionState = "ready" | "loading" | "failed";
+
+export function shadowMCPReviewSelectionState(
+  selectionInitialized: boolean,
+  inventoryFailed: boolean,
+): ShadowMCPReviewSelectionState {
+  if (selectionInitialized) return "ready";
+  return inventoryFailed ? "failed" : "loading";
+}
+
 export function shadowMCPReviewSummary({
   disposition,
   selectedURLs,
   servers,
+  selectionState = "ready",
 }: {
   disposition: ShadowMCPDisposition;
   selectedURLs: ReadonlySet<string>;
@@ -37,7 +52,23 @@ export function shadowMCPReviewSummary({
     ShadowMCPInventoryServer,
     "canonicalServerUrl" | "serverName" | "urlHost"
   >[];
+  selectionState?: ShadowMCPReviewSelectionState;
 }): ShadowMCPReviewSummary {
+  const behavior = SHADOW_MCP_DISPOSITION_TITLE[disposition];
+  const listLabel =
+    disposition === "allow_all" ? "Blocked servers" : "Allowed servers";
+  if (selectionState === "loading") {
+    return { behavior, listLabel, servers: [], emptyText: "Loading servers…" };
+  }
+  if (selectionState === "failed") {
+    return {
+      behavior,
+      listLabel,
+      servers: [],
+      emptyText: "Could not load servers. Reload the page to try again.",
+    };
+  }
+
   const byURL = new Map(
     servers.map((server) => [server.canonicalServerUrl, server]),
   );
@@ -50,15 +81,15 @@ export function shadowMCPReviewSummary({
 
   if (disposition === "allow_all") {
     return {
-      behavior: SHADOW_MCP_DISPOSITION_TITLE.allow_all,
-      listLabel: "Blocked servers",
+      behavior,
+      listLabel,
       servers: names,
       emptyText: "None. Every server stays available.",
     };
   }
   return {
-    behavior: SHADOW_MCP_DISPOSITION_TITLE.block_all,
-    listLabel: "Allowed servers",
+    behavior,
+    listLabel,
     servers: names,
     emptyText: "None. Every server is blocked.",
   };
