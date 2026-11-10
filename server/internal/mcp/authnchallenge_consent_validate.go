@@ -290,7 +290,7 @@ func (s *Service) probeRemoteSession(
 		if resolvesByAssociation(member) {
 			return s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
 		}
-		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, tokenProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	}
 	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens)
 	switch {
