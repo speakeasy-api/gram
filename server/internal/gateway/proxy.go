@@ -884,17 +884,23 @@ func (tp *ToolProxy) doHTTP(
 		Policy:                    tp.policy,
 		ResponseStatusCodeCapture: &responseStatusCode,
 		Attributes:                attrRecorder,
-		VerifyResponse:            func(resp *http.Response) error { return nil },
-		RetryConfig:               httpToolRetryConfig(),
-		Timeout:                   httpToolCallTimeout,
-		ID:                        descriptor.ID,
-		Name:                      descriptor.Name,
-		DeploymentID:              descriptor.DeploymentID,
-		ProjectID:                 descriptor.ProjectID,
-		ProjectSlug:               descriptor.ProjectSlug,
-		OrganizationID:            descriptor.OrganizationID,
-		OrganizationSlug:          descriptor.OrganizationSlug,
-		DisableKeepAlives:         false,
+		VerifyResponse: func(resp *http.Response) error {
+			// The challenge is kept for classification only; it is not forwarded.
+			if env.Credentials != nil {
+				env.Credentials.Challenges = resp.Header.Values("WWW-Authenticate")
+			}
+			return nil
+		},
+		RetryConfig:       httpToolRetryConfig(),
+		Timeout:           httpToolCallTimeout,
+		ID:                descriptor.ID,
+		Name:              descriptor.Name,
+		DeploymentID:      descriptor.DeploymentID,
+		ProjectID:         descriptor.ProjectID,
+		ProjectSlug:       descriptor.ProjectSlug,
+		OrganizationID:    descriptor.OrganizationID,
+		OrganizationSlug:  descriptor.OrganizationSlug,
+		DisableKeepAlives: false,
 	})
 }
 

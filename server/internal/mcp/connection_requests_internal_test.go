@@ -623,14 +623,15 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		sent    []toolconfig.AppliedCredential
 		failure toolconfig.ClientGrantFailure
 		callers []string
+		header  string
 		want    mcpconnectionattempts.Code
 		who     mcpconnectionattempts.WhoFixes
 	}{
 		{name: "person's sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "shared sign-in", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("SHARED_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "shared sign-in", status: http.StatusForbidden, header: `Bearer error="invalid_token"`, sent: []toolconfig.AppliedCredential{user("SHARED_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "saved client grant", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
-		{name: "environment key", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "environment key", status: http.StatusForbidden, header: `Bearer error="invalid_token"`, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "filtered sign-in falls back to a system key", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{system("PERSON_ACCESS_TOKEN")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "token endpoint refused", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantRejected, want: mcpconnectionattempts.CodeSharedCredentialRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "token endpoint down", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{grant(system("MACHINE_CLIENT_SECRET"))}, failure: toolconfig.ClientGrantUnavailable, want: mcpconnectionattempts.CodeRemoteSessionUnavailable, who: mcpconnectionattempts.WhoProvider},
@@ -644,6 +645,11 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		{name: "tool call arguments override a sign-in", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, callers: []string{"PERSON_ACCESS_TOKEN"}, want: none},
 		{name: "tool call arguments override another variable", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, callers: []string{"REGION"}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
 		{name: "no credential", status: http.StatusUnauthorized, want: none},
+		{name: "saved key 401", status: http.StatusUnauthorized, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "saved key 403 without a challenge", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: none},
+		{name: "saved key 403 insufficient scope", status: http.StatusForbidden, header: `Bearer error="insufficient_scope"`, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: none},
+		{name: "saved key 403 invalid token", status: http.StatusForbidden, header: `Bearer error="invalid_token"`, sent: []toolconfig.AppliedCredential{user("ENVIRONMENT_KEY")}, want: mcpconnectionattempts.CodeStaticKeyRejected, who: mcpconnectionattempts.WhoAdmin},
+		{name: "sign-in 403 without a challenge", status: http.StatusForbidden, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
 		{name: "served", status: http.StatusOK, sent: []toolconfig.AppliedCredential{user("PERSON_ACCESS_TOKEN")}, want: none},
 		{name: "not found", status: http.StatusNotFound, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
 		{name: "rate limited", status: http.StatusTooManyRequests, sent: []toolconfig.AppliedCredential{system("API_KEY")}, want: none},
@@ -652,7 +658,11 @@ func TestHTTPToolRejectionHappened(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Sent: tc.sent, GrantFailure: tc.failure, CallerVariables: tc.callers}, sources)
+			var challenges []string
+			if tc.header != "" {
+				challenges = []string{tc.header}
+			}
+			got := httpToolRejectionHappened(tc.status, &toolconfig.CredentialReport{Challenges: challenges, Sent: tc.sent, GrantFailure: tc.failure, CallerVariables: tc.callers}, sources)
 			require.Equal(t, tc.want, got)
 			if tc.want == none {
 				return

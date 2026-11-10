@@ -148,7 +148,22 @@ func (c *requestConnections) upstreamFailureHappened(status int, sent, response 
 		Self:       attached && c.SelfCredential,
 		Configured: slices.ContainsFunc(c.credentialHeaders, func(name string) bool { return sent.Get(name) != "" }),
 	}
-	return UpstreamFailureHappened(status, credential, c.tunneled, response.Get(tunnelrouting.ErrorHeader), cause)
+	return UpstreamFailureHappened(status, CredentialRejected(status, response.Values("WWW-Authenticate")), credential, c.tunneled, response.Get(tunnelrouting.ErrorHeader), cause)
+}
+
+// CredentialRejected reports whether a provider's answer rejected the credential: a 401, or a 403
+// whose challenge says error="invalid_token" (RFC 6750 §3.1). A 403 for insufficient_scope, or with
+// no such challenge, is a permission answer from a working credential.
+func CredentialRejected(status int, wwwAuthenticate []string) bool {
+	switch status {
+	case http.StatusUnauthorized:
+		return true
+	case http.StatusForbidden:
+		return slices.ContainsFunc(authParams(wwwAuthenticate), func(p authParam) bool {
+			return strings.EqualFold(p.name, "error") && strings.EqualFold(p.value, "invalid_token")
+		})
+	}
+	return false
 }
 
 // requestMethodDetail bounds a client-supplied method to a known label.
@@ -196,8 +211,9 @@ func configuredCredentialNames(headers []proxy.ConfiguredHeader) []string {
 }
 
 // UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.
+// credentialRejected says a 401 or 403 rejected the credential sent, as [CredentialRejected] decides.
 // tunnelError is the tunnel gateway's own error status, when it answered instead of the server.
-func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunneled bool, tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
+func UpstreamFailureHappened(status int, credentialRejected bool, credential UpstreamCredentialSent, tunneled bool, tunnelError string, causes ...error) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
 	if status == 0 {
 		for _, cause := range causes {
@@ -229,6 +245,9 @@ func UpstreamFailureHappened(status int, credential UpstreamCredentialSent, tunn
 	case status == 0:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
+		if !credentialRejected {
+			return none, false
+		}
 		switch {
 		case credential.Self:
 			return mcpconnectionattempts.CodeSharedCredentialRejected, true

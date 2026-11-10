@@ -403,7 +403,8 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		return memberConnectionError{failure, code}
 	}
 	if status, rejected := rt.rejection(); rejected {
-		code, ok := remotemcp.UpstreamFailureHappened(status, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		// Gateway members still count every 401 and 403 as a rejected credential.
+		code, ok := remotemcp.UpstreamFailureHappened(status, true, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		if !ok {
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
@@ -423,7 +424,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// The caller went away, so this says nothing about the member.
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
@@ -442,7 +443,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		spent := (isNetErr && netErr.Timeout()) || errors.Is(exchangeErr, context.DeadlineExceeded) || errors.Is(exchangeErr, context.Canceled)
 		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
 		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
-		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
 	}
 	rpcErr, isRPC := errors.AsType[*jsonrpc.Error](err)
@@ -452,11 +453,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	}
 	switch {
 	case retryableStatus:
-		code, _ := remotemcp.UpstreamFailureHappened(status, dial.upstreamCredential(), dial.tunneled, rt.tunnelError(), errors.Join(err, exchangeErr))
+		code, _ := remotemcp.UpstreamFailureHappened(status, false, dial.upstreamCredential(), dial.tunneled, rt.tunnelError(), errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(message, true), code}
 	case isRPC && rpcErr.Message == sdkTransportRejected && rt.status() == 0:
 		// The SDK could not send the call, so the member never saw it.
-		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		code, _ := remotemcp.UpstreamFailureHappened(0, false, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
 		return memberConnectionError{upstreamFailure(message, false), code}
 	// An HTTP-successful JSON-RPC error is a tool result, not evidence of a
 	// failed connection. Local proxy refusals already recorded their own row.

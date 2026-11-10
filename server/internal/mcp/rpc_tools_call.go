@@ -308,6 +308,7 @@ func handleToolsCall(
 			Sent:            nil,
 			GrantFailure:    "",
 			CallerVariables: nil,
+			Challenges:      nil,
 		},
 	}
 
@@ -687,11 +688,11 @@ const (
 	credentialSourceShared credentialSource = "shared"
 )
 
-// httpToolRejectionHappened says who fixes an HTTP tool call its provider answered with 401 or 403,
+// httpToolRejectionHappened says who fixes an HTTP tool call whose provider rejected its credential (see [remotemcp.CredentialRejected]),
 // from the credentials the call actually sent. A caller's own credential, or none, writes nothing.
 func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, sources map[string]credentialSource) mcpconnectionattempts.Code {
 	var none mcpconnectionattempts.Code
-	if report == nil || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+	if report == nil || !remotemcp.CredentialRejected(status, report.Challenges) {
 		return none
 	}
 	sourceOf := func(credential toolconfig.AppliedCredential) credentialSource {
@@ -735,7 +736,7 @@ func httpToolRejectionHappened(status int, report *toolconfig.CredentialReport, 
 	case toolconfig.ClientGrantBlocked, toolconfig.ClientGrantMisconfigured:
 		return mcpconnectionattempts.CodeCredentialMisconfigured
 	}
-	code, _ := remotemcp.UpstreamFailureHappened(status, sent, false, "")
+	code, _ := remotemcp.UpstreamFailureHappened(status, true, sent, false, "")
 	return code
 }
 

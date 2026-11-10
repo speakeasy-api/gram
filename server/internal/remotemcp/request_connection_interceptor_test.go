@@ -113,13 +113,14 @@ func TestToolsCallConnections_UpstreamFailures(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name   string
-		status int
-		want   mcpconnectionattempts.Code
-		who    mcpconnectionattempts.WhoFixes
+		name      string
+		status    int
+		challenge string
+		want      mcpconnectionattempts.Code
+		who       mcpconnectionattempts.WhoFixes
 	}{
 		{name: "provider rejects", status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
-		{name: "provider forbids", status: http.StatusForbidden, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
+		{name: "provider forbids an invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: mcpconnectionattempts.CodeProviderRejected, who: mcpconnectionattempts.WhoPerson},
 		{name: "rate limited", status: http.StatusTooManyRequests, want: mcpconnectionattempts.CodeProviderRateLimited, who: mcpconnectionattempts.WhoProvider},
 		{name: "server error", status: http.StatusBadGateway, want: mcpconnectionattempts.CodeProviderServerError, who: mcpconnectionattempts.WhoProvider},
 	} {
@@ -128,6 +129,9 @@ func TestToolsCallConnections_UpstreamFailures(t *testing.T) {
 
 			rec := mcpconnectionattemptstest.New(t)
 			serveToolsCall(t.Context(), t, recordingConnections(rec, "token"), func(w http.ResponseWriter, _ *http.Request) {
+				if tc.challenge != "" {
+					w.Header().Set("WWW-Authenticate", tc.challenge)
+				}
 				w.WriteHeader(tc.status)
 			}, continueCheckpoint())
 
@@ -232,15 +236,15 @@ func TestUpstreamFailureHappened(t *testing.T) {
 	t.Parallel()
 
 	attached := UpstreamCredentialSent{Attached: true, Self: false, Configured: false}
-	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: true, Self: true, Configured: false}, false, "")
+	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, true, UpstreamCredentialSent{Attached: true, Self: true, Configured: false}, false, "")
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeSharedCredentialRejected, code)
 
-	code, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: false, Self: false, Configured: true}, false, "")
+	code, ok = UpstreamFailureHappened(http.StatusUnauthorized, true, UpstreamCredentialSent{Attached: false, Self: false, Configured: true}, false, "")
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeStaticKeyRejected, code)
 
-	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, false, "")
+	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, true, UpstreamCredentialSent{Attached: false, Self: false, Configured: false}, false, "")
 	require.False(t, ok, "a 401 with no credential is the sign-in challenge")
 
 	for tunnelError, want := range map[string]mcpconnectionattempts.Code{
@@ -252,19 +256,19 @@ func TestUpstreamFailureHappened(t *testing.T) {
 		wire.TunnelErrorRouteLookupFailed:     mcpconnectionattempts.CodeInternalError,
 		wire.TunnelErrorRouteStoreUnavailable: mcpconnectionattempts.CodeInternalError,
 	} {
-		code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, true, tunnelError)
+		code, _ = UpstreamFailureHappened(http.StatusBadGateway, true, attached, true, tunnelError)
 		require.Equal(t, want, code, tunnelError)
 	}
-	code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, false, wire.TunnelErrorNoRoute)
+	code, _ = UpstreamFailureHappened(http.StatusBadGateway, true, attached, false, wire.TunnelErrorNoRoute)
 	require.Equal(t, mcpconnectionattempts.CodeProviderServerError, code, "only a tunneled server has a tunnel")
-	code, _ = UpstreamFailureHappened(0, attached, true, "")
+	code, _ = UpstreamFailureHappened(0, true, attached, true, "")
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
-	code, _ = UpstreamFailureHappened(0, attached, false, "")
+	code, _ = UpstreamFailureHappened(0, true, attached, false, "")
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code)
-	code, _ = UpstreamFailureHappened(0, attached, true, "", fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut))
+	code, _ = UpstreamFailureHappened(0, true, attached, true, "", fmt.Errorf("forward: %w", proxy.ErrUpstreamTimedOut))
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, code, "a slow server behind a tunnel is not ours")
 
-	_, ok = UpstreamFailureHappened(http.StatusNotFound, attached, false, "")
+	_, ok = UpstreamFailureHappened(http.StatusNotFound, true, attached, false, "")
 	require.False(t, ok)
 }
 
@@ -327,7 +331,10 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 			require.Equal(t, tc.admin, HasConfiguredCredential(headers))
 			for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
 				rec := mcpconnectionattemptstest.New(t)
-				reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(status) }
+				reject := func(w http.ResponseWriter, _ *http.Request) {
+					w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+					w.WriteHeader(status)
+				}
 				serveToolsCall(t.Context(), t, newConnectionsUnderTest(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", headers), reject, continueCheckpoint())
 				if tc.admin {
 					row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
@@ -811,5 +818,82 @@ func TestRequestConnections_SuppressedKeyRecordsNothing(t *testing.T) {
 		require.True(t, HasConfiguredCredential(headers), "the stored row is a credential")
 		serveRequest(t, connections, upstream.URL, body)
 		rec.RequireNothing()
+	}
+}
+
+// Only a 401, or a 403 whose challenge says the token is invalid, rejects the credential.
+func TestCredentialRejected(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		status    int
+		challenge []string
+		want      bool
+	}{
+		{name: "401 without a challenge", status: http.StatusUnauthorized, want: true},
+		{name: "403 without a challenge", status: http.StatusForbidden, want: false},
+		{name: "403 insufficient scope", status: http.StatusForbidden, challenge: []string{`Bearer error="insufficient_scope", scope="repo"`}, want: false},
+		{name: "403 invalid token", status: http.StatusForbidden, challenge: []string{`Bearer error="invalid_token"`}, want: true},
+		{name: "403 unquoted and mixed case", status: http.StatusForbidden, challenge: []string{`bearer ERROR=Invalid_Token`}, want: true},
+		{name: "403 invalid token in a later challenge", status: http.StatusForbidden, challenge: []string{`Basic realm="api", DPoP error="invalid_token", algs="ES256"`}, want: true},
+		{name: "403 invalid token in a second header", status: http.StatusForbidden, challenge: []string{`Basic realm="api"`, `Bearer error="invalid_token"`}, want: true},
+		{name: "403 invalid token only inside a quoted value", status: http.StatusForbidden, challenge: []string{`Bearer error_description="not error=invalid_token", error="insufficient_scope"`}, want: false},
+		{name: "404", status: http.StatusNotFound, challenge: []string{`Bearer error="invalid_token"`}, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, CredentialRejected(tc.status, tc.challenge))
+		})
+	}
+}
+
+// A 403 on a direct server's handshake or tool call is a rejection only when its challenge says the token is invalid.
+func TestRequestConnections_ForbiddenNeedsAnInvalidToken(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		status    int
+		challenge string
+		recorded  bool
+	}{
+		{name: "401", status: http.StatusUnauthorized, recorded: true},
+		{name: "403 without a challenge", status: http.StatusForbidden},
+		{name: "403 insufficient scope", status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope"`},
+		{name: "403 invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, recorded: true},
+	} {
+		upstream := func(w http.ResponseWriter, _ *http.Request) {
+			if tc.challenge != "" {
+				w.Header().Set("WWW-Authenticate", tc.challenge)
+			}
+			w.WriteHeader(tc.status)
+		}
+		t.Run("initialize "+tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			server := httptest.NewServer(http.HandlerFunc(upstream))
+			t.Cleanup(server.Close)
+			serveRequest(t, recordingConnections(rec, "token"), server.URL, connectionInitialize)
+			if !tc.recorded {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+			require.Equal(t, "initialize", row.SubReason)
+		})
+		t.Run("tools/call "+tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			serveToolsCall(t.Context(), t, recordingConnections(rec, "token"), upstream, continueCheckpoint())
+			if !tc.recorded {
+				rec.RequireNothing()
+				return
+			}
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+			require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+			require.Empty(t, row.SubReason)
+		})
 	}
 }

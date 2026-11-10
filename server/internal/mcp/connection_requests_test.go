@@ -882,12 +882,15 @@ func TestGatewayHostedSecurityCheckFailureRecordsInternalError(t *testing.T) {
 func TestHostedToolProviderRejectionRecords(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		status int
-		want   mcpconnectionattempts.Code
+		name      string
+		status    int
+		challenge string
+		want      mcpconnectionattempts.Code
 	}{
 		{name: "unauthorized", status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeStaticKeyRejected},
-		{name: "forbidden", status: http.StatusForbidden, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "forbidden without a challenge", status: http.StatusForbidden},
+		{name: "forbidden insufficient scope", status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope"`},
+		{name: "forbidden invalid token", status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: mcpconnectionattempts.CodeStaticKeyRejected},
 		{name: "served", status: http.StatusOK},
 		{name: "not found", status: http.StatusNotFound},
 		{name: "server error", status: http.StatusInternalServerError},
@@ -898,7 +901,7 @@ func TestHostedToolProviderRejectionRecords(t *testing.T) {
 			auth := requireProjectAuthContext(t, ctx)
 			ts := createPublicMCPToolset(t, ctx, ti, auth, "hosted-reject-"+uuid.NewString()[:8])
 			ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
-			upstream := statusUpstream(t, tc.status)
+			upstream := challengingUpstream(t, tc.status, tc.challenge)
 			ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
 			rec := mcpconnectionattemptstest.New(t)
 			ti.service.SetConnectionRecorder(rec.Recorder)
@@ -974,7 +977,7 @@ func TestGatewayHostedToolProviderRejectionRecords(t *testing.T) {
 	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "rejecting", 0, mcpservers.VisibilityPublic)
 	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
-	upstream := statusUpstream(t, http.StatusForbidden)
+	upstream := challengingUpstream(t, http.StatusForbidden, `Bearer error="invalid_token"`)
 	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
@@ -1017,7 +1020,16 @@ func TestGatewayHostedToolRejectionWithUnreadableResponseRecords(t *testing.T) {
 // statusUpstream answers every request with status and a short text body.
 func statusUpstream(t *testing.T, status int) *httptest.Server {
 	t.Helper()
+	return challengingUpstream(t, status, "")
+}
+
+// challengingUpstream answers like statusUpstream, with challenge as its WWW-Authenticate when set.
+func challengingUpstream(t *testing.T, status int, challenge string) *httptest.Server {
+	t.Helper()
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if challenge != "" {
+			w.Header().Set("WWW-Authenticate", challenge)
+		}
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(status)
 		_, _ = w.Write([]byte("upstream says " + http.StatusText(status)))
