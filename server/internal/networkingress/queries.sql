@@ -27,6 +27,7 @@ INSERT INTO network_ingresses (
     enabled,
     identity_required,
     credentials_encrypted,
+    credentials_org_encrypted,
     attestor_namespace,
     attestor_service_account,
     provider_resources
@@ -40,6 +41,7 @@ INSERT INTO network_ingresses (
     @enabled,
     @identity_required,
     @credentials_encrypted,
+    @credentials_org_encrypted,
     @attestor_namespace,
     @attestor_service_account,
     @provider_resources
@@ -132,6 +134,7 @@ RETURNING *;
 UPDATE network_ingresses
 SET
     credentials_encrypted = @credentials_encrypted,
+    credentials_org_encrypted = @credentials_org_encrypted,
     status = 'pending',
     last_error = NULL,
     updated_at = clock_timestamp()
@@ -276,6 +279,7 @@ WHERE id = @id
 UPDATE network_ingresses
 SET
     credentials_encrypted = NULL,
+    credentials_org_encrypted = NULL,
     provider_resources = '{}'::jsonb,
     last_error = NULL,
     updated_at = clock_timestamp()

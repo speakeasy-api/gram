@@ -280,6 +280,18 @@ const (
 	// instructions. Evaluated server-side on every call with the organization
 	// ID as distinct ID. Off, unavailable or failing, the tools refuse.
 	FlagPlatformMCPGatewayProxy Flag = "platform-mcp-gateway-proxy"
+
+	// FlagOrgEncryptedIntegrationCredentials moves an organization's
+	// integration credentials (Slack workspaces, device integrations, network
+	// ingress) to organization encryption. On, every write also seals the
+	// credential under the organization's key, reads use that ciphertext, and
+	// the hourly backfill seals rows written before. The application-key
+	// ciphertext keeps being written either way, so turning the flag off is
+	// the rollback. Evaluated server-side and locally, with the organization ID
+	// as distinct ID; targeted the same way as FlagAuthClientResolver. Off,
+	// unavailable or failing reads as off. Removed once every organization
+	// reads organization ciphertext and the application-key copies are gone.
+	FlagOrgEncryptedIntegrationCredentials Flag = "org-encrypted-integration-credentials"
 )
 
 // Variants of FlagPlatformMCPDiscoveryMode. Anything else — no variant, an

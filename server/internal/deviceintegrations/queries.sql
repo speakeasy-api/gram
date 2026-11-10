@@ -34,12 +34,14 @@ INSERT INTO device_integration_configs (
     organization_id
   , provider
   , credentials_encrypted
+  , credentials_org_encrypted
   , settings
   , enabled
 ) VALUES (
     @organization_id
   , @provider
   , @credentials_encrypted
+  , @credentials_org_encrypted
   , @settings
   , @enabled
 )
@@ -52,6 +54,7 @@ RETURNING *;
 -- name: UpdateConfigCredentials :one
 UPDATE device_integration_configs
 SET credentials_encrypted = @credentials_encrypted,
+    credentials_org_encrypted = @credentials_org_encrypted,
     settings = @settings,
     enabled = @enabled,
     updated_at = clock_timestamp()
@@ -1624,6 +1627,7 @@ SELECT
   , c.organization_id
   , c.provider
   , c.credentials_encrypted
+  , c.credentials_org_encrypted
   , c.settings
   , c.enabled
   , c.deleted

@@ -1075,6 +1075,7 @@ SELECT
   , c.organization_id
   , c.provider
   , c.credentials_encrypted
+  , c.credentials_org_encrypted
   , c.settings
   , c.enabled
   , c.deleted
@@ -1096,22 +1097,23 @@ WHERE s.id = $1
 `
 
 type GetSyncTargetRow struct {
-	ConfigID             uuid.UUID
-	OrganizationID       string
-	Provider             string
-	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
-	Deleted              bool
-	ConfigUpdatedAt      pgtype.Timestamptz
-	Schedule             string
-	DisabledAt           pgtype.Timestamptz
-	SyncID               uuid.UUID
-	PollWatermarkAt      pgtype.Timestamptz
-	ConsecutiveFailures  int32
-	AutoPausedAt         pgtype.Timestamptz
-	LastPushDigest       pgtype.Text
-	LastPollSuccessAt    pgtype.Timestamptz
+	ConfigID                uuid.UUID
+	OrganizationID          string
+	Provider                string
+	CredentialsEncrypted    string
+	CredentialsOrgEncrypted pgtype.Text
+	Settings                []byte
+	Enabled                 bool
+	Deleted                 bool
+	ConfigUpdatedAt         pgtype.Timestamptz
+	Schedule                string
+	DisabledAt              pgtype.Timestamptz
+	SyncID                  uuid.UUID
+	PollWatermarkAt         pgtype.Timestamptz
+	ConsecutiveFailures     int32
+	AutoPausedAt            pgtype.Timestamptz
+	LastPushDigest          pgtype.Text
+	LastPollSuccessAt       pgtype.Timestamptz
 }
 
 func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncTargetRow, error) {
@@ -1122,6 +1124,7 @@ func (q *Queries) GetSyncTarget(ctx context.Context, syncID uuid.UUID) (GetSyncT
 		&i.OrganizationID,
 		&i.Provider,
 		&i.CredentialsEncrypted,
+		&i.CredentialsOrgEncrypted,
 		&i.Settings,
 		&i.Enabled,
 		&i.Deleted,
@@ -1143,6 +1146,7 @@ INSERT INTO device_integration_configs (
     organization_id
   , provider
   , credentials_encrypted
+  , credentials_org_encrypted
   , settings
   , enabled
 ) VALUES (
@@ -1151,16 +1155,18 @@ INSERT INTO device_integration_configs (
   , $3
   , $4
   , $5
+  , $6
 )
 RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type InsertConfigParams struct {
-	OrganizationID       string
-	Provider             string
-	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
+	OrganizationID          string
+	Provider                string
+	CredentialsEncrypted    string
+	CredentialsOrgEncrypted pgtype.Text
+	Settings                []byte
+	Enabled                 bool
 }
 
 func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (DeviceIntegrationConfig, error) {
@@ -1168,6 +1174,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (Dev
 		arg.OrganizationID,
 		arg.Provider,
 		arg.CredentialsEncrypted,
+		arg.CredentialsOrgEncrypted,
 		arg.Settings,
 		arg.Enabled,
 	)
@@ -2632,21 +2639,23 @@ const updateConfigCredentials = `-- name: UpdateConfigCredentials :one
 
 UPDATE device_integration_configs
 SET credentials_encrypted = $1,
-    settings = $2,
-    enabled = $3,
+    credentials_org_encrypted = $2,
+    settings = $3,
+    enabled = $4,
     updated_at = clock_timestamp()
-WHERE organization_id = $4
-  AND provider = $5
+WHERE organization_id = $5
+  AND provider = $6
   AND deleted IS FALSE
 RETURNING id, organization_id, provider, credentials_encrypted, credentials_org_encrypted, settings, enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateConfigCredentialsParams struct {
-	CredentialsEncrypted string
-	Settings             []byte
-	Enabled              bool
-	OrganizationID       string
-	Provider             string
+	CredentialsEncrypted    string
+	CredentialsOrgEncrypted pgtype.Text
+	Settings                []byte
+	Enabled                 bool
+	OrganizationID          string
+	Provider                string
 }
 
 // Credential rotation updates the row in place rather than replacing it:
@@ -2655,6 +2664,7 @@ type UpdateConfigCredentialsParams struct {
 func (q *Queries) UpdateConfigCredentials(ctx context.Context, arg UpdateConfigCredentialsParams) (DeviceIntegrationConfig, error) {
 	row := q.db.QueryRow(ctx, updateConfigCredentials,
 		arg.CredentialsEncrypted,
+		arg.CredentialsOrgEncrypted,
 		arg.Settings,
 		arg.Enabled,
 		arg.OrganizationID,

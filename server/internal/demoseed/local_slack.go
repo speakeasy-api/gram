@@ -90,9 +90,9 @@ func connectLocalSlack(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	existing, err := queries.LockSlackDirectoryConnectionByTeam(ctx, slackrepo.LockSlackDirectoryConnectionByTeamParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		_, err = queries.CreateSlackDirectoryConnection(ctx, slackrepo.CreateSlackDirectoryConnectionParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: workspace.scopes, Generation: uuid.New()})
+		_, err = queries.CreateSlackDirectoryConnection(ctx, slackrepo.CreateSlackDirectoryConnectionParams{OrganizationID: organizationID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), CredentialsOrgEncrypted: pgtype.Text{String: "", Valid: false}, GrantedScopes: workspace.scopes, Generation: uuid.New()})
 	case err == nil:
-		_, err = queries.AuthorizeSlackDirectoryConnection(ctx, slackrepo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: organizationID, ID: existing.ID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), GrantedScopes: workspace.scopes, Generation: uuid.New(), ExpectedGeneration: existing.Generation})
+		_, err = queries.AuthorizeSlackDirectoryConnection(ctx, slackrepo.AuthorizeSlackDirectoryConnectionParams{OrganizationID: organizationID, ID: existing.ID, SlackTeamID: workspace.teamID, SlackTeamName: conv.ToPGTextEmpty(workspace.teamName), CredentialsEncrypted: conv.ToPGText(ciphertext), CredentialsOrgEncrypted: pgtype.Text{String: "", Valid: false}, GrantedScopes: workspace.scopes, Generation: uuid.New(), ExpectedGeneration: existing.Generation})
 	}
 	if err != nil {
 		return fmt.Errorf("save local Slack connection: %w", err)

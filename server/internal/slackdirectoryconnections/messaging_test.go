@@ -33,7 +33,7 @@ func TestMessagingWorkspacesKeepsATokenWithTimeLeftWhenRenewalFails(t *testing.T
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
 	storeTokens(t, ctx, f, c, time.Now().Add(10*time.Minute))
-	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, unusedDirectory(t), audit.NewLogger(), failingRefresh)
+	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.creds, unusedDirectory(t), audit.NewLogger(), failingRefresh)
 
 	workspaces, err := sync.MessagingWorkspaces(ctx, f.auth.ActiveOrganizationID, slackscopes.UsersRead)
 	require.NoError(t, err)
@@ -46,7 +46,7 @@ func TestMessagingWorkspacesReportsAnExpiringTokenItCannotRenew(t *testing.T) {
 	ctx, f := newService(t)
 	c := authorize(t, ctx, f, begin(t, ctx, f, nil), "TEXAMPLE01")
 	storeTokens(t, ctx, f, c, time.Now().Add(30*time.Second))
-	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, unusedDirectory(t), audit.NewLogger(), failingRefresh)
+	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.creds, unusedDirectory(t), audit.NewLogger(), failingRefresh)
 
 	workspaces, err := sync.MessagingWorkspaces(ctx, f.auth.ActiveOrganizationID, slackscopes.UsersRead)
 	var syncErr *slackdirectoryconnections.SyncError
@@ -75,7 +75,7 @@ func TestMessagingWorkspacesReportsABusySync(t *testing.T) {
 		t.Error("renewed a token while a sync holds the lock")
 		return nil, nil
 	})
-	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.enc, unusedDirectory(t), audit.NewLogger(), noRefresh)
+	sync := slackdirectoryconnections.NewDirectorySync(f.db, f.creds, unusedDirectory(t), audit.NewLogger(), noRefresh)
 
 	workspaces, err := sync.MessagingWorkspaces(ctx, f.auth.ActiveOrganizationID, slackscopes.UsersRead)
 	var syncErr *slackdirectoryconnections.SyncError

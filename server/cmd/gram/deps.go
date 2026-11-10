@@ -77,6 +77,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
@@ -1938,4 +1939,13 @@ func orgEncryptionSweeper(provisioner *orgencryption.Provisioner) background.Org
 		return nil
 	}
 	return provisioner
+}
+
+// integrationCredentialsBackfiller is nil while organization encryption is
+// unconfigured, since no organization can be enrolled.
+func integrationCredentialsBackfiller(logger *slog.Logger, db *pgxpool.Pool, credentials *integrationcredentials.Cipher, service *orgencryption.Service) background.IntegrationCredentialsBackfiller {
+	if service == nil {
+		return nil
+	}
+	return integrationcredentials.NewBackfiller(logger, db, credentials)
 }

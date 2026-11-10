@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -159,6 +160,14 @@ type WorkerOptions struct {
 	// disables unused managed ones; nil sweeps nothing.
 	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
 
+	// IntegrationCredentials seals Slack, device integration and network
+	// ingress credentials. Nil falls back to EncryptionClient alone.
+	IntegrationCredentials *integrationcredentials.Cipher
+
+	// IntegrationCredentialsBackfill seals enrolled organizations' existing
+	// integration credentials under their own keys; nil backfills nothing.
+	IntegrationCredentialsBackfill IntegrationCredentialsBackfiller
+
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
 	StartupSeeds []activitiespkg.StartupSeed
@@ -229,6 +238,8 @@ func ForDeploymentProcessing(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		IntegrationCredentials:         nil,
+		IntegrationCredentialsBackfill: nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -355,6 +366,8 @@ func NewTemporalWorker(
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
 		OrganizationEncryptionSweeper:  nil,
+		IntegrationCredentials:         nil,
+		IntegrationCredentialsBackfill: nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -416,6 +429,8 @@ func NewTemporalWorker(
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
 			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
+			IntegrationCredentials:         conv.Default(o.IntegrationCredentials, opts.IntegrationCredentials),
+			IntegrationCredentialsBackfill: conv.Default(o.IntegrationCredentialsBackfill, opts.IntegrationCredentialsBackfill),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -490,6 +505,11 @@ func NewTemporalWorker(
 		}
 	}
 
+	integrationCredentials := opts.IntegrationCredentials
+	if integrationCredentials == nil && opts.EncryptionClient != nil {
+		integrationCredentials = integrationcredentials.New(logger, opts.EncryptionClient, nil, nil, nil)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -498,6 +518,7 @@ func NewTemporalWorker(
 		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
+		integrationCredentials,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,
@@ -573,6 +594,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
 	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
 	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
+	integrationCredentialsBackfill := NewIntegrationCredentialsBackfillActivities(logger, opts.IntegrationCredentialsBackfill)
+	temporalWorker.RegisterActivityWithOptions(integrationCredentialsBackfill.Backfill, activity.RegisterOptions{Name: IntegrationCredentialsBackfillActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -734,8 +757,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(DeviceIntegrationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(SlackDirectorySyncWorkflow)
 	temporalWorker.RegisterWorkflow(SlackDirectorySweepWorkflow)
-	if opts.DB != nil && opts.EncryptionClient != nil && opts.GuardianPolicy != nil {
-		slackDirectory := newSlackDirectoryActivities(opts.DB, opts.EncryptionClient, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
+	if opts.DB != nil && integrationCredentials != nil && opts.GuardianPolicy != nil {
+		slackDirectory := newSlackDirectoryActivities(opts.DB, integrationCredentials, opts.GuardianPolicy.PooledClient(), opts.SlackDirectoryTokenRefresher)
 		temporalWorker.RegisterActivity(slackDirectory.SyncSlackDirectory)
 		temporalWorker.RegisterActivity(slackDirectory.ListDueSlackDirectories)
 		if opts.ServerURL != nil {
@@ -752,6 +775,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
 	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
+	temporalWorker.RegisterWorkflow(IntegrationCredentialsBackfillWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -932,6 +956,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// Preview databases clone dev's keys, so only the shared queue may run it.
 	if err := AddOrganizationEncryptionSweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
+	}
+
+	// The backfill mints managed KMS keys and writes credential rows. Preview
+	// databases clone dev's, so only the shared queue may run it.
+	if err := AddIntegrationCredentialsBackfillSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add integration credentials backfill schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {

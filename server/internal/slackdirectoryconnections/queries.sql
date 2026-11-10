@@ -29,8 +29,8 @@ FOR NO KEY UPDATE;
 -- name: CreateSlackDirectoryConnection :one
 -- A new workspace answers for the organization's "default" project unless that
 -- project already answers in another workspace.
-INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, default_project_id)
-VALUES (@organization_id, @slack_team_id, @slack_team_name, @credentials_encrypted, @granted_scopes, @generation, 'connected', (
+INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, credentials_org_encrypted, granted_scopes, generation, health, default_project_id)
+VALUES (@organization_id, @slack_team_id, @slack_team_name, @credentials_encrypted, @credentials_org_encrypted, @granted_scopes, @generation, 'connected', (
   SELECT p.id FROM projects p
   WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
     AND NOT EXISTS (SELECT 1 FROM slack_directory_connections c WHERE c.default_project_id = p.id)
@@ -42,6 +42,7 @@ RETURNING *;
 UPDATE slack_directory_connections SET
 slack_team_name = @slack_team_name,
 credentials_encrypted = @credentials_encrypted,
+credentials_org_encrypted = @credentials_org_encrypted,
 granted_scopes = @granted_scopes,
 generation = @generation,
 health = 'connected', disconnected_at = NULL, last_error_code = NULL,
@@ -58,7 +59,7 @@ RETURNING *;
 
 -- name: DisconnectSlackDirectoryConnection :one
 UPDATE slack_directory_connections SET
-credentials_encrypted = NULL, granted_scopes = '{}', generation = @generation,
+credentials_encrypted = NULL, credentials_org_encrypted = NULL, granted_scopes = '{}', generation = @generation,
 health = 'disconnected', disconnected_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = NULL
 WHERE organization_id = @organization_id AND id = @id AND generation = @expected_generation
 RETURNING *;
@@ -239,7 +240,7 @@ UPDATE slack_directory_connections SET last_full_sync_generation = NULL, last_fu
 WHERE organization_id = @organization_id AND id = @id;
 
 -- name: UpdateSlackDirectoryCredentials :execrows
-UPDATE slack_directory_connections SET credentials_encrypted = @credentials_encrypted, updated_at = clock_timestamp()
+UPDATE slack_directory_connections SET credentials_encrypted = @credentials_encrypted, credentials_org_encrypted = @credentials_org_encrypted, updated_at = clock_timestamp()
 WHERE organization_id = @organization_id AND id = @id AND generation = @generation AND disconnected_at IS NULL;
 
 -- name: ListDueSlackDirectorySyncs :many

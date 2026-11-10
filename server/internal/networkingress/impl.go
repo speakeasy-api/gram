@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
@@ -28,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -48,7 +47,7 @@ type Service struct {
 	db                   *pgxpool.Pool
 	auth                 *auth.Auth
 	authz                *authz.Engine
-	enc                  *encryption.Client
+	credentials          *integrationcredentials.Cipher
 	audit                *audit.Logger
 	admission            *ExpansionAdmission
 	requester            ReconcileRequester
@@ -59,13 +58,13 @@ type Service struct {
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
-	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *integrationcredentials.Cipher, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
+	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, credentials, auditLogger, admission, requester, nil, health)
 }
 
 // NewServiceWithPublication configures the optional durable publication invalidator.
 // A nil requester preserves the dormant producer behavior.
-func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
+func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, credentials *integrationcredentials.Cipher, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, publicationRequester PublicationRequester, health HealthRefresher) *Service {
 	logger = logger.With(attr.SlogComponent("network_ingress"))
 	return &Service{
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
@@ -73,7 +72,7 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		db:                   db,
 		auth:                 auth.New(logger, db, sessions, authzEngine),
 		authz:                authzEngine,
-		enc:                  enc,
+		credentials:          credentials,
 		audit:                auditLogger,
 		admission:            admission,
 		requester:            requester,
@@ -153,19 +152,19 @@ type tailscaleCredentials struct {
 	ClientSecret string `json:"client_secret"`
 }
 
-func (s *Service) encryptCredentials(clientID, clientSecret string) (pgtype.Text, error) {
+func (s *Service) encryptCredentials(ctx context.Context, organizationID, clientID, clientSecret string) (integrationcredentials.Sealed, error) {
 	if clientID == "" || clientSecret == "" {
-		return pgtype.Text{}, fmt.Errorf("OAuth client ID and secret are required")
+		return integrationcredentials.Sealed{}, oops.E(oops.CodeBadRequest, errors.New("OAuth client ID and secret are required"), "invalid provider credentials")
 	}
 	plaintext, err := json.Marshal(tailscaleCredentials{ClientID: clientID, ClientSecret: clientSecret})
 	if err != nil {
-		return pgtype.Text{}, fmt.Errorf("encode provider credentials: %w", err)
+		return integrationcredentials.Sealed{}, oops.E(oops.CodeUnexpected, err, "encode provider credentials").LogError(ctx, s.logger)
 	}
-	ciphertext, err := s.enc.Encrypt(plaintext)
+	sealed, err := s.credentials.Seal(ctx, organizationID, integrationcredentials.ColumnNetworkIngresses, plaintext)
 	if err != nil {
-		return pgtype.Text{}, fmt.Errorf("encrypt provider credentials: %w", err)
+		return integrationcredentials.Sealed{}, oops.E(oops.CodeUnexpected, err, "encrypt provider credentials").LogError(ctx, s.logger)
 	}
-	return conv.ToPGText(ciphertext), nil
+	return sealed, nil
 }
 
 func validateHostname(hostname string) error {
@@ -189,9 +188,9 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	if err := validateHostname(payload.Hostname); err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error())
 	}
-	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
+	credentials, err := s.encryptCredentials(ctx, authCtx.ActiveOrganizationID, payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
+		return nil, err
 	}
 
 	ingressID, err := uuid.NewV7()
@@ -239,7 +238,7 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 	ingress, err := queries.CreateNetworkIngress(ctx, repo.CreateNetworkIngressParams{
 		ID: ingressID, OrganizationID: authCtx.ActiveOrganizationID, Provider: payload.Provider,
 		Hostname: payload.Hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
-		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
+		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: conv.ToPGText(credentials.Legacy), CredentialsOrgEncrypted: credentials.Org,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
 	})
 	if err != nil {
@@ -337,9 +336,9 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	if err := s.requireExpansion(ctx, authCtx.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
-	credentials, err := s.encryptCredentials(payload.OauthClientID, payload.OauthClientSecret)
+	credentials, err := s.encryptCredentials(ctx, authCtx.ActiveOrganizationID, payload.OauthClientID, payload.OauthClientSecret)
 	if err != nil {
-		return nil, oops.E(oops.CodeBadRequest, err, "invalid provider credentials")
+		return nil, err
 	}
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -355,7 +354,7 @@ func (s *Service) RotateCredentials(ctx context.Context, payload *gen.RotateCred
 	} else if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress").LogError(ctx, s.logger)
 	}
-	ingress, err := queries.RotateNetworkIngressCredentials(ctx, repo.RotateNetworkIngressCredentialsParams{CredentialsEncrypted: credentials, OrganizationID: authCtx.ActiveOrganizationID})
+	ingress, err := queries.RotateNetworkIngressCredentials(ctx, repo.RotateNetworkIngressCredentialsParams{CredentialsEncrypted: conv.ToPGText(credentials.Legacy), CredentialsOrgEncrypted: credentials.Org, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "rotate network ingress credentials").LogError(ctx, s.logger)
 	}

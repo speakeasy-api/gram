@@ -16,12 +16,18 @@ type UseCase string
 const (
 	// UseCaseTailscaleGatewayState is the use case for Tailscale gateway state.
 	UseCaseTailscaleGatewayState UseCase = "tailscale-gateway-state"
+
+	// UseCaseIntegrationCredentials is the use case for credentials Speakeasy
+	// holds for third-party integrations: Slack workspaces, device management
+	// and compliance providers, and network ingress providers.
+	UseCaseIntegrationCredentials UseCase = "integration-credentials"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
 // here before calling any entry point with its name.
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
+	UseCaseIntegrationCredentials,
 }
 
 // ParseUseCase returns the registered use case named value.

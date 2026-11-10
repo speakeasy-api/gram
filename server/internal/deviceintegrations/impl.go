@@ -29,9 +29,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/integrationcredentials"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -154,7 +154,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	encryptionClient *encryption.Client,
+	credentials *integrationcredentials.Cipher,
 	guardianPolicy *guardian.Policy,
 	syncTrigger SyncTrigger,
 	features feature.Provider,
@@ -167,7 +167,7 @@ func NewService(
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
 		audit:       auditLogger,
-		store:       NewStore(logger, db, encryptionClient),
+		store:       NewStore(logger, db, credentials),
 		repo:        repo.New(db),
 		guardian:    guardianPolicy,
 		syncTrigger: syncTrigger,
