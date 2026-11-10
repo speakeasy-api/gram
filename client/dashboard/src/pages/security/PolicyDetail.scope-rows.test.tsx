@@ -574,6 +574,21 @@ describe("StandardPolicyEditor scope rows", () => {
     expect(screen.queryByText(/customized/)).toBeNull();
   });
 
+  it("keeps the recommendation toggle in the detector column", () => {
+    renderEditor(policy());
+
+    expect(screen.queryByText("Customize")).toBeNull();
+    const toggle = screen.getByRole("switch", { name: "Customize Secrets" });
+    const detectorCell = toggle.parentElement?.parentElement;
+    expect(detectorCell?.textContent).toContain("Secrets");
+    expect(toggle.parentElement?.textContent).toContain("Recommended");
+
+    fireEvent.click(toggle);
+    expect(toggle.parentElement?.textContent).toContain("Customized");
+    fireEvent.click(toggle);
+    expect(toggle.parentElement?.textContent).toContain("Recommended");
+  });
+
   it("unlocks a detector when customized and resets it when switched off", () => {
     renderEditor(policy());
 

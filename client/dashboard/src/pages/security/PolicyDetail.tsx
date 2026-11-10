@@ -1121,16 +1121,15 @@ function InspectMatrix({
         ) : null}
       </div>
       <div className="border-border overflow-x-auto border">
-        <div className="divide-border min-w-[760px] divide-y">
+        <div className="divide-border min-w-[768px] divide-y">
           <div
             className={cn(
               INSPECT_GRID,
               "bg-muted/35 text-muted-foreground text-xs",
             )}
           >
-            <div className="px-4 py-2 font-medium">Detector</div>
-            <div className="flex items-center justify-center border-l px-2 py-2 text-center font-medium">
-              Customize
+            <div className="flex items-center px-4 py-2 text-sm font-medium">
+              Detector
             </div>
             {SCOPE_SURFACES.map(({ kind, label, help }) => (
               <div
@@ -1138,7 +1137,9 @@ function InspectMatrix({
                 className="flex items-center justify-center border-l px-2 py-2 text-center"
               >
                 <SimpleTooltip tooltip={help}>
-                  <span className="text-foreground font-medium">{label}</span>
+                  <span className="text-foreground whitespace-nowrap font-medium">
+                    {label}
+                  </span>
                 </SimpleTooltip>
               </div>
             ))}
@@ -1398,8 +1399,7 @@ function sameScope(a: ScopeOverride, b: ScopeOverride): boolean {
   );
 }
 
-const INSPECT_GRID =
-  "grid grid-cols-[minmax(14rem,1.6fr)_6rem_repeat(4,minmax(6.5rem,1fr))]";
+const INSPECT_GRID = "grid grid-cols-[minmax(16rem,1fr)_repeat(4,8rem)]";
 
 function InspectRow({
   category,
@@ -1429,7 +1429,7 @@ function InspectRow({
           </Text>
           <ScopeRationaleHint rationale={category.recommendedScopeRationale} />
         </div>
-        <div className="text-muted-foreground col-span-5 flex items-center border-l px-4 py-3 text-xs">
+        <div className="text-muted-foreground col-span-4 flex items-center border-l px-4 py-3 text-xs">
           Checks the whole session, not individual messages.
         </div>
       </div>
@@ -1507,6 +1507,17 @@ function InspectRow({
               </button>
             ) : null}
           </div>
+          <div className="flex items-center gap-2 pt-1">
+            <Switch
+              aria-label={`Customize ${category.label}`}
+              checked={customized}
+              disabled={recommendationUnusable}
+              onCheckedChange={setCustomized}
+            />
+            <Badge variant="neutral">
+              {customized ? "Customized" : "Recommended"}
+            </Badge>
+          </div>
           {invalid ? (
             <Text small className="text-destructive">
               {mcpScoped
@@ -1514,14 +1525,6 @@ function InspectRow({
                 : "Select at least one kind of traffic."}
             </Text>
           ) : null}
-        </div>
-        <div className="flex items-center justify-center border-l px-2 py-3">
-          <Switch
-            aria-label={`Customize ${category.label}`}
-            checked={customized}
-            disabled={recommendationUnusable}
-            onCheckedChange={setCustomized}
-          />
         </div>
         {SCOPE_SURFACES.map(({ kind, label }) => {
           const unavailable = !editableKinds.includes(kind);
