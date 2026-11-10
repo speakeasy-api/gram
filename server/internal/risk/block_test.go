@@ -350,3 +350,61 @@ func TestSubmitRiskBlockFeedback_NotFound(t *testing.T) {
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
+
+// TestGetRiskBlock_KeepsDeletedPolicyName: a block page is a record of what
+// happened, so deleting the policy afterwards must not erase its name. With the
+// name gone the page fell back to the spend-rule headline, mislabeling a policy
+// block as a spend rule.
+func TestGetRiskBlock_KeepsDeletedPolicyName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx, authCtx := orgAdminContext(t, ctx, ti)
+
+	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{
+		Name: new("Deleted Block Policy"),
+	})
+	require.NoError(t, err)
+	policyID, err := uuid.Parse(policy.ID)
+	require.NoError(t, err)
+
+	blockID, err := uuid.NewV7()
+	require.NoError(t, err)
+	require.NoError(t, hooksrepo.New(ti.conn).InsertToolCallBlock(t.Context(), hooksrepo.InsertToolCallBlockParams{
+		ID:             blockID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+		ProjectID:      *authCtx.ProjectID,
+		Provider:       "claude",
+		Reason:         `Speakeasy blocked this tool call: matched policy "Deleted Block Policy"`,
+		ToolName:       pgtype.Text{String: "search", Valid: true},
+		UserID:         "",
+		RiskPolicyID:   uuid.NullUUID{UUID: policyID, Valid: true},
+		RiskResultID:   uuid.NullUUID{},
+		ChatID:         uuid.NullUUID{},
+		ChatMessageID:  uuid.NullUUID{},
+	}))
+
+	require.NoError(t, ti.service.DeleteRiskPolicy(ctx, &gen.DeleteRiskPolicyPayload{ID: policy.ID}))
+
+	block, err := ti.service.GetRiskBlock(ctx, &gen.GetRiskBlockPayload{ID: blockID.String()})
+	require.NoError(t, err)
+	require.Equal(t, "Deleted Block Policy", block.PolicyName)
+
+	voted, err := ti.service.SubmitRiskBlockFeedback(ctx, &gen.SubmitRiskBlockFeedbackPayload{ID: blockID.String(), Sentiment: "up"})
+	require.NoError(t, err)
+	require.Equal(t, "Deleted Block Policy", voted.PolicyName)
+}
+
+// TestGetRiskBlock_SpendRuleBlockHasNoPolicyName: a spend-rule block carries
+// no risk policy, which is what the page keys its spend-rule headline on.
+func TestGetRiskBlock_SpendRuleBlockHasNoPolicyName(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	ctx, authCtx := orgAdminContext(t, ctx, ti)
+
+	blockID := seedToolCallBlock(t, ti, authCtx.ActiveOrganizationID, *authCtx.ProjectID,
+		`Speakeasy blocked this tool call: spend rule "Hard limit"`, "Bash")
+
+	block, err := ti.service.GetRiskBlock(ctx, &gen.GetRiskBlockPayload{ID: blockID.String()})
+	require.NoError(t, err)
+	require.Empty(t, block.PolicyName)
+}

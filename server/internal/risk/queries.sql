@@ -1504,7 +1504,9 @@ RETURNING id;
 -- organization MEMBERSHIP (not their active org): the block is opened from the
 -- link an agent embeds in its block message, often by a non-admin member, so it
 -- is readable by any active member of the organization that owns it. The policy
--- name is joined for display when the policy still exists.
+-- name is joined for display even when the policy has since been deleted: the
+-- page records what blocked the call, and a block with no policy name reads as
+-- a spend-rule block.
 --
 -- user_id is the owning user captured at deny time (empty string when it could
 -- not be resolved). The handler uses it to tighten access beyond bare
@@ -1521,7 +1523,7 @@ SELECT
     b.user_id,
     rp.name AS policy_name
 FROM tool_call_blocks b
-LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id AND rp.deleted IS FALSE
+LEFT JOIN risk_policies rp ON rp.id = b.risk_policy_id
 WHERE b.id = @id
   AND b.deleted IS FALSE
   AND EXISTS (
@@ -1556,7 +1558,7 @@ WHERE tool_call_blocks.id = sqlc.arg(id)
   )
 RETURNING tool_call_blocks.id, tool_call_blocks.project_id, tool_call_blocks.reason, tool_call_blocks.tool_name,
   tool_call_blocks.provider, tool_call_blocks.feedback, tool_call_blocks.created_at,
-  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id AND rp.deleted IS FALSE), '')::text AS policy_name;
+  COALESCE((SELECT rp.name FROM risk_policies rp WHERE rp.id = tool_call_blocks.risk_policy_id), '')::text AS policy_name;
 
 
 -- name: UpsertRiskPolicyEvalReview :one
