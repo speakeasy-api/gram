@@ -627,6 +627,11 @@ func (s *Server) authenticateOAuth(r *http.Request) (identity, *authFailure) {
 	if tok == "" {
 		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
 	}
+	// Like many real servers, the OAuth endpoint also takes a service
+	// account key: the shared token.
+	if tok == fixtureauth.SharedToken {
+		return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
+	}
 	id, err := s.accessIdentity(tok)
 	if err != nil {
 		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: err.Error()}

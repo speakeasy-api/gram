@@ -214,3 +214,116 @@ WHERE id = (
   LIMIT 1
 )
 AND NOT (@tool_urn::text = ANY(tool_urns));
+
+-- Local MCP fixture (local_mcp_fixture.go). These point a few seeded servers
+-- at the throwaway fixture server (mcp-fixture/) so they work right after
+-- seeding. Local org only: the public demo org cannot reach localhost.
+
+-- name: LocalFixtureUpsertEnvironment :exec
+INSERT INTO environments (id, organization_id, project_id, name, slug, description)
+VALUES (@id::uuid, @organization_id::text, @project_id::uuid, 'MCP fixture', 'mcp-fixture',
+        'Points the demo API servers at the local MCP fixture''s API stub.')
+ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
+DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, updated_at = clock_timestamp();
+
+-- name: LocalFixtureUpsertEnvironmentEntry :exec
+INSERT INTO environment_entries (environment_id, name, value, is_secret)
+VALUES (@environment_id::uuid, @name::text, @value::text, FALSE)
+ON CONFLICT (environment_id, name)
+DO UPDATE SET value = EXCLUDED.value, is_secret = FALSE, updated_at = clock_timestamp();
+
+-- A toolset's environment is system-provided: it wins over any caller's own.
+-- name: LocalFixtureLinkToolsetEnvironments :execrows
+INSERT INTO toolset_environments (toolset_id, project_id, environment_id)
+SELECT t.id, t.project_id, @environment_id::uuid
+FROM toolsets t
+WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE
+  AND t.id = ANY(@toolset_ids::uuid[])
+ON CONFLICT (toolset_id)
+DO UPDATE SET environment_id = EXCLUDED.environment_id, updated_at = clock_timestamp();
+
+-- name: LocalFixturePointRemoteServer :execrows
+UPDATE remote_mcp_servers SET url = @url::text, name = @name::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixtureRenameServer :execrows
+UPDATE mcp_servers SET name = @name::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixturePointIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/oauth/authorize',
+    token_endpoint = @issuer::text || '/oauth/token',
+    registration_endpoint = @issuer::text || '/oauth/register',
+    revocation_endpoint = @issuer::text || '/oauth/revoke',
+    jwks_uri = NULL,
+    scopes_supported = @scopes::text[],
+    scope_override = NULL,
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['none'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    client_id_metadata_document_supported = TRUE,
+    name = @name::text,
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixturePointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = @resource::text,
+    metadata_url = @metadata_url::text,
+    authorization_servers = ARRAY[@issuer::text],
+    scopes_supported = @scopes::text[],
+    scope_override = @scopes::text[],
+    resource_name = 'Speakeasy MCP fixture (per-user OAuth)',
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE project_id = @project_id::uuid AND organization_id = @organization_id::text
+  AND resource_identifier = @old_resource::text AND deleted IS FALSE;
+
+-- A client ID metadata document client: Speakeasy serves the document at
+-- client_id, and the fixture fetches it to learn the redirect URI.
+-- name: LocalFixturePointMetadataDocumentClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, client_id_metadata_uri = @client_id::text,
+    callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- A client registered with the fixture ahead of time (the seed mints the
+-- registration the fixture would have returned).
+-- name: LocalFixturePointRegisteredClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text, callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalFixtureRenameAuthClient :execrows
+UPDATE mcp_auth_clients SET name = @name::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND deleted IS FALSE;
+
+-- name: LocalFixtureSetHeaderValue :execrows
+UPDATE mcp_auth_client_headers SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text;
+
+-- The live seeded sign-ins on the given clients, with the email each signed in as.
+-- name: LocalFixtureListLiveSessions :many
+SELECT rs.id, COALESCE(u.email, rs.upstream_email, '')::text AS email
+FROM remote_sessions rs
+LEFT JOIN users u ON rs.subject_urn = 'user:' || u.id
+WHERE rs.remote_session_client_id = ANY(@client_ids::uuid[])
+  AND rs.deleted IS FALSE
+  AND rs.access_expires_at > clock_timestamp()
+ORDER BY rs.id;
+
+-- name: LocalFixtureSetSessionTokens :execrows
+UPDATE remote_sessions
+SET access_token_encrypted = @access_token_encrypted::text,
+    access_expires_at = @access_expires_at::timestamptz,
+    refresh_token_encrypted = @refresh_token_encrypted::text,
+    refresh_expires_at = @refresh_expires_at::timestamptz,
+    scopes = @scopes::text[],
+    auto_refresh = TRUE,
+    upstream_email = @email::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND deleted IS FALSE;
