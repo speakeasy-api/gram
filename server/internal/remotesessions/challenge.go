@@ -1105,8 +1105,9 @@ const (
 	// RemoteSessionActive: the access token is unexpired, or a refresh token
 	// exists to renew it — the runtime gate will accept it.
 	RemoteSessionActive RemoteSessionStatus = "active"
-	// RemoteSessionExpired: the row exists but the access token has expired
-	// with no refresh token, so the runtime gate rejects it
+	// RemoteSessionExpired: the row exists but nothing stored can serve or
+	// renew it (an expired or missing access token with no usable refresh
+	// token, or tokens that can't be decrypted), so the runtime gate rejects it
 	// (ErrNoValidToken). The user must re-link to recover.
 	RemoteSessionExpired RemoteSessionStatus = "expired"
 )
@@ -1162,6 +1163,9 @@ type RemoteSessionState struct {
 	ValidationStatus ValidationOutcome
 	// ValidationReason is the Speakeasy-authored explanation of a non-valid verdict.
 	ValidationReason string
+
+	// SignInUnreadable marks a stored sign-in no token of which can be read; only a new sign-in replaces it.
+	SignInUnreadable bool
 }
 
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
@@ -1231,13 +1235,29 @@ func (m *ChallengeManager) remoteSessionStatuses(
 	if err != nil {
 		return nil, fmt.Errorf("list remote session statuses: %w", err)
 	}
-	return remoteSessionStates(rows), nil
+	return m.remoteSessionStates(rows), nil
 }
 
-// remoteSessionStates keys each status row by its client.
-func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
+// remoteSessionStates keys each status row by its client. A row with nothing
+// resolution can use reports expired, so connecting again rewrites it.
+func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) map[uuid.UUID]RemoteSessionState {
 	statuses := make(map[uuid.UUID]RemoteSessionState, len(rows))
+	now := time.Now()
 	for _, row := range rows {
+		status, canRefresh := RemoteSessionStatus(row.Status), row.CanRefresh
+		stored := storedTokenRow(row)
+		read := readStoredTokens(m.enc, stored, now)
+		if status == RemoteSessionActive && !read.usable {
+			status, canRefresh = RemoteSessionExpired, false
+		}
+		// A refresh token this key can't read can't be sent, so Refresh is not offered.
+		if canRefresh {
+			refreshErr := read.refreshErr
+			if !read.refreshRead {
+				_, refreshErr = m.enc.Decrypt(stored.RefreshTokenEncrypted.String)
+			}
+			canRefresh = refreshErr == nil
+		}
 		var accessExpiresAt *time.Time
 		if row.AccessExpiresAt.Valid {
 			expires := row.AccessExpiresAt.Time
@@ -1264,12 +1284,12 @@ func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesFor
 		}
 		label := RemoteSessionAccountLabel(row.UpstreamEmail.String, row.UpstreamDisplayName.String, row.UpstreamSubject.String, row.IdentitySource.String, row.Enrichment)
 		statuses[row.RemoteSessionClientID] = RemoteSessionState{
-			Status:                 RemoteSessionStatus(row.Status),
+			Status:                 status,
 			AutoRefresh:            row.AutoRefresh,
 			AccessExpiresAt:        accessExpiresAt,
 			RefreshExpiresAt:       refreshExpiresAt,
 			AuthorizationExpiresAt: authorizationExpiresAt,
-			CanRefresh:             row.CanRefresh,
+			CanRefresh:             canRefresh,
 			Resource:               row.Resource.String,
 			Scopes:                 row.Scopes,
 			ConnectedAs:            label.Identity(),
@@ -1282,6 +1302,7 @@ func remoteSessionStates(rows []remotesessions_repo.ListRemoteSessionStatusesFor
 			LastValidatedAt:        lastValidatedAt,
 			ValidationStatus:       ValidationOutcome(row.ValidationStatus.String),
 			ValidationReason:       row.ValidationReason.String,
+			SignInUnreadable:       read.unreadable,
 		}
 	}
 	return statuses
@@ -2757,3 +2778,14 @@ type tokenExchangeUnavailableError struct{ err error }
 
 func (e *tokenExchangeUnavailableError) Error() string { return e.err.Error() }
 func (e *tokenExchangeUnavailableError) Unwrap() error { return e.err }
+
+// storedTokenRow is the part of a status row readStoredTokens judges.
+func storedTokenRow(row remotesessions_repo.ListRemoteSessionStatusesForSubjectRow) remotesessions_repo.RemoteSession {
+	var sess remotesessions_repo.RemoteSession
+	sess.AccessTokenEncrypted = row.AccessTokenEncrypted
+	sess.RefreshTokenEncrypted = row.RefreshTokenEncrypted
+	sess.AccessExpiresAt = row.AccessExpiresAt
+	sess.RefreshExpiresAt = row.RefreshExpiresAt
+	sess.AuthorizationExpiresAt = row.AuthorizationExpiresAt
+	return sess
+}

@@ -715,6 +715,13 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if reconnect := r.URL.Query().Get("refresh_reconnect"); reconnect != "" {
+		for i := range cards {
+			if cards[i].ClientID == reconnect {
+				cards[i].ValidationNotice = refreshReconnectNotice(cards[i].Connected)
+			}
+		}
+	}
 	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
 		for i := range cards {
 			// An Unavailable card already says so, from stored state.

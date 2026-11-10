@@ -655,6 +655,15 @@ const (
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
 
+	// OAuthStoredTokenKey names which stored upstream token, access or
+	// refresh, could not be decrypted.
+	OAuthStoredTokenKey = attribute.Key("gram.oauth.stored_token")
+
+	// EncryptionKeyFingerprintKey is the first characters of the SHA-256 of
+	// the encryption key a process holds, so pods with different keys can be
+	// told apart without revealing the key.
+	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
+
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
 	// connect callback, or the idle keepalive re-check. Used as a metric
@@ -2583,6 +2592,14 @@ func OAuthRefreshTrigger[V ~string](v V) attribute.KeyValue {
 
 func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
+}
+
+func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
+	return OAuthStoredTokenKey.String(string(v))
+}
+
+func SlogEncryptionKeyFingerprint(v string) slog.Attr {
+	return slog.String(string(EncryptionKeyFingerprintKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {

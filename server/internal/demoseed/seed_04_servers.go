@@ -46,6 +46,9 @@ type serversKillswitchOperation struct {
 }
 
 // seedServers: MCP servers, gateway endpoints, plugins, meta servers, remote sessions, killswitch.
+// demoInertAccessToken is the dummy upstream access token the inert demo sessions hold.
+const demoInertAccessToken = "demo-inert-access-token" //nolint:gosec // G101: a fixture placeholder, not a credential
+
 func (s *seeder) seedServers(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
@@ -485,6 +488,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	// Sealed with this environment's key so the inert sessions read as connected;
+	// the token only ever reaches the fixture's reserved example hosts.
+	dummyAccess, err := s.enc.Encrypt([]byte(demoInertAccessToken))
+	if err != nil {
+		return fmt.Errorf("seal demo access token: %w", err)
+	}
 	for _, account := range []struct {
 		key     string
 		person  int
@@ -494,7 +503,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		{key: "attachment-session-expired", person: 2, expires: -time.Hour},
 	} {
 		if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
-			ID: s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
+			AccessTokenEncrypted: dummyAccess,
+			ID:                   s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
 			RemoteSessionClientID: s.det("attachment-client"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert demo attachment session: %w", err)
@@ -511,6 +521,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 	for _, v := range validated {
 		if err := s.q.ServersInsertValidatedSession(ctx, repo.ServersInsertValidatedSessionParams{
+			AccessTokenEncrypted:  dummyAccess,
 			ID:                    s.det("validated-session-" + strconv.Itoa(int(v.n))),
 			UserID:                user(int(v.n)),
 			UserSessionIssuerID:   s.det("issuer-linear"),

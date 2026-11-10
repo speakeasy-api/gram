@@ -576,7 +576,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
@@ -1361,7 +1361,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
 		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
-		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
+		WithAgentIdentityReads(platformmcp.NewAgentIdentityReadService(config.Logger, config.DB, config.Encryption, config.Authz, config.AgentAuthorizationChecks, budgets.Diagnostics)).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).

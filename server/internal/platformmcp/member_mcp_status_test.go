@@ -391,6 +391,7 @@ func TestMemberMCPReauthorizationReasonIsBounded(t *testing.T) {
 		{name: "refresh lifetime", state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &future, RefreshExpiresAt: &expired}, reason: "refresh_expired"},
 		{name: "upstream validation", state: remotesessions.RemoteSessionState{ValidationStatus: remotesessions.ValidationOutcomeRejectedByMember, ValidationReason: "sensitive upstream detail"}, reason: "authorization_rejected"},
 		{name: "access lifetime", state: remotesessions.RemoteSessionState{}, reason: "access_expired"},
+		{name: "saved sign-in unreadable", state: remotesessions.RemoteSessionState{SignInUnreadable: true}, reason: "sign_in_unreadable"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
