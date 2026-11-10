@@ -37,7 +37,7 @@ func (f *docsRetryFake) RetryDocsTx(_ context.Context, _ pgx.Tx, request catalog
 }
 func newDocsRetryWriter(f writeFixture) (*catalogDocsRetryWriter, *docsRetryFake, CatalogDocsRetryInput) {
 	mutator := &docsRetryFake{candidate: catalogpromotion.Candidate{ID: uuid.NewString(), OrganizationID: f.orgA, DocsRevision: uuid.NewString(), Status: "promoted", DocsStatus: "needs_attention", DocsRetryAllowed: true}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationRetryRegistryPromotionDocs: true}} //nolint:exhaustive // Only this operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	w := &catalogDocsRetryWriter{runner: f.runner, writes: writes, mutator: mutator}
 	return w, mutator, CatalogDocsRetryInput{OrganizationID: f.orgA, PromotionID: mutator.candidate.ID, DocsRevision: mutator.candidate.DocsRevision}
 }
@@ -72,7 +72,7 @@ func TestCatalogDocsRetryRejectsChangedDeliveryAndOtherTenant(t *testing.T) {
 
 func TestCatalogDocsRetryRequiresWriteScope(t *testing.T) {
 	t.Parallel()
-	w := &catalogDocsRetryWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationRetryRegistryPromotionDocs: true}}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogDocsRetryWriter{writes: WriteConfig{Enabled: true}}
 	_, err := w.apply(writePrincipalContext(t, []string{ScopeRead}), CatalogDocsRetryInput{})
 	require.ErrorIs(t, err, ErrWriteScope)
 }

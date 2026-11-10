@@ -31,7 +31,7 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 	f := newWriteFixture(t, "admin_mcp_image_upload_url")
 	ctx := writeContext(t, f)
 	uploads := &fakeImageUploads{}
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUploadPlatformImage: true}} //nolint:exhaustive // Only the upload operation is enabled.
+	enabled := WriteConfig{Enabled: true}
 
 	out, err := createImageUploadURL(ctx, uploads, enabled)
 	require.NoError(t, err)
@@ -56,11 +56,12 @@ func TestCreateImageUploadURLIssuesForTheVerifiedStaffMember(t *testing.T) {
 
 func TestAttachWritesImageUploadNeedsAssetStorage(t *testing.T) {
 	t.Parallel()
-	enabled := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationUploadPlatformImage: true}} //nolint:exhaustive // Only the upload operation is enabled.
+	enabled := WriteConfig{Enabled: true}
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
 
-	err := AttachWrites(NewRuntime(nil, ""), &StaffOAuth{runner: &writeRunner{}}, deps, enabled)
-	require.ErrorContains(t, err, "not implemented")
+	withoutStorage := NewRuntime(nil, "")
+	require.NoError(t, AttachWrites(withoutStorage, &StaffOAuth{runner: &writeRunner{}}, deps, enabled))
+	require.False(t, withoutStorage.writes.implements(OperationUploadPlatformImage))
 
 	runtime := NewRuntime(nil, "")
 	oauth := &StaffOAuth{runner: &writeRunner{}}

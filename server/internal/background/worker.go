@@ -155,6 +155,10 @@ type WorkerOptions struct {
 	// IssuerKeySweeper retires expired internal session issuer keys; nil sweeps nothing.
 	IssuerKeySweeper InternalSessionIssuerKeySweeper
 
+	// OrganizationEncryptionSweeper probes organization encryption keys and
+	// disables unused managed ones; nil sweeps nothing.
+	OrganizationEncryptionSweeper OrganizationEncryptionSweeper
+
 	// StartupSeeds is the reference data this worker keeps applied. The
 	// worker kicks one run per seed version when it starts.
 	StartupSeeds []activitiespkg.StartupSeed
@@ -224,6 +228,7 @@ func ForDeploymentProcessing(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
 		StartupSeeds:                   nil,
 		SlackClient:                    nil,
 		SlackDirectoryTokenRefresher:   nil,
@@ -349,6 +354,7 @@ func NewTemporalWorker(
 		RemoteSessionAssertionSigner:   nil,
 		Connections:                    nil,
 		IssuerKeySweeper:               nil,
+		OrganizationEncryptionSweeper:  nil,
 		StartupSeeds:                   nil,
 		EmailService:                   nil,
 		AssistantsCore:                 nil,
@@ -409,6 +415,7 @@ func NewTemporalWorker(
 			RemoteSessionAssertionSigner:   conv.Default(o.RemoteSessionAssertionSigner, opts.RemoteSessionAssertionSigner),
 			Connections:                    conv.Default(o.Connections, opts.Connections),
 			IssuerKeySweeper:               conv.Default(o.IssuerKeySweeper, opts.IssuerKeySweeper),
+			OrganizationEncryptionSweeper:  conv.Default(o.OrganizationEncryptionSweeper, opts.OrganizationEncryptionSweeper),
 			StartupSeeds:                   conv.DefaultSlice(o.StartupSeeds, opts.StartupSeeds),
 			EmailService:                   conv.Default(o.EmailService, opts.EmailService),
 			AssistantsCore:                 conv.Default(o.AssistantsCore, opts.AssistantsCore),
@@ -564,6 +571,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivityWithOptions(adminReconciliationActivities.Reconcile, activity.RegisterOptions{Name: OpenRouterAdminReconcileActivityName})
 	issuerKeySweep := NewInternalSessionIssuerKeySweepActivities(logger, meterProvider, opts.IssuerKeySweeper)
 	temporalWorker.RegisterActivityWithOptions(issuerKeySweep.Sweep, activity.RegisterOptions{Name: InternalSessionIssuerKeySweepActivityName})
+	organizationEncryptionSweep := NewOrganizationEncryptionSweepActivities(logger, opts.OrganizationEncryptionSweeper)
+	temporalWorker.RegisterActivityWithOptions(organizationEncryptionSweep.Sweep, activity.RegisterOptions{Name: OrganizationEncryptionSweepActivityName})
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomain)
 	temporalWorker.RegisterActivity(activities.VerifyCustomDomainV2)
 	temporalWorker.RegisterActivity(activities.CustomDomainIngress)
@@ -744,6 +753,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(OktaApplicationSyncWorkflow)
 	temporalWorker.RegisterWorkflow(InternalSessionIssuerKeySweepWorkflow)
+	temporalWorker.RegisterWorkflow(OrganizationEncryptionSweepWorkflow)
 	temporalWorker.RegisterWorkflow(AIUsagePollerWorkflow)
 	temporalWorker.RegisterWorkflow(WeeklyUsageSummaryWorkflow)
 	temporalWorker.RegisterWorkflow(IndexToolsetWorkflow)
@@ -920,6 +930,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	// so only the shared queue may run it.
 	if err := AddInternalSessionIssuerKeySweepSchedule(ctx, env); err != nil {
 		logger.ErrorContext(ctx, "failed to add internal session issuer key sweep schedule", attr.SlogError(err))
+	}
+
+	// The sweep suspends organizations and disables managed KMS keys.
+	// Preview databases clone dev's keys, so only the shared queue may run it.
+	if err := AddOrganizationEncryptionSweepSchedule(ctx, env); err != nil {
+		logger.ErrorContext(ctx, "failed to add organization encryption sweep schedule", attr.SlogError(err))
 	}
 
 	if err := AddPlatformUsageMetricsSchedule(ctx, env); err != nil {

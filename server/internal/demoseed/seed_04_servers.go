@@ -219,7 +219,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
 	}
-	if err := s.q.ServersStampLinearRemoteSessionIssuer(ctx, repo.ServersStampLinearRemoteSessionIssuerParams{
+	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),
 		McpServerID:           s.det("mcpserver-linear"),
 		ProjectID:             proj,
@@ -241,6 +241,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		OrgID:     org,
 	}); err != nil {
 		return fmt.Errorf("upsert demo linear protected resource: %w", err)
+	}
+	if err := s.seedSignInExampleServers(ctx); err != nil {
+		return err
 	}
 	if err := s.q.ServersInsertSlackIdentityHeader(ctx, repo.ServersInsertSlackIdentityHeaderParams{
 		ID:                s.det("agent-identity-header-slack"),
@@ -459,9 +462,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 	// Organization authorizations include Linear and Slack plus GitHub, private
-	// inventory, and both EMA servers, including on the expired history row.
+	// inventory, both EMA servers, Notion and DeepWiki, including on the
+	// expired history row.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki"} {
+		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki", "notion", "deepwiki"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
@@ -874,6 +878,13 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		}); err != nil {
 			return fmt.Errorf("associate demo ema %s server with its client: %w", service, err)
 		}
+		if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
+			RemoteSessionIssuerID: s.det("ema-vendor-" + service),
+			McpServerID:           s.det("mcpserver-ema-" + service),
+			ProjectID:             proj,
+		}); err != nil {
+			return fmt.Errorf("stamp demo ema %s remote session issuer: %w", service, err)
+		}
 	}
 	if err := s.q.ServersInsertEMAProtectedResources(ctx, repo.ServersInsertEMAProtectedResourcesParams{
 		TrackerID: s.det("protected-resource-ema-tracker"),
@@ -902,6 +913,52 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
+	return nil
+}
+
+// seedSignInExampleServers adds Notion, whose callers each sign in to their
+// own account once an admin sets up its sign-in, and DeepWiki, a public
+// server that needs no sign-in. Unlike the example-host servers, both
+// connect for real.
+func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	if err := s.q.ServersInsertSignInExampleRemoteMCPServers(ctx, repo.ServersInsertSignInExampleRemoteMCPServersParams{
+		NotionID:   s.det("remotemcp-notion"),
+		ProjectID:  proj,
+		DeepwikiID: s.det("remotemcp-deepwiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo notion and deepwiki remote servers: %w", err)
+	}
+	if err := s.q.ServersInsertNotionUserSessionIssuer(ctx, repo.ServersInsertNotionUserSessionIssuerParams{
+		ID:        s.det("issuer-notion"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo notion user session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertSignInExampleMCPServers(ctx, repo.ServersInsertSignInExampleMCPServersParams{
+		NotionID:          s.det("mcpserver-notion"),
+		ProjectID:         proj,
+		RemoteNotionID:    s.det("remotemcp-notion"),
+		IssuerNotionID:    s.det("issuer-notion"),
+		DeepwikiID:        s.det("mcpserver-deepwiki"),
+		RemoteDeepwikiID:  s.det("remotemcp-deepwiki"),
+		IssuerWorkforceID: s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("insert demo notion and deepwiki servers: %w", err)
+	}
+	if err := s.q.ServersInsertSignInExampleEndpoints(ctx, repo.ServersInsertSignInExampleEndpointsParams{
+		NotionEndpointID:   s.det("endpoint-notion"),
+		ProjectID:          proj,
+		NotionServerID:     s.det("mcpserver-notion"),
+		NotionSlug:         s.spec.OrgSlug + "-notion",
+		DeepwikiEndpointID: s.det("endpoint-deepwiki"),
+		DeepwikiServerID:   s.det("mcpserver-deepwiki"),
+		DeepwikiSlug:       s.spec.OrgSlug + "-deepwiki",
+	}); err != nil {
+		return fmt.Errorf("insert demo notion and deepwiki endpoints: %w", err)
 	}
 	return nil
 }

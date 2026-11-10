@@ -3,7 +3,7 @@ import { Card } from "@/components/ui/Card";
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { useActiveDeployment } from "@/hooks/toolTypes";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
 import { Server } from "lucide-react";

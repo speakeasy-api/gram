@@ -7,7 +7,6 @@ package mcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -16,9 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -176,29 +173,22 @@ func (s *Service) authorizedMetaMembers(
 	}
 
 	shadow := s.newMandatoryShadow(ctx, endpoint.OrganizationID)
+	// Filtering the candidates names none of them, so it records no
+	// authorization check for any.
+	filterCtx := authz.WithoutChallenges(ctx)
 	authorized := make([]metamcprepo.ListMetaMCPMembersForRemoteSessionClientRow, 0, len(rows))
 	for _, row := range rows {
 		// Only proxy backends reach here, so mcp:connect is keyed on the
-		// mcp_servers id. Unknown visibility fails closed.
+		// mcp_servers id. Unknown visibility fails closed, which is not
+		// redundant with the query's one-named-value visibility filter. Only
+		// a refusal drops a member; dropping on a fault narrows the candidate
+		// set and turns ambiguous into a confident wrong answer.
 		connect := authz.MCPCheck(authz.ScopeMCPConnect, row.McpServerID.String(), row.ProjectID.String())
-		switch row.McpServerVisibility {
-		case mcpservers.VisibilityPublic:
-			shadow.recordServer(ctx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
-		case mcpservers.VisibilityPrivate:
-			// Only a denial drops a member (Unauthorized is an anonymous
-			// caller, as the runtime snapshot treats it); dropping on a fault
-			// narrows the candidate set and turns ambiguous into a confident
-			// wrong answer.
-			err := s.authz.Require(ctx, connect)
-			shadow.shadowRequireServer(ctx, mandatorySurfaceConsent, err, authz.MandatoryServerPrivate, connect)
-			if err != nil {
-				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
-					continue
-				}
-				return nil, fmt.Errorf("authorize meta MCP member access: %w", err)
-			}
-		default:
-			// Not redundant with the query's one-named-value visibility filter.
+		refusal, err := s.memberConnectDecision(filterCtx, shadow, mandatorySurfaceConsent, row.McpServerVisibility, connect)
+		if err != nil {
+			return nil, fmt.Errorf("authorize meta MCP member access: %w", err)
+		}
+		if refusal != nil {
 			continue
 		}
 		authorized = append(authorized, row)

@@ -217,7 +217,10 @@ func TestUpdateMcpEndpointAddressInTransactionPreservesRoot(t *testing.T) {
 	require.Empty(t, reconcileDomains)
 	require.True(t, updated.IsDomainRoot)
 	require.NoError(t, tx.Commit(ctx))
-	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, domain.ID)
+	route, err := customdomainsrepo.New(ti.conn).GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	require.NoError(t, err)
 	require.Equal(t, "after", route.RootSlug)
 }

@@ -23,7 +23,7 @@ func newFeatureWriterFixture(t *testing.T, f writeFixture) (*featureWriter, *pro
 	redisClient, err := newRedisClient(t, 0)
 	require.NoError(t, err)
 	features := productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), f.db, redisClient)
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}} //nolint:exhaustive // Only the tested feature operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	return &featureWriter{runner: f.runner, mutator: productfeatures.NewMutator(features, audit.NewLogger()), writes: writes}, features
 }
 
@@ -107,7 +107,7 @@ func TestFeatureWriteRefusedWhileSwitchedOff(t *testing.T) {
 
 func TestFeatureWriteRequiresStaffWriteAuthority(t *testing.T) {
 	t.Parallel()
-	writer := &featureWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetOrganizationFeature: true}}} //nolint:exhaustive // Only feature writes are enabled.
+	writer := &featureWriter{writes: WriteConfig{Enabled: true}}
 	for _, tc := range []struct {
 		name string
 		ctx  func(*testing.T) context.Context

@@ -16,7 +16,7 @@ import (
 )
 
 func newChatAnalysisWriter(f writeFixture) *chatAnalysisWriter {
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationSetChatAnalysisSettings: true}} //nolint:exhaustive // Only the tested operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	return &chatAnalysisWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes}
 }
 

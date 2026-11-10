@@ -16,6 +16,7 @@ import {
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
+  WebhookIcon,
 } from "lucide-react";
 import { Fragment, useRef, useState, type JSX } from "react";
 
@@ -91,6 +92,12 @@ const RECORD_PAGES = [
     icon: SlidersHorizontalIcon,
   },
   { to: "/organizations/$idOrSlug/members", label: "Members", icon: UsersIcon },
+  {
+    to: "/organizations/$idOrSlug/hooks",
+    label: "Hooks",
+    icon: WebhookIcon,
+    keywords: "hooks fleet installs versions machines legacy",
+  },
 ] as const;
 
 // One spelling of the key, registered from it and drawn from it. `Mod` is the

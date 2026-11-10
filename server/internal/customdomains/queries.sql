@@ -75,6 +75,7 @@ SELECT
     d.provisioner_kind,
     d.ip_allowlist,
     d.deleted,
+    d.dns_target_token,
     COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
     COALESCE(root_endpoint.slug, '')::text AS root_slug
 FROM custom_domains AS d
@@ -93,7 +94,18 @@ LEFT JOIN LATERAL (
       AND e.deleted IS FALSE
     LIMIT 1
 ) AS root_endpoint ON TRUE
-WHERE d.id = @id;
+WHERE d.id = @id
+  AND d.organization_id = @organization_id;
+
+-- name: GetCustomDomainOrganizationIDForReconcile :one
+-- Internal reconcile workflow lookup. The workflow is keyed by custom domain
+-- ID alone, so this resolves the owning organization before the
+-- organization-scoped GetCustomDomainRouteConfig read. Not reachable from
+-- user-facing handlers. Includes deleted rows so reconciliation can clean up
+-- their resources.
+SELECT organization_id
+FROM custom_domains
+WHERE id = @id;
 
 -- name: LockRootMcpEndpointSelection :many
 -- The caller locks the parent custom-domain row first. Sort endpoint locks to
@@ -387,9 +399,34 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- name: DeleteCustomDomain :exec
+-- Clearing the DNS target token frees it from the live-row unique index and
+-- stops the tombstone from claiming a per-domain target.
 UPDATE custom_domains
-SET deleted_at = clock_timestamp()
+SET
+    deleted_at = clock_timestamp(),
+    dns_target_token = NULL
 WHERE organization_id = @organization_id
+  AND deleted IS FALSE;
+
+-- name: AssignCustomDomainDNSTargetToken :one
+-- Tokens are immutable once set: only a live row without one is updated, so
+-- concurrent assigners cannot overwrite each other. No row means the domain
+-- already has a token or is no longer live.
+UPDATE custom_domains
+SET
+    dns_target_token = @dns_target_token::text,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+  AND dns_target_token IS NULL
+RETURNING dns_target_token;
+
+-- name: GetCustomDomainDNSTargetToken :one
+SELECT dns_target_token
+FROM custom_domains
+WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: DisableCustomDomainForHealth :one

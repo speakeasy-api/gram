@@ -3,6 +3,7 @@ import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useState, type JSX } from "react";
+import { OpenClawMaintenance } from "../OpenClawMaintenance";
 import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
 import { WizardStepHeader } from "./WizardChrome";
@@ -288,6 +289,7 @@ export function StepInstall({
                 {commandError}
               </Text>
             )}
+            <OpenClawMaintenance />
           </PanelTab>
 
           <PanelTab value="manual">

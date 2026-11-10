@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcprepo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // seedDeploymentWithExternalMCP inserts a completed deployment that carries an
@@ -32,14 +32,12 @@ func seedDeploymentWithExternalMCP(t *testing.T, ctx context.Context, ti *testIn
 	require.NoError(t, err)
 	require.NoError(t, q.CreateDeploymentStatus(ctx, repo.CreateDeploymentStatusParams{DeploymentID: depID, Status: "completed"}))
 
-	_, err = externalmcprepo.New(ti.conn).CreateExternalMCPAttachment(ctx, externalmcprepo.CreateExternalMCPAttachmentParams{
+	require.NoError(t, testrepo.New(ti.conn).CreateExternalMCPAttachmentFixture(ctx, testrepo.CreateExternalMCPAttachmentFixtureParams{
 		DeploymentID:            depID,
-		RegistryID:              uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Name:                    "Test",
 		Slug:                    "test",
 		RegistryServerSpecifier: "example/server",
-	})
-	require.NoError(t, err)
+	}))
 
 	return depID
 }

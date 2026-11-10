@@ -92,7 +92,7 @@ type StaffOAuthAuthorization struct {
 func NewStaffOAuthAuthorization(clients staffClientStore, store staffAuthorizationStore, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, resource string) *StaffOAuthAuthorization {
 	return &StaffOAuthAuthorization{
 		clients: clients, store: store, cache: cache.NewTypedObjectCache[staffChallenge](nil, challengeCache, cache.SuffixNone),
-		verifier: verifier, cipher: cipher, resource: resource, writes: WriteConfig{Enabled: false, Operations: nil},
+		verifier: verifier, cipher: cipher, resource: resource, writes: WriteConfig{Enabled: false},
 	}
 }
 
@@ -134,7 +134,7 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
-		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
+		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.Enabled)
 		if !ok {
 			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 			return
@@ -328,7 +328,7 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	// Revalidate against the current switch: writes may have been turned off
 	// between authorize and consent.
-	scopes, ok := normalizeRequestedScopes(strings.Join(challenge.Scopes, " "), s.writes.WritesAvailable())
+	scopes, ok := normalizeRequestedScopes(strings.Join(challenge.Scopes, " "), s.writes.Enabled)
 	if !ok {
 		staffRedirectError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 		return

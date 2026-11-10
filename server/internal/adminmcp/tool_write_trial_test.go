@@ -16,7 +16,7 @@ import (
 )
 
 func newTrialWriter(f writeFixture) *trialWriter {
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationExtendOrganizationTrial: true}} //nolint:exhaustive // Only selected write operations are enabled by this test.
+	writes := WriteConfig{Enabled: true}
 	return &trialWriter{runner: f.runner, audit: audit.NewLogger(), writes: writes}
 }
 

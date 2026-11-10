@@ -2,6 +2,9 @@
 import { describe, expect, it } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import {
+  agentPolicyBroadGrantLabel,
+  agentPolicyChangedScopes,
+  agentPolicySaveChanges,
   agentPolicyFingerprint,
   agentPolicyDraftFromGrants,
   agentPolicyGrantsFromDraft,
@@ -291,6 +294,31 @@ describe("policy diff", () => {
       "grant_two",
     ]);
   });
+
+  it("removes every stored copy of a duplicated grant, and keeps every copy it still wants", () => {
+    const selector = { resourceKind: "skill", resourceId: "*" } as const;
+    const stored = [
+      storedGrant("copy_one", "skill:read", selector),
+      storedGrant("copy_two", "skill:read", selector),
+      storedGrant("kept_one", "project:read", {
+        resourceKind: "project",
+        resourceId: "*",
+      }),
+      storedGrant("kept_two", "project:read", {
+        resourceKind: "project",
+        resourceId: "*",
+      }),
+    ];
+    const diff = diffAgentPolicyGrants(
+      stored,
+      agentPolicyGrantsFromDraft({ "project:read": null }),
+    );
+    expect(diff.remove.map((grant) => grant.id)).toEqual([
+      "copy_one",
+      "copy_two",
+    ]);
+    expect(diff.create).toEqual([]);
+  });
 });
 
 // The server accepts server_url and server_identity on risk policy selectors
@@ -528,16 +556,12 @@ describe("stored constraints the editor cannot show", () => {
 // An empty tool or project id still constrains the grant, so truthiness must
 // not decide whether it survives a trip through the editor.
 describe("empty-string dimensions", () => {
-  it.each([
-    ["tool", { tool: "" }],
-    ["projectId", { projectId: "" }],
-    ["both", { tool: "", projectId: "" }],
-  ])("round-trips a grant constrained by an empty %s", (_, extra) => {
+  it("round-trips a grant constrained by an empty projectId", () => {
     const stored = [
       storedGrant("grant_empty", "mcp:read", {
         resourceKind: "mcp",
         resourceId: "server_one",
-        ...extra,
+        projectId: "",
       }),
     ];
     const view = agentPolicyViewFromGrants(stored);
@@ -548,6 +572,25 @@ describe("empty-string dimensions", () => {
         agentPolicyGrantsFromDraft(view.draft),
       ),
     ).toEqual({ create: [], remove: [] });
+  });
+
+  // The editor shows no tool choice for the MCP scopes it offers, so even an
+  // empty tool is a constraint it cannot show, and the scope is kept whole.
+  it.each([
+    ["tool", { tool: "" }],
+    ["both", { tool: "", projectId: "" }],
+  ])("keeps a grant constrained by an empty %s as stored", (_, extra) => {
+    const stored = [
+      storedGrant("grant_empty", "mcp:read", {
+        resourceKind: "mcp",
+        resourceId: "server_one",
+        ...extra,
+      }),
+    ];
+    const view = agentPolicyViewFromGrants(stored);
+    expect(view.editable).toEqual([]);
+    expect(view.preserved).toEqual(stored);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
   });
 
   it("does not read an empty dimension as unrestricted", () => {
@@ -717,5 +760,270 @@ describe("selector values containing the old delimiters", () => {
     expect(agentPolicyFingerprint([split, joined])).toBe(
       agentPolicyFingerprint([joined, split]),
     );
+  });
+});
+
+// Loading an agent's ceiling into the editor and saving it untouched must
+// write nothing, whatever shape the stored grants take.
+describe("round trip through the editor", () => {
+  const ceiling = [
+    storedGrant("connect", "mcp:connect", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      projectId: "project_one",
+    }),
+    storedGrant("auth", "mcp:auth", {
+      resourceKind: "mcp_auth_client",
+      resourceId: "*",
+    }),
+    storedGrant("read_server", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "server_one",
+      projectId: "project_one",
+    }),
+    storedGrant("read_server_two", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "server_two",
+    }),
+    storedGrant("write_project", "mcp:write", {
+      resourceKind: "mcp",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+    storedGrant("project_read", "project:read", {
+      resourceKind: "project",
+      resourceId: "project_one",
+    }),
+    storedGrant("skill_read", "skill:read", {
+      resourceKind: "skill",
+      resourceId: "*",
+    }),
+    storedGrant("inference", "inference:execute", {
+      resourceKind: "inference",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+    storedGrant("assistant", "assistant:read", {
+      resourceKind: "assistant",
+      resourceId: "assistant_one",
+      projectId: "project_one",
+    }),
+    storedGrant("sync", "org:device_agent_sync", {
+      resourceKind: "org",
+      resourceId: "org_one",
+    }),
+  ];
+
+  it("reproduces every editable grant exactly", () => {
+    const view = agentPolicyViewFromGrants(ceiling);
+    expect(view.preservedScopes).toEqual(["mcp:auth"]);
+    expect(view.editable.map((grant) => grant.id)).toEqual([
+      "read_server",
+      "read_server_two",
+      "write_project",
+      "project_read",
+      "skill_read",
+      "inference",
+      "assistant",
+      "sync",
+    ]);
+    expect(
+      diffAgentPolicyGrants(
+        view.editable,
+        agentPolicyGrantsFromDraft(view.draft),
+      ),
+    ).toEqual({ create: [], remove: [] });
+    // Rebuilt from what a save would write, the draft names no changed scope.
+    expect(
+      agentPolicyChangedScopes(
+        view.draft,
+        agentPolicyDraftFromGrants(
+          agentPolicyGrantsFromDraft(view.draft).map((grant, index) =>
+            storedGrant(`saved_${index}`, grant.scope, grant.selector),
+          ),
+        ),
+      ),
+    ).toEqual(new Set());
+  });
+
+  it("locks a scope the picker cannot show in one view", () => {
+    const view = agentPolicyViewFromGrants([
+      storedGrant("project_wide", "mcp:read", {
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "project_one",
+      }),
+      storedGrant("named", "mcp:read", {
+        resourceKind: "mcp",
+        resourceId: "server_two",
+      }),
+      storedGrant("environment", "environment:read", {
+        resourceKind: "environment",
+        resourceId: "*",
+        projectId: "project_one",
+      }),
+      storedGrant("risk", "risk_policy:evaluate", {
+        resourceKind: "risk_policy",
+        resourceId: "policy_one",
+      }),
+    ]);
+    expect(view.editable).toEqual([]);
+    expect(view.preservedScopes).toEqual([
+      "mcp:read",
+      "environment:read",
+      "risk_policy:evaluate",
+    ]);
+  });
+});
+
+describe("changed scopes", () => {
+  const initial = {
+    "mcp:read": [
+      {
+        resourceKind: "mcp" as const,
+        resourceId: "server_one",
+        projectId: "p",
+      },
+    ],
+    "project:read": null,
+  };
+
+  it("leaves out a scope chosen again as it was", () => {
+    expect(
+      agentPolicyChangedScopes(initial, {
+        ...initial,
+        "mcp:read": [
+          { resourceKind: "mcp", resourceId: "server_one", projectId: "p" },
+        ],
+      }),
+    ).toEqual(new Set());
+  });
+
+  it("names a scope whose resources, presence or completeness changed", () => {
+    expect(
+      agentPolicyChangedScopes(initial, {
+        "mcp:read": [],
+        "skill:read": null,
+      }),
+    ).toEqual(new Set(["mcp:read", "project:read", "skill:read"]));
+  });
+
+  it("names an unfinished choice started from any stored permission", () => {
+    expect(
+      agentPolicyChangedScopes(
+        { "mcp:read": null, "skill:read": [], "project:read": null },
+        { "mcp:read": [], "skill:read": [], "project:read": null },
+      ),
+    ).toEqual(new Set(["mcp:read"]));
+  });
+});
+
+describe("broad grant label", () => {
+  it.each([
+    [{ resourceKind: "org", resourceId: "*" }, "Whole organization"],
+    // The organization's own id narrows nothing: an agent is in one.
+    [{ resourceKind: "org", resourceId: "org_one" }, "Whole organization"],
+    [
+      { resourceKind: "org", resourceId: "*", projectId: "project_one" },
+      "All resources",
+    ],
+    [
+      { resourceKind: "org", resourceId: "org_one", projectId: "project_one" },
+      undefined,
+    ],
+    [{ resourceKind: "mcp", resourceId: "*" }, "All resources"],
+    [
+      { resourceKind: "mcp", resourceId: "*", projectId: "project_one" },
+      "All resources",
+    ],
+    [{ resourceKind: "mcp", resourceId: "server_one" }, undefined],
+  ] as const)("labels %j as %s", (selector, label) => {
+    expect(agentPolicyBroadGrantLabel(selector)).toBe(label);
+  });
+});
+
+describe("project-wide grants stored without a resource id", () => {
+  it.each(["mcp:read", "inference:execute"])(
+    "edits a %s grant the picker ticks as its project",
+    (scope) => {
+      const stored = [
+        storedGrant("grant_project", scope, {
+          resourceKind: agentPolicyResourceKind(scope),
+          resourceId: "",
+          projectId: "project_one",
+        }),
+        storedGrant("grant_project_two", scope, {
+          resourceKind: agentPolicyResourceKind(scope),
+          resourceId: "*",
+          projectId: "project_two",
+        }),
+      ];
+      const view = agentPolicyViewFromGrants(stored);
+      expect(view.preservedScopes).toEqual([]);
+      expect(
+        diffAgentPolicyGrants(
+          view.editable,
+          agentPolicyGrantsFromDraft(view.draft),
+        ),
+      ).toEqual({ create: [], remove: [] });
+    },
+  );
+
+  it("locks every resource in an empty project, which the picker cannot tick", () => {
+    const view = agentPolicyViewFromGrants([
+      storedGrant("grant_empty", "mcp:read", {
+        resourceKind: "mcp",
+        resourceId: "*",
+        projectId: "",
+      }),
+    ]);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
+  });
+});
+
+describe("save changes", () => {
+  const stored = [
+    storedGrant("kept_one", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "*",
+      projectId: "project_one",
+    }),
+    storedGrant("kept_two", "mcp:read", {
+      resourceKind: "mcp",
+      resourceId: "server_two",
+    }),
+    storedGrant("skill", "skill:read", {
+      resourceKind: "skill",
+      resourceId: "*",
+    }),
+  ];
+
+  it("writes nothing for a kept scope left alone", () => {
+    const view = agentPolicyViewFromGrants(stored);
+    expect(view.preservedScopes).toEqual(["mcp:read"]);
+    expect(agentPolicySaveChanges(view, view.draft, new Set())).toEqual({
+      create: [],
+      remove: [],
+    });
+  });
+
+  it("removes every stored grant of a kept scope the reader removes", () => {
+    const view = agentPolicyViewFromGrants(stored);
+    const changes = agentPolicySaveChanges(
+      view,
+      { ...view.draft, "project:read": null },
+      new Set(["mcp:read"]),
+    );
+    expect(changes.remove.map((grant) => grant.id)).toEqual([
+      "kept_one",
+      "kept_two",
+    ]);
+    expect(changes.create).toEqual([
+      {
+        effect: "allow",
+        scope: "project:read",
+        selector: { resourceKind: "project", resourceId: "*" },
+      },
+    ]);
   });
 });

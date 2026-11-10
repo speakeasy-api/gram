@@ -572,6 +572,45 @@ func (q *Queries) LinkChatActingAgent(ctx context.Context, arg LinkChatActingAge
 	return result.RowsAffected(), nil
 }
 
+const linkChatOwner = `-- name: LinkChatOwner :execrows
+UPDATE chats
+SET user_id = $1
+  , external_user_id = $2
+  , updated_at = NOW()
+WHERE id = $3
+  AND project_id = $4
+  AND COALESCE(user_id, '') = ''
+  AND COALESCE(external_user_id, '') = ''
+  AND agent_id IS NULL
+  AND deleted IS FALSE
+`
+
+type LinkChatOwnerParams struct {
+	UserID         pgtype.Text
+	ExternalUserID pgtype.Text
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Backfills the human owner of a session whose chat row was created before the
+// session's identity was known: a shared plugin key with no self-reported email
+// creates the chat ownerless when its first prompt beats the first OTEL export.
+// Fill-once and only for a chat with no owner at all, so it never replaces an
+// identity chat creation recorded, and never names a person on a session an
+// agent key produced.
+func (q *Queries) LinkChatOwner(ctx context.Context, arg LinkChatOwnerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkChatOwner,
+		arg.UserID,
+		arg.ExternalUserID,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const linkChatUserAccount = `-- name: LinkChatUserAccount :execrows
 UPDATE chats
 SET user_account_id = $1

@@ -691,10 +691,11 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 		return OperationReceipt{}, fmt.Errorf("commit platform mcp component convergence: %w", err)
 	}
 	if componentsCreated && s.icons != nil {
-		// The logo fetch runs detached and stores the image as a project
-		// asset, which needs the project-scoped auth context.
+		// The result card shows the logo, so the fetch finishes before the
+		// card is built. It stores the image as a project asset, which needs
+		// the project-scoped auth context.
 		iconCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID})
-		s.icons.ScheduleDefaultRemoteServerIcon(iconCtx, project.ID, registration.McpServerID.UUID, registration.RemoteMcpServerID.UUID)
+		s.icons.SetDefaultRemoteServerIcon(iconCtx, project.ID, registration.McpServerID.UUID, registration.RemoteMcpServerID.UUID)
 	}
 	return operationReceiptFromRow(completedReceipt, receipt.Replayed), nil
 }

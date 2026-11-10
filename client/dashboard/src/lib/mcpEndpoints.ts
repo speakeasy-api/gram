@@ -1,4 +1,4 @@
-import { useSdkClient } from "@/contexts/Sdk";
+import type { useSdkClient } from "@/contexts/Sdk";
 import { randomSlugSuffix } from "@/lib/slug";
 import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";

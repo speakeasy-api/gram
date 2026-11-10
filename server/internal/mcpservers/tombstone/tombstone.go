@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strings"
 
@@ -17,6 +18,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/memberbindings"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
@@ -76,6 +78,9 @@ type Input struct {
 
 	// TracerProvider traces the risk policy cleanup the delete runs.
 	TracerProvider trace.TracerProvider
+
+	// Logger records the gateway bindings the delete removes or keeps.
+	Logger *slog.Logger
 }
 
 // Result is the tombstoned server, how many plugin attachments it lost, and
@@ -89,7 +94,7 @@ type Result struct {
 
 // Tombstone soft-deletes a locked server and its attachments; the caller audits the server delete.
 func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked Locked, input Input) (Result, error) {
-	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
+	if tx == nil || auditLogger == nil || input.TracerProvider == nil || input.Logger == nil || input.OrganizationID == "" || input.ProjectID == uuid.Nil || !hasActor(ctx, input) {
 		return Result{}, errors.New("invalid MCP server tombstone input")
 	}
 	actor := auditActor(ctx, input)
@@ -147,6 +152,19 @@ func Tombstone(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, locked
 		return Result{}, fmt.Errorf("delete meta mcp memberships: %w", err)
 	}
 	for _, membership := range deletedMemberships {
+		// The membership bound the server's provider client to the gateway's
+		// issuer, so the deletion that ends the membership removes the binding.
+		if membership.MetaMcpServerUserSessionIssuerID.Valid {
+			gateway := memberbindings.Gateway{
+				ID:                  membership.MetaMcpServerID,
+				OrganizationID:      input.OrganizationID,
+				ProjectID:           input.ProjectID,
+				UserSessionIssuerID: membership.MetaMcpServerUserSessionIssuerID.UUID,
+			}
+			if err := memberbindings.DetachServerProvider(ctx, tx, input.Logger, gateway, deleted.ID); err != nil {
+				return Result{}, fmt.Errorf("unbind deleted member provider client: %w", err)
+			}
+		}
 		if err := auditLogger.LogMetaMcpMemberRemove(ctx, tx, audit.LogMetaMcpMemberEvent{
 			OrganizationID:   input.OrganizationID,
 			ProjectID:        input.ProjectID,

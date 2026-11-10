@@ -35,22 +35,30 @@ func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Serv
 	}
 	result := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
-		state := b.knownConnectionState(ctx, gate, member)
+		state := b.knownConnectionState(ctx, gate, member, nil)
 		result = append(result, codemode.Server{Slug: member.slug, Name: member.name, Connection: state})
 	}
 	return result, nil
 }
 
-func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember) *codemode.ConnectionState {
+// knownConnectionState reuses approval when the caller already checked it; nil checks here.
+func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember, approval *catalogApproval) *codemode.ConnectionState {
 	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "", CheckedAt: nil}
 	if member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid {
 		state.Authentication = "not_required"
 	}
 	if gate.catalog != nil {
 		state.Consent = "approved"
-		if err := b.service.validateCatalogMember(ctx, gate, member); err != nil {
+		if approval == nil {
+			approval = new(b.service.checkCatalogApproval(ctx, b.service.logger, gate, member))
+		}
+		if approval.err != nil {
 			state.Consent = "unknown"
-			if needsNewConsent(err) {
+			if approval.changed {
+				if approval.remedy == staleChoiceAskAdmin {
+					state.Instructions = approval.message
+					return state
+				}
 				state.Consent = "required"
 			}
 		} else {
@@ -85,17 +93,18 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if err != nil {
 		return nil, err
 	}
-	member, ok := findMetaMember(members, server)
+	member, ok := b.service.findNamedMember(ctx, gate, members, server)
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	if err := b.connectRefusal(ctx, gate, member); err != nil {
+	approval, err := b.connectRefusal(ctx, gate, member)
+	if err != nil {
 		return nil, err
 	}
 	if !codeConnectAvailable(gate) {
 		return nil, codemode.ErrToolUnavailable
 	}
-	needsConsent := b.knownConnectionState(ctx, gate, member).Consent == "required"
+	needsConsent := b.knownConnectionState(ctx, gate, member, approval).Consent == "required"
 	b.connections.mu.Lock()
 	defer b.connections.mu.Unlock()
 	if previous := b.connections.actions[server]; previous != nil && previous.ExpiresAt != nil && time.Now().Before(*previous.ExpiresAt) {
@@ -154,16 +163,21 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	return action, nil
 }
 
-// connectRefusal stops a sign-in link for a stale choice that consent can't replace.
-func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
-	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
-		return nil
+// connectRefusal stops a sign-in link for a stale choice or changed approval that consent can't fix.
+// It returns the approval when it checked one.
+func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) (*catalogApproval, error) {
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); stale {
+		message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+		if remedy == staleChoiceReconnect {
+			return nil, nil
+		}
+		return nil, &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
 	}
-	message, remedy := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
-	if remedy == staleChoiceReconnect {
-		return nil
+	approval := b.service.checkCatalogApproval(ctx, b.service.logger, gate, member)
+	if approval.changed && approval.remedy == staleChoiceAskAdmin {
+		return nil, &codemode.MemberRefusalError{Message: approval.message, ConsentRequired: false}
 	}
-	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
+	return &approval, nil
 }
 
 // codeConnectAvailable reports whether Connect can mint a link bound to the
@@ -238,7 +252,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	if !ok {
 		return &codemode.ConnectionState{Consent: "unknown", Authentication: "unknown", Instructions: "This server is no longer available; list servers again.", CheckedAt: nil}
 	}
-	state := b.knownConnectionState(ctx, gate, member)
+	state := b.knownConnectionState(ctx, gate, member, nil)
 	if ctx.Err() != nil {
 		state.Authentication = "unknown"
 		state.Instructions = "Verification time budget exhausted; verify this server separately."
@@ -260,7 +274,7 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 	if gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser {
 		probeGate.chainUpstream = b.service.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
 	}
-	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
+	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate), false)
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {

@@ -17,7 +17,7 @@ type AdminContext struct {
 	WriteOperations []WriteOperation `json:"available_write_operations"`
 }
 
-func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable bool, runtime *Runtime) {
+func registerContextTool(server *mcp.Server, organizationReadsAvailable, projectReadsAvailable, configurationReadsAvailable, activityReadsAvailable, auditReadsAvailable, usageReadsAvailable, coverageReadsAvailable, issuerReadsAvailable, matrixReadsAvailable, onboardingReadsAvailable, projectMCPReadsAvailable, billingDiagnosticsAvailable, organizationStatsAvailable, organizationMembersAvailable, billingDetailsAvailable, registryAvailable, serverHealthAvailable, hookFleetAvailable bool, runtime *Runtime) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_admin_context",
 		Title:       "Get Staff Admin Context",
@@ -80,9 +80,12 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 		if serverHealthAvailable {
 			workflows = append(workflows, "inspect one MCP server's authentication configuration, session counts and tool call outcomes")
 		}
+		if hookFleetAvailable {
+			workflows = append(workflows, "inspect an organization's hooks installs, versions and legacy endpoint traffic")
+		}
 		operations := []WriteOperation{}
-		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil {
-			for _, op := range runtime.writes.writes.EnabledOperations() {
+		if slices.Contains(principal.Scopes, ScopeWrite) && runtime.writes != nil && runtime.writes.writes.Enabled {
+			for _, op := range AllWriteOperations {
 				if runtime.writes.implements(op) {
 					operations = append(operations, op)
 				}
@@ -99,7 +102,7 @@ func registerContextTool(server *mcp.Server, organizationReadsAvailable, project
 	})
 }
 
-// writeWorkflows describes the enabled writes.
+// writeWorkflows describes the available writes.
 func writeWorkflows(operations []WriteOperation) []string {
 	workflows := []string{}
 	if slices.ContainsFunc(operations, func(op WriteOperation) bool { return op != OperationUploadPlatformImage }) {

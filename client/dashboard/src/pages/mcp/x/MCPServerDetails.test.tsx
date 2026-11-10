@@ -93,7 +93,7 @@ vi.mock("@/components/page-layout", () => {
   });
   (Page.Header as unknown as { Breadcrumbs: () => null }).Breadcrumbs = () =>
     null;
-  return { Page };
+  return { Page, useInPageFrame: () => true };
 });
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),

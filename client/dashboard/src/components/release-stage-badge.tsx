@@ -1,26 +1,14 @@
 import { cn } from "@/lib/utils";
+import { type ReleaseStage, stageLabel, stageTextClass } from "./release-stage";
 import { SimpleTooltip } from "./ui/Tooltip";
 
-export type ReleaseStage = "preview" | "beta";
+export type { ReleaseStage } from "./release-stage";
 
 type ReleaseStageBadgeProps = {
   stage: ReleaseStage;
   /** When true, omit the tooltip wrapper (e.g., inside a parent that already has a tooltip). */
   noTooltip?: boolean;
   className?: string;
-};
-
-// Editorial tag chip: square, mono uppercase, hairline border on bg-card.
-// Beta keeps the brand-blue text (the historical stage color); preview uses
-// warning-orange. Color lives in text + border only — no tinted washes.
-const stageTextClass: Record<ReleaseStage, string> = {
-  preview: "text-default-warning border-warning-softest",
-  beta: "text-default-information border-information-softest",
-};
-
-const stageLabel: Record<ReleaseStage, string> = {
-  preview: "Preview",
-  beta: "Beta",
 };
 
 const stageTooltip: Record<ReleaseStage, string> = {

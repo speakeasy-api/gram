@@ -399,7 +399,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "59"
+const hooksGeneratorVersion = "61"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -424,12 +424,13 @@ const (
 	// of repeating "platform-mcp" twice. Cursor and Codex packages keep a
 	// client suffix because all five package roots share one repository.
 	platformMCPPluginName         = "speakeasy"
-	platformMCPDisplayName        = "Platform MCP"
+	platformMCPDisplayName        = "Speakeasy Platform"
 	platformMCPServerName         = "platform"
 	platformMCPCursorPluginName   = "speakeasy-cursor"
 	platformMCPCodexPluginName    = "speakeasy-codex"
 	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPPrivacyPolicyURL   = "https://www.speakeasy.com/privacy-policy"
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
 	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
@@ -443,6 +444,13 @@ const (
 //
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
+
+// platformMCPClaudeIcon is the Speakeasy mark the Claude plugin directory uses
+// as the listing icon. The directory reads .claude-plugin/icon.png and wants a
+// square PNG of 512 to 2048 px under 2 MB.
+//
+//go:embed platform_mcp_assets/icon.png
+var platformMCPClaudeIcon []byte
 
 // PluginMCPFingerprint returns one plugin's entry of publishMCPFingerprints without
 // generating the rest of the project: the fingerprint a publish would record
@@ -1406,13 +1414,14 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		name = ClaudeObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        name,
-		DisplayName: cfg.OrgName + " Observability",
-		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  nil,
+		Name:             name,
+		DisplayName:      cfg.OrgName + " Observability",
+		Description:      "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Version:          hooksManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:         "https://getgram.ai",
+		UserConfig:       nil,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -2207,6 +2216,12 @@ const AGENT_END_WAIT_MS = 2000
 // How long a run whose agent_end was sent without its final message ignores a
 // late llm_output, so that output is not cached where nothing will consume it.
 const ENDED_RUN_TTL_MS = 60000
+// How many tool calls the shim remembers between before_tool_call and their
+// result. A Gateway whose runs never end must not grow the record forever.
+const OPEN_CALLS_CAP = 1024
+// How long a call whose result the shim reported at agent_end ignores a late
+// after_tool_call, so that the call is not reported twice.
+const SETTLED_CALL_TTL_MS = 60000
 // The relay resolves the org's fail-open posture in-process; shim-level
 // fail-closed covers the binary being unavailable (mirrors cursor failClosed).
 const FAIL_CLOSED = true
@@ -2231,6 +2246,13 @@ export default {
     // llm_output, so an agent_end with nothing to splice waits briefly for it.
     const pendingEnds = new Map()
     const endedRuns = new Set()
+    // Tool calls that sent before_tool_call and no after_tool_call yet, by
+    // toolCallId. OpenClaw's Codex harness fires after_tool_call for an MCP
+    // tool only from Codex's PostToolUse, which a failed call never gets, so a
+    // failed gateway call would stay pending forever. At agent_end the shim
+    // reports each open call of the run from its result in the transcript.
+    const openCalls = new Map()
+    const settledCalls = new Set()
 
     // The daemon keeps the host process alive only while a reply is pending,
     // so a CLI command that fired a hook can still exit once it is answered.
@@ -2365,6 +2387,61 @@ export default {
       return { block: true, blockReason: reason }
     }
 
+    const toolCallIdOf = (event, ctx) => event?.toolCallId ?? ctx?.toolCallId
+
+    const openCall = (event, ctx) => {
+      const toolCallId = toolCallIdOf(event, ctx)
+      if (typeof toolCallId !== "string" || toolCallId === "") return
+      if (openCalls.size >= OPEN_CALLS_CAP) openCalls.delete(openCalls.keys().next().value)
+      const runId = event?.runId ?? ctx?.runId
+      openCalls.set(toolCallId, {
+        runKey: runId ?? "",
+        sessionKey: ctx?.sessionId ?? "",
+        event: { toolName: event?.toolName, params: event?.params, runId, toolCallId },
+        ctx,
+      })
+    }
+
+    // The text of a transcript tool result, which carries a failed call's error.
+    const toolResultText = (message) => {
+      const content = message?.content
+      if (typeof content === "string") return content
+      if (!Array.isArray(content)) return ""
+      return content
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .map((part) => part.text)
+        .join("\n")
+    }
+
+    // At agent_end, reports every call of the run that is still waiting for
+    // its after_tool_call, from the call's result in the run's transcript: a
+    // failed result is sent as a failure with its text as the error. A call
+    // with no result in the transcript is not reported, because its outcome
+    // is unknown.
+    const settleOpenCalls = (rawEvent, ctx) => {
+      const runKey = rawEvent?.runId ?? ctx?.runId ?? ""
+      const sessionKey = ctx?.sessionId ?? ""
+      const results = new Map()
+      for (const message of Array.isArray(rawEvent?.messages) ? rawEvent.messages : []) {
+        if (message?.role === "toolResult" && typeof message.toolCallId === "string") results.set(message.toolCallId, message)
+      }
+      for (const [toolCallId, open] of [...openCalls]) {
+        const sameRun = runKey !== "" && open.runKey === runKey
+        const sameSession = (runKey === "" || open.runKey === "") && sessionKey !== "" && open.sessionKey === sessionKey
+        if (!sameRun && !sameSession) continue
+        openCalls.delete(toolCallId)
+        const message = results.get(toolCallId)
+        if (message === undefined) continue
+        settledCalls.add(toolCallId)
+        setTimeout(() => settledCalls.delete(toolCallId), SETTLED_CALL_TTL_MS).unref?.()
+        const result = { content: message.content }
+        if (message.details !== undefined) result.details = message.details
+        const after = { ...open.event, result }
+        if (message.isError === true) after.error = toolResultText(message) || "Tool call failed"
+        void call("after_tool_call", after, open.ctx)
+      }
+    }
+
     for (const hook of HOOKS) {
       const gateTimeoutMs = GATE_TIMEOUT_MS[hook]
       api.on(hook, (rawEvent, ctx) => {
@@ -2389,6 +2466,7 @@ export default {
           return
         }
         if (hook === "agent_end") {
+          settleOpenCalls(rawEvent, ctx)
           // Consume exactly the entry that served the splice: deleting the
           // other candidate key could destroy a concurrent turn's pending entry.
           const runKey = event?.runId ?? ctx?.runId ?? ""
@@ -2415,15 +2493,24 @@ export default {
           void call(hook, spliced, sanitizeCtx(hook, ctx))
           return
         }
+        if (hook === "after_tool_call") {
+          const toolCallId = toolCallIdOf(event, ctx)
+          openCalls.delete(toolCallId)
+          // agent_end already reported this call from its transcript result.
+          if (settledCalls.delete(toolCallId)) return
+        }
         if (gateTimeoutMs === undefined) {
           void call(hook, event, sanitizeCtx(hook, ctx))
           return
         }
+        if (hook === "before_tool_call") openCall(event, ctx)
         return call(hook, event, sanitizeCtx(hook, ctx), gateTimeoutMs).then((reply) => {
           // An output-less reply is the daemon's legitimate "no decision";
           // only a shim timeout or daemon-reported error may fail closed.
-          if ((reply?.timedOut || reply?.error) && FAIL_CLOSED) return failClosedResult(hook, event)
-          return reply?.output
+          const decision = (reply?.timedOut || reply?.error) && FAIL_CLOSED ? failClosedResult(hook, event) : reply?.output
+          // A blocked call never runs, so it has no result to wait for.
+          if (hook === "before_tool_call" && decision?.block === true) openCalls.delete(toolCallIdOf(event, ctx))
+          return decision
         })
       })
     }
@@ -3259,18 +3346,20 @@ func emitPlatformMCPSkills(files map[string][]byte) error {
 func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
-		Name:        platformMCPPluginName,
-		DisplayName: platformMCPDisplayName,
-		Description: platformMCPDescription,
-		Version:     platformMCPManifestVersion(cfg),
-		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
-		Homepage:    "https://www.speakeasy.com/product/gram",
-		UserConfig:  nil,
+		Name:             platformMCPPluginName,
+		DisplayName:      platformMCPDisplayName,
+		Description:      platformMCPDescription,
+		Version:          platformMCPManifestVersion(cfg),
+		Author:           pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:         "https://www.speakeasy.com/product/gram",
+		UserConfig:       nil,
+		PrivacyPolicyURL: platformMCPPrivacyPolicyURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
 	files[".claude-plugin/plugin.json"] = meta
+	files[".claude-plugin/icon.png"] = bytes.Clone(platformMCPClaudeIcon)
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
 		platformMCPServerName: {
@@ -3478,13 +3567,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        p.Slug,
-		DisplayName: p.Name,
-		Description: p.Description,
-		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfigPtr,
+		Name:             p.Slug,
+		DisplayName:      p.Name,
+		Description:      p.Description,
+		Version:          pluginManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:         "https://getgram.ai",
+		UserConfig:       userConfigPtr,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3793,6 +3883,10 @@ type claudePluginMeta struct {
 	Author      pluginAuthor               `json:"author"`
 	Homepage    string                     `json:"homepage"`
 	UserConfig  map[string]userConfigEntry `json:"userConfig,omitempty"`
+	// PrivacyPolicyURL is read by the Claude plugin directory review; only the
+	// first-party Platform MCP package is listed there, so customer and
+	// observability packages leave it empty.
+	PrivacyPolicyURL string `json:"privacyPolicyUrl,omitempty"`
 }
 
 type userConfigEntry struct {

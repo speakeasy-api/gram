@@ -59,7 +59,7 @@ func (f *promotionMutatorFake) PromoteTx(_ context.Context, _ pgx.Tx, request ca
 func newPromotionWriter(f writeFixture, eligible bool, reason string) (*catalogPromotionWriter, *promotionMutatorFake, CatalogPromotionInput) {
 	project, server := uuid.NewString(), uuid.NewString()
 	mutator := &promotionMutatorFake{candidate: catalogpromotion.Candidate{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: uuid.NewString(), Status: "candidate", Eligible: eligible, Reason: reason}}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}} //nolint:exhaustive // Only this operation is enabled.
+	writes := WriteConfig{Enabled: true}
 	w := &catalogPromotionWriter{runner: f.runner, writes: writes, mutator: mutator}
 	input := CatalogPromotionInput{OrganizationID: f.orgA, ProjectID: project, MCPServerID: server, SourceRevision: "source-v1", CurationRevision: mutator.candidate.CurationRevision, PublicMetadataConfirmed: true, Public: catalogpromotion.PublicMetadata{Name: "com.example/mcp", Title: "Example", Description: "Public example server", URL: "https://mcp.example.test/mcp", DocumentationURL: "https://example.test/docs", DocsSlug: "example", AuthMode: "oauth"}}
 	return w, mutator, input
@@ -127,7 +127,7 @@ func TestCatalogPromotionRequiresPublicConfirmationAndWriteScope(t *testing.T) {
 	t.Parallel()
 	_, err := catalogPromotionRequest(CatalogPromotionInput{OrganizationID: "org_example", ProjectID: uuid.NewString(), MCPServerID: uuid.NewString(), SourceRevision: "source-v1", CurationRevision: uuid.NewString()})
 	require.Error(t, err)
-	w := &catalogPromotionWriter{writes: WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{OperationPromoteRegistryCandidate: true}}} //nolint:exhaustive // Only this operation is enabled.
+	w := &catalogPromotionWriter{writes: WriteConfig{Enabled: true}}
 	_, err = w.apply(writePrincipalContext(t, []string{ScopeRead}), CatalogPromotionInput{})
 	require.ErrorIs(t, err, ErrWriteScope)
 }
