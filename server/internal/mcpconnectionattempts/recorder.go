@@ -432,9 +432,10 @@ type Recorder struct {
 	referenceChecks singleflight.Group
 }
 
-// referableOrg is one logs answer and when it was read.
+// referableOrg is one logs answer and when it was read. off is a logs-off answer, not a failed check.
 type referableOrg struct {
 	allowed bool
+	off     bool
 	at      time.Time
 }
 
@@ -742,36 +743,47 @@ func FailureWorthAReference(what Happened) bool {
 
 // referenceLogsAnswer asks the logs setting off the writer's and record's panic guards, so it has
 // its own: a logs check that panics shows no reference.
-func (r *Recorder) referenceLogsAnswer(organizationID string) (allowed bool) {
+func (r *Recorder) referenceLogsAnswer(organizationID string) (reason dropReason) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			r.drop(context.Background(), dropPanic, 1, fmt.Errorf("connection reference logs check: %v", recovered))
-			allowed = false
+			reason = dropPanic
 		}
 	}()
-	reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
-	return reason == ""
+	reason, _ = r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+	return reason
+}
+
+// rememberedLogsAnswer is the organization's logs answer while it is fresh.
+func (r *Recorder) rememberedLogsAnswer(organizationID string) (referableOrg, bool) {
+	r.referableMu.Lock()
+	cached, ok := r.referableOrgs.Get(organizationID)
+	r.referableMu.Unlock()
+	return cached, ok && time.Since(cached.at) < cached.ttl()
+}
+
+// checkLogs starts one background logs check per organization that remembers its answer.
+func (r *Recorder) checkLogs(organizationID string) <-chan singleflight.Result {
+	return r.referenceChecks.DoChan(organizationID, func() (any, error) {
+		reason := r.referenceLogsAnswer(organizationID)
+		answer := referableOrg{allowed: reason == "", off: reason == dropLogsOff, at: time.Now()}
+		r.referableMu.Lock()
+		r.referableOrgs.Add(organizationID, answer)
+		r.referableMu.Unlock()
+		return answer.allowed, nil
+	})
 }
 
 // logsAllowForReference waits a bounded time for one background logs check per organization.
 // A slow check answers false now and fills the cache for the next failure.
 func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
 	if r.referableOrgs == nil {
-		return r.referenceLogsAnswer(organizationID)
+		return r.referenceLogsAnswer(organizationID) == ""
 	}
-	r.referableMu.Lock()
-	cached, ok := r.referableOrgs.Get(organizationID)
-	r.referableMu.Unlock()
-	if ok && time.Since(cached.at) < cached.ttl() {
+	if cached, ok := r.rememberedLogsAnswer(organizationID); ok {
 		return cached.allowed
 	}
-	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
-		allowed := r.referenceLogsAnswer(organizationID)
-		r.referableMu.Lock()
-		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
-		r.referableMu.Unlock()
-		return allowed, nil
-	})
+	answer := r.checkLogs(organizationID)
 	timer := time.NewTimer(referenceLogsTimeout)
 	defer timer.Stop()
 	select {
@@ -1078,14 +1090,22 @@ func (r *Recorder) surviving(n int, fn func()) {
 }
 
 // Stores reports whether rows on scope may be stored, so a caller can skip costly detail
-// for a row that would be dropped. A failed check reports true; the writer decides then.
-// It checks on the recorder's own context, so a cancelled request can't read as logs off.
+// for a row that would be dropped. It never waits on a logs check: false is a remembered
+// logs-off answer, and a miss or a failed check reports true, so the writer decides then.
 func (r *Recorder) Stores(scope Scope) bool {
 	if r == nil {
 		return false
 	}
-	reason, _ := r.organizationAllowed(scope.organizationID, r.cfg.logsCheckTimeout)
-	return reason != dropLogsOff
+	if r.referableOrgs == nil {
+		reason, _ := r.organizationAllowed(scope.organizationID, r.cfg.logsCheckTimeout)
+		return reason != dropLogsOff
+	}
+	cached, ok := r.rememberedLogsAnswer(scope.organizationID)
+	if !ok {
+		r.checkLogs(scope.organizationID)
+		return true
+	}
+	return !cached.off
 }
 
 // organizationAllowed is the one place that decides whether an organization's attempts

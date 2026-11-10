@@ -62,8 +62,9 @@ func (s *RefreshService) recordRefresh(
 }
 
 // invalidClientHappened names a refresh_invalid_client row, recommending re-registration only
-// when the tenant's binding is known. stored is false for a row that won't be stored: it
-// skips the lookup, and the steps metric leaves it out rather than count an unchecked code.
+// when the tenant's binding is known. stored is false when the organization is known to have
+// logs off: it skips the lookup, and the steps metric leaves it out rather than count an
+// unchecked code. Stores never waits, so the refresh waits at most on the bounded lookup.
 func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) (code mcpconnectionattempts.Code, stored bool) {
 	scope := attribution.scope
 	if !attribution.attempt.IsZero() {
