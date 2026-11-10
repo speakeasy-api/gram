@@ -273,7 +273,8 @@ open their effective assignments; the dropdown always offers compact member sear
       exchange; the inert shared seed cannot prove third-party authentication.
     - Seed rationale: four identities cover active, suspended and revoked
       states; the two active release agents have exact project/server-scoped
-      Linear grants and share one inert human-owned upstream session. API keys
+      Linear grants and share one human-owned upstream session (inert in the
+      demo org; a live MCP fixture token locally). API keys
       remain empty and the agent credential session is expired. Confirm the
       release agents' policy views show their scoped grant; the other two
       identities retain an explicit empty direct-policy state.
@@ -361,7 +362,13 @@ open their effective assignments; the dropdown always offers compact member sear
     Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
     Example Workspace Identity provider, and the one client bound to Linear's
     user session issuer sits under that same provider, so the stamp matches what
-    `ResyncMCPServerRemoteSessionIssuers` would derive.
+    `ResyncMCPServerRemoteSessionIssuers` would derive. Linear offers one
+    OAuth client, "Example Workspace sign-in"; the legacy callback client
+    stays unbound and shows only on the provider's pages. After
+    `mise run seed`, the local org renames Linear to **Per-User OAuth Server**
+    (provider **MCP Fixture OAuth**, server URL on `GRAM_MCP_FIXTURE_URL`)
+    and GitHub to **Shared or Own Token Server**; the demo org keeps Linear
+    and GitHub.
 
 20. **Billing meter usage** — select a custom trailing 14-day window. Storage
     shows s-tokens of stored content, bandwidth shows ingress and egress bytes,
@@ -454,12 +461,13 @@ open their effective assignments; the dropdown always offers compact member sear
       connection. Remove a selected server here without returning to selection.
     - **Reauthenticate** and **Remove** belong on the connection subrow;
       expired connections use a warning treatment. Reauthenticate is available
-      only to the person whose connection expired. With a separate live
-      local-only OAuth fixture, verify it opens a small popup and refreshes the
-      row automatically when the popup closes. The icon-only status refresh is
-      a fallback, not a required second step. A successful explicit
-      reauthentication must restore gateway calls; the inert seed cannot prove
-      that exchange.
+      only to the person whose connection expired. Locally, the MCP fixture is
+      the OAuth server: verify Reauthenticate opens a small popup on the
+      fixture's sign-in page (pick an email), and the row refreshes
+      automatically when the popup closes. The icon-only status refresh is a
+      fallback, not a required second step. A successful explicit
+      reauthentication must restore gateway calls; the demo org's inert seed
+      cannot prove that exchange.
     - On creation, missing or expired individual selections must be connected
       or removed before continuing. **All servers** keeps valid assignments
       and names missing connections without blocking progression. On edit,
@@ -469,11 +477,12 @@ open their effective assignments; the dropdown always offers compact member sear
       survive. Reattach the same exact session twice: only one active binding
       per agent/issuer/client slot. Reauthorization changes the generation and
       must not silently authorize an old attachment.
-    - Rerun `mise run seed` twice. Expect six managed agents, two inert
-      attachment sessions, two bindings and two exact project/server-scoped
-      grants, with no usable upstream credentials. The separate six Linear
-      validation sessions remain intact. These fixtures prove display and
-      identity relationships, not live execution.
+    - Rerun `mise run seed` twice. Expect six managed agents, two attachment
+      sessions on Linear's one OAuth client, two bindings and two exact
+      project/server-scoped grants. The four Linear validation sessions
+      (members 3 to 6) remain intact. In the demo org every upstream
+      credential is inert; locally, the unexpired sessions hold real MCP
+      fixture tokens and the expired one stays expired.
 
 24. **Identity-chaining registration evidence**
     - Run `mise run seed` twice in an isolated local stack. In its `default`
@@ -665,6 +674,23 @@ open their effective assignments; the dropdown always offers compact member sear
       off, neither Skills tab is in the sidebar, a direct `/skills` tab URL
       returns to the server or gateway overview, and the skill page has no
       "Served over MCP" section.
+
+35. **Seeded MCP servers** (picker check in both orgs; live checks local only)
+    - Open an agent's **MCP sign-in** tab and click **Add servers**. Every
+      server appears once: one Acme Support Tools and one Acme Ops (each
+      toolset's canonical wrapper), and one row for Linear (Per-User OAuth
+      Server locally). Expanding Linear shows one OAuth client, not two.
+    - Locally, with the `mcp-fixture` daemon up (`pitchfork status
+      mcp-fixture`), connect any MCP client to
+      `GRAM_SERVER_URL/mcp/<org>-linear`. The consent page lists one service,
+      **MCP Fixture OAuth**. **Connect** opens the fixture's sign-in page; pick
+      an email, then **Give access**. `whoami` returns that email with
+      `auth: oauth`.
+    - Connect a client to `GRAM_SERVER_URL/mcp/<org>-partner` and call
+      `get_customer`: it returns the fixture's demo customer, not an error
+      about `api.internal.acme.example`.
+    - The demo org keeps display-only upstreams: Linear's **Connect account**
+      goes to `identity.example.com` and fails, by design.
 
 ## On failure
 
