@@ -315,6 +315,9 @@ func groupByServer(rows []ListUpstreamClientBackfillCandidatesRow) [][]ListUpstr
 // only consumer, otherwise the single client its own upstream's metadata
 // names. It never copies a shared issuer's clients onto every server on it,
 // and never reads an unbound issuer as proof that no authentication is needed.
+// A server with no association that offers an OAuth client of its own was
+// configured apart from the issuer, so the issuer's clients say nothing about
+// it, even when it is their only consumer.
 func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 	first := rows[0]
 	result := ServerResult{
@@ -348,6 +351,8 @@ func Decide(rows []ListUpstreamClientBackfillCandidatesRow) ServerResult {
 	switch {
 	case len(bound) == 0:
 		return result
+	case first.LiveAssociations == 0 && first.OffersOwnOauthClient:
+		result.Outcome = OutcomeConfigured
 	case first.IssuerServerCount <= 1 && !first.IssuerHasGateway:
 		result.Outcome, decided, result.RespectRemoved = OutcomeSoleConsumer, bound, false
 	case len(matched) == 1 && !matched[0].PairRecorded:
@@ -461,6 +466,7 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		Skipped:             false,
 	}
 	var granted, derived []ListGatewayAssociationCandidatesRow
+	associated := false
 	for _, row := range rows {
 		if row.GrantMatch {
 			granted = append(granted, row)
@@ -468,6 +474,12 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		if row.DerivedMatch {
 			derived = append(derived, row)
 		}
+		associated = associated || row.PairLive
+	}
+	// Configured apart from the issuer, as Decide treats it.
+	if !associated && first.OffersOwnOauthClient {
+		result.Outcome = GatewayOutcomeConfigured
+		return result
 	}
 	var decided ListGatewayAssociationCandidatesRow
 	switch {

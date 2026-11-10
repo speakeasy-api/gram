@@ -18,6 +18,7 @@ import (
 	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -411,6 +412,8 @@ func TestDetachServerClientAssociation_EnforcedSoleConsumer(t *testing.T) {
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-own")
 	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced-own")
 	resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+	// The fixture binds the client itself, so it captures as a binding writer does.
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{userIssuerID}, []uuid.UUID{clientID}))
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
@@ -459,6 +462,7 @@ func TestDetachServerClientAssociation_KeepsAdministratorLinkToBackfilledClient(
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, issuerID, "adminlink")
 	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, issuerID, orgID, "rsi-adminlink")
 	resync(t, ctx, ti.conn, orgID, projectID, issuerID)
+	require.NoError(t, upstreamclients.CaptureSoleConsumers(ctx, ti.conn, orgID, projectID, []uuid.UUID{issuerID}, []uuid.UUID{clientID}))
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
 	offered := offeredAuthClients(t, ctx, ti.conn, serverID)
 	require.Len(t, offered, 1)
