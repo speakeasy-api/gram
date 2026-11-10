@@ -225,7 +225,7 @@ func (s *Service) probeRemoteSession(
 	attribution = attribution.NotingSkips(skipped)
 	defer func() {
 		if failure, ok := classifyCheckFailure(ctx, retErr); ok {
-			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code)
+			s.recordRemoteSessionCheck(ctx, fromRequest, endpoint, challengeState, client, trigger, failure.code, mcpconnectionattempts.FailedElsewhere())
 		}
 	}()
 
