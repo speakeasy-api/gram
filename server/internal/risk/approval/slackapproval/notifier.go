@@ -96,11 +96,14 @@ type Notifier struct {
 	cards      *Cards
 	workspaces WorkspaceSource
 	slack      *slackapi.Client
+	buttons    bool
 }
 
 // NewNotifier builds a Notifier that posts through slack to the workspaces
-// workspaces lists.
-func NewNotifier(logger *slog.Logger, cards *Cards, workspaces WorkspaceSource, slack *slackapi.Client) *Notifier {
+// workspaces lists. buttons puts Approve and Deny on the DMs; pass it only
+// when the server has the Slack app's signing secret, which verifies the
+// clicks. Without it, DMs send approvers to the dashboard to decide.
+func NewNotifier(logger *slog.Logger, cards *Cards, workspaces WorkspaceSource, slack *slackapi.Client, buttons bool) *Notifier {
 	return &Notifier{
 		logger:     logger.With(attr.SlogComponent("risk_approval_slack")),
 		db:         cards.db,
@@ -108,6 +111,7 @@ func NewNotifier(logger *slog.Logger, cards *Cards, workspaces WorkspaceSource, 
 		cards:      cards,
 		workspaces: workspaces,
 		slack:      slack,
+		buttons:    buttons,
 	}
 }
 
@@ -121,33 +125,18 @@ type recipient struct {
 // Notify DMs each approver who has not been sent the request yet. It is safe
 // to repeat: approvers with a recorded DM are skipped. A Slack failure worth
 // retrying is returned after every other approver has been tried. Once the
-// recorded DMs are known, every return reports them, errors included, so a
-// run that stops retrying still gives those DMs the outcome.
+// recorded DMs are known, every return reports them, errors included.
 func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, error) {
 	none := NotifyResult{Sent: 0, ExpiresAt: time.Time{}}
-	row, err := n.approvals.Get(ctx, target.OrganizationID, target.ProjectID, target.ApprovalID)
+	row, sent, err := n.sentTo(ctx, target)
 	if errors.Is(err, approval.ErrNotFound) {
 		return none, nil
 	}
 	if err != nil {
-		return none, fmt.Errorf("get approval: %w", err)
+		return none, err
 	}
 	queries := repo.New(n.db)
-	sentRows, err := queries.ListApprovalMessages(ctx, repo.ListApprovalMessagesParams{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, ApprovalID: row.ID})
-	if err != nil {
-		return none, fmt.Errorf("list approval messages: %w", err)
-	}
-	sent := make(map[string]bool, len(sentRows))
-	for _, message := range sentRows {
-		if message.Provider == providerSlack {
-			sent[message.RecipientUserID] = true
-		}
-	}
-	expiresAt := time.Time{}
-	if row.ExpiresAt.Valid {
-		expiresAt = row.ExpiresAt.Time
-	}
-	recorded := func() NotifyResult { return NotifyResult{Sent: len(sent), ExpiresAt: expiresAt} }
+	recorded := func() NotifyResult { return sentResult(row, sent) }
 
 	if n.approvals.EffectiveStatus(row) != approval.StatusPending {
 		return recorded(), nil
@@ -181,7 +170,7 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 	if err != nil {
 		return recorded(), err
 	}
-	pending := pendingCard(content)
+	pending := pendingCard(content, n.buttons)
 
 	var retry error
 	for _, person := range recipients {
@@ -232,6 +221,49 @@ func (n *Notifier) Notify(ctx context.Context, target Target) (NotifyResult, err
 		return recorded(), fmt.Errorf("send approval DMs: %w", retry)
 	}
 	return recorded(), nil
+}
+
+// Sent counts the DMs recorded for a request, without sending any. A send
+// that fails without an answer, as when it times out, reports nothing, so the
+// run counts the recorded DMs here.
+func (n *Notifier) Sent(ctx context.Context, target Target) (NotifyResult, error) {
+	row, sent, err := n.sentTo(ctx, target)
+	if errors.Is(err, approval.ErrNotFound) {
+		return NotifyResult{Sent: 0, ExpiresAt: time.Time{}}, nil
+	}
+	if err != nil {
+		return NotifyResult{Sent: 0, ExpiresAt: time.Time{}}, err
+	}
+	return sentResult(row, sent), nil
+}
+
+// sentTo reads a request and the approvers it has a recorded DM for. It
+// returns approval.ErrNotFound when the request is gone.
+func (n *Notifier) sentTo(ctx context.Context, target Target) (repo.RiskPolicyApproval, map[string]bool, error) {
+	row, err := n.approvals.Get(ctx, target.OrganizationID, target.ProjectID, target.ApprovalID)
+	if err != nil {
+		return repo.RiskPolicyApproval{}, nil, fmt.Errorf("get approval: %w", err)
+	}
+	messages, err := repo.New(n.db).ListApprovalMessages(ctx, repo.ListApprovalMessagesParams{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, ApprovalID: row.ID})
+	if err != nil {
+		return repo.RiskPolicyApproval{}, nil, fmt.Errorf("list approval messages: %w", err)
+	}
+	sent := make(map[string]bool, len(messages))
+	for _, message := range messages {
+		if message.Provider == providerSlack {
+			sent[message.RecipientUserID] = true
+		}
+	}
+	return row, sent, nil
+}
+
+// sentResult reports the DMs recorded for a request and when it lapses.
+func sentResult(row repo.RiskPolicyApproval, sent map[string]bool) NotifyResult {
+	expiresAt := time.Time{}
+	if row.ExpiresAt.Valid {
+		expiresAt = row.ExpiresAt.Time
+	}
+	return NotifyResult{Sent: len(sent), ExpiresAt: expiresAt}
 }
 
 // Finish replaces every DM of a request that is no longer pending with the

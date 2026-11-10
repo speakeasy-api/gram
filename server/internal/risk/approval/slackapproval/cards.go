@@ -185,15 +185,26 @@ type cardInput struct {
 	DashboardURL string
 }
 
-// pendingCard asks an approver to decide.
-func pendingCard(in cardInput) card {
+// pendingCard asks an approver to decide. With buttons, they decide in Slack.
+// Without, nothing could verify a click, so the card sends them to the
+// dashboard instead.
+func pendingCard(in cardInput, buttons bool) card {
 	tool := code(in.Approval.ToolName, maxNameChars)
 	blocks := []block{
 		mrkdwnSection(":raised_hand: *Approval needed* to call " + tool),
 		detailFields(in),
 	}
 	blocks = append(blocks, detailSections(in)...)
-	buttons := []element{
+	text := "Approval needed to call " + tool
+	if !buttons {
+		decide := "Decide in Speakeasy, on the Tool approvals tab."
+		if in.DashboardURL != "" {
+			decide = fmt.Sprintf("<%s|Decide in Speakeasy>, on the Tool approvals tab.", in.DashboardURL)
+		}
+		blocks = append(blocks, mrkdwnSection(decide), contextBlock("The reason above was written by the agent."))
+		return card{Text: text, Blocks: blocks}
+	}
+	actions := []element{
 		{Type: "button", Text: plainText("Approve once"), ActionID: ActionApprove, Value: in.Approval.ID.String(), Style: "primary", URL: "", TextValue: "", Confirm: nil},
 		{Type: "button", Text: plainText("Deny"), ActionID: ActionDeny, Value: in.Approval.ID.String(), Style: "danger", URL: "", TextValue: "", Confirm: &confirmDialog{
 			Title: textObject{Type: "plain_text", Text: "Deny this call?"},
@@ -205,13 +216,13 @@ func pendingCard(in cardInput) card {
 		}},
 	}
 	if in.DashboardURL != "" {
-		buttons = append(buttons, element{Type: "button", Text: plainText("Open in Speakeasy"), ActionID: actionOpen, Value: "", URL: in.DashboardURL, Style: "", TextValue: "", Confirm: nil})
+		actions = append(actions, element{Type: "button", Text: plainText("Open in Speakeasy"), ActionID: actionOpen, Value: "", URL: in.DashboardURL, Style: "", TextValue: "", Confirm: nil})
 	}
 	blocks = append(blocks,
-		block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: buttons},
+		block{Type: "actions", BlockID: "risk_approval", Text: nil, Fields: nil, Elements: actions},
 		contextBlock("Approve once lets this exact call run one time. The reason above was written by the agent."),
 	)
-	return card{Text: "Approval needed to call " + tool, Blocks: blocks}
+	return card{Text: text, Blocks: blocks}
 }
 
 // decidedCard replaces a pending card once the request is decided or lapses.
