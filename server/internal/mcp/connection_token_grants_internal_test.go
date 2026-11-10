@@ -214,6 +214,21 @@ func TestAssistantClientCredentialsOrganizationGatewayRecordsUnacceptedMethod(t 
 	require.Equal(t, "organization_gateway", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted).SubReason)
 }
 
+// With no assistant token issuer, a normal endpoint's refusal names that, not an organization gateway.
+func TestAssistantClientCredentialsWithoutIssuerRecordsUnacceptedMethod(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	c := newAssistantGrantCase(t, rec.Recorder, nil)
+	c.service.assistantWorkloadTokens = nil
+
+	require.Equal(t, http.StatusBadRequest, c.post(t, assistantGrantForm).Code)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted)
+	require.Equal(t, "assistant_tokens_not_issued", row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
 func TestAssistantClientCredentialsTokenWithoutAgentRecordsOurError(t *testing.T) {
 	t.Parallel()
 

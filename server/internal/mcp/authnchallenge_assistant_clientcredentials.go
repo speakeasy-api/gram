@@ -85,8 +85,11 @@ func (s *Service) handleAssistantClientCredentialsGrant(ctx context.Context, w h
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth assistant workload token request rejected", client.ClientID, presentedAuthMethod, "client_credentials", code)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "assistant workload authorization refused")
 	}
-	if s.assistantWorkloadTokens == nil || endpoint.IsOrganizationGateway() {
+	if endpoint.IsOrganizationGateway() {
 		return reject("unauthorized_client", mcpconnectionattempts.CodeSignInMethodNotAccepted, mcpconnectionattempts.Detail("organization_gateway"))
+	}
+	if s.assistantWorkloadTokens == nil {
+		return reject("unauthorized_client", mcpconnectionattempts.CodeSignInMethodNotAccepted, mcpconnectionattempts.Detail("assistant_tokens_not_issued"))
 	}
 	kind, err := clientcred.KindOf(client.TokenEndpointAuthMethod, client.ClientSecretHash.Valid)
 	if err != nil || (kind != clientcred.KindSecret && kind != clientcred.KindKey) {
