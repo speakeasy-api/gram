@@ -45,6 +45,16 @@ describe("native Okta setup", () => {
   ])("rejects unsupported org %s", (value) => {
     expect(oktaOrg(value)).toBeNull();
   });
+  it("requires an Okta organization to complete an otherwise connected setup", () => {
+    const s = initialState("okta");
+    Object.assign(s, { saved: true, authorized: true, tested: true });
+    s.values.oktaOrg = "example.okta.com";
+    expect(reduce(s, { type: "complete" }).screen).toBe("success");
+
+    s.values.oktaOrg = "";
+    expect(ready(s)).toBe(false);
+    expect(reduce(s, { type: "complete" }).screen).toBe("setup");
+  });
   it("requires a secret only for Web apps and invalidates changed configuration", () => {
     let s = initialState("okta");
     s.step = "credentials";

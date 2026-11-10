@@ -1,7 +1,7 @@
 import { scopesFor } from "./provider-data";
 import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -755,61 +755,6 @@ it("uses the published app installation URL and stops at the documented support 
   expect(screen.queryByLabelText("Consumer Key")).toBeNull();
 });
 
-it.each(["web", "native"])(
-  "renders Okta %s app instructions with the actual callback and matching credentials",
-  (appType) => {
-    const dispatch = vi.fn<() => void>();
-    const s = initialState("okta");
-    Object.assign(s.values, {
-      oktaOrg: "https://example.okta.com",
-      oktaAppType: appType,
-    });
-    const content = (step: string) => (
-      <SetupContext
-        value={{
-          s: { ...s, step },
-          dispatch,
-          live: connectionFixture(dispatch),
-        }}
-      >
-        <ProviderTask serverName="Okta" />
-      </SetupContext>
-    );
-    const view = render(content("app"));
-    expect(
-      screen.getByLabelText("Sign-in redirect URI").getAttribute("value"),
-    ).toBe("https://current.example/callback");
-    expect(screen.queryByText("Proof Key for Code Exchange (PKCE)")).toBeNull();
-    const instructions = screen.getByText("In Okta").parentElement!.textContent;
-    expect(instructions).toContain("In Grant type, select Authorization code.");
-    expect(instructions).not.toContain("Client authentication");
-    expect(instructions).not.toContain(
-      appType === "web" ? "Native app" : "Web app",
-    );
-    view.rerender(content("credentials"));
-    expect(screen.getByLabelText("Client ID")).toBeDefined();
-    expect(!!screen.queryByLabelText("Client Secret")).toBe(appType === "web");
-    view.rerender(content("permissions"));
-    expect(
-      screen.getAllByRole("listitem").map((item) => item.textContent),
-    ).toEqual([
-      "Select the Okta API Scopes tab.",
-      "Click Grant for the API scopes required by the tools you want to use.",
-      "Go to the General tab and confirm that Proof Key for Code Exchange (PKCE) is selected.",
-    ]);
-    expect(
-      screen.queryByRole("heading", { name: "Configure app authentication" }),
-    ).toBeNull();
-    expect(screen.queryByLabelText("Okta API scopes")).toBeNull();
-    expect(
-      screen
-        .getByRole("link", { name: "Find the API scopes for your tools" })
-        .getAttribute("href"),
-    ).toContain("scope-based-tool-loading");
-    expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
-  },
-);
-
 it("explains why Open Okta is disabled on hover and keyboard focus", async () => {
   const { TooltipProvider } = await import("@/components/ui/Tooltip");
   const dispatch = vi.fn<() => void>();
@@ -874,6 +819,18 @@ it.each(["web", "native"])(
   (appType) => {
     const view = render(<OktaTaskFixture step="app" appType={appType} />);
     expect(screen.getByText("Create App Integration")).toBeDefined();
+    expect(screen.getByLabelText("Sign-in redirect URI")).toHaveProperty(
+      "value",
+      "https://current.example/callback",
+    );
+    const application =
+      appType === "web" ? "Web Application" : "Native Application";
+    const alternative =
+      appType === "web" ? "Native Application" : "Web Application";
+    const creation = within(screen.getByText("In Okta").parentElement!);
+    expect(creation.getByText(application)).toBeDefined();
+    expect(creation.queryByText(alternative)).toBeNull();
+    expect(creation.getByText("Authorization code")).toBeDefined();
     expect(screen.getByLabelText("App integration name")).toHaveProperty(
       "value",
       "Speakeasy AI Control Plane – Okta MCP",
@@ -897,6 +854,9 @@ it.each(["web", "native"])(
     expect(screen.queryByText("App integration name")).toBeNull();
     expect(screen.queryByLabelText("App integration name")).toBeNull();
     expect(screen.getByText(/Keep any redirect URIs/)).toBeDefined();
+    const editing = within(screen.getByText("In Okta").parentElement!);
+    expect(editing.getByText(application)).toBeDefined();
+    expect(editing.queryByText(alternative)).toBeNull();
     expect(screen.queryByText(/select the people or groups/)).toBeNull();
   },
 );
@@ -904,17 +864,20 @@ it.each(["web", "native"])(
 it("guides granting scopes in Okta without collecting or copying them", () => {
   render(<OktaTaskFixture step="permissions" />);
   expect(screen.queryByRole("textbox")).toBeNull();
-  expect(screen.queryByLabelText("Scopes to grant")).toBeNull();
   expect(screen.queryByRole("button", { name: /copy/i })).toBeNull();
+  const instructions = within(screen.getByText("In Okta").parentElement!);
   expect(
-    screen.getByText(/for the API scopes required by the tools/),
-  ).toBeDefined();
+    instructions.getAllByRole("listitem").map((item) => item.textContent),
+  ).toEqual([
+    "Select the Okta API Scopes tab.",
+    "Click Grant for the API scopes required by the tools you want to use.",
+    "Go to the General tab and confirm that Proof Key for Code Exchange (PKCE) is selected.",
+  ]);
   expect(
     screen
       .getByRole("link", { name: "Find the API scopes for your tools" })
       .getAttribute("href"),
   ).toContain("scope-based-tool-loading");
-  expect(screen.queryByText("Refresh Token")).toBeNull();
 });
 
 it("keeps later assignment instructions only for existing Okta apps", () => {
@@ -928,15 +891,26 @@ it("keeps later assignment instructions only for existing Okta apps", () => {
   expect(screen.queryByText(/Assign the people or groups/)).toBeNull();
 });
 
-it("keeps credential instructions specific to the selected app and hides them after saving", () => {
-  const view = render(<OktaTaskFixture step="credentials" appType="native" />);
-  expect(screen.queryByText(/client secret/i)).toBeNull();
-  expect(screen.queryByText(/confirm/i)).toBeNull();
-  view.rerender(<OktaTaskFixture step="credentials" appType="web" />);
-  expect(screen.getByText("Client Credentials")).toBeDefined();
-  view.rerender(<OktaTaskFixture step="credentials" appType="web" saved />);
-  expect(screen.queryByText("In Okta")).toBeNull();
-  expect(
-    screen.getByRole("button", { name: "Update credentials" }),
-  ).toBeDefined();
-});
+it.each(["web", "native"])(
+  "shows %s credentials and hides instructions after saving",
+  (appType) => {
+    const view = render(
+      <OktaTaskFixture step="credentials" appType={appType} />,
+    );
+    expect(screen.getByLabelText("Client ID")).toBeDefined();
+    if (appType === "web") {
+      expect(screen.getByLabelText("Client Secret")).toBeDefined();
+      expect(screen.getByText("Client Credentials")).toBeDefined();
+    } else {
+      expect(screen.queryByLabelText("Client Secret")).toBeNull();
+      expect(screen.queryByText(/client secret/i)).toBeNull();
+    }
+    view.rerender(
+      <OktaTaskFixture step="credentials" appType={appType} saved />,
+    );
+    expect(screen.queryByText("In Okta")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Update credentials" }),
+    ).toBeDefined();
+  },
+);
