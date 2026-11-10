@@ -436,8 +436,17 @@ type mergedCimdClients struct {
 // Both rows describe one client, so the target row survives: its consents win
 // where the same subject approved the same upstream set on both issuers, and
 // every other consent and session moves to it. The steps must run in this
-// order because each one finds its pairs from the live source client rows.
-func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, params repo.MoveMergedCimdClientConsentResourcesParams) (mergedCimdClients, error) {
+// order because each one skips source clients that are no longer live.
+func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, organizationID string, sourceIssuerID, targetIssuerID uuid.UUID) (mergedCimdClients, error) {
+	sourceClientIDs, err := q.ListMergeableCimdSourceClientIDs(ctx, repo.ListMergeableCimdSourceClientIDsParams{TargetIssuerID: targetIssuerID, SourceIssuerID: sourceIssuerID, OrganizationID: organizationID})
+	if err != nil {
+		return mergedCimdClients{}, fmt.Errorf("list mergeable clients: %w", err)
+	}
+	if len(sourceClientIDs) == 0 {
+		return mergedCimdClients{clients: 0, consents: 0}, nil
+	}
+
+	params := repo.MoveMergedCimdClientConsentResourcesParams{TargetIssuerID: targetIssuerID, SourceClientIds: sourceClientIDs, SourceIssuerID: sourceIssuerID}
 	if _, err := q.MoveMergedCimdClientConsentResources(ctx, params); err != nil {
 		return mergedCimdClients{}, fmt.Errorf("move consent resources: %w", err)
 	}
@@ -558,7 +567,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		return nil, oops.E(oops.CodeConflict, nil, "user session issuer migration warnings have not been confirmed or changed; refresh the preflight and confirm its exact warnings fingerprint").LogError(ctx, logger)
 	}
 
-	merged, err := mergeDuplicateCimdClients(ctx, q, repo.MoveMergedCimdClientConsentResourcesParams{SourceIssuerID: source.ID, TargetIssuerID: target.ID, OrganizationID: authCtx.ActiveOrganizationID})
+	merged, err := mergeDuplicateCimdClients(ctx, q, authCtx.ActiveOrganizationID, source.ID, target.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "merge duplicate CIMD user session clients").LogError(ctx, logger)
 	}

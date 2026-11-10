@@ -732,11 +732,48 @@ WHERE source.user_session_issuer_id = @source_issuer_id
 ORDER BY source.client_id;
 
 -- The queries below merge each source CIMD client into the target issuer's
--- row for the same metadata document URL, in this order, before the remaining
--- source clients move: consent resources, then duplicate consents and their
--- remaining resources, remaining consents, sessions, then the source client
--- rows. Each recomputes the pairs
--- from live source rows, so the client rows must be retired last.
+-- row for the same metadata document URL. ListMergeableCimdSourceClientIDs decides
+-- which source clients merge; every later step takes those source clients and
+-- finds each one's target row by client_id, re-checking only that both rows
+-- are live on their issuers. The steps run in this order
+-- before the remaining source clients move: consent resources, then duplicate
+-- consents and their remaining resources, remaining consents, sessions, then
+-- the source client rows.
+
+-- name: ListMergeableCimdSourceClientIDs :many
+-- Lists each live source client resolved from a Client ID Metadata Document
+-- that the target issuer also has a live client for. A source client an
+-- issuance selection profile pins to the source issuer is left out: the
+-- profile's foreign key keeps it on that issuer.
+SELECT source.id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = @target_issuer_id
+ AND target.client_id = source.client_id
+ AND target.client_id_metadata_uri IS NOT NULL
+ AND target.deleted IS FALSE
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.client_id_metadata_uri IS NOT NULL
+  AND source.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM issuance_selection_profiles AS profile
+    WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+      AND profile.user_session_client_id = source.id
+      AND profile.deleted IS FALSE
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+ORDER BY source.id;
 
 -- name: MoveMergedCimdClientConsentResources :execrows
 -- Approval evidence on a source consent that duplicates a live target consent
@@ -749,29 +786,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 ), duplicate_consents AS (
     SELECT source_consent.id AS source_consent_id, target_consent.id AS target_consent_id
     FROM pairs
@@ -809,29 +827,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consent_resources AS resource
 SET deleted_at = clock_timestamp(),
@@ -861,29 +860,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consents AS source_consent
 SET deleted_at = clock_timestamp(),
@@ -909,29 +889,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consents AS consent
 SET user_session_client_id = pairs.target_client_id,
@@ -952,29 +913,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_sessions AS session
 SET user_session_client_id = pairs.target_client_id,
@@ -991,29 +933,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = @target_issuer_id
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = @source_issuer_id
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY(@source_client_ids::uuid[])
+      AND source.user_session_issuer_id = @source_issuer_id
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_clients AS client
 SET deleted_at = clock_timestamp(),

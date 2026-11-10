@@ -3133,6 +3133,77 @@ func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx conte
 	return items, nil
 }
 
+const listMergeableCimdSourceClientIDs = `-- name: ListMergeableCimdSourceClientIDs :many
+
+SELECT source.id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = $1
+ AND target.client_id = source.client_id
+ AND target.client_id_metadata_uri IS NOT NULL
+ AND target.deleted IS FALSE
+WHERE source.user_session_issuer_id = $2
+  AND source.client_id_metadata_uri IS NOT NULL
+  AND source.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM issuance_selection_profiles AS profile
+    WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+      AND profile.user_session_client_id = source.id
+      AND profile.deleted IS FALSE
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN ($2, $1)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
+      )
+  )
+ORDER BY source.id
+`
+
+type ListMergeableCimdSourceClientIDsParams struct {
+	TargetIssuerID uuid.UUID
+	SourceIssuerID uuid.UUID
+	OrganizationID string
+}
+
+// The queries below merge each source CIMD client into the target issuer's
+// row for the same metadata document URL. ListMergeableCimdSourceClientIDs decides
+// which source clients merge; every later step takes those source clients and
+// finds each one's target row by client_id, re-checking only that both rows
+// are live on their issuers. The steps run in this order
+// before the remaining source clients move: consent resources, then duplicate
+// consents and their remaining resources, remaining consents, sessions, then
+// the source client rows.
+// Lists each live source client resolved from a Client ID Metadata Document
+// that the target issuer also has a live client for. A source client an
+// issuance selection profile pins to the source issuer is left out: the
+// profile's foreign key keeps it on that issuer.
+func (q *Queries) ListMergeableCimdSourceClientIDs(ctx context.Context, arg ListMergeableCimdSourceClientIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listMergeableCimdSourceClientIDs, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrganizationManagedUserSessionIssuerMCPServers = `-- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
 SELECT
     attachment.kind,
@@ -4882,7 +4953,6 @@ func (q *Queries) MergeDuplicateUserSessionIssuerCimdClients(ctx context.Context
 }
 
 const moveMergedCimdClientConsentResources = `-- name: MoveMergedCimdClientConsentResources :execrows
-
 WITH pairs AS (
     SELECT source.id AS source_client_id, target.id AS target_client_id,
            target.project_id AS target_project_id, target.organization_id AS target_organization_id
@@ -4890,29 +4960,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 ), duplicate_consents AS (
     SELECT source_consent.id AS source_consent_id, target_consent.id AS target_consent_id
     FROM pairs
@@ -4941,22 +4992,16 @@ WHERE resource.user_session_consent_id = duplicate_consents.source_consent_id
 `
 
 type MoveMergedCimdClientConsentResourcesParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
-// The queries below merge each source CIMD client into the target issuer's
-// row for the same metadata document URL, in this order, before the remaining
-// source clients move: consent resources, then duplicate consents and their
-// remaining resources, remaining consents, sessions, then the source client
-// rows. Each recomputes the pairs
-// from live source rows, so the client rows must be retired last.
 // Approval evidence on a source consent that duplicates a live target consent
 // (same subject and upstream set) moves to the target consent, except for
 // resources the target consent already covers.
 func (q *Queries) MoveMergedCimdClientConsentResources(ctx context.Context, arg MoveMergedCimdClientConsentResourcesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, moveMergedCimdClientConsentResources, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, moveMergedCimdClientConsentResources, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
@@ -5484,29 +5529,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consents AS consent
 SET user_session_client_id = pairs.target_client_id,
@@ -5519,14 +5545,14 @@ WHERE consent.user_session_client_id = pairs.source_client_id
 `
 
 type RepointMergedCimdClientConsentsParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
 // Consents the target client lacks move to it with the target's tenancy.
 func (q *Queries) RepointMergedCimdClientConsents(ctx context.Context, arg RepointMergedCimdClientConsentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, repointMergedCimdClientConsents, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, repointMergedCimdClientConsents, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
@@ -5541,29 +5567,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_sessions AS session
 SET user_session_client_id = pairs.target_client_id,
@@ -5574,15 +5581,15 @@ WHERE session.user_session_client_id = pairs.source_client_id
 `
 
 type RepointMergedCimdClientSessionsParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
 // Sessions keep their refresh tokens; only the client they belong to changes.
 // Their issuer and tenancy move with the rest of the source sessions.
 func (q *Queries) RepointMergedCimdClientSessions(ctx context.Context, arg RepointMergedCimdClientSessionsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, repointMergedCimdClientSessions, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, repointMergedCimdClientSessions, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
@@ -5731,29 +5738,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consent_resources AS resource
 SET deleted_at = clock_timestamp(),
@@ -5775,16 +5763,16 @@ WHERE resource.user_session_consent_id = source_consent.id
 `
 
 type RetireMergedCimdClientDuplicateConsentResourcesParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
 // Approval evidence still on a source duplicate consent after the move covers
 // resources the target consent already holds, so it is retired with its
 // consent rather than left live under a deleted parent.
 func (q *Queries) RetireMergedCimdClientDuplicateConsentResources(ctx context.Context, arg RetireMergedCimdClientDuplicateConsentResourcesParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retireMergedCimdClientDuplicateConsentResources, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, retireMergedCimdClientDuplicateConsentResources, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
@@ -5799,29 +5787,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_consents AS source_consent
 SET deleted_at = clock_timestamp(),
@@ -5840,15 +5809,15 @@ WHERE source_consent.user_session_client_id = pairs.source_client_id
 `
 
 type RetireMergedCimdClientDuplicateConsentsParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
 // The target consent is authoritative for a subject and upstream set it
 // already covers, so the source duplicate is retired.
 func (q *Queries) RetireMergedCimdClientDuplicateConsents(ctx context.Context, arg RetireMergedCimdClientDuplicateConsentsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retireMergedCimdClientDuplicateConsents, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, retireMergedCimdClientDuplicateConsents, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
@@ -5863,29 +5832,10 @@ WITH pairs AS (
     JOIN user_session_clients AS target
       ON target.user_session_issuer_id = $1
      AND target.client_id = source.client_id
-     AND target.client_id_metadata_uri IS NOT NULL
      AND target.deleted IS FALSE
-    WHERE source.user_session_issuer_id = $2
-      AND source.client_id_metadata_uri IS NOT NULL
+    WHERE source.id = ANY($2::uuid[])
+      AND source.user_session_issuer_id = $3
       AND source.deleted IS FALSE
-      AND NOT EXISTS (
-        SELECT 1
-        FROM issuance_selection_profiles AS profile
-        WHERE profile.user_session_issuer_id = source.user_session_issuer_id
-          AND profile.user_session_client_id = source.id
-          AND profile.deleted IS FALSE
-      )
-      AND 2 = (
-        SELECT COUNT(*)
-        FROM user_session_issuers AS issuer
-        LEFT JOIN projects AS project ON project.id = issuer.project_id
-        WHERE issuer.id IN ($2, $1)
-          AND issuer.deleted IS FALSE
-          AND (
-            (issuer.project_id IS NULL AND issuer.organization_id = $3::text)
-            OR (issuer.project_id IS NOT NULL AND project.organization_id = $3::text AND project.deleted IS FALSE)
-          )
-      )
 )
 UPDATE user_session_clients AS client
 SET deleted_at = clock_timestamp(),
@@ -5895,13 +5845,13 @@ WHERE client.id = pairs.source_client_id
 `
 
 type RetireMergedCimdClientsParams struct {
-	TargetIssuerID uuid.UUID
-	SourceIssuerID uuid.UUID
-	OrganizationID string
+	TargetIssuerID  uuid.UUID
+	SourceClientIds []uuid.UUID
+	SourceIssuerID  uuid.UUID
 }
 
 func (q *Queries) RetireMergedCimdClients(ctx context.Context, arg RetireMergedCimdClientsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, retireMergedCimdClients, arg.TargetIssuerID, arg.SourceIssuerID, arg.OrganizationID)
+	result, err := q.db.Exec(ctx, retireMergedCimdClients, arg.TargetIssuerID, arg.SourceClientIds, arg.SourceIssuerID)
 	if err != nil {
 		return 0, err
 	}
