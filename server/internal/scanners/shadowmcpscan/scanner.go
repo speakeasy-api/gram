@@ -299,6 +299,14 @@ func (s *Scanner) scanCall(ctx context.Context, orgID string, userID string, cal
 		return candidateForFinding(finding, userID, resolvedAccessEvidence(prov, match), call.Name, true)
 	}
 
+	// Unresolved provenance means the hook recorded neither a URL nor a launch
+	// command for the server, which is how the agent's own in-process servers
+	// (Claude in Chrome, desktop app tools) always arrive. They are not Shadow
+	// MCP, so they produce no finding.
+	if shadowmcp.IsAgentBuiltinServer(serverPrefix, "", "") {
+		return nil
+	}
+
 	s.recordResolution(ctx, orgID, senderOf(prov, call), ResolutionUnresolved)
 
 	// Provenance could not identify the server. Fall back to the echoed

@@ -841,3 +841,76 @@ func TestScanner_UntrimmedServerURLIsClean(t *testing.T) {
 
 	require.Empty(t, out[0])
 }
+
+// The agent's own in-process servers reach the scanner with no URL or launch
+// command, the same shape the signature fallback would otherwise flag. They
+// are not Shadow MCP and must produce no finding, while a stdio server that
+// borrows a built-in name is still flagged.
+func TestScanner_AgentBuiltinServers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		toolName    string
+		provenance  map[string]telemetryrepo.MCPProvenance
+		wantFlagged bool
+	}{
+		{
+			name:        "claude in chrome with bare prefix provenance is clean",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "claude-in-chrome", ServerURL: "", ServerIdentity: "claude-in-chrome", HookSource: "claude"}},
+			wantFlagged: false,
+		},
+		{
+			name:        "desktop app tool without provenance is clean",
+			toolName:    "mcp__ccd_turn__wrap_up",
+			provenance:  map[string]telemetryrepo.MCPProvenance{},
+			wantFlagged: false,
+		},
+		{
+			name:        "built-in name with stdio command provenance is flagged",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "npx some-mcp", ServerURL: "", ServerIdentity: "", HookSource: "claude"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "built-in name with external URL provenance is flagged",
+			toolName:    "mcp__Claude_Browser__navigate",
+			provenance:  map[string]telemetryrepo.MCPProvenance{"call-1": {Match: "Claude_Browser", ServerURL: "https://mcp.example.test/mcp", ServerIdentity: "", HookSource: "claude"}},
+			wantFlagged: true,
+		},
+		{
+			name:        "third-party server without provenance is flagged",
+			toolName:    "mcp__linear__list_issues",
+			provenance:  map[string]telemetryrepo.MCPProvenance{},
+			wantFlagged: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// The validator denies every bare tool name, so only the built-in
+			// exemption can keep an unresolved call clean.
+			validator := &fakeValidator{denied: map[string]bool{
+				"tabs_context_mcp": true,
+				"wrap_up":          true,
+				"navigate":         true,
+				"list_issues":      true,
+			}, orgIDs: nil}
+			prov := &fakeProvenance{found: tc.provenance, err: nil, gotIDs: nil, gotSince: time.Time{}, callCount: 0}
+			s := NewScanner(discardLogger(), validator, gramHosted(), prov, nil)
+
+			out := s.Scan(t.Context(), "org-1", uuid.New(), uuid.Nil, []Message{
+				{ToolCalls: []ToolCall{{ID: "call-1", Name: tc.toolName, Arguments: `{}`, CreatedAt: time.Now(), Sender: "claude"}}},
+			})
+
+			if tc.wantFlagged {
+				require.Len(t, out[0], 1)
+				return
+			}
+			require.Empty(t, out[0])
+		})
+	}
+}

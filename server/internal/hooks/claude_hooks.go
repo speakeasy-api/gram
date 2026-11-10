@@ -1293,6 +1293,16 @@ func (s *Service) handlePreToolUse(ctx context.Context, ev *hookevents.BeforeToo
 		return constructBlockResponse(payload.HookEventName, userReason), nil
 	}
 
+	// The agent's own in-process servers (Claude in Chrome, desktop app tools)
+	// never appear in `claude mcp list`, so without this they would read as
+	// missing from the configuration and be denied under block_all.
+	if shadowmcp.IsAgentBuiltinServer(serverPrefix, "", "") && !inventoryConfiguresMCPServer(entries, serverPrefix) {
+		if output != nil {
+			output.PermissionDecision = &allow
+		}
+		return result, nil
+	}
+
 	matched := matchCachedMCPEntry(entries, serverPrefix)
 	var detail string
 	if policy.IsAllowAll() {

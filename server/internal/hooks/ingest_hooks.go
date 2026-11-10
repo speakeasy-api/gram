@@ -922,6 +922,9 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 			s.resolveEvidenceFromSessionInventory(ctx, &evidence, canonicalSessionID(payload))
 		}
 	}
+	if s.isCanonicalAgentBuiltinMCPServer(ctx, payload, rawToolName, evidence) {
+		return "", ""
+	}
 	if detail, denied := s.enforceShadowMCPToolAccess(ctx, authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), actor.UserID, policy, toolName, evidence); denied {
 		auditReason := fmt.Sprintf("Speakeasy blocked this tool call: matched policy %q (%s)", policy.Name, detail)
 		userReason := s.renderShadowMCPUserBlockReason(ctx, shadowMCPRequestLinkParams{

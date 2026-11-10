@@ -74,6 +74,44 @@ func (s *Service) enforceShadowMCPToolAccess(
 	return detail, true
 }
 
+// isCanonicalAgentBuiltinMCPServer reports whether a canonical MCP tool call
+// targets one of the agent's own in-process servers, which Shadow MCP does not
+// govern. The call must carry no URL or launch command, and the session's MCP
+// inventory must not configure a server under the same name with one: a
+// user-configured stdio or remote server named like a built-in is still a
+// Shadow MCP server.
+func (s *Service) isCanonicalAgentBuiltinMCPServer(ctx context.Context, payload *gen.IngestPayload, rawToolName string, evidence shadowmcp.AccessEvidence) bool {
+	serverName := toolref.MCPServerOf(rawToolName)
+	command := ""
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		command = conv.PtrValOr(mcp.Command, "")
+	}
+	if !shadowmcp.IsAgentBuiltinServer(serverName, evidence.FullURL, command) {
+		return false
+	}
+
+	entries, err := s.getCachedMCPList(ctx, canonicalSessionID(payload))
+	if err != nil {
+		return true
+	}
+	return !inventoryConfiguresMCPServer(entries, serverName)
+}
+
+// inventoryConfiguresMCPServer reports whether any inventory entry addressed
+// by serverName (configured name or tool-name prefix) has a URL or launch
+// command, which marks the server as user configured rather than built in.
+func inventoryConfiguresMCPServer(entries []MCPServerEntry, serverName string) bool {
+	for _, entry := range entries {
+		if entry.Name != serverName && !mcpEntryMatchesPrefix(entry, serverName) {
+			continue
+		}
+		if entry.URL != "" || entry.Command != "" {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) canBypassPolicy(
 	ctx context.Context,
 	organizationID string,
