@@ -85,6 +85,36 @@ func TestDefaultMCPConnectionLogMinSeverityMatchesColumnDefault(t *testing.T) {
 	require.Equal(t, dataexports.DefaultMCPConnectionLogMinSeverity, string(column[1]))
 }
 
+func TestNormalizeMinSeverity(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range []string{"warn", "WARN", " warn ", "Warn\n"} {
+		level, err := dataexports.NormalizeMinSeverity(dataexports.DataSourceMCPConnectionLogs, value)
+		require.NoError(t, err, value)
+		require.Equal(t, dataexports.MinSeverityWarn, level, value)
+	}
+	for _, value := range []string{"", " ", "debug", "warning"} {
+		_, err := dataexports.NormalizeMinSeverity(dataexports.DataSourceMCPConnectionLogs, value)
+		require.ErrorContains(t, err, "must be info, warn or error", value)
+	}
+	_, err := dataexports.NormalizeMinSeverity(dataexports.DataSourceRiskFindings, dataexports.MinSeverityWarn)
+	require.ErrorContains(t, err, "only supported on mcp_connection_logs routes")
+}
+
+func TestRouteMinSeverityIsStoredNormalized(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	created, err := createRouteWithLevel(ctx, ti, dataexports.DataSourceMCPConnectionLogs, new(" WARN "))
+	require.NoError(t, err)
+	require.Equal(t, dataexports.MinSeverityWarn, *created.MinSeverity)
+
+	listed, err := ti.service.ListRoutes(ctx, &gen.ListRoutesPayload{SessionToken: nil, ApikeyToken: nil, ProjectSlugInput: nil})
+	require.NoError(t, err)
+	require.Len(t, listed.Routes, 1)
+	require.Equal(t, dataexports.MinSeverityWarn, *listed.Routes[0].MinSeverity)
+}
+
 func TestRouteMinSeverityDefaultsToErrorWithoutARow(t *testing.T) {
 	t.Parallel()
 
@@ -207,11 +237,11 @@ func TestRouteMinSeverityStorageIsTenantScoped(t *testing.T) {
 		})
 		require.ErrorIs(t, err, pgx.ErrNoRows, tenant.name)
 
-		levels, err := queries.ListMCPConnectionLogRouteMinSeverities(ctx, repo.ListMCPConnectionLogRouteMinSeveritiesParams{
-			DefaultMinSeverity: dataexports.DefaultMCPConnectionLogMinSeverity, OrganizationID: tenant.organizationID, ProjectID: tenant.projectID,
+		routes, err := queries.ListDataExportRoutes(ctx, repo.ListDataExportRoutesParams{
+			OrganizationID: tenant.organizationID, ProjectID: tenant.projectID,
 		})
 		require.NoError(t, err)
-		require.Empty(t, levels, tenant.name)
+		require.Empty(t, routes, tenant.name)
 
 		require.NoError(t, queries.DeleteMCPConnectionLogRouteSettings(ctx, repo.DeleteMCPConnectionLogRouteSettingsParams{
 			OrganizationID: tenant.organizationID, ProjectID: tenant.projectID, DataExportRouteID: routeID,

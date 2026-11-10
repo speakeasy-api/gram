@@ -141,21 +141,30 @@ WHERE organization_id = @organization_id
 RETURNING *;
 
 -- List active routes in stable creation order for the management API.
+-- MCP connection logs routes carry their minimum level; NULL means the default.
 -- name: ListDataExportRoutes :many
-SELECT *
-FROM data_export_routes
-WHERE organization_id = @organization_id
-  AND project_id = @project_id
-  AND deleted IS FALSE
-ORDER BY created_at, id;
+SELECT sqlc.embed(route), settings.min_severity AS min_severity
+FROM data_export_routes AS route
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
+WHERE route.organization_id = @organization_id
+  AND route.project_id = @project_id
+  AND route.deleted IS FALSE
+ORDER BY route.created_at, route.id;
 
 -- List active routes across live projects in one organization.
 -- name: ListDataExportRoutesByOrganizationID :many
-SELECT route.*
+SELECT sqlc.embed(route), settings.min_severity AS min_severity
 FROM data_export_routes AS route
 JOIN projects AS project
   ON project.id = route.project_id
  AND project.organization_id = route.organization_id
+LEFT JOIN mcp_connection_log_routes AS settings
+  ON settings.organization_id = route.organization_id
+ AND settings.project_id = route.project_id
+ AND settings.data_export_route_id = route.id
 WHERE project.organization_id = @organization_id
   AND project.deleted IS FALSE
   AND route.deleted IS FALSE
@@ -246,40 +255,6 @@ WHERE organization_id = @organization_id
   AND id = @id
   AND deleted IS FALSE
 RETURNING *;
-
--- Minimum levels of the project's live MCP connection logs routes. Routes
--- without a settings row use the default the caller passes.
--- name: ListMCPConnectionLogRouteMinSeverities :many
-SELECT
-  route.id AS data_export_route_id,
-  COALESCE(settings.min_severity, @default_min_severity::text)::text AS min_severity
-FROM data_export_routes AS route
-LEFT JOIN mcp_connection_log_routes AS settings
-  ON settings.organization_id = route.organization_id
- AND settings.project_id = route.project_id
- AND settings.data_export_route_id = route.id
-WHERE route.organization_id = @organization_id
-  AND route.project_id = @project_id
-  AND route.data_source = 'mcp_connection_logs'
-  AND route.deleted IS FALSE;
-
--- Minimum levels of live MCP connection logs routes across live projects in one organization.
--- name: ListMCPConnectionLogRouteMinSeveritiesByOrganizationID :many
-SELECT
-  route.id AS data_export_route_id,
-  COALESCE(settings.min_severity, @default_min_severity::text)::text AS min_severity
-FROM data_export_routes AS route
-JOIN projects AS project
-  ON project.id = route.project_id
- AND project.organization_id = route.organization_id
-LEFT JOIN mcp_connection_log_routes AS settings
-  ON settings.organization_id = route.organization_id
- AND settings.project_id = route.project_id
- AND settings.data_export_route_id = route.id
-WHERE route.organization_id = @organization_id
-  AND project.deleted IS FALSE
-  AND route.data_source = 'mcp_connection_logs'
-  AND route.deleted IS FALSE;
 
 -- Minimum level of one live MCP connection logs route.
 -- name: GetMCPConnectionLogRouteMinSeverity :one

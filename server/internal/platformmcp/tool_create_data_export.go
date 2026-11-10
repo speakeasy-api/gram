@@ -105,12 +105,9 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 	}
 	minSeverity := ""
 	if input.MinSeverity != "" {
-		if dataSource != dataexports.DataSourceMCPConnectionLogs {
-			return CreateDataExportOutput{}, fmt.Errorf("%w: min_severity is only supported for mcp_connection_logs", ErrDataExportInvalidInput)
-		}
-		minSeverity, err = dataexports.NormalizeMinSeverity(input.MinSeverity)
+		minSeverity, err = dataexports.NormalizeMinSeverity(dataSource, input.MinSeverity)
 		if err != nil {
-			return CreateDataExportOutput{}, fmt.Errorf("%w: validate min_severity: %w", ErrDataExportInvalidInput, err)
+			return CreateDataExportOutput{}, fmt.Errorf("%w: %w", ErrDataExportInvalidInput, err)
 		}
 	}
 

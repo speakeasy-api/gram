@@ -74,8 +74,8 @@ func (f dataExportToggleFixture) route(t *testing.T, ctx context.Context, routeI
 	rows, err := dataexportsrepo.New(f.conn).ListDataExportRoutes(ctx, dataexportsrepo.ListDataExportRoutesParams{OrganizationID: f.principal.OrganizationID, ProjectID: f.project.ID})
 	require.NoError(t, err)
 	for _, row := range rows {
-		if row.ID == routeID {
-			return row
+		if row.DataExportRoute.ID == routeID {
+			return row.DataExportRoute
 		}
 	}
 	require.FailNow(t, "route not found")

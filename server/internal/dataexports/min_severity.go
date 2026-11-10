@@ -2,6 +2,7 @@ package dataexports
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -16,13 +17,17 @@ const (
 	DefaultMCPConnectionLogMinSeverity = MinSeverityError
 )
 
-// NormalizeMinSeverity validates and returns a supported minimum level.
-func NormalizeMinSeverity(value string) (string, error) {
-	switch value {
+// NormalizeMinSeverity validates a requested minimum level for a route's data source and returns it trimmed and lowercased.
+func NormalizeMinSeverity(dataSource, value string) (string, error) {
+	if dataSource != DataSourceMCPConnectionLogs {
+		return "", fmt.Errorf("min_severity is only supported on mcp_connection_logs routes, not %s", dataSource)
+	}
+	level := strings.ToLower(strings.TrimSpace(value))
+	switch level {
 	case MinSeverityInfo, MinSeverityWarn, MinSeverityError:
-		return value, nil
+		return level, nil
 	default:
-		return "", fmt.Errorf("unsupported minimum level %q", value)
+		return "", fmt.Errorf("min_severity must be info, warn or error, not %q", value)
 	}
 }
 

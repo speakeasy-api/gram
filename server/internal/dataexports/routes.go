@@ -1,8 +1,6 @@
 package dataexports
 
 import (
-	"github.com/google/uuid"
-
 	gen "github.com/speakeasy-api/gram/server/gen/data_exports"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports/repo"
@@ -20,16 +18,4 @@ func buildDataExportRouteView(row repo.DataExportRoute, minSeverity *string) *ge
 		CreatedAt:         conv.FromPGTimestamptz(row.CreatedAt),
 		UpdatedAt:         conv.FromPGTimestamptz(row.UpdatedAt),
 	}
-}
-
-// routeMinSeverity looks a route's level up in levels, falling back to the default.
-func routeMinSeverity(row repo.DataExportRoute, levels map[uuid.UUID]string) *string {
-	if row.DataSource != DataSourceMCPConnectionLogs {
-		return nil
-	}
-	if level, ok := levels[row.ID]; ok {
-		return &level
-	}
-	level := DefaultMCPConnectionLogMinSeverity
-	return &level
 }

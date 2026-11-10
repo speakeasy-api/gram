@@ -129,20 +129,9 @@ func (s *Service) ListForOrg(ctx context.Context, _ *gen.ListForOrgPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list organization data export routes").LogError(ctx, logger)
 	}
-	levelRows, err := queries.ListMCPConnectionLogRouteMinSeveritiesByOrganizationID(ctx, repo.ListMCPConnectionLogRouteMinSeveritiesByOrganizationIDParams{
-		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
-		OrganizationID:     authCtx.ActiveOrganizationID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization MCP connection log levels").LogError(ctx, logger)
-	}
-	levels := make(map[uuid.UUID]string, len(levelRows))
-	for _, level := range levelRows {
-		levels[level.DataExportRouteID] = level.MinSeverity
-	}
 	routes := make([]*gen.DataExportRoute, 0, len(routeRows))
 	for _, row := range routeRows {
-		routes = append(routes, buildDataExportRouteView(row, routeMinSeverity(row, levels)))
+		routes = append(routes, buildDataExportRouteView(row.DataExportRoute, conv.PtrEmpty(RouteMinSeverity(row.DataExportRoute.DataSource, row.MinSeverity))))
 	}
 
 	return &gen.ListDataExportsForOrgResult{
@@ -516,22 +505,10 @@ func (s *Service) ListRoutes(ctx context.Context, _ *gen.ListRoutesPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list data export routes").LogError(ctx, logger)
 	}
-	levelRows, err := queries.ListMCPConnectionLogRouteMinSeverities(ctx, repo.ListMCPConnectionLogRouteMinSeveritiesParams{
-		DefaultMinSeverity: DefaultMCPConnectionLogMinSeverity,
-		OrganizationID:     authCtx.ActiveOrganizationID,
-		ProjectID:          *authCtx.ProjectID,
-	})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list MCP connection log levels").LogError(ctx, logger)
-	}
-	levels := make(map[uuid.UUID]string, len(levelRows))
-	for _, level := range levelRows {
-		levels[level.DataExportRouteID] = level.MinSeverity
-	}
 
 	result := &gen.ListDataExportRoutesResult{Routes: make([]*gen.DataExportRoute, 0, len(rows))}
 	for _, row := range rows {
-		result.Routes = append(result.Routes, buildDataExportRouteView(row, routeMinSeverity(row, levels)))
+		result.Routes = append(result.Routes, buildDataExportRouteView(row.DataExportRoute, conv.PtrEmpty(RouteMinSeverity(row.DataExportRoute.DataSource, row.MinSeverity))))
 	}
 	return result, nil
 }
@@ -549,9 +526,13 @@ func (s *Service) CreateRoute(ctx context.Context, payload *gen.CreateRoutePaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
 	}
-	minSeverity, err := normalizeRouteMinSeverity(source, payload.MinSeverity)
-	if err != nil {
-		return nil, err
+	var minSeverity *string
+	if payload.MinSeverity != nil {
+		level, err := NormalizeMinSeverity(source, *payload.MinSeverity)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
+		}
+		minSeverity = &level
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -618,9 +599,13 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
 	}
-	minSeverity, err := normalizeRouteMinSeverity(source, payload.MinSeverity)
-	if err != nil {
-		return nil, err
+	var minSeverity *string
+	if payload.MinSeverity != nil {
+		level, err := NormalizeMinSeverity(source, *payload.MinSeverity)
+		if err != nil {
+			return nil, oops.E(oops.CodeInvalid, err, "%s", err.Error())
+		}
+		minSeverity = &level
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
 	dbtx, err := s.db.Begin(ctx)
@@ -793,21 +778,6 @@ func routeSnapshot(row repo.DataExportRoute) *audit.DataExportRouteSnapshot {
 		OtelDestinationID: conv.FromNullableUUID(row.OtelDestinationID),
 		MinSeverity:       nil,
 	}
-}
-
-// normalizeRouteMinSeverity validates a requested minimum level. Nil means none was given.
-func normalizeRouteMinSeverity(source string, value *string) (*string, error) {
-	if value == nil {
-		return nil, nil
-	}
-	if source != DataSourceMCPConnectionLogs {
-		return nil, oops.E(oops.CodeInvalid, fmt.Errorf("min_severity on %q route", source), "min_severity is only supported on mcp_connection_logs routes")
-	}
-	level, err := NormalizeMinSeverity(*value)
-	if err != nil {
-		return nil, oops.E(oops.CodeInvalid, err, "min_severity must be info, warn or error")
-	}
-	return &level, nil
 }
 
 // readRouteMinSeverity returns the stored level of an MCP connection logs route, or nil for other sources.
