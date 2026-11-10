@@ -159,6 +159,21 @@ func BuildListRootMcpServersPayload(domainsListRootMcpServersSessionToken string
 	return v, nil
 }
 
+// BuildReconcileDomainPayload builds the payload for the domains
+// reconcileDomain endpoint from CLI flags.
+func BuildReconcileDomainPayload(domainsReconcileDomainSessionToken string) (*domains.ReconcileDomainPayload, error) {
+	var sessionToken *string
+	{
+		if domainsReconcileDomainSessionToken != "" {
+			sessionToken = &domainsReconcileDomainSessionToken
+		}
+	}
+	v := &domains.ReconcileDomainPayload{}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildCheckHealthPayload builds the payload for the domains checkHealth
 // endpoint from CLI flags.
 func BuildCheckHealthPayload(domainsCheckHealthSessionToken string) (*domains.CheckHealthPayload, error) {

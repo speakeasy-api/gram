@@ -34923,6 +34923,87 @@ paths:
             x-speakeasy-react-hook:
                 name: RootMcpServers
                 type: query
+    /rpc/domain.reconcile:
+        post:
+            description: Reapply the configured ingress state for the organization's verified custom domain
+            operationId: reconcileDomain
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/CustomDomain'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: reconcileDomain domains
+            tags:
+                - domains
+            x-speakeasy-name-override: reconcileDomain
+            x-speakeasy-react-hook:
+                name: ReconcileDomain
     /rpc/domain.register:
         post:
             description: Create a custom domain for an organization
@@ -109220,6 +109301,9 @@ components:
                     items:
                         type: string
                     description: IP addresses or CIDR ranges allowed to access this domain. Empty list means unrestricted.
+                is_reconciling:
+                    type: boolean
+                    description: The custom domain ingress configuration is being applied
                 is_updating:
                     type: boolean
                     description: The custom domain is actively being registered
@@ -109229,6 +109313,9 @@ components:
                 organization_id:
                     type: string
                     description: The ID of the organization this domain belongs to
+                reconciliation_status:
+                    type: string
+                    description: 'The latest domain ingress reconciliation state. One of: not_started, applying, reconciled, failed.'
                 root_mcp_endpoint_id:
                     type: string
                     description: The MCP endpoint currently mapped to the domain root, if any
@@ -109259,6 +109346,8 @@ components:
                 - created_at
                 - updated_at
                 - is_updating
+                - is_reconciling
+                - reconciliation_status
                 - ip_allowlist
                 - suggested_record_type
         CustomDomainMcpEndpoint:

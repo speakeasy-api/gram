@@ -25,6 +25,7 @@ type Server struct {
 	UpdateDomain       http.Handler
 	SetRootMcpEndpoint http.Handler
 	ListRootMcpServers http.Handler
+	ReconcileDomain    http.Handler
 	CheckHealth        http.Handler
 	DeleteDomain       http.Handler
 	ListMcpEndpoints   http.Handler
@@ -63,6 +64,7 @@ func New(
 			{"UpdateDomain", "POST", "/rpc/domain.update"},
 			{"SetRootMcpEndpoint", "POST", "/rpc/domain.setRootMcpEndpoint"},
 			{"ListRootMcpServers", "GET", "/rpc/domain.listRootMcpServers"},
+			{"ReconcileDomain", "POST", "/rpc/domain.reconcile"},
 			{"CheckHealth", "POST", "/rpc/domain.checkHealth"},
 			{"DeleteDomain", "DELETE", "/rpc/domain.delete"},
 			{"ListMcpEndpoints", "GET", "/rpc/domain.listMcpEndpoints"},
@@ -73,6 +75,7 @@ func New(
 		UpdateDomain:       NewUpdateDomainHandler(e.UpdateDomain, mux, decoder, encoder, errhandler, formatter),
 		SetRootMcpEndpoint: NewSetRootMcpEndpointHandler(e.SetRootMcpEndpoint, mux, decoder, encoder, errhandler, formatter),
 		ListRootMcpServers: NewListRootMcpServersHandler(e.ListRootMcpServers, mux, decoder, encoder, errhandler, formatter),
+		ReconcileDomain:    NewReconcileDomainHandler(e.ReconcileDomain, mux, decoder, encoder, errhandler, formatter),
 		CheckHealth:        NewCheckHealthHandler(e.CheckHealth, mux, decoder, encoder, errhandler, formatter),
 		DeleteDomain:       NewDeleteDomainHandler(e.DeleteDomain, mux, decoder, encoder, errhandler, formatter),
 		ListMcpEndpoints:   NewListMcpEndpointsHandler(e.ListMcpEndpoints, mux, decoder, encoder, errhandler, formatter),
@@ -90,6 +93,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.UpdateDomain = m(s.UpdateDomain)
 	s.SetRootMcpEndpoint = m(s.SetRootMcpEndpoint)
 	s.ListRootMcpServers = m(s.ListRootMcpServers)
+	s.ReconcileDomain = m(s.ReconcileDomain)
 	s.CheckHealth = m(s.CheckHealth)
 	s.DeleteDomain = m(s.DeleteDomain)
 	s.ListMcpEndpoints = m(s.ListMcpEndpoints)
@@ -106,6 +110,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountUpdateDomainHandler(mux, h.UpdateDomain)
 	MountSetRootMcpEndpointHandler(mux, h.SetRootMcpEndpoint)
 	MountListRootMcpServersHandler(mux, h.ListRootMcpServers)
+	MountReconcileDomainHandler(mux, h.ReconcileDomain)
 	MountCheckHealthHandler(mux, h.CheckHealth)
 	MountDeleteDomainHandler(mux, h.DeleteDomain)
 	MountListMcpEndpointsHandler(mux, h.ListMcpEndpoints)
@@ -411,6 +416,59 @@ func NewListRootMcpServersHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listRootMcpServers")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReconcileDomainHandler configures the mux to serve the "domains"
+// service "reconcileDomain" endpoint.
+func MountReconcileDomainHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/domain.reconcile", f)
+}
+
+// NewReconcileDomainHandler creates a HTTP handler which loads the HTTP
+// request and calls the "domains" service "reconcileDomain" endpoint.
+func NewReconcileDomainHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReconcileDomainRequest(mux, decoder)
+		encodeResponse = EncodeReconcileDomainResponse(encoder)
+		encodeError    = EncodeReconcileDomainError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "reconcileDomain")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "domains")
 		payload, err := decodeRequest(r)
 		if err != nil {

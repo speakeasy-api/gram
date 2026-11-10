@@ -130,6 +130,14 @@ func CustomDomainReconcileWorkflowID(customDomainID uuid.UUID) string {
 	return fmt.Sprintf("v1:custom-domain-reconcile:%s", customDomainID.String())
 }
 
+func (c *CustomDomainRegistrationClient) GetReconcileWorkflowInfo(ctx context.Context, customDomainID uuid.UUID) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	info, err := c.TemporalEnv.Client().DescribeWorkflowExecution(ctx, CustomDomainReconcileWorkflowID(customDomainID), "")
+	if err != nil {
+		return nil, fmt.Errorf("describe custom domain reconcile workflow: %w", err)
+	}
+	return info, nil
+}
+
 func customDomainReconcileSignal(params CustomDomainReconcileParams) string {
 	return CustomDomainReconcileWorkflowID(params.CustomDomainID) + "/signal"
 }
