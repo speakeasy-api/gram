@@ -24,7 +24,7 @@ func (r *Relay) versionNotice(e *agenthooks.Event, status string) string {
 	if !claimVersionNotice(e.Session.ID) {
 		return ""
 	}
-	return fmt.Sprintf("Speakeasy: this machine runs speakeasy-hooks %s, which is no longer supported. Ask your Speakeasy admin to update the Speakeasy hooks plugin.", BinaryVersion)
+	return fmt.Sprintf("Speakeasy: the Speakeasy hooks plugin on this machine (version %s) is no longer supported. Ask your Speakeasy admin to update it.", BinaryVersion)
 }
 
 func claimVersionNotice(sessionID string) bool {

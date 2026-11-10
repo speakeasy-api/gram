@@ -14,8 +14,9 @@ import (
 // never changes the decision.
 const effectHooksVersion = "hooks_version"
 
-// legacyHooksNotice is shown once per session by the retired per-tool Claude
-// endpoint, which is always unsupported.
+// legacyHooksNotice is returned on every SessionStart (startup, resume,
+// clear, compact) by the retired per-tool Claude endpoint, which is always
+// unsupported.
 const legacyHooksNotice = "Speakeasy: the hooks in this workspace use a retired endpoint and are no longer supported. Ask your Speakeasy admin to update the Speakeasy hooks plugin."
 
 func (s *Service) withVersionStatus(ctx context.Context, res *gen.IngestHookResult) *gen.IngestHookResult {
