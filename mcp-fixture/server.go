@@ -798,18 +798,26 @@ func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 	}
 }
 
-// authenticateOwnToken lets every request in, so a client can connect and
-// list tools, but only a request carrying the caller's own token (a personal
-// token or a per-user OAuth token) in OwnTokenHeader gets an identity. Tools
-// refuse to run without one.
+// authenticateOwnToken lets every request in, so a setup probe sees a working
+// server, but only a request carrying the caller's own token (a personal
+// token or a per-user OAuth token) gets an identity. Tools refuse to run
+// without one. The token arrives in OwnTokenHeader when Speakeasy forwards
+// that header, or in Authorization (with or without "Bearer ") when a typed
+// pass-through client forwards it there.
 func (s *Server) authenticateOwnToken(r *http.Request) (identity, *authFailure) {
 	tok := strings.TrimSpace(r.Header.Get(fixtureauth.OwnTokenHeader))
+	if tok == "" {
+		tok = bearer(r)
+	}
+	if tok == "" {
+		tok = strings.TrimSpace(r.Header.Get("Authorization"))
+	}
 	if tok == "" {
 		return identity{}, nil
 	}
 	id, err := s.accessIdentity(tok, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), fixtureauth.OAuthResource(s.issuer))
 	if err != nil {
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: `Bearer realm="mcp-fixture-own-token"`, message: fixtureauth.OwnTokenHeader + " is not a valid fixture token"}
+		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: `Bearer realm="mcp-fixture-own-token"`, message: "the caller's token is not a valid fixture token"}
 	}
 	id.Auth = "own-token"
 	return id, nil

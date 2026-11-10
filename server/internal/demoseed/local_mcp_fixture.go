@@ -235,8 +235,12 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 
 	// 4. The Pass-Through Token Server: each caller brings their own upstream
 	// token in a request header Speakeasy forwards unchanged (Manual identity:
-	// users manage their own headers). The fixture's own-token endpoint lets
-	// anyone connect but runs tools only for a caller with a token.
+	// users manage their own headers). The header is required, so Speakeasy
+	// turns away a caller without one. The fixture's own-token endpoint answers
+	// the handshake without a token only so Speakeasy's setup probe, which
+	// calls the upstream directly with no headers, sees a working server; it
+	// runs tools only for a caller with a token, read from this header or from
+	// Authorization when the typed pass-through client forwards it there.
 	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathOwnTokenMCP, ID: s.det("remotemcp-github"), ProjectID: proj})
 	if err := expect("point the pass-through server", n, err); err != nil {
 		return err

@@ -469,4 +469,22 @@ func TestOwnTokenEndpoint(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, "pat@fixture.test", out["identity"])
 	require.Equal(t, "own-token", out["auth"])
+
+	// A typed pass-through client forwards the caller's token as
+	// Authorization instead, raw or as a bearer token.
+	for _, value := range []string{pair.AccessToken, "Bearer " + pair.AccessToken} {
+		client := mcp.NewClient(&mcp.Implementation{Name: "fixture-test", Version: "1.0.0"}, nil)
+		session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+			Endpoint:   base + fixtureauth.PathOwnTokenMCP,
+			HTTPClient: &http.Client{Transport: headerTransport{name: "Authorization", value: value}},
+		}, nil)
+		require.NoError(t, err)
+		res, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "whoami", Arguments: map[string]any{}})
+		require.NoError(t, err)
+		require.False(t, res.IsError, "%v", res.Content)
+		got, ok := res.StructuredContent.(map[string]any)
+		require.True(t, ok)
+		require.Equal(t, "pat@fixture.test", got["identity"])
+		_ = session.Close()
+	}
 }
