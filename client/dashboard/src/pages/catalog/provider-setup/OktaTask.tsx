@@ -233,7 +233,7 @@ export function OktaTask(): JSX.Element {
                   Click <strong>Next</strong>.
                 </>,
                 <>
-                  Enter a name in <strong>App integration name</strong>.
+                  Enter the name below in <strong>App integration name</strong>.
                 </>,
               ]),
           <>
@@ -263,6 +263,12 @@ export function OktaTask(): JSX.Element {
           <>Save the app.</>,
         ]}
       />
+      {s.values.appChoice === "new" && (
+        <CopyValue
+          label="App integration name"
+          value="Speakeasy AI Control Plane – Okta MCP"
+        />
+      )}
       {redirect ? (
         <CopyValue label="Sign-in redirect URI" value={redirect} />
       ) : (

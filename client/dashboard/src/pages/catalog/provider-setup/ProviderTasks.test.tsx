@@ -853,7 +853,16 @@ it.each(["web", "native"])(
   (appType) => {
     const view = render(<OktaTaskFixture step="app" appType={appType} />);
     expect(screen.getByText("Create App Integration")).toBeDefined();
-    expect(screen.getByText("App integration name")).toBeDefined();
+    expect(screen.getByLabelText("App integration name")).toHaveProperty(
+      "value",
+      "Speakeasy AI Control Plane – Okta MCP",
+    );
+    const fields = [...view.container.querySelectorAll<HTMLElement>("input")];
+    expect(
+      fields.indexOf(screen.getByLabelText("App integration name")),
+    ).toBeLessThan(
+      fields.indexOf(screen.getByLabelText("Sign-in redirect URI")),
+    );
     const instructions =
       screen.getByText("In Okta").parentElement!.textContent!;
     expect(instructions.indexOf("In Assignments, select")).toBeGreaterThan(-1);
@@ -865,6 +874,7 @@ it.each(["web", "native"])(
     );
     expect(screen.queryByText("Create App Integration")).toBeNull();
     expect(screen.queryByText("App integration name")).toBeNull();
+    expect(screen.queryByLabelText("App integration name")).toBeNull();
     expect(screen.getByText(/Keep any redirect URIs/)).toBeDefined();
     expect(screen.queryByText(/select the people or groups/)).toBeNull();
   },
