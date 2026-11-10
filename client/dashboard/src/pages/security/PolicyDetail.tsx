@@ -144,7 +144,12 @@ import {
   StepperShell,
   SummaryRow,
 } from "./policy-editor-shell";
-import { type PolicyStep, useStepParam } from "./use-step-param";
+import {
+  type PolicyStep,
+  unvisitedStepsReason,
+  useStepParam,
+  useVisitedSteps,
+} from "./use-step-param";
 import { builtInRuleDisabledReason } from "./policy-built-in-rule-exclusivity";
 import {
   FLAG_ONLY_CATEGORIES,
@@ -454,6 +459,7 @@ function PromptPolicyEditor({
   const isCreate = policy === null;
 
   const [step, setStep] = useStepParam(PROMPT_STEPS);
+  const visitedSteps = useVisitedSteps(step);
   const [nameGenerating, setNameGenerating] = useState(false);
 
   // Editable guardrail definition, seeded from the loaded policy (edit), a
@@ -678,6 +684,7 @@ function PromptPolicyEditor({
       }
       onSubmit={() => save()}
       onCreate={create}
+      createBlockedReason={unvisitedStepsReason(visitedSteps, PROMPT_STEPS)}
       nameGenerating={nameGenerating}
     />
   );
@@ -3234,6 +3241,7 @@ export function StandardPolicyEditor({
     useState<string | null>(null);
 
   const [step, setStep] = useStepParam(STANDARD_STEPS);
+  const visitedSteps = useVisitedSteps(step);
 
   // Original values (edit mode) used for dirty tracking.
   const orig = useMemo(() => {
@@ -3766,6 +3774,7 @@ export function StandardPolicyEditor({
       actionDisabled={saveBlocked}
       onSubmit={() => save()}
       onCreate={() => save()}
+      createBlockedReason={unvisitedStepsReason(visitedSteps, STANDARD_STEPS)}
     />
   );
 
