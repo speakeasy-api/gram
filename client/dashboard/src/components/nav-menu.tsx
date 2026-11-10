@@ -11,12 +11,8 @@ import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
-import {
-  ReleaseStage,
-  ReleaseStageBadge,
-  stageLabel,
-  stageTextClass,
-} from "./release-stage-badge";
+import { stageLabel, stageTextClass } from "./release-stage";
+import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 
