@@ -271,6 +271,7 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 	if mcp == nil && base.Provider == agenthooks.ProviderOpenClaw {
 		mcp = openclawResolveMCPCall(base, tool.Name, output, errOut)
 	}
+	mcp = resolveClaudePluginMCP(base, tool.Name, mcp)
 	if mcp != nil {
 		m := &components.HookMCPData{
 			ServerName:     optStr(mcp.Server),
