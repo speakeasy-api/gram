@@ -577,3 +577,33 @@ func TestRemoteSessionsNeedReconnect_EmptyAccessWithReadableRefreshRenews(t *tes
 		require.Equal(t, "healed-access", entry.Token)
 	}
 }
+
+// An empty refresh token is never sent upstream: an expired grant holding one needs a reconnect.
+func TestResolveAccessTokens_EmptyRefreshTokenIsNeverSent(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "empty-refresh", &refreshes, healingRefresh)
+	empty, err := env.enc.Encrypt([]byte(""))
+	require.NoError(t, err)
+	stale, err := env.enc.Encrypt([]byte("stale-access"))
+	require.NoError(t, err)
+	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: stale, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+		RefreshTokenEncrypted: conv.ToPGText(empty), Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+
+	require.True(t, needsReconnect(t, env))
+	require.Equal(t, remotesessions.RemoteSessionExpired, storedSessionStatus(t, env).Status)
+	_, err = resolveAll(t, env)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	stored, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.refresher.RefreshNow(t.Context(), stored, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.Zero(t, refreshes.Load(), "refresh_token= is never sent")
+}

@@ -93,7 +93,10 @@ func readStoredTokens(enc *encryption.Client, sess remotesessions_repo.RemoteSes
 	}
 	if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
 		read.refreshRead = true
-		if _, read.refreshErr = enc.Decrypt(sess.RefreshTokenEncrypted.String); read.refreshErr == nil {
+		var refresh string
+		refresh, read.refreshErr = enc.Decrypt(sess.RefreshTokenEncrypted.String)
+		// An empty refresh token renews nothing, so it is never sent.
+		if read.refreshErr == nil && refresh != "" {
 			read.usable = true
 			return read
 		}
@@ -173,6 +176,9 @@ func (s *RefreshService) readRefreshToken(ctx context.Context, sess remotesessio
 	if err != nil {
 		s.refreshTokenUnreadable(ctx, sess, err)
 		return "", newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", fmt.Errorf("%w: %w", errStoredTokenUnreadable, err), refreshRemedyReconnect)
+	}
+	if refreshToken == "" {
+		return "", ErrNoValidToken
 	}
 	return refreshToken, nil
 }

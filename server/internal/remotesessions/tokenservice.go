@@ -1195,6 +1195,10 @@ func (m *ChallengeManager) validateAndRefresh(
 		m.reportUnreadable(ctx, sess, stored)
 		return "", sess, sess.UpdatedAt.Time, stored.err()
 	}
+	// Nothing stored can serve or renew it, so no refresh is sent.
+	if !stored.usable {
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
+	}
 	if stored.accessErr != nil {
 		// A refresh (RFC 6749 section 6) stores a new pair under the current key.
 		m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted; renewing it", storedTokenAttrs(m.enc, sess, stored.accessErr)...)
