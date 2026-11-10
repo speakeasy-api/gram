@@ -12,7 +12,21 @@ import (
 
 func connectionLogTestRecord(t *testing.T) *otelv1.LogRecord {
 	t.Helper()
-	return agentEventTestLog(t, dialect.ConnectionLogScope, "speakeasy.mcp_connection")
+	record := agentEventTestLog(t, dialect.ConnectionLogScope, "speakeasy.mcp_connection")
+	record.GetProvenance().SetSource(dialect.ConnectionLogSource)
+	return record
+}
+
+// A producer can send the connection scope; only the recorder's source makes a connection log.
+func TestLogEventCHWriterKeepsRecordsThatOnlyClaimTheConnectionScope(t *testing.T) {
+	t.Parallel()
+
+	inserter := &captureLogInserter{batches: nil, err: nil}
+	writer := newLogEventTestWriter(t, inserter)
+
+	record := agentEventTestLog(t, dialect.ConnectionLogScope, "speakeasy.mcp_connection")
+	require.NoError(t, writer.HandleBatch(t.Context(), []*otelv1.LogRecord{record}, nil))
+	require.Len(t, inserter.batches, 1)
 }
 
 func TestAgentEventLogCHWriterLeavesOutConnectionLogs(t *testing.T) {

@@ -31,7 +31,7 @@ func newTestConnectionLogExport(t *testing.T) (*connectionLogExport, *[]*otelv1.
 	return &connectionLogExport{
 		logs: otelpub.NewLogger(publisher,
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
-			dialect.ConnectionLogScope),
+			dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)),
 	}, published
 }
 

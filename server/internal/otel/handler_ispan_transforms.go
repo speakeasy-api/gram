@@ -106,8 +106,8 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 }
 
 // dropReservedSpanAttributes removes what a producer sent under the
-// namespaces the pipeline writes, speakeasy and directory, and under
-// speakeasy.mcp_connection, which only the connection recorder writes: only
+// namespaces the pipeline writes, speakeasy and directory, exactly as the
+// log transform does for a log record: only
 // the pipeline writes there, and a producer that sends one would otherwise
 // classify its own span, claim another tenant, pose as another producer's
 // scope, or give a person a group or department. The enrichers read
@@ -115,7 +115,7 @@ func rewriteInstrumentationScope(span *otelv1.Span) error {
 func dropReservedSpanAttributes(span *otelv1.Span) {
 	attributes := span.GetAttributes()
 	kept := slices.DeleteFunc(attributes, func(kv *otelv1.Span_KeyValue) bool {
-		return enrich.IsPipelineKey(kv.GetKey()) || enrich.IsMcpConnectionKey(kv.GetKey())
+		return enrich.IsPipelineKey(kv.GetKey())
 	})
 	if len(kept) != len(attributes) {
 		span.SetAttributes(kept)

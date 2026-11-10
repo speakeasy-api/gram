@@ -575,6 +575,7 @@ func TestLogRelayHandlerLeavesGatewayToolCallRecordsToTheToolCallRelay(t *testin
 func connectionLogRelayRecord(body, organizationID, projectID string) *otelv1.LogRecord {
 	record := relayTestLogRecord(body, organizationID, projectID, 0)
 	record.SetAttributes([]*otelv1.LogRecord_KeyValue{logEventTestKV(string(enrich.OriginalInstrumentationScopeNameKey), dialect.ConnectionLogScope)})
+	record.GetProvenance().SetSource(dialect.ConnectionLogSource)
 	record.SetSeverityNumber(otelv1.LogRecord_SEVERITY_NUMBER_ERROR)
 	return record
 }

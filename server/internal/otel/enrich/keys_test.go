@@ -26,6 +26,7 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		"speakeasy.connection.outcome",
 		"speakeasy.mcp_connections",
 		"speakeasy.future.key",
+		"speakeasy.mcp_connection.outcome",
 		string(TokensCountKey),
 		string(TokensCodecKey),
 		string(GramUserRolesKey),
@@ -42,8 +43,6 @@ func TestIsPipelineKeyCoversWhatThePipelineWrites(t *testing.T) {
 		"gram.session.id",
 		"directory",
 		"speakeasy",
-		"speakeasy.mcp_connection.outcome",
-		"speakeasy.mcp_connection.user_message",
 	} {
 		require.False(t, IsPipelineKey(key), "%s is the producer's", key)
 	}
@@ -84,4 +83,15 @@ func TestIsMcpConnectionKey(t *testing.T) {
 	require.True(t, IsMcpConnectionKey("speakeasy.mcp_connection.outcome"))
 	require.False(t, IsMcpConnectionKey("speakeasy.mcp_connections"))
 	require.False(t, IsMcpConnectionKey("speakeasy.project.id"))
+}
+
+func TestIsReservedLogKeyLetsOnlyTheConnectionRecorderWriteItsKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, source := range []string{"speakeasy", "", "test"} {
+		require.True(t, IsReservedLogKey(source, "speakeasy.mcp_connection.outcome"), source)
+	}
+	require.False(t, IsReservedLogKey(dialect.ConnectionLogSource, "speakeasy.mcp_connection.outcome"))
+	require.True(t, IsReservedLogKey(dialect.ConnectionLogSource, string(ProjectIDKey)), "the recorder may not claim a tenant either")
+	require.False(t, IsReservedLogKey("speakeasy", "gram.session.id"))
 }

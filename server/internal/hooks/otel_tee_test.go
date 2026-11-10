@@ -16,7 +16,6 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -284,21 +283,4 @@ func TestLogsTeesExportIntoEventFeedPipeline(t *testing.T) {
 	require.Equal(t, uint64(timestamp.UnixNano()), record.GetTimeUnixNano())
 	require.Equal(t, "codex.conversation_starts", record.GetEventName())
 	require.Equal(t, "claude-code", teeAttrByKey(t, record.GetResource().GetAttributes(), "service.name").GetStringValue())
-}
-
-func TestInboundLogRecordsFromHooksExportScrubsConnectionLogFields(t *testing.T) {
-	t.Parallel()
-
-	scope := &gen.OTELScope{Name: new(dialect.ConnectionLogScope)}
-	payload := claudeLogsPayload(nil, scope, &gen.OTELLogRecord{
-		Body:       &gen.OTELLogBody{StringValue: new("forged")},
-		Attributes: []*gen.OTELAttribute{strAttr("speakeasy.mcp_connection.outcome", "failed"), strAttr("session.id", "session-1")},
-	})
-
-	records := inboundLogRecordsFromHooksExport(payload, teeTestProvenance(), time.Now())
-
-	require.Len(t, records, 1)
-	require.Empty(t, records[0].GetScope().GetName())
-	require.Len(t, records[0].GetAttributes(), 1)
-	require.Equal(t, "session.id", records[0].GetAttributes()[0].GetKey())
 }

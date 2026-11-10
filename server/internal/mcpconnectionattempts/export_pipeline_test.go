@@ -143,7 +143,7 @@ func TestExportPipeline_RealRecordReachesASensitiveExcludedDestinationUnredacted
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, logsAlwaysOn,
-		mcpconnectionattempts.WithExport(pipelineSink{logs: otelpub.NewLogger(inboundPublisher, resource.Empty(), dialect.ConnectionLogScope)}))
+		mcpconnectionattempts.WithExport(pipelineSink{logs: otelpub.NewLogger(inboundPublisher, resource.Empty(), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}))
 	recorder.End(ctx, mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(organizationID, project.ID, uuid.New(), mcpconnectionattempts.AppDCR)),
 		mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable)
 	require.NoError(t, recorder.Shutdown(ctx))

@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 )
 
@@ -455,15 +456,31 @@ func connectionRecordWith(key string) log.Record {
 	return record
 }
 
-func TestLogAllowsTheExportedConnectionKeys(t *testing.T) {
+func TestLogAllowsTheExportedConnectionKeysOnlyUnderTheConnectionSource(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := NewLogger(publisher, resource.Empty(), testScope, WithProvenanceSource(dialect.ConnectionLogSource))
+	require.NoError(t, logger.Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")))
+	require.Len(t, *published, 1)
+	require.Equal(t, "value", attributeValue((*published)[0], "speakeasy.mcp_connection.outcome"))
+	require.Equal(t, dialect.ConnectionLogSource, (*published)[0].GetProvenance().GetSource())
+
+	publisher, published = capture(t, gcp.NewSuccessPublishResult())
+	require.ErrorContains(t, testLogger(publisher).Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")), "reserved namespace")
+	require.Empty(t, *published)
+}
+
+func TestLogStampsTheIngestSourceByDefault(t *testing.T) {
 	t.Parallel()
 
 	publisher, published := capture(t, gcp.NewSuccessPublishResult())
 	ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
-
-	require.NoError(t, testLogger(publisher).Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")))
+	require.NoError(t, testLogger(publisher).Log(ctx, connectionRecordWith("gram.session.id")))
 	require.Len(t, *published, 1)
-	require.Equal(t, "value", attributeValue((*published)[0], "speakeasy.mcp_connection.outcome"))
+	require.Equal(t, otelsvc.ProvenanceSource, (*published)[0].GetProvenance().GetSource())
 }
 
 func TestLogRefusesForgedTenancyKeys(t *testing.T) {

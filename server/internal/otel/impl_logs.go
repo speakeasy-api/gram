@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,8 +13,6 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	gen "github.com/speakeasy-api/gram/server/gen/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 )
 
 func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.ReadCloser) error {
@@ -47,17 +44,6 @@ func (s *Service) Logs(ctx context.Context, payload *gen.LogsPayload, body io.Re
 	// failed publish must not write the hooks telemetry rows twice.
 	s.forwardLogsToHooks(ctx, export)
 	return nil
-}
-
-// ScrubExternalLogRecord removes what only the connection recorder may write, so a
-// record sent to an ingest endpoint cannot reach a project's connection logs route.
-func ScrubExternalLogRecord(record *otelv1.InboundLogRecord) {
-	if record.GetScope().GetName() == dialect.ConnectionLogScope {
-		record.GetScope().SetName("")
-	}
-	record.SetAttributes(slices.DeleteFunc(record.GetAttributes(), func(kv *otelv1.InboundLogRecord_KeyValue) bool {
-		return enrich.IsMcpConnectionKey(kv.GetKey())
-	}))
 }
 
 func unmarshalOTLPLogExport(raw []byte) (*collectorlogsv1.ExportLogsServiceRequest, error) {
@@ -117,7 +103,6 @@ func inboundLogRecordsFromExport(request *collectorlogsv1.ExportLogsServiceReque
 				converted.SetResource(resource)
 				converted.SetProvenance(provenance)
 				converted.SetScope(scope)
-				ScrubExternalLogRecord(converted)
 
 				if schemaURL := resourceLogs.GetSchemaUrl(); schemaURL != "" {
 					converted.SetResourceSchemaUrl(schemaURL)

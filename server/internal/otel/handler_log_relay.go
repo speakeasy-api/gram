@@ -270,15 +270,15 @@ func (h *LogRelayHandler) recordFailedLogs(ctx context.Context, count int, reaso
 func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLogs []logRelayMessage, excluded, belowSeverity int) {
 	telemetry = messages[:0]
 	for _, message := range messages {
-		switch logOriginalScopeName(message.record) {
-		case dialect.GatewayLogScope:
-			excluded++
-		case dialect.ConnectionLogScope:
+		switch {
+		case isConnectionLogRecord(message.record):
 			if message.record.GetSeverityNumber() < minConnectionLogSeverity {
 				belowSeverity++
 				continue
 			}
 			connectionLogs = append(connectionLogs, message)
+		case logOriginalScopeName(message.record) == dialect.GatewayLogScope:
+			excluded++
 		default:
 			telemetry = append(telemetry, message)
 		}
@@ -287,8 +287,10 @@ func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLog
 }
 
 // isConnectionLogRecord reports a record only the connection logs route carries, until AIM-960 adds them to the feed.
+// It reads the provenance source, which the ingest edges stamp, rather than the
+// scope, which any producer can set.
 func isConnectionLogRecord(record *otelv1.LogRecord) bool {
-	return logOriginalScopeName(record) == dialect.ConnectionLogScope
+	return record.GetProvenance().GetSource() == dialect.ConnectionLogSource
 }
 
 // logOriginalScopeName is the producer's scope as the transform preserved it.

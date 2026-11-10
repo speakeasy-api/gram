@@ -31,6 +31,7 @@ type Logger struct {
 	publisher gcp.Publisher[*otelv1.InboundLogRecord]
 	resource  *resource.Resource
 	scope     string
+	source    string
 	timeout   time.Duration
 
 	// Log holds the read lock for its whole call, so Close's write lock waits for in-flight calls.
@@ -38,16 +39,31 @@ type Logger struct {
 	closed bool
 }
 
+// Option configures a Logger.
+type Option func(*Logger)
+
+// WithProvenanceSource stamps source on every record instead of the ingest
+// edges' otel.ProvenanceSource. The pipeline routes and reserves keys by
+// source, so only a component the source names may use it.
+func WithProvenanceSource(source string) Option {
+	return func(l *Logger) { l.source = source }
+}
+
 // NewLogger returns a logger that publishes under the given resource and instrumentation scope.
-func NewLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], res *resource.Resource, scope string) *Logger {
-	return &Logger{
+func NewLogger(publisher gcp.Publisher[*otelv1.InboundLogRecord], res *resource.Resource, scope string, opts ...Option) *Logger {
+	l := &Logger{
 		publisher: publisher,
 		resource:  res,
 		scope:     scope,
+		source:    otelsvc.ProvenanceSource,
 		timeout:   publishTimeout,
 		mu:        sync.RWMutex{},
 		closed:    false,
 	}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 // Log publishes the record and returns nil only once Pub/Sub has acked it.
@@ -101,14 +117,14 @@ func (l *Logger) inbound(ctx context.Context, record *log.Record) (*otelv1.Inbou
 		inbound.GetScope().GetAttributes(),
 	} {
 		for _, kv := range attrs {
-			if enrich.IsPipelineKey(kv.GetKey()) {
+			if enrich.IsReservedLogKey(l.source, kv.GetKey()) {
 				return nil, fmt.Errorf("attribute %q is in the reserved namespace", kv.GetKey())
 			}
 		}
 	}
 
 	inbound.SetProvenance((&otelv1.InboundLogRecord_Provenance_builder{
-		Source:         new(otelsvc.ProvenanceSource),
+		Source:         new(l.source),
 		OrganizationId: &t.organizationID,
 		ProjectId:      &t.projectID,
 	}).Build())

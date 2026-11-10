@@ -10,6 +10,11 @@ const GatewayLogScope = "github.com/speakeasy-api/gram/server/internal/mcp"
 // ConnectionLogScope is the scope failed MCP connection attempts are exported under.
 const ConnectionLogScope = "github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 
+// ConnectionLogSource is the provenance source the connection recorder stamps.
+// Ingest edges stamp their own source, so unlike the scope a producer cannot
+// claim it, and it alone decides that a record is a connection log.
+const ConnectionLogSource = "mcp-connection-attempts"
+
 const (
 	gatewayMCPClientNameKey    = "gram.mcp.client.name"
 	gatewayToolsetSlugKey      = "gram.toolset.slug"

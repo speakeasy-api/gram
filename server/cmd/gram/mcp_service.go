@@ -84,7 +84,7 @@ func newConnectionLogExport(publisher gcp.Publisher[*otelv1.InboundLogRecord]) m
 	return mcpconnectionattempts.WithExport(&connectionLogExport{
 		logs: otelpub.NewLogger(publisher,
 			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
-			dialect.ConnectionLogScope),
+			dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)),
 	})
 }
 
