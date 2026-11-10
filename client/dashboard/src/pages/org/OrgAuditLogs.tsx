@@ -1131,55 +1131,56 @@ function OrgAuditLogsInner() {
           </Page.Toolbar>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <SegmentedControl
-            ariaLabel="Audit log view"
-            value={view}
-            onChange={(value) => {
-              // Actions, actors and surfaces differ between views, so a
-              // filter chosen in one could leave another empty.
-              void setSelectedView(value);
-              clearFilterValue("action");
-              clearFilterValue("actor");
-              clearFilterValue("surface");
-            }}
-            options={VIEW_OPTIONS}
-          />
-          <div className="flex items-center gap-3">
-            <Text small muted>
-              Timestamp
-            </Text>
-            <div className="bg-background flex h-8 items-center gap-2 border px-3">
-              <Text
-                small
-                className={
-                  tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
-                }
-              >
-                UTC
+        <div className="bg-card overflow-hidden border">
+          <div className="border-border flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2">
+            <SegmentedControl
+              ariaLabel="Audit log view"
+              value={view}
+              onChange={(value) => {
+                // Actions, actors and surfaces differ between views, so a
+                // filter chosen in one could leave another empty.
+                void setSelectedView(value);
+                clearFilterValue("action");
+                clearFilterValue("actor");
+                clearFilterValue("surface");
+              }}
+              options={VIEW_OPTIONS}
+            />
+            <div className="flex items-center gap-3">
+              <Text small muted>
+                Timestamp
               </Text>
-              <Switch
-                checked={tsMode === "local"}
-                onCheckedChange={(checked) => {
-                  void setTimestampMode(checked ? "local" : "utc");
-                }}
-                aria-label="Toggle timestamp timezone"
-              />
-              <Text
-                small
-                className={
-                  tsMode === "local"
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-                }
-              >
-                Local
-              </Text>
+              <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                <Text
+                  small
+                  className={
+                    tsMode === "utc"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  UTC
+                </Text>
+                <Switch
+                  checked={tsMode === "local"}
+                  onCheckedChange={(checked) => {
+                    void setTimestampMode(checked ? "local" : "utc");
+                  }}
+                  aria-label="Toggle timestamp timezone"
+                />
+                <Text
+                  small
+                  className={
+                    tsMode === "local"
+                      ? "text-foreground"
+                      : "text-muted-foreground"
+                  }
+                >
+                  Local
+                </Text>
+              </div>
             </div>
           </div>
-        </div>
-
-        <div className="bg-card overflow-hidden border">
           <div
             ref={logsContainerRef}
             tabIndex={0}
