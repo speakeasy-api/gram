@@ -721,6 +721,21 @@ func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPu
 	return count, err
 }
 
+const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+`
+
+// Counts a client's user session issuer bindings, whether or not the client is
+// deleted.
+func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillScanRecords = `-- name: CountSkillScanRecords :one
 SELECT count(*)
 FROM risk_results rr

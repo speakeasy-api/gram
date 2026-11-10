@@ -1120,3 +1120,47 @@ JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
 WHERE a.remote_session_client_id = @remote_session_client_id::uuid
   AND (sqlc.narg('organization_id')::text IS NULL OR a.organization_id = sqlc.narg('organization_id')::text)
 ORDER BY a.organization_id, a.mcp_server_id;
+
+-- name: ListOrganizationProjectsWithServers :many
+-- The organization's live projects with a live MCP server, for a change that
+-- re-decides associations in every one of them: one to the organization's
+-- organization-level issuers, which decide whether the organization gateway
+-- fronts each server.
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id;
+
+-- name: ListOrganizationLevelUserSessionIssuerIDs :many
+-- The organization's live organization-level user session issuers.
+SELECT id
+FROM user_session_issuers
+WHERE organization_id = @organization_id::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+ORDER BY id;
+
+-- name: ListProjectsConsumingUserSessionIssuers :many
+-- The organization's live projects with a live MCP server or gateway on one of
+-- the user session issuers. A change to those issuers' bindings re-decides the
+-- associations of each.
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+UNION
+SELECT g.project_id
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND g.organization_id = @organization_id::text
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY 1;

@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -153,6 +154,10 @@ func TestDeleteClient(t *testing.T) {
 		ApikeyToken:  nil,
 	})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	bindings, err := testrepo.New(ti.conn).CountRemoteSessionClientBindingsFixture(ctx, uuid.MustParse(clientID))
+	require.NoError(t, err)
+	require.Zero(t, bindings, "a deleted client keeps no user session issuer binding")
 }
 
 // TestDeleteClient_RBACForbidden proves a write requires org:admin; org:read

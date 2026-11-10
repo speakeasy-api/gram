@@ -174,6 +174,14 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
 	q := repo.New(dbtx)
 
 	if _, err := q.GetOrganizationManagedUserSessionIssuerByID(ctx, repo.GetOrganizationManagedUserSessionIssuerByIDParams{ID: issuerID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
@@ -267,6 +275,12 @@ func (s *Service) MoveIssuer(ctx context.Context, payload *orggen.MoveIssuerPayl
 	moved, err := q.GetOrganizationManagedUserSessionIssuerWithProjectByID(ctx, repo.GetOrganizationManagedUserSessionIssuerWithProjectByIDParams{ID: updated.ID, OrganizationID: authCtx.ActiveOrganizationID})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "read moved user session issuer").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)

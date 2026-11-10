@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -1617,6 +1618,14 @@ func (c *IdentityCommit) detachClient(ctx context.Context, tx *IdentityTx, clien
 	}
 	if err := c.committer.audit.LogRemoteSessionClientDetachUserSessionIssuer(ctx, tx.tx, c.attachmentEvent(client)); err != nil {
 		return fmt.Errorf("audit client detachment: %w", err)
+	}
+	// The project's associations the detached client no longer serves, and
+	// the typed links derived from them, go in the transaction rather than
+	// with the post-commit resync. Begin locked this project's scope only, so
+	// servers of other projects on an organization-level issuer are left to
+	// that resync.
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.Scope.ProjectID, nil); err != nil {
+		return fmt.Errorf("prune detached client associations: %w", err)
 	}
 	return nil
 }

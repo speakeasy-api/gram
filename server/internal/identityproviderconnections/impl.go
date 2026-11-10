@@ -41,6 +41,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/identityproviderconnections/repo"
 	jwksrepo "github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
@@ -706,6 +707,16 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 
 	q := repo.New(dbtx)
 	rq := remotesessionsrepo.New(dbtx)
+	// The managed client's associations go with it, so their writer scope is
+	// taken before the first row lock.
+	var associations upstreamclients.ClientAssociationScope
+	if managed != nil {
+		associations, err = upstreamclients.LockClientAssociationScope(cleanupCtx, dbtx, organizationID, managed.ClientRowID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to lock writer scope of abandoned connection client", attr.SlogError(err))
+			return
+		}
+	}
 	if !issuerID.Valid {
 		found, err := q.GetConnectionIssuerBySlug(cleanupCtx, repo.GetConnectionIssuerBySlugParams{
 			OrganizationID: conv.ToPGText(organizationID),
@@ -732,6 +743,14 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			OrganizationID: conv.ToPGText(organizationID),
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
+			return
+		}
+		if err := rq.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(cleanupCtx, managed.ClientRowID); err != nil {
+			logger.ErrorContext(ctx, "failed to unbind client of abandoned connection", attr.SlogError(err))
+			return
+		}
+		if err := associations.PruneInLockedTransaction(cleanupCtx, dbtx); err != nil {
+			logger.ErrorContext(ctx, "failed to prune associations of abandoned connection client", attr.SlogError(err))
 			return
 		}
 		if managed.JSONWebKeySetID.Valid {

@@ -1060,6 +1060,16 @@ WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id = @project_id;
 
+-- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
+-- Removes every user session issuer binding of a client the caller has just
+-- soft-deleted, in any tenant: the client row's deletion is the authorization,
+-- so a live client is never touched.
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.deleted IS TRUE;
+
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
 -- endpoint is unauthenticated and addresses clients by their globally unique

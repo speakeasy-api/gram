@@ -1218,6 +1218,118 @@ func (q *Queries) ListMCPServerUpstreamIssuers(ctx context.Context, arg ListMCPS
 	return items, nil
 }
 
+const listOrganizationLevelUserSessionIssuerIDs = `-- name: ListOrganizationLevelUserSessionIssuerIDs :many
+SELECT id
+FROM user_session_issuers
+WHERE organization_id = $1::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+// The organization's live organization-level user session issuers.
+func (q *Queries) ListOrganizationLevelUserSessionIssuerIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationLevelUserSessionIssuerIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationProjectsWithServers = `-- name: ListOrganizationProjectsWithServers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE p.organization_id = $1::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+// The organization's live projects with a live MCP server, for a change that
+// re-decides associations in every one of them: one to the organization's
+// organization-level issuers, which decide whether the organization gateway
+// fronts each server.
+func (q *Queries) ListOrganizationProjectsWithServers(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProjectsWithServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsConsumingUserSessionIssuers = `-- name: ListProjectsConsumingUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+UNION
+SELECT g.project_id
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = ANY($1::uuid[])
+  AND g.organization_id = $2::text
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY 1
+`
+
+type ListProjectsConsumingUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// The organization's live projects with a live MCP server or gateway on one of
+// the user session issuers. A change to those issuers' bindings re-decides the
+// associations of each.
+func (q *Queries) ListProjectsConsumingUserSessionIssuers(ctx context.Context, arg ListProjectsConsumingUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsConsumingUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
 SELECT latest.mcp_server_id,
        latest.auth_client_id,

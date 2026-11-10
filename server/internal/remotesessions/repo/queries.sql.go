@@ -2896,6 +2896,22 @@ func (q *Queries) DeleteTenantRemoteSessionIssuer(ctx context.Context, id uuid.U
 	return i, err
 }
 
+const deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = $1
+  AND c.deleted IS TRUE
+`
+
+// Removes every user session issuer binding of a client the caller has just
+// soft-deleted, in any tenant: the client row's deletion is the authorization,
+// so a live client is never touched.
+func (q *Queries) DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx context.Context, remoteSessionClientID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient, remoteSessionClientID)
+	return err
+}
+
 const deleteUserSessionIssuerAttachmentsForRemoteSessionClient = `-- name: DeleteUserSessionIssuerAttachmentsForRemoteSessionClient :exec
 DELETE FROM remote_session_client_user_session_issuers AS link
 USING remote_session_clients AS c

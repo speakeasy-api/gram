@@ -2654,3 +2654,10 @@ WHERE organization_id = @organization_id
 -- read path must treat them as gone.
 INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
 VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');
+
+-- name: CountRemoteSessionClientBindingsFixture :one
+-- Counts a client's user session issuer bindings, whether or not the client is
+-- deleted.
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = @remote_session_client_id;

@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -179,6 +180,15 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
+
 	if trustedIssuerID.Valid {
 		var trustErr error
 		if trustedClientID.Valid {
@@ -223,6 +233,12 @@ func (s *Service) CreateIssuer(ctx context.Context, payload *orggen.CreateIssuer
 		UserSessionIssuerSnapshotAfter: UserSessionIssuerView(row),
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log organization user session issuer creation").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return nil, err
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -585,6 +601,14 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		return oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
+	// Whether the organization has one organization-level issuer decides
+	// whether its organization gateway fronts every server, so this change
+	// re-decides associations in every project. Their writer scope precedes
+	// every row lock.
+	reconcileScope, err := upstreamclients.LockOrganizationScope(ctx, dbtx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock organization upstream client writer scope").LogError(ctx, logger)
+	}
 	txRepo := repo.New(dbtx)
 	if err := guardUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, id); err != nil {
 		return err
@@ -635,6 +659,12 @@ func (s *Service) DeleteIssuer(ctx context.Context, payload *orggen.DeleteIssuer
 		Slug:                 deleted.Slug,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "log organization user session issuer deletion").LogError(ctx, logger)
+	}
+	if err := upstreamclients.ReconcileOrganizationInLockedTransaction(ctx, dbtx, authCtx.ActiveOrganizationID, reconcileScope); err != nil {
+		if errors.Is(err, upstreamclients.ErrScopeChanged) {
+			return err
+		}
+		return oops.E(oops.CodeUnexpected, err, "reconcile organization upstream clients").LogError(ctx, logger)
 	}
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
