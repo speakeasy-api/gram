@@ -119,6 +119,12 @@ func (t *Transformer) Transform(_ context.Context, in SourceRow) ([]FindingRow, 
 		return nil, nil
 	}
 
+	// This tool has no organization keys, and a row stamped without its
+	// match would overwrite the ClickHouse row's redaction and fingerprints.
+	if in.Sealed {
+		return nil, fmt.Errorf("risk result %s holds encrypted evidence, which this backfill cannot read", in.ID)
+	}
+
 	orgID := strings.TrimSpace(in.OrganizationID)
 	ruleID := conv.PtrValOr(in.RuleID, "")
 	deadLetter := conv.PtrValOr(in.DeadLetterReason, "") != ""

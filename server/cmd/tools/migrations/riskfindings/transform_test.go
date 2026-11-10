@@ -160,6 +160,24 @@ func TestTransformContentPartAnchor(t *testing.T) {
 	require.Empty(t, out[0].AssistantID)
 }
 
+func TestTransformRefusesSealedEvidence(t *testing.T) {
+	t.Parallel()
+
+	// A sealed row reaches the transform with no match. Stamping it would
+	// replace the ClickHouse row's redaction and fingerprints with empty ones.
+	tf := NewTransformer(testFingerprinter(t))
+	in := SourceRow{
+		ID: uuid.New(), CreatedAt: time.Now().UTC(), OrganizationID: "org_123",
+		ProjectID: uuid.New(), RiskPolicyID: uuid.New(), ChatMessageID: anchoredTo(uuid.New()),
+		Source: "gitleaks", Found: true, RuleID: conv.PtrEmpty("generic-api-key"),
+		Match: nil, Tags: []string{}, Sealed: true,
+	}
+
+	out, err := tf.Transform(t.Context(), in)
+	require.ErrorContains(t, err, "encrypted evidence")
+	require.Nil(t, out)
+}
+
 func TestTransformUnresolvedAttributionStaysEmpty(t *testing.T) {
 	t.Parallel()
 

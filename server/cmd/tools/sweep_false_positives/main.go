@@ -25,7 +25,9 @@
 // Safety properties:
 //   - -dry-run defaults to true: a plain run only reports what it would mark.
 //   - Candidates are paged from Postgres risk_results, so findings that exist
-//     only in ClickHouse are not swept.
+//     only in ClickHouse are not swept. Findings whose match is encrypted
+//     under the organization's key cannot be judged here; they are counted as
+//     sealed and left alone.
 //   - Marks are appended to ClickHouse. Every write is scoped by
 //     organization_id + project_id + id and skips findings already dismissed,
 //     so re-runs and resumes are idempotent.
@@ -89,6 +91,10 @@ type report struct {
 	// be recovered (content-part anchors, deleted messages).
 	contextRead    int64
 	contextMissing int64
+
+	// sealed counts rows whose match is encrypted under the organization's
+	// key, which this tool cannot read.
+	sealed int64
 }
 
 func main() {
@@ -220,9 +226,10 @@ func parseFlags() (config, error) {
 // chat_message_id comes along for the context pass: rules like the NHS one need
 // the text the match was found in, which is re-read from the anchoring message
 // (see selectMessages). Rows anchored to a content part instead carry NULL and
-// simply never get a context verdict.
+// simply never get a context verdict. sealed marks a match encrypted under the
+// organization's key, which this tool cannot read.
 const selectPage = `
-SELECT id, rule_id, match, chat_message_id
+SELECT id, rule_id, match, chat_message_id, match_encrypted IS NOT NULL AS sealed
 FROM risk_results
 WHERE organization_id = $1
   AND project_id = $2
@@ -309,13 +316,18 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 				ruleID    string
 				match     *string
 				messageID uuid.NullUUID
+				sealed    bool
 			)
-			if err := rows.Scan(&id, &ruleID, &match, &messageID); err != nil {
+			if err := rows.Scan(&id, &ruleID, &match, &messageID, &sealed); err != nil {
 				rows.Close()
 				return rep, fmt.Errorf("scan row: %w", err)
 			}
 			n++
 			cursor = id
+			if sealed {
+				rep.sealed++
+				continue
+			}
 			if match == nil {
 				continue
 			}
@@ -457,6 +469,9 @@ func printReport(cfg config, rep report) {
 	fmt.Printf("  scanned:     %d\n", rep.scanned)
 	fmt.Printf("  flagged:     %d\n", rep.flagged)
 	fmt.Printf("  updated:     %d\n", rep.updated)
+	if rep.sealed > 0 {
+		fmt.Printf("  sealed:      %d not judged (match encrypted under the organization's key)\n", rep.sealed)
+	}
 	if rep.contextRead > 0 || rep.contextMissing > 0 {
 		fmt.Printf("  re-read:     %d judged with context, %d unrecoverable\n", rep.contextRead, rep.contextMissing)
 	}
