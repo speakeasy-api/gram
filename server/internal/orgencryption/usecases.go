@@ -16,12 +16,18 @@ type UseCase string
 const (
 	// UseCaseTailscaleGatewayState is the use case for Tailscale gateway state.
 	UseCaseTailscaleGatewayState UseCase = "tailscale-gateway-state"
+
+	// UseCaseAIProviderKeys is the use case for AI provider and model
+	// credentials: AI integration API keys and webhook signing secrets,
+	// customer model provider keys, and provisioned OpenRouter keys.
+	UseCaseAIProviderKeys UseCase = "ai-provider-keys"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
 // here before calling any entry point with its name.
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
+	UseCaseAIProviderKeys,
 }
 
 // ParseUseCase returns the registered use case named value.

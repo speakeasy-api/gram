@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	pfrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -102,6 +103,7 @@ type testInstance struct {
 	service     *modelkeys.Service
 	conn        *pgxpool.Pool
 	enc         *encryption.Client
+	keys        *cutover.Sealer
 	provisioner *stubProvisioner
 	features    *productfeatures.Client
 }
@@ -144,6 +146,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	enc := testenv.NewEncryptionClient(t)
+	keys := testenv.NewAIProviderKeys(t)
 
 	provisioner := &stubProvisioner{platformKey: "platform-key", usageErr: nil, usageCalls: 0}
 	features := productfeatures.NewClient(logger, tracerProvider, conn, redisClient)
@@ -154,7 +157,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		conn,
 		sessionManager,
 		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
-		enc,
+		keys,
 		provisioner,
 		features,
 		audit.NewLogger(),
@@ -164,6 +167,7 @@ func newTestServiceWithRedisDB(t *testing.T, redisDB int) (context.Context, *tes
 		service:     svc,
 		conn:        conn,
 		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 	}

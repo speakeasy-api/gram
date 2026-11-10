@@ -24,11 +24,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -58,7 +58,7 @@ func NewService(
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	encryptionClient *encryption.Client,
+	keys *cutover.Sealer,
 	guardianPolicy *guardian.Policy,
 	configPoller ConfigPoller,
 ) *Service {
@@ -70,7 +70,7 @@ func NewService(
 		auth:         auth.New(logger, db, sessions, authzEngine),
 		authz:        authzEngine,
 		audit:        auditLogger,
-		store:        NewStore(logger, db, encryptionClient),
+		store:        NewStore(logger, db, keys),
 		credentials:  NewCredentialVerifier(logger, guardianPolicy),
 		configPoller: configPoller,
 	}

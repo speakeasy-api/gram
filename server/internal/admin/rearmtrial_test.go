@@ -396,7 +396,7 @@ func newProductionRearmService(t *testing.T) (context.Context, *Service, *pgxpoo
 	option, err := openrouter.WithTestBaseURL(server.URL)
 	require.NoError(t, err)
 	svc.openRouter = openrouter.New(
-		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), testenv.NewTracerProvider(t), policy, conn, "test", "provisioning-key", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	return ctx, svc, conn, upstream

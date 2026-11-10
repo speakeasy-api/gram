@@ -390,7 +390,7 @@ func stripeLifecycleOpenRouterProvisioner(t *testing.T, db *pgxpool.Pool, baseUR
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	return openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 }
 
@@ -1829,7 +1829,7 @@ func TestStripeCheckoutDomainReplayIsNoop(t *testing.T) {
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "first").Code)
@@ -1934,7 +1934,7 @@ func TestStripeCheckoutFinalBillingCauseRecoveryReconcilesStaleDisabledMirror(t 
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "final cause recovery").Code)
@@ -1983,7 +1983,7 @@ func TestStripeCheckoutLayeredBillingRecoveryDoesNotReconcileUnchangedAccess(t *
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusOK, serveStripeWebhook(service, "layered recovery").Code)
@@ -2134,7 +2134,7 @@ func TestStripeCheckoutConvertedDemotedTrialExactReplayRepairsInternalPostCommit
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2356,7 +2356,7 @@ func TestStripeCheckoutExactReplayRepairsPostCommitOpenRouterFailure(t *testing.
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2633,7 +2633,7 @@ func TestStripeSubscriptionDeletionPostCommitReconcileFailurePreservesDurableInt
 		"provisioning_key_placeholder",
 		nil,
 		nil,
-		testenv.NewEncryptionClient(t),
+		testenv.NewAIProviderKeys(t),
 		option,
 	)
 
@@ -2679,7 +2679,7 @@ func TestStripeSubscriptionDeletionExactReplayRepairsPostCommitOpenRouterFailure
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "first").Code)
@@ -2732,7 +2732,7 @@ func TestStripeSubscriptionDeletionReplayCannotOverrideLaterConversion(t *testin
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	service.openRouter = openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 
 	require.Equal(t, http.StatusInternalServerError, serveStripeWebhook(service, "loss").Code)
@@ -2796,7 +2796,7 @@ func TestConvertedDemotedTrialSubscriptionLossWinsBeforeDelayedActivationReconci
 	guardianPolicy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
 	require.NoError(t, err)
 	production := openrouter.New(
-		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewEncryptionClient(t), option,
+		testenv.NewLogger(t), tracerProvider, guardianPolicy, db, "test", "provisioning_key_placeholder", nil, nil, testenv.NewAIProviderKeys(t), option,
 	)
 	require.NoError(t, RepairPaygOpenRouterChatKey(
 		t.Context(), testenv.NewLogger(t), db, production, stripeWebhookOrganizationID, openrouter.KeyDesiredStateEnabled,

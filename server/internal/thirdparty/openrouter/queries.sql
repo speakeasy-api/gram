@@ -44,6 +44,18 @@ WHERE organization_id = @organization_id
   AND key_type = @key_type
   AND deleted IS FALSE;
 
+-- name: BackfillOpenRouterAPIKeyOrgEncrypted :exec
+-- Stores the organization-encrypted copy of a key that does not have one yet.
+-- The application-key ciphertext must still be the one that was sealed, so a
+-- key replaced in the meantime is left alone.
+UPDATE openrouter_api_keys
+SET key_org_encrypted = @key_org_encrypted
+WHERE organization_id = @organization_id
+  AND key_type = @key_type
+  AND key_encrypted = @key_encrypted
+  AND key_org_encrypted IS NULL
+  AND deleted IS FALSE;
+
 -- name: PrepareAPIKeyPolicy :one
 -- Local-only policy preparation. The caller owns the transaction and has
 -- already acquired lifecycle and per-key advisory locks in canonical order.

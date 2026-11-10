@@ -29,10 +29,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background/activities/keybillinglock"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys/repo"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	orrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -50,7 +50,7 @@ type Service struct {
 	db                        *pgxpool.Pool
 	auth                      *auth.Auth
 	audit                     *audit.Logger
-	enc                       *encryption.Client
+	keys                      *cutover.Sealer
 	provisioner               openrouter.Provisioner
 	coordinator               AdminMutationCoordinator
 	adminLocalMutationTimeout time.Duration
@@ -88,7 +88,7 @@ func NewService(
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
 	provisioner openrouter.Provisioner,
-	enc *encryption.Client,
+	keys *cutover.Sealer,
 	coordinator AdminMutationCoordinator,
 	options ...ServiceOption,
 ) *Service {
@@ -99,7 +99,7 @@ func NewService(
 		db:                        db,
 		auth:                      auth.New(logger, db, sessions, authzEngine),
 		audit:                     auditLogger,
-		enc:                       enc,
+		keys:                      keys,
 		provisioner:               provisioner,
 		coordinator:               coordinator,
 		adminLocalMutationTimeout: defaultAdminLocalMutationTimeout,
@@ -195,7 +195,7 @@ func (s *Service) GetKeyUsage(ctx context.Context, payload *gen.GetKeyUsagePaylo
 		return nil, oops.E(oops.CodeInvalid, nil, "key is disabled; usage is not polled")
 	}
 
-	apiKey, err := s.keyMaterial(row)
+	apiKey, err := s.keyMaterial(ctx, row)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "resolve openrouter key material").LogError(ctx, logger)
 	}
@@ -359,14 +359,15 @@ func (s *Service) mutateAdminLock(ctx context.Context, logger *slog.Logger, auth
 	return oops.E(oops.CodeUnexpected, err, "admin %s openrouter key", operation).LogError(ctx, logger)
 }
 
-// keyMaterial resolves the usable API key from a row by decrypting the
-// encrypted column. A row without a ciphertext is a hard error.
-func (s *Service) keyMaterial(row orrepo.OpenrouterApiKey) (string, error) {
+// keyMaterial resolves the usable API key from a row by decrypting its
+// encrypted columns. A row without an application-key ciphertext is a hard
+// error.
+func (s *Service) keyMaterial(ctx context.Context, row orrepo.OpenrouterApiKey) (string, error) {
 	if !row.KeyEncrypted.Valid {
 		return "", errors.New("key row holds no encrypted key material")
 	}
 
-	plaintext, err := s.enc.Decrypt(row.KeyEncrypted.String)
+	plaintext, err := s.keys.Open(ctx, row.OrganizationID, openrouter.OrgEncryptedKeyColumn, cutover.Ciphertexts{Legacy: row.KeyEncrypted.String, Org: row.KeyOrgEncrypted}, nil)
 	if err != nil {
 		return "", fmt.Errorf("decrypt openrouter key: %w", err)
 	}

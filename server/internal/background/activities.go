@@ -63,6 +63,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/oktaapplications"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformresearch "github.com/speakeasy-api/gram/server/internal/platformtools/research"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -204,6 +205,7 @@ func NewActivities(
 	tunnelHTTPClient *tunnelrouting.HTTPClient,
 	db *pgxpool.Pool,
 	encryption *encryption.Client,
+	aiProviderKeys *cutover.Sealer,
 	features feature.Provider,
 	assetStorage assets.BlobStore,
 	slackClient *slack_client.SlackClient,
@@ -399,12 +401,12 @@ func NewActivities(
 	return &Activities{
 		db:                               db,
 		temporalEnv:                      temporalEnv,
-		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, encryption),
+		collectOpenRouterCreditsMetrics:  activities.NewCollectOpenRouterCreditsMetrics(logger, db, openrouterProvisioner, aiProviderKeys),
 		collectOpenRouterDailySpend:      activities.NewCollectOpenRouterDailySpend(logger, db, openrouterSpendClient),
 		settleStripeInvoiceAllocations:   activities.NewSettleStripeInvoiceAllocations(logger, db, stripeClient),
 		collectPlatformUsageMetrics:      activities.NewCollectPlatformUsageMetrics(logger, db),
-		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, encryption),
-		pollAIData:                       activities.NewPollAIData(logger, db, encryption, telemetryLogger, guardianPolicy, chatWriter),
+		getAIIntegrationsCandidates:      activities.NewGetAIIntegrationsCandidates(logger, db, aiProviderKeys),
+		pollAIData:                       activities.NewPollAIData(logger, db, aiProviderKeys, telemetryLogger, guardianPolicy, chatWriter),
 		getDeviceIntegrationCandidates:   activities.NewGetDeviceIntegrationSyncCandidates(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
 		runDeviceIntegrationSync:         activities.NewRunDeviceIntegrationSync(logger, meterProvider, db, encryption, guardianPolicy, features, growthEmitter),
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),

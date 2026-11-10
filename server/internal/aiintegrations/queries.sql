@@ -45,6 +45,7 @@ INSERT INTO ai_integration_configs (
   , project_id
   , external_organization_id
   , api_key_encrypted
+  , api_key_org_encrypted
   , enabled
   , billing_mode
 ) VALUES (
@@ -53,6 +54,7 @@ INSERT INTO ai_integration_configs (
   , @project_id
   , @external_organization_id
   , @api_key_encrypted
+  , @api_key_org_encrypted
   , @enabled
   , @billing_mode
 )
@@ -440,12 +442,25 @@ SELECT pg_advisory_xact_lock(hashtextextended('anthropic_inference:' || @organiz
 -- name: UpdateAnthropicInferenceConfig :one
 UPDATE ai_integration_configs
 SET api_key_encrypted = @api_key_encrypted,
+    api_key_org_encrypted = @api_key_org_encrypted,
     enabled = @enabled,
     updated_at = clock_timestamp()
 WHERE id = @id AND organization_id = @organization_id
   AND project_id = @project_id AND provider = 'anthropic_inference'
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: BackfillConfigOrgEncrypted :exec
+-- Stores the organization-encrypted copy of a credential read before it had
+-- one. The application-key ciphertext must still be the one that was read, so
+-- a credential replaced in the meantime is left alone.
+UPDATE ai_integration_configs
+SET api_key_org_encrypted = @api_key_org_encrypted
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND api_key_encrypted = @api_key_encrypted
+  AND api_key_org_encrypted IS NULL;
 
 -- name: DeleteAnthropicInferenceConfig :one
 UPDATE ai_integration_configs

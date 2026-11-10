@@ -25,12 +25,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/modelkeys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -42,7 +42,7 @@ type Service struct {
 	db          *pgxpool.Pool
 	auth        *auth.Auth
 	authz       *authz.Engine
-	enc         *encryption.Client
+	keys        *cutover.Sealer
 	provisioner openrouter.Provisioner
 	features    *productfeatures.Client
 	audit       *audit.Logger
@@ -57,7 +57,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
-	enc *encryption.Client,
+	keys *cutover.Sealer,
 	provisioner openrouter.Provisioner,
 	features *productfeatures.Client,
 	auditLogger *audit.Logger,
@@ -70,7 +70,7 @@ func NewService(
 		db:          db,
 		auth:        auth.New(logger, db, sessions, authzEngine),
 		authz:       authzEngine,
-		enc:         enc,
+		keys:        keys,
 		provisioner: provisioner,
 		features:    features,
 		audit:       auditLogger,
@@ -157,7 +157,7 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 		return nil, oops.E(oops.CodeBadRequest, err, "the model provider rejected the API key").LogError(ctx, logger)
 	}
 
-	encrypted, err := s.enc.Encrypt([]byte(apiKey))
+	sealed, err := s.keys.Seal(ctx, authCtx.ActiveOrganizationID, orgEncryptedKeyColumn, []byte(apiKey))
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "encrypt model provider key").LogError(ctx, logger)
 	}
@@ -184,12 +184,13 @@ func (s *Service) UpsertKey(ctx context.Context, payload *gen.UpsertKeyPayload) 
 	}
 
 	row, err := queries.InsertKey(ctx, repo.InsertKeyParams{
-		OrganizationID:  authCtx.ActiveOrganizationID,
-		ProjectID:       *authCtx.ProjectID,
-		Slot:            slot,
-		Provider:        provider,
-		ApiKeyEncrypted: encrypted,
-		Enabled:         payload.Enabled,
+		OrganizationID:     authCtx.ActiveOrganizationID,
+		ProjectID:          *authCtx.ProjectID,
+		Slot:               slot,
+		Provider:           provider,
+		ApiKeyEncrypted:    sealed.Legacy,
+		ApiKeyOrgEncrypted: sealed.Org,
+		Enabled:            payload.Enabled,
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError

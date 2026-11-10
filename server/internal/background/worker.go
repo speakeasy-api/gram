@@ -50,6 +50,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption/cutover"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -93,9 +94,13 @@ type WorkerOptions struct {
 	TunnelHTTPClient *tunnelrouting.HTTPClient
 	DB               *pgxpool.Pool
 	EncryptionClient *encryption.Client
-	FeatureProvider  feature.Provider
-	AssetStorage     assets.BlobStore
-	SlackClient      *slack_client.SlackClient
+	// AIProviderKeys seals and opens AI provider and model credentials. Nil
+	// uses EncryptionClient alone and never moves an organization to
+	// organization encryption.
+	AIProviderKeys  *cutover.Sealer
+	FeatureProvider feature.Provider
+	AssetStorage    assets.BlobStore
+	SlackClient     *slack_client.SlackClient
 	// SlackDirectoryTokenRefresher renews rotating Slack directory tokens; nil leaves expired tokens needing reconnect.
 	SlackDirectoryTokenRefresher slackdirectoryconnections.TokenRefresher
 	ChatMessageWriter            *chat.ChatMessageWriter
@@ -219,6 +224,7 @@ func ForDeploymentProcessing(
 		GuardianPolicy:                 guardianPolicy,
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
+		AIProviderKeys:                 nil,
 		FeatureProvider:                f,
 		AssetStorage:                   assetStorage,
 		FunctionsDeployer:              deployer,
@@ -322,6 +328,7 @@ func NewTemporalWorker(
 		TunnelHTTPClient:               nil,
 		DB:                             nil,
 		EncryptionClient:               nil,
+		AIProviderKeys:                 nil,
 		FeatureProvider:                nil,
 		AssetStorage:                   nil,
 		SlackClient:                    nil,
@@ -382,6 +389,7 @@ func NewTemporalWorker(
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
+			AIProviderKeys:                 conv.Default(o.AIProviderKeys, opts.AIProviderKeys),
 			FeatureProvider:                conv.Default(o.FeatureProvider, opts.FeatureProvider),
 			AssetStorage:                   conv.Default(o.AssetStorage, opts.AssetStorage),
 			SlackClient:                    conv.Default(o.SlackClient, opts.SlackClient),
@@ -490,6 +498,11 @@ func NewTemporalWorker(
 		}
 	}
 
+	aiProviderKeys := opts.AIProviderKeys
+	if aiProviderKeys == nil {
+		aiProviderKeys = cutover.New(logger, opts.EncryptionClient, cutover.AIProviderKeys, nil)
+	}
+
 	activities := NewActivities(
 		logger,
 		tracerProvider,
@@ -498,6 +511,7 @@ func NewTemporalWorker(
 		opts.TunnelHTTPClient,
 		opts.DB,
 		opts.EncryptionClient,
+		aiProviderKeys,
 		opts.FeatureProvider,
 		opts.AssetStorage,
 		opts.SlackClient,

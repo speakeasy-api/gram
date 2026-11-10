@@ -13,3 +13,7 @@ ALTER TABLE toolsets DROP COLUMN mcp_is_public;
 ALTER TABLE toolsets DROP COLUMN mcp_enabled;
 ALTER TABLE toolsets DROP COLUMN custom_domain_id;
 ALTER TABLE toolsets DROP COLUMN user_session_issuer_id;
+
+-- The plaintext upstream OpenRouter key (DNO-1571). key_encrypted replaced it and
+-- nothing writes or reads it any more.
+ALTER TABLE openrouter_api_keys DROP COLUMN key;

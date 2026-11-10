@@ -230,6 +230,18 @@ const (
 	// Targeted the same way as FlagAuthClientResolver.
 	FlagAuthClientResolverShadow Flag = "auth-client-resolver-shadow"
 
+	// FlagAIProviderKeysOrgEncryption moves an organization's AI provider and
+	// model credentials to organization encryption (use case
+	// ai-provider-keys). On, writes also seal each credential under the
+	// organization's own key, reads prefer that copy, and a row without one
+	// gains it on its next read; the application-key copy is always kept, so
+	// turning the flag off returns every read to it. Evaluated locally with
+	// the organization id as the distinct id, so the PostHog flag must be
+	// person-aggregated and match distinct_id in a list of organization ids.
+	// Inconclusive reads as off. Removed once every organization is moved and
+	// the application-key copies are destroyed.
+	FlagAIProviderKeysOrgEncryption Flag = "ai-provider-keys-org-encryption"
+
 	// FlagMandatoryAuthzShadow evaluates the mandatory server and auth client
 	// check beside today's decision for an organization's MCP requests and
 	// records where they disagree, without changing any response. Auth clients

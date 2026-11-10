@@ -712,13 +712,6 @@ SET key_hash = @key_hash
 WHERE organization_id = @organization_id
   AND key_type = @key_type;
 
--- name: SetOpenRouterAPIKeyProviderPayloadFixture :exec
--- Test-only privacy sentinel in the deprecated plaintext provider payload column.
-UPDATE openrouter_api_keys
-SET key = @provider_payload
-WHERE organization_id = @organization_id
-  AND key_type = @key_type;
-
 -- name: GetOpenRouterAPIKeyStateFixture :one
 -- Test-only fixture: observes guarded-mutation state, including soft-deleted rows.
 SELECT key_hash, monthly_credits, disabled, disable_causes, deleted
