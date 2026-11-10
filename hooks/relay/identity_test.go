@@ -80,6 +80,160 @@ func isolateInstalledAgent(t *testing.T) {
 	previous := machineWideAgentPaths
 	machineWideAgentPaths = nil
 	t.Cleanup(func() { machineWideAgentPaths = previous })
+	stubAccountHome(t, "")
+}
+
+// stubAccountHome replaces the OS account's home for the test, so the real
+// developer install under it cannot answer.
+func stubAccountHome(t *testing.T, home string) {
+	t.Helper()
+	previous := accountHomeDir
+	accountHomeDir = func() string { return home }
+	t.Cleanup(func() { accountHomeDir = previous })
+}
+
+// writeFakeAgent installs a shell speakeasyd at path that prints body and, when
+// marker is set, touches it so the test can tell whether it ran.
+func writeFakeAgent(t *testing.T, path, body, marker string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	script := "#!/bin/sh\n"
+	if marker != "" {
+		script += "touch '" + marker + "'\n"
+	}
+	script += "printf '%s' '" + body + "'\n"
+	require.NoError(t, os.WriteFile(path, []byte(script), 0o700))
+}
+
+func perUserAgentPath(home string) string {
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(home, "Library", "Application Support", "Speakeasy", "bin", "speakeasyd")
+	}
+	return filepath.Join(home, ".local", "state", "speakeasy", "bin", "speakeasyd")
+}
+
+// An agent harness runs hooks with $HOME pointed at a temporary folder. The
+// per-user device agent still lives under the account's real home, and the
+// relay must find it there rather than fall through to a machine-wide copy.
+func TestDeviceAgentEmailFindsAgentUnderAccountHomeWhenHOMEMoved(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+	writeFakeAgent(t, perUserAgentPath(account), `{"email":"managed@example.com"}`, "")
+
+	stale := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	staleRan := filepath.Join(t.TempDir(), "stale-ran")
+	writeFakeAgent(t, stale, `{"email":"stale@example.com"}`, staleRan)
+	machineWideAgentPaths = []string{stale}
+
+	t.Setenv("HOME", t.TempDir()) // the harness's temporary home: no installs
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "managed@example.com", deviceAgentEmail(t.Context()))
+	require.NoFileExists(t, staleRan, "machine-wide copy ran although the per-user agent answered")
+}
+
+// Machine-wide copies are installer seeds that do not auto-update; an old one
+// can raise a macOS keychain dialog. A running daemon's socket must answer
+// before any of them is exec'd.
+func TestDeviceAgentEmailAsksSocketBeforeMachineWideCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	stale := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	staleRan := filepath.Join(t.TempDir(), "stale-ran")
+	writeFakeAgent(t, stale, `{"email":"stale@example.com"}`, staleRan)
+	machineWideAgentPaths = []string{stale}
+
+	socket := startIdentitySocket(t, http.StatusOK, `{"v":1,"enrolled":true,"email":"socket@example.com","source":"managed"}`)
+	t.Setenv("SPEAKEASY_SOCKET", socket)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+
+	require.Equal(t, "socket@example.com", deviceAgentEmail(t.Context()))
+	require.NoFileExists(t, staleRan, "machine-wide copy ran although the daemon socket answered")
+}
+
+// With no per-user agent and no daemon, the machine-wide copy is still the
+// last resort.
+func TestDeviceAgentEmailFallsBackToMachineWideCopy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	machineWide := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	writeFakeAgent(t, machineWide, `{"email":"machine@example.com"}`, "")
+	machineWideAgentPaths = []string{machineWide}
+
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "machine@example.com", deviceAgentEmail(t.Context()))
+}
+
+// The agent must read the account's enrollment and keychain, not the
+// harness's temporary home, whichever install answers.
+func TestDeviceAgentIdentityRunsWithAccountHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable shell fixture is POSIX-only")
+	}
+	isolateInstalledAgent(t)
+	resetDeviceIdentityMemo()
+	t.Cleanup(resetDeviceIdentityMemo)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+	agent := filepath.Join(t.TempDir(), "machine-wide-speakeasyd")
+	require.NoError(t, os.WriteFile(agent, []byte("#!/bin/sh\n"+
+		"[ \"$HOME\" = '"+account+"' ] && printf '%s' '{\"email\":\"account-home@example.com\"}'\n"), 0o700))
+	machineWideAgentPaths = []string{agent}
+
+	t.Setenv("SPEAKEASY_SOCKET", filepath.Join(t.TempDir(), "nope.sock"))
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("GRAM_DEVICE_AGENT_COMMANDS", "")
+	t.Setenv("SPEAKEASY_AI_DEVICE_AGENT_TIMEOUT_TENTHS", "20")
+
+	require.Equal(t, "account-home@example.com", deviceAgentEmail(t.Context()))
+}
+
+func TestAgentSocketPathFindsDaemonUnderAccountHome(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("named pipe path does not depend on the home folder")
+	}
+	t.Setenv("SPEAKEASY_SOCKET", "")
+	moved := t.TempDir()
+	t.Setenv("HOME", moved)
+	account := t.TempDir()
+	stubAccountHome(t, account)
+
+	// No daemon anywhere: keep the $HOME-derived path, as before.
+	require.Equal(t, homeSocketPath(moved), agentSocketPath())
+
+	socket := homeSocketPath(account)
+	require.NoError(t, os.MkdirAll(filepath.Dir(socket), 0o755))
+	require.NoError(t, os.WriteFile(socket, nil, 0o600))
+	require.Equal(t, socket, agentSocketPath())
 }
 
 func TestDeviceAgentEmailSocketRescue(t *testing.T) {
