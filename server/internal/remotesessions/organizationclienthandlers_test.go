@@ -504,6 +504,30 @@ func TestRemoveClientFromMcpServer_NotAttached(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
+// A server that took its upstream issuer from the removed binding no longer
+// names it once the removal commits.
+func TestRemoveClientFromMcpServer_RederivesServersOnTheIssuer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	projectID := projectIDFromContext(t, ctx)
+
+	issuerID := createRemoteIssuer(t, ctx, ti, "admin-detach-derive-issuer", "")
+	userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "admin-detach-derive-usi")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-detach-derive-server")
+	clientID := createRemoteClient(t, ctx, ti, issuerID, userIssuerID.String(), "admin-detach-derive-client")
+	stampIssuer(t, ctx, ti.conn, projectID, serverID, uuid.MustParse(issuerID))
+
+	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
+		ClientID:     clientID,
+		McpServerID:  serverID.String(),
+		SessionToken: nil,
+		ApikeyToken:  nil,
+	}))
+
+	require.False(t, storedIssuer(t, ctx, ti.conn, projectID, serverID).Valid)
+}
+
 // TestRemoveClientFromMcpServer_CrossOrgNotFound proves an MCP server owned by
 // another organization returns NotFound rather than being resolved across the
 // tenant boundary when an admin attempts to detach a client from it.

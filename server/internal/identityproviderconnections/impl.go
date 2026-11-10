@@ -710,8 +710,14 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 	// The managed client's associations go with it, so their writer scope is
 	// taken before the first row lock.
 	var associations upstreamclients.ClientAssociationScope
+	var bindingServers remotesessions.ClientBindingServers
 	if managed != nil {
-		associations, err = upstreamclients.LockClientAssociationScope(cleanupCtx, dbtx, organizationID, managed.ClientRowID)
+		bindingServers, err = remotesessions.ReadClientBindingServers(cleanupCtx, dbtx, organizationID, managed.ClientRowID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to read servers on abandoned connection client's issuers", attr.SlogError(err))
+			return
+		}
+		associations, err = upstreamclients.LockClientAssociationScope(cleanupCtx, dbtx, organizationID, managed.ClientRowID, bindingServers.Projects(organizationID))
 		if err != nil {
 			logger.ErrorContext(ctx, "failed to lock writer scope of abandoned connection client", attr.SlogError(err))
 			return
@@ -743,11 +749,6 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			OrganizationID: conv.ToPGText(organizationID),
 		}); err != nil && !errors.Is(err, pgx.ErrNoRows) {
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
-			return
-		}
-		bindingServers, err := remotesessions.ReadClientBindingServers(cleanupCtx, dbtx, managed.ClientRowID)
-		if err != nil {
-			logger.ErrorContext(ctx, "failed to read servers on abandoned connection client's issuers", attr.SlogError(err))
 			return
 		}
 		if err := rq.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(cleanupCtx, managed.ClientRowID); err != nil {
