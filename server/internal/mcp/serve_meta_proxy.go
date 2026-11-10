@@ -177,6 +177,13 @@ func (d memberDial) upstreamCredential() remotemcp.UpstreamCredentialSent {
 	return remotemcp.UpstreamCredentialSent{Attached: !d.anonymous, Self: d.clientCredential, Configured: d.configuredHeaders}
 }
 
+// sentCredential is what of the dialed credentials the final request to the member still carried.
+func (d memberDial) sentCredential(answer memberRejection) remotemcp.UpstreamCredentialSent {
+	sent := remotemcp.SentCredential(answer.sent, !d.anonymous, d.clientCredential, answer.headers)
+	sent.Configured = sent.Configured && d.configuredHeaders
+	return sent
+}
+
 func memberSessionKey(route any, token string) string {
 	encoded, _ := json.Marshal([]any{route, token})
 	sum := sha256.Sum256(encoded)

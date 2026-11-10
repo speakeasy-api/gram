@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -513,6 +514,71 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 			require.Equal(t, tc.retryable, failure.retryable)
 			_, outage := errors.AsType[memberUnavailableError](got)
 			require.Equal(t, tc.discovery, outage, "the connection status reads this as an outage")
+		})
+	}
+}
+
+// A member's 401 or 403 is recorded as a rejected credential only as on a direct server: a 401,
+// or a 403 whose challenge says invalid_token, to a credential the final request still carried.
+func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		status    int
+		challenge string
+		redirect  bool
+		want      mcpconnectionattempts.Code
+	}{
+		"401":                             {status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 invalid_token":               {status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 insufficient_scope":          {status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope", scope="repo"`, want: mcpconnectionattempts.Code{}},
+		"403 without challenge":           {status: http.StatusForbidden, want: mcpconnectionattempts.Code{}},
+		"401 after cross-origin redirect": {status: http.StatusUnauthorized, redirect: true, want: mcpconnectionattempts.Code{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var sawAuthorization sync.Map
+			final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				sawAuthorization.Store(r.Header.Get("Authorization") != "", true)
+				if tc.challenge != "" {
+					w.Header().Set("WWW-Authenticate", tc.challenge)
+				}
+				w.WriteHeader(tc.status)
+			}))
+			t.Cleanup(final.Close)
+			endpoint := final.URL
+			if tc.redirect {
+				_, port, err := net.SplitHostPort(final.Listener.Addr().String())
+				require.NoError(t, err)
+				elsewhere := "http://localhost:" + port
+				origin := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					http.Redirect(w, r, elsewhere+r.URL.Path, http.StatusTemporaryRedirect)
+				}))
+				t.Cleanup(origin.Close)
+				endpoint = origin.URL
+			}
+			service, build := memberClientFixture(t, endpoint)
+			withToken := func(ctx context.Context) (*proxy.Proxy, error) {
+				p, err := build(ctx)
+				if err != nil {
+					return nil, err
+				}
+				p.AuthorizationOverride = "member-token"
+				return p, nil
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			_, rt, err := service.connectMetaMember(ctx, testenv.NewLogger(t), withToken, time.Second)
+			require.Error(t, err)
+			if tc.redirect {
+				_, stripped := sawAuthorization.Load(false)
+				require.True(t, stripped, "the redirect must reach the server without the credential")
+			}
+			got := memberClientFailure(ctx, testenv.NewLogger(t), rt, memberDial{build: withToken, anonymous: false}, metaMember{slug: "fixture"}, err)
+			failure, ok := errors.AsType[memberConnectionError](got)
+			require.True(t, ok, "%v", got)
+			require.Equal(t, tc.want, failure.code)
 		})
 	}
 }

@@ -59,12 +59,14 @@ type memberAttempt struct {
 	// sentCall marks a tools/call handed to the member's proxy. A call on a
 	// session that had already failed never gets that far.
 	sentCall bool
+	// rejectedAnswer is what the latest 401 or 403 said and was sent with.
+	rejectedAnswer memberRejection
 }
 
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, lastStatus: 0, lastTunnelError: "", lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, rejectedAnswer: memberRejection{challenges: nil, sent: nil, headers: nil}, lastStatus: 0, lastTunnelError: "", lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -73,10 +75,19 @@ func (a *memberAttempt) memberRefused() bool {
 	return a.refused
 }
 
+// memberRejection is the member's 401 or 403: its challenges, and what the final request
+// carried. A response the proxy wrote itself leaves both empty.
+type memberRejection struct {
+	challenges []string
+	sent       http.Header
+	headers    []proxy.ConfiguredHeader
+}
+
 // memberOutcome is what failure classification reads from an operation.
 type memberOutcome interface {
 	failure() error
 	rejection() (int, bool)
+	rejectedBy() memberRejection
 	status() int
 	tunnelError() string
 	retryAfter(now time.Time) time.Duration
@@ -173,10 +184,15 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	// and then fail or hang the body, and the SDK never sees such an answer.
 	mintedSession := ""
 	tunnelError := ""
+	answered := memberRejection{challenges: nil, sent: nil, headers: p.Headers}
 	interceptResponse := p.UpstreamResponseInterceptor
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
 		mintedSession = resp.Header.Get(proxy.McpSessionIDHeader)
 		tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		answered.challenges = resp.Header.Values("WWW-Authenticate")
+		if resp.Request != nil {
+			answered.sent = resp.Request.Header.Clone()
+		}
 		if interceptResponse != nil {
 			return interceptResponse(ctx, resp)
 		}
@@ -203,6 +219,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt.lastErr = nil
 		if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
 			attempt.rejected = rec.status
+			attempt.rejectedAnswer = answered
 		}
 	}
 	attempt.mu.Unlock()
@@ -248,6 +265,12 @@ func (a *memberAttempt) rejection() (int, bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.rejected, a.rejected != 0
+}
+
+func (a *memberAttempt) rejectedBy() memberRejection {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.rejectedAnswer
 }
 
 func (a *memberAttempt) status() int {
@@ -403,9 +426,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		return memberConnectionError{failure, code}
 	}
 	if status, rejected := rt.rejection(); rejected {
-		// Gateway members still count every 401 and 403 as a rejected credential.
-		code, ok := remotemcp.UpstreamFailureHappened(status, true, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
-		if !ok {
+		// As on a direct server: only a rejected credential the final request still carried is recorded.
+		answer := rt.rejectedBy()
+		code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.CredentialRejected(status, answer.challenges), dial.sentCredential(answer), dial.tunneled, "", errors.Join(err, exchangeErr))
+		if !ok && dial.anonymous && !dial.configuredHeaders {
+			// Nothing could be sent, so the caller has no connection to it.
 			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
 		return memberConnectionError{memberAuthFailure(member, dial, status), code}

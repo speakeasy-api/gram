@@ -170,6 +170,7 @@ func TestMemberConnectionFailureKeepsTextAndType(t *testing.T) {
 type stubMemberOutcome struct {
 	err       error
 	rejected  int
+	answer    memberRejection
 	code      int
 	tunnelErr string
 }
@@ -177,6 +178,8 @@ type stubMemberOutcome struct {
 func (o stubMemberOutcome) failure() error { return o.err }
 
 func (o stubMemberOutcome) rejection() (int, bool) { return o.rejected, o.rejected != 0 }
+
+func (o stubMemberOutcome) rejectedBy() memberRejection { return o.answer }
 
 func (o stubMemberOutcome) status() int { return o.code }
 
@@ -231,18 +234,32 @@ func TestMemberClientFailure_SDKRejection(t *testing.T) {
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 	t.Parallel()
 
+	bearerSent := memberRejection{sent: http.Header{"Authorization": {"Bearer token"}}}
+	keySent := memberRejection{sent: http.Header{"X-Api-Key": {"key"}}, headers: []proxy.ConfiguredHeader{{Name: "X-Api-Key", StaticValue: "key", IsSecret: true}}}
+	withChallenge := func(answer memberRejection, challenge string) memberRejection {
+		answer.challenges = []string{challenge}
+		return answer
+	}
+
 	for _, tc := range []struct {
 		name    string
 		outcome stubMemberOutcome
 		dial    memberDial
 		want    mcpconnectionattempts.Code
 	}{
-		{name: "person's credential rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, want: mcpconnectionattempts.CodeProviderRejected},
+		{name: "person's credential rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: bearerSent}, want: mcpconnectionattempts.CodeProviderRejected},
+		{name: "person's token invalid on a 403", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `Bearer error="invalid_token"`)}, want: mcpconnectionattempts.CodeProviderRejected},
+		{name: "person's token lacks scope", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `Bearer error="insufficient_scope", scope="repo"`)}, want: mcpconnectionattempts.Code{}},
+		{name: "403 with no challenge", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: bearerSent}, want: mcpconnectionattempts.Code{}},
+		{name: "credential stripped before the server", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: memberRejection{sent: http.Header{}}}, want: mcpconnectionattempts.Code{}},
+		{name: "proxy answered itself", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, want: mcpconnectionattempts.Code{}},
 		{name: "no credential to send", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeInvalidRemoteSession},
-		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "configured key lacks permission", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.Code{}},
 		{name: "tunnel down", outcome: stubMemberOutcome{code: http.StatusBadGateway, tunnelErr: wire.TunnelErrorNoLiveSession}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeTunnelUnavailable},
 		{name: "server behind the tunnel", outcome: stubMemberOutcome{code: http.StatusBadGateway}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeProviderServerError},
-		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeSharedCredentialRejected},
+		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `DPoP error="invalid_token"`)}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeSharedCredentialRejected},
+		{name: "server's own credential lacks scope", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: withChallenge(bearerSent, `Bearer error="insufficient_scope"`)}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.Code{}},
 		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, want: mcpconnectionattempts.CodeProviderUnreachable},
 		{name: "no route", outcome: stubMemberOutcome{err: fmt.Errorf("%w: %w", errMemberUnroutable, errTunnelNoRoute)}, want: mcpconnectionattempts.CodeTunnelUnavailable},
 		{name: "route store down", outcome: stubMemberOutcome{err: fmt.Errorf("%w: store unavailable", errMemberUnroutable)}, want: mcpconnectionattempts.CodeInternalError},
