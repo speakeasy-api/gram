@@ -79,6 +79,9 @@ type WorkerOptions struct {
 	// FleetHealthCache refreshes the staff dashboard snapshot; nil disables its schedule.
 	FleetHealthCache FleetHealthCacheRefresher
 
+	// HookFleetMetrics emits the per-organization hooks fleet gauges; nil disables its schedule.
+	HookFleetMetrics HookFleetMetricsEmitter
+
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
 
@@ -217,6 +220,7 @@ func ForDeploymentProcessing(
 	return &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
@@ -320,6 +324,7 @@ func NewTemporalWorker(
 	opts := &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
+		HookFleetMetrics:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
@@ -382,6 +387,7 @@ func NewTemporalWorker(
 	for _, o := range options {
 		opts = &WorkerOptions{
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
+			HookFleetMetrics:               conv.Default(o.HookFleetMetrics, opts.HookFleetMetrics),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
@@ -561,6 +567,11 @@ func NewTemporalWorker(
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
 		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
+	}
+
+	if opts.HookFleetMetrics != nil {
+		temporalWorker.RegisterActivityWithOptions(opts.HookFleetMetrics.Emit, activity.RegisterOptions{Name: hookFleetMetricsActivity})
+		temporalWorker.RegisterWorkflow(HookFleetMetricsWorkflow)
 	}
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
@@ -921,6 +932,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if opts.FleetHealthCache != nil {
 		if err := addFleetHealthCacheSchedule(ctx, env); err != nil {
 			logger.ErrorContext(ctx, "register fleet health cache schedule", attr.SlogError(err))
+		}
+	}
+
+	if opts.HookFleetMetrics != nil {
+		if err := addHookFleetMetricsSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register hook fleet metrics schedule", attr.SlogError(err))
 		}
 	}
 

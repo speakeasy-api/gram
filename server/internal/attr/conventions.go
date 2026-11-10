@@ -982,6 +982,9 @@ const (
 	// and sender produced a row (see the HookEndpointGeneration* values), so
 	// traffic on retired endpoints can be found and moved to a supported one.
 	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
+	// HookVersionStatusKey is a hooks install's support status: current,
+	// behind, unsupported or unknown.
+	HookVersionStatusKey = attribute.Key("gram.hook.version_status")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -2997,6 +3000,8 @@ func SlogOrganizationID(v string) slog.Attr      { return slog.String(string(Org
 
 func OrganizationSlug(v string) attribute.KeyValue { return OrganizationSlugKey.String(v) }
 func SlogOrganizationSlug(v string) slog.Attr      { return slog.String(string(OrganizationSlugKey), v) }
+
+func HookVersionStatus(v string) attribute.KeyValue { return HookVersionStatusKey.String(v) }
 
 func WorkOSOrganizationID(v string) attribute.KeyValue { return WorkOSOrganizationIDKey.String(v) }
 func SlogWorkOSOrganizationID(v string) slog.Attr {
