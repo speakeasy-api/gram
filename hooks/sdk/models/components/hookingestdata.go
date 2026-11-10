@@ -10,6 +10,8 @@ import (
 type HookIngestData struct {
 	// Device-side delivery failure report, sent with event type client.delivery_failed and a required Idempotency-Key so each failure counts once. The speakeasy-hooks binary writes one when an event could not reach the control plane and redelivers it from the offline spool once connectivity returns, so the record describes the original attempt rather than the request that carried it. It is diagnostic only and never counts as agent activity.
 	DeliveryFailure *HookDeliveryFailureData `json:"delivery_failure,omitzero"`
+	// Bootstrap install failure report, sent with event type client.install_failed. A plugin's bootstrap script sends one, best effort, when it cannot download the hooks binary or the download fails its checksum. It is diagnostic only and never counts as agent activity.
+	InstallFailure *HookInstallFailureData `json:"install_failure,omitzero"`
 	// MCP feature payload.
 	Mcp *HookMCPData `json:"mcp,omitzero"`
 	// Transcript-derived per-request MCP attribution (Claude Stop/SubagentStop).
@@ -50,6 +52,13 @@ func (h *HookIngestData) GetDeliveryFailure() *HookDeliveryFailureData {
 		return nil
 	}
 	return h.DeliveryFailure
+}
+
+func (h *HookIngestData) GetInstallFailure() *HookInstallFailureData {
+	if h == nil {
+		return nil
+	}
+	return h.InstallFailure
 }
 
 func (h *HookIngestData) GetMcp() *HookMCPData {
