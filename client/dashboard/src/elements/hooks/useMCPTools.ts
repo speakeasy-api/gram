@@ -1,6 +1,6 @@
 import { assert } from "@/lib/utils";
 import type { MCPServerEntry } from "@/elements/types";
-import { ToolsFilter } from "@/elements/types";
+import type { ToolsFilter } from "@/elements/types";
 import type { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
@@ -12,7 +12,7 @@ import {
   listServedSkills,
   serverServesSkills,
 } from "@/elements/lib/mcpSkills";
-import { Auth } from "./useAuth";
+import type { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<
   ReturnType<Awaited<ReturnType<typeof createMCPClient>>["tools"]>

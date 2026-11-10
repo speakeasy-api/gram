@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
 )
 
 // These tools let a person use the MCP servers their organization gateway
@@ -163,13 +164,15 @@ func (s *GatewayProxyService) call(ctx context.Context, principal Principal, too
 	var zero proxiedToolResult
 	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagPlatformMCPGatewayProxy, principal.OrganizationID, nil)
 	if err != nil || !enabled {
-		return zero, gatewayProxyUnavailable("Using your MCP servers through this Speakeasy connection is not switched on for your organization yet.")
+		return zero, gatewayProxyUnavailable(gatewayProxyOff)
 	}
 	gateway, err := s.gateway.getForPlatformMCP(ctx, principal)
 	if err != nil {
 		return zero, err
 	}
-	if !gateway.Available {
+	// The organization issuer signs people in to the gateway's own URL. This
+	// caller is already signed in, so the gateway serves them without one.
+	if !gateway.Available && !orggateway.Unavailability(gateway.UnavailableReason).LacksSingleIssuer() {
 		return zero, gatewayProxyUnavailable("Your organization gateway is not available (" + gateway.UnavailableReason + "). " + gateway.NextAction)
 	}
 	raw, err := json.Marshal(arguments)
@@ -209,6 +212,14 @@ func proxiedResultText(result proxiedToolResult) string {
 	}
 	return "The server returned an error with no message."
 }
+
+// gatewayProxyOff is the refusal when the flag is off or cannot be read. It
+// does not claim a cause the server cannot see, and names the path that works
+// instead, so an agent does not send the user to an organization setting that
+// does not exist: connecting the server to the app directly.
+const gatewayProxyOff = "Running tools on your MCP servers through this Speakeasy connection (list_my_servers, search_my_tools, describe_tools and execute_tool) is not available for your organization right now. " +
+	"Speakeasy controls whether it is available; it is not an organization setting, so an administrator cannot switch it on. " +
+	"Your servers still work when connected to this app directly: call get_my_install_instructions with the server's project_id, its mcp_id or the registration_id setup returned, and client_family set to this app (claude_code, claude_cowork, codex, cursor, opencode, or other), then show the user each step's link and snippet as written."
 
 func gatewayProxyUnavailable(message string) error {
 	payload, err := json.Marshal(featureUnavailableResult{Code: unavailableCode, Feature: gatewayProxyFeature, Message: message})
@@ -357,21 +368,21 @@ func registerGatewayProxyTools(reg *Registrar, service *GatewayProxyService) {
 	}
 	searchTool := &mcp.Tool{
 		Name:  searchMyToolsName,
-		Title: "Search My MCP Server Tools",
+		Title: "Search Tools in My MCP Servers",
 		Description: "Find the right tool across all of the user's MCP servers in one call, by describing the task in plain words (for example: create a ticket, look up a customer by email). " +
 			"Returns ranked tools with their server, tool name, description and input_schema, ready for execute_tool. Use it whenever the user wants something done in another system; narrow with server when you already know it.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	describeTool := &mcp.Tool{
 		Name:  describeToolsName,
-		Title: "Describe My MCP Server Tools",
+		Title: "Get Tool Details from My MCP Servers",
 		Description: "Describe the tools of one server from list_my_servers. Omit tools to list every tool's name and description. " +
 			"Pass tool names to get their input_schema, which you need before calling execute_tool.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, DestructiveHint: new(false), OpenWorldHint: new(true)},
 	}
 	executeTool := &mcp.Tool{
 		Name:  executeToolName,
-		Title: "Run My MCP Server Tool",
+		Title: "Run a Tool from My MCP Servers",
 		Description: "Call one tool on one server from list_my_servers, as you, with arguments matching its input_schema from describe_tools. " +
 			"Returns the server's answer unchanged: is_error is true when the server or tool refused, with the reason in content. The tool may change data in the system behind the server.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: false, DestructiveHint: new(true), OpenWorldHint: new(true)},

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { platformSteps } from "@/pages/setup/setup-data";
 import { organizationGatewayInstallPlatforms } from "./organization-gateway-install";

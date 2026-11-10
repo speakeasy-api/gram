@@ -1,3 +1,5 @@
+import type { ToolSource } from "@/pages/access/useServerTools";
+import { toolSourceUnavailableMessage } from "./toolSourceMessage";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
@@ -23,6 +25,7 @@ export function ToolNarrowingDialog({
   serverId,
   serverName,
   catalog,
+  toolSource,
   limitedBy,
   tools,
   dispositions,
@@ -34,6 +37,7 @@ export function ToolNarrowingDialog({
   serverName?: string;
   /** The server's tools, when this surface has them. */
   catalog?: ToolSelectionTool[];
+  toolSource?: ToolSource;
   /**
    * The principal whose block keeps the rest of the catalogue out of reach,
    * when the list here is only part of the server.
@@ -57,10 +61,14 @@ export function ToolNarrowingDialog({
       id: serverId,
       name: serverName ?? "This server",
       tools: catalog ?? [],
-      status: catalog ? "ready" : "unavailable",
-      // Remote servers resolve their tools per caller, so this surface may
-      // have no catalogue to list; annotations still work there.
-      unavailableLabel: "Tools are resolved when the server is called",
+      status:
+        toolSource?.status === "loading" || toolSource?.status === "error"
+          ? toolSource.status
+          : catalog
+            ? "ready"
+            : "unavailable",
+      onRetry: toolSource?.status === "error" ? toolSource.retry : undefined,
+      unavailableLabel: toolSourceUnavailableMessage(toolSource),
       emptyLabel: "No tools reported",
     },
   ];

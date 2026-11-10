@@ -115,10 +115,19 @@ type iconCall struct {
 	authProjectID *uuid.UUID
 }
 
-// recordingServerIcons records scheduled logo fetches instead of fetching.
+// recordingServerIcons records logo fetches instead of fetching. fetched,
+// when set, stands in for a fetch that stores a logo before it returns.
 type recordingServerIcons struct {
-	mu    sync.Mutex
-	calls []iconCall
+	mu      sync.Mutex
+	calls   []iconCall
+	fetched func(mcpServerID uuid.UUID)
+}
+
+func (r *recordingServerIcons) SetDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
+	r.ScheduleDefaultRemoteServerIcon(ctx, projectID, mcpServerID, remoteMCPServerID)
+	if r.fetched != nil {
+		r.fetched(mcpServerID)
+	}
 }
 
 func (r *recordingServerIcons) ScheduleDefaultRemoteServerIcon(ctx context.Context, projectID, mcpServerID, remoteMCPServerID uuid.UUID) {
@@ -140,7 +149,7 @@ func (r *recordingServerIcons) recorded() []iconCall {
 }
 
 // storeLogo stores an image asset and makes it the MCP server's logo, as the
-// detached logo fetch does.
+// logo fetch does.
 func storeLogo(t *testing.T, conn *pgxpool.Pool, storage assets.BlobStore, project ResolvedProject, organizationID string, mcpServerID uuid.UUID, contentType string, body []byte) {
 	t.Helper()
 
@@ -187,8 +196,8 @@ func callRegisterCatalogCard(t *testing.T, ctx context.Context, session *mcp.Cli
 	return card
 }
 
-// Adding an MCP server schedules its logo fetch once; once a logo is stored,
-// the card inlines it, and a stored SVG logo falls back to the first letter.
+// Adding an MCP server fetches its logo once, before the card is built, so the
+// first card already shows it; a stored SVG logo falls back to the first letter.
 func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 	t.Parallel()
 
@@ -223,9 +232,12 @@ func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 	})
 	session := connectTestClient(t, reg.server)
 
+	logo := testPNG(t)
+	icons.fetched = func(mcpServerID uuid.UUID) {
+		storeLogo(t, conn, storage, project, principal.OrganizationID, mcpServerID, "image/png", logo)
+	}
 	first := callRegisterCatalogCard(t, ctx, session, project, providerKey)
-	require.NotContains(t, first, "<img", "the logo is fetched after the add returns")
-	require.Contains(t, first, `<div class="tile"><svg class="icon"`)
+	require.Contains(t, first, `<img class="logo" src="data:image/png;base64,`+base64.StdEncoding.EncodeToString(logo)+`" alt="">`, "the first card shows the logo")
 
 	calls := icons.recorded()
 	require.Len(t, calls, 1)
@@ -234,8 +246,6 @@ func TestCatalogRegistrationCapturesLogoForItsCard(t *testing.T) {
 	require.NotEqual(t, uuid.Nil, calls[0].remoteID)
 	require.Equal(t, &project.ID, calls[0].authProjectID, "the logo is stored as an asset of the server's project")
 
-	logo := testPNG(t)
-	storeLogo(t, conn, storage, project, principal.OrganizationID, calls[0].mcpServerID, "image/png", logo)
 	replayed := callRegisterCatalogCard(t, ctx, session, project, providerKey)
 	require.Contains(t, replayed, `<img class="logo" src="data:image/png;base64,`+base64.StdEncoding.EncodeToString(logo)+`" alt="">`)
 	require.Len(t, icons.recorded(), 1, "a replayed add does not fetch the logo again")

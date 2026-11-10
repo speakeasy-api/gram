@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { UserSessionIssuer } from "@gram/client/models/components/usersessionissuer.js";
 import { describe, expect, it } from "vitest";
 import {

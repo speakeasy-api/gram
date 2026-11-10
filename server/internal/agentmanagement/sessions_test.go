@@ -243,11 +243,12 @@ func TestAgentSessionsScopeAndRevocationCascade(t *testing.T) {
 	require.NoError(t, service.RevokeSession(ctx, &gen.RevokeSessionPayload{AgentID: agent.ID.String(), SessionID: session.String()}))
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
 	require.Equal(t, 1, revoker.credentials)
-	var revoked, preserved bool
-	require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM remote_sessions WHERE id=$1`, upstream).Scan(&revoked))        //nolint:glint // notestingrawsql: validates real upstream cascade SQL
-	require.NoError(t, db.QueryRow(ctx, `SELECT deleted FROM remote_sessions WHERE id=$1`, humanUpstream).Scan(&preserved)) //nolint:glint // notestingrawsql: proves no owner credential cascade
-	require.True(t, revoked)
-	require.False(t, preserved)
+	revoked, err := testrepo.New(db).GetRemoteSessionDeletedFixture(ctx, upstream)
+	require.NoError(t, err)
+	preserved, err := testrepo.New(db).GetRemoteSessionDeletedFixture(ctx, humanUpstream)
+	require.NoError(t, err)
+	require.True(t, revoked, "the upstream session cascades")
+	require.False(t, preserved, "the owner's credential does not cascade")
 	listed, err = service.ListSessions(ctx, &gen.ListSessionsPayload{AgentID: agent.ID.String()})
 	require.NoError(t, err)
 	require.Len(t, listed.Items, 1)
@@ -302,11 +303,12 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEqual(t, upstream, fresh.ID)
 	freshUpstream := fresh.ID
-	_, err = db.Exec(ctx, `INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at) SELECT subject_urn, user_session_issuer_id, remote_session_client_id, 'unrelated-old-access', deleted_at - interval '1 second' FROM remote_sessions WHERE id=$1`, upstream) //nolint:glint // notestingrawsql: an older unrelated tombstone must not match the retry boundary
+	// An older unrelated tombstone must not match the retry boundary.
+	err = testrepo.New(db).InsertOlderRemoteSessionTombstoneFixture(ctx, upstream)
 	require.NoError(t, err)
-	var sameBoundary bool
-	require.NoError(t, db.QueryRow(ctx, `SELECT r.deleted_at = s.deleted_at FROM remote_sessions r JOIN user_sessions s ON s.id=$2 WHERE r.id=$1`, upstream, session).Scan(&sameBoundary)) //nolint:glint // notestingrawsql: exact persisted boundary shared by original tombstones
-	require.True(t, sameBoundary)
+	sameBoundary, err := testrepo.New(db).RemoteSessionSharesUserSessionBoundaryFixture(ctx, testrepo.RemoteSessionSharesUserSessionBoundaryFixtureParams{UserSessionID: session, RemoteSessionID: upstream})
+	require.NoError(t, err)
+	require.True(t, sameBoundary, "original tombstones share the exact persisted boundary")
 	revoker.pushErr = nil
 	revoker.events = nil
 	require.NoError(t, service.RevokeSession(ctx, payload))
@@ -314,9 +316,11 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	require.Equal(t, "fixture-not-a-token", revoker.lastCredentials[0].AccessTokenEncrypted)
 	require.Equal(t, "fixture-refresh", revoker.lastCredentials[0].RefreshTokenEncrypted.String)
 	require.Equal(t, []string{seededSession.Jti, seededSession.Jti}, revoker.revokedJTIs)
-	var freshPreserved bool
-	require.NoError(t, db.QueryRow(ctx, `SELECT NOT deleted AND access_token_encrypted='fresh-access' AND refresh_token_encrypted='fresh-refresh' AND upstream_subject='fresh-identity' FROM remote_sessions WHERE id=$1`, freshUpstream).Scan(&freshPreserved)) //nolint:glint // notestingrawsql: retry cannot alter the reconnect's credentials or identity
-	require.True(t, freshPreserved)
+	freshPreserved, err := testrepo.New(db).RemoteSessionHasLiveCredentialsFixture(ctx, testrepo.RemoteSessionHasLiveCredentialsFixtureParams{
+		AccessTokenEncrypted: "fresh-access", RefreshTokenEncrypted: "fresh-refresh", UpstreamSubject: "fresh-identity", ID: freshUpstream,
+	})
+	require.NoError(t, err)
+	require.True(t, freshPreserved, "retry cannot alter the reconnect's credentials or identity")
 	// The reconnect's JWT and refresh session remain live.
 	freshStored, err := liveUserSession(ctx, db, "org-a", freshSession)
 	require.NoError(t, err)
@@ -325,14 +329,15 @@ func TestAgentSessionRevocationFailureOrderingAndRetry(t *testing.T) {
 	require.Equal(t, []string{"cascade", "token", "upstream"}, revoker.events)
 	require.Equal(t, 2, revoker.credentials, "retry must repeat upstream revocation with retained credentials")
 	require.Len(t, auditLogs(t, db, "org-a", session.String()), 1, "audit idempotency across a committed retry")
-	var identityCleared bool
-	require.NoError(t, db.QueryRow(ctx, `SELECT upstream_subject IS NULL AND upstream_email IS NULL AND upstream_display_name IS NULL AND identity_source IS NULL AND enrichment IS NULL FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&identityCleared)) //nolint:glint // notestingrawsql: retries retain credentials but must remove identity
-	require.True(t, identityCleared)
-	var subject, access, refresh string
-	require.NoError(t, db.QueryRow(ctx, `SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id=$1 AND deleted`, upstream).Scan(&subject, &access, &refresh)) //nolint:glint // notestingrawsql: runtime tombstones retain linkage and encrypted credentials for retries
-	require.Equal(t, "agent:"+agent.ID.String(), subject)
-	require.Equal(t, "fixture-not-a-token", access)
-	require.Equal(t, "fixture-refresh", refresh)
+	identityCleared, err := testrepo.New(db).DeletedRemoteSessionIdentityClearedFixture(ctx, upstream)
+	require.NoError(t, err)
+	require.True(t, identityCleared, "retries retain credentials but must remove identity")
+	tombstone, err := testrepo.New(db).GetDeletedRemoteSessionCredentialsFixture(ctx, upstream)
+	require.NoError(t, err)
+	// Runtime tombstones retain linkage and encrypted credentials for retries.
+	require.Equal(t, "agent:"+agent.ID.String(), tombstone.SubjectUrn.String())
+	require.Equal(t, "fixture-not-a-token", tombstone.AccessTokenEncrypted)
+	require.Equal(t, conv.ToPGText("fixture-refresh"), tombstone.RefreshTokenEncrypted)
 }
 
 func TestAgentSessionRevocationDetachedCachePush(t *testing.T) {

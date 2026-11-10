@@ -4,12 +4,12 @@ package adminmcp
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const maxOrganizationProjects = 200
@@ -37,18 +37,71 @@ type ProjectIDInput struct {
 }
 
 type ProjectSummary struct {
-	ID               string `json:"id"`
-	OrganizationID   string `json:"organization_id"`
-	Name             string `json:"name"`
-	Slug             string `json:"slug"`
-	ToolsetCount     int    `json:"toolset_count"`
-	DeploymentCount  int    `json:"deployment_count"`
-	HTTPToolCount    int    `json:"http_tool_count"`
-	EnvironmentCount int    `json:"environment_count"`
-	APIKeyCount      int    `json:"api_key_count"`
-	AssistantCount   int    `json:"assistant_count"`
-	CreatedAt        string `json:"created_at"`
-	UpdatedAt        string `json:"updated_at"`
+	ID              string `json:"id"`
+	OrganizationID  string `json:"organization_id"`
+	Name            string `json:"name"`
+	Slug            string `json:"slug"`
+	ToolsetCount    int    `json:"toolset_count"`
+	DeploymentCount int    `json:"deployment_count"`
+	// ActiveDeploymentID is the deployment the project serves, when one has
+	// completed. After a redeploy it shows whether the new deployment took over.
+	ActiveDeploymentID string `json:"active_deployment_id,omitempty"`
+	HTTPToolCount      int    `json:"http_tool_count"`
+	EnvironmentCount   int    `json:"environment_count"`
+	APIKeyCount        int    `json:"api_key_count"`
+	AssistantCount     int    `json:"assistant_count"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
+}
+
+// ProjectRedeployPreview is what redeploy_project would act on.
+type ProjectRedeployPreview struct {
+	OrganizationID     string `json:"organization_id"`
+	ProjectID          string `json:"project_id"`
+	ProjectName        string `json:"project_name"`
+	ActiveDeploymentID string `json:"active_deployment_id"`
+	OpenAPIAssets      int    `json:"openapi_assets"`
+	FunctionAssets     int    `json:"function_assets"`
+	Packages           int    `json:"packages"`
+	ExternalMCPs       int    `json:"external_mcps"`
+}
+
+func registerProjectRedeployPreviewTool(server *mcp.Server, organizations OrganizationReader, previews ProjectRedeployPreviewReader) {
+	mcp.AddTool(server, &mcp.Tool{
+		Name:        "get_project_redeploy_preview",
+		Title:       "Get Project Redeploy Preview",
+		Description: "Read what redeploying an exact project would act on: its active deployment and that deployment's source counts. Its external MCP sources are the ones a redeploy drops. Changes nothing.",
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
+	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDInput) (*mcp.CallToolResult, ProjectRedeployPreview, error) {
+		if _, err := parseExactProjectID(input.ProjectID); err != nil {
+			return nil, ProjectRedeployPreview{}, err
+		}
+		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
+		if err != nil {
+			return nil, ProjectRedeployPreview{}, err
+		}
+		if previews == nil {
+			return nil, ProjectRedeployPreview{}, errProjectUnavailable
+		}
+		preview, err := previews.GetProjectRedeployPreview(ctx, &gen.GetProjectRedeployPreviewPayload{OrganizationID: org.ID, ProjectID: input.ProjectID})
+		if err != nil || preview == nil || preview.ProjectID != input.ProjectID || preview.OrganizationID != org.ID {
+			return nil, ProjectRedeployPreview{}, errProjectUnavailable
+		}
+		return nil, ProjectRedeployPreview{
+			OrganizationID: preview.OrganizationID, ProjectID: preview.ProjectID, ProjectName: preview.ProjectName,
+			ActiveDeploymentID: preview.ActiveDeploymentID, OpenAPIAssets: preview.OpenapiAssets, FunctionAssets: preview.FunctionAssets,
+			Packages: preview.Packages, ExternalMCPs: preview.ExternalMcps,
+		}, nil
+	})
+}
+
+// parseExactProjectID accepts only a canonical project UUID.
+func parseExactProjectID(raw string) (uuid.UUID, error) {
+	id, err := uuid.Parse(raw)
+	if err != nil || id.String() != raw {
+		return uuid.Nil, errors.New("provide an exact project ID from list_organization_projects")
+	}
+	return id, nil
 }
 
 func registerProjectTools(server *mcp.Server, organizations OrganizationReader, projects ProjectReader) {
@@ -90,12 +143,8 @@ func registerProjectTools(server *mcp.Server, organizations OrganizationReader, 
 		Description: "Read resource counts and setup signals for an exact project ID within an exact organization ID. Counts are not adoption metrics. Does not return credentials or environment secrets.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input ProjectIDInput) (*mcp.CallToolResult, ProjectSummary, error) {
-		if input.ProjectID != strings.TrimSpace(input.ProjectID) || len(input.ProjectID) > 128 {
-			return nil, ProjectSummary{}, errors.New("provide an exact project ID from list_organization_projects")
-		}
-		id, err := uuid.Parse(input.ProjectID)
-		if err != nil || id.String() != input.ProjectID {
-			return nil, ProjectSummary{}, errors.New("provide an exact project ID from list_organization_projects")
+		if _, err := parseExactProjectID(input.ProjectID); err != nil {
+			return nil, ProjectSummary{}, err
 		}
 		org, err := readExactOrganization(ctx, organizations, input.OrganizationID)
 		if err != nil {
@@ -112,7 +161,7 @@ func registerProjectTools(server *mcp.Server, organizations OrganizationReader, 
 		}
 		return nil, ProjectSummary{
 			ID: project.ID, OrganizationID: project.OrganizationID, Name: project.Name, Slug: project.Slug,
-			ToolsetCount: project.ToolsetCount, DeploymentCount: project.DeploymentCount,
+			ToolsetCount: project.ToolsetCount, DeploymentCount: project.DeploymentCount, ActiveDeploymentID: conv.PtrValOr(project.ActiveDeploymentID, ""),
 			HTTPToolCount: project.HTTPToolCount, EnvironmentCount: project.EnvironmentCount,
 			APIKeyCount: project.APIKeyCount, AssistantCount: project.AssistantCount,
 			CreatedAt: project.CreatedAt, UpdatedAt: project.UpdatedAt,

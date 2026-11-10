@@ -875,7 +875,25 @@ WHERE s.id = $3::uuid
           OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
+            AND ARRAY(
+                  -- The one live provider the server's live client associations name.
+                  SELECT DISTINCT c.remote_session_issuer_id
+                  FROM mcp_server_remote_session_clients AS a
+                  JOIN remote_session_clients AS c
+                    ON c.id = a.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = a.project_id
+                        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+                  JOIN remote_session_issuers AS provider
+                    ON provider.id = c.remote_session_issuer_id
+                   AND provider.deleted IS FALSE
+                   AND (provider.project_id = a.project_id
+                        OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+                  WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
+                    AND a.deleted IS FALSE
+                )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
             AND t.resource_identifier = b.resource)
       )
   )
@@ -1989,7 +2007,25 @@ WHERE b.id = $1::uuid
       OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
-        AND s.remote_session_issuer_id = b.remote_session_issuer_id
+        AND ARRAY(
+              -- The one live provider the server's live client associations name.
+              SELECT DISTINCT c.remote_session_issuer_id
+              FROM mcp_server_remote_session_clients AS a
+              JOIN remote_session_clients AS c
+                ON c.id = a.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = a.project_id
+                    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+              JOIN remote_session_issuers AS provider
+                ON provider.id = c.remote_session_issuer_id
+               AND provider.deleted IS FALSE
+               AND (provider.project_id = a.project_id
+                    OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+              WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
+                AND a.deleted IS FALSE
+            )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
         AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id
@@ -2017,8 +2053,8 @@ type ListEMABindingServersRow struct {
 // chains only a request whose own inbound issuer the binding names. It is a
 // remote server whose valid persisted protected resource names the binding's
 // resource, or, with no valid persisted record, whose URL names it; or a
-// tunneled server whose resource identifier names it under its own derived
-// issuer. A remote server whose valid record lists authorization servers
+// tunneled server whose resource identifier names it and whose client
+// associations name the binding's issuer as their one provider. A remote server whose valid record lists authorization servers
 // without the binding's issuer is returned as issuer_not_allowed, since the
 // runtime would refuse it. direct reports that the server's own issuer is the
 // binding's.
@@ -2981,36 +3017,57 @@ SELECT sel.id,
                  -- headers, compared as stored. RecordUpstreamClientSelections
                  -- repeats this comparison; the two must stay identical.
                  AND (
-                   SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-                   FROM mcp_auth_client_headers AS h
-                   WHERE h.auth_client_id = ac.id
-                     AND h.deleted IS FALSE
-                 ) = (
-                   SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                   SELECT COALESCE(
+                            cmp.client_headers = cmp.source_headers,
+                            -- A source with no credential headers has none to carry. A
+                            -- client or association an administrator created there is
+                            -- the server's own configuration and mirrors nothing, as
+                            -- GetAuthClientSelection reads it.
+                            cmp.source_headers IS NULL
+                            AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                              SELECT 1
+                              FROM mcp_server_auth_clients AS admin_link
+                              WHERE admin_link.mcp_server_id = sel.mcp_server_id
+                                AND admin_link.auth_client_id = ac.id
+                                AND admin_link.organization_id = ac.organization_id
+                                AND admin_link.deleted IS FALSE
+                                AND admin_link.source <> 'backfill'
+                            ))
+                          )
                    FROM (
-                     SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-                     FROM mcp_servers AS s
-                     JOIN remote_mcp_servers AS r
-                       ON r.id = s.remote_mcp_server_id
-                      AND r.project_id = s.project_id
-                      AND r.deleted IS FALSE
-                     JOIN remote_mcp_server_headers AS rh
-                       ON rh.remote_mcp_server_id = r.id
-                      AND rh.deleted IS FALSE
-                     WHERE s.id = sel.mcp_server_id
-                     UNION ALL
-                     SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-                     FROM mcp_servers AS s
-                     JOIN tunneled_mcp_servers AS t
-                       ON t.id = s.tunneled_mcp_server_id
-                      AND t.project_id = s.project_id
-                      AND t.deleted IS FALSE
-                     JOIN tunneled_mcp_server_headers AS th
-                       ON th.tunneled_mcp_server_id = t.id
-                      AND th.deleted IS FALSE
-                     WHERE s.id = sel.mcp_server_id
-                   ) AS src
-                   WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+                     SELECT (
+                       SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                       FROM mcp_auth_client_headers AS h
+                       WHERE h.auth_client_id = ac.id
+                         AND h.deleted IS FALSE
+                     ) AS client_headers, (
+                       SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                       FROM (
+                         SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                         FROM mcp_servers AS s
+                         JOIN remote_mcp_servers AS r
+                           ON r.id = s.remote_mcp_server_id
+                          AND r.project_id = s.project_id
+                          AND r.deleted IS FALSE
+                         JOIN remote_mcp_server_headers AS rh
+                           ON rh.remote_mcp_server_id = r.id
+                          AND rh.deleted IS FALSE
+                         WHERE s.id = sel.mcp_server_id
+                         UNION ALL
+                         SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                         FROM mcp_servers AS s
+                         JOIN tunneled_mcp_servers AS t
+                           ON t.id = s.tunneled_mcp_server_id
+                          AND t.project_id = s.project_id
+                          AND t.deleted IS FALSE
+                         JOIN tunneled_mcp_server_headers AS th
+                           ON th.tunneled_mcp_server_id = t.id
+                          AND th.deleted IS FALSE
+                         WHERE s.id = sel.mcp_server_id
+                       ) AS src
+                       WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+                     ) AS source_headers
+                   ) AS cmp
                  ))
            )
          ORDER BY ac.id
@@ -3209,7 +3266,9 @@ type ListSelectionMappingsRow struct {
 // static_credential or pass_through clients that carry exactly the server
 // source's current credential headers, while the server has no OAuth
 // association and links no enabled OAuth-backed client: those are the
-// server's own headers, which the no-auth choice was served with. A mapped
+// server's own headers, which the no-auth choice was served with. When the
+// source has no credential headers, a client an administrator created or
+// linked is the server's own configuration and is a candidate too. A mapped
 // choice's client is usable while it is live, enabled, linked to the server
 // and, for an OAuth choice, still the registration's.
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
@@ -3259,6 +3318,7 @@ FROM principal_grants
 WHERE organization_id = $1
   AND scope = ANY($2::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn, scope, id
 `
 
@@ -3275,6 +3335,8 @@ type ListServerAccessGrantsRow struct {
 
 // Grants that can satisfy mcp:connect, held by anyone but API keys, whose
 // policies are provisioned separately. Like grant loading, effect is ignored.
+// Temporary grants are skipped: a permanent default must not be derived from
+// access that ends.
 func (q *Queries) ListServerAccessGrants(ctx context.Context, arg ListServerAccessGrantsParams) ([]ListServerAccessGrantsRow, error) {
 	rows, err := q.db.Query(ctx, listServerAccessGrants, arg.OrganizationID, arg.Scopes)
 	if err != nil {
@@ -4192,6 +4254,28 @@ type LockServerOAuthClientsForSyncParams struct {
 
 func (q *Queries) LockServerOAuthClientsForSync(ctx context.Context, arg LockServerOAuthClientsForSyncParams) error {
 	_, err := q.db.Exec(ctx, lockServerOAuthClientsForSync, arg.OrganizationID, arg.RegistrationIds, arg.McpServerIds)
+	return err
+}
+
+const lockServersForAuthClientSync = `-- name: LockServersForAuthClientSync :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY($1::uuid[]) AND p.organization_id = $2::text
+ORDER BY s.id
+FOR UPDATE OF s
+`
+
+type LockServersForAuthClientSyncParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+// Locks the servers a synchronization is about to link in UUID order, which is
+// the order LockEMAPreparationServer walks them in. The link insert takes a
+// foreign-key lock on each server it records, and it records them in
+// association order, so without this the two orders disagree and deadlock.
+func (q *Queries) LockServersForAuthClientSync(ctx context.Context, arg LockServersForAuthClientSyncParams) error {
+	_, err := q.db.Exec(ctx, lockServersForAuthClientSync, arg.McpServerIds, arg.OrganizationID)
 	return err
 }
 

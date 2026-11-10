@@ -5,7 +5,7 @@ import { useStepper } from "../stepper/use-stepper";
 import { StepContextProvider } from "./context";
 import { useStep } from "./use-step";
 import Frame from "./frame";
-import { StepState } from "./types";
+import type { StepState } from "./types";
 
 type StepProps = {
   children: React.ReactNode;

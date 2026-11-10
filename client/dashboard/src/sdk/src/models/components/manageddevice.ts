@@ -17,7 +17,7 @@ import {
 /**
  * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
  */
-export const CoverageBucket = {
+export const ManagedDeviceCoverageBucket = {
   AgentActive: "agent_active",
   AgentStale: "agent_stale",
   AgentOtherDevice: "agent_other_device",
@@ -29,12 +29,14 @@ export const CoverageBucket = {
 /**
  * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
  */
-export type CoverageBucket = OpenEnum<typeof CoverageBucket>;
+export type ManagedDeviceCoverageBucket = OpenEnum<
+  typeof ManagedDeviceCoverageBucket
+>;
 
 /**
  * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
  */
-export const PolicyState = {
+export const ManagedDevicePolicyState = {
   Attested: "attested",
   Outdated: "outdated",
   Unreported: "unreported",
@@ -43,7 +45,9 @@ export const PolicyState = {
 /**
  * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
  */
-export type PolicyState = OpenEnum<typeof PolicyState>;
+export type ManagedDevicePolicyState = OpenEnum<
+  typeof ManagedDevicePolicyState
+>;
 
 /**
  * One device from a connected MDM's inventory, annotated with its agent-coverage bucket. What that bucket attests depends on the organization's matching mode: under device-level matching a device may be classified by its own hardware serial (this machine ran the agent) or, when no serial heartbeat exists for it, by its assigned-user email (only that user ran the agent somewhere). Under user-level matching only the latter applies.
@@ -60,7 +64,7 @@ export type ManagedDevice = {
   /**
    * Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
    */
-  coverageBucket: CoverageBucket;
+  coverageBucket: ManagedDeviceCoverageBucket;
   /**
    * The MDM's identifier for the device.
    */
@@ -94,7 +98,7 @@ export type ManagedDevice = {
   /**
    * Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent's kill switch stopped enforcement on a blocked build. Omitted for every other bucket.
    */
-  policyState?: PolicyState | undefined;
+  policyState?: ManagedDevicePolicyState | undefined;
   /**
    * Provider the device was synced from.
    */
@@ -114,14 +118,16 @@ export type ManagedDevice = {
 };
 
 /** @internal */
-export const CoverageBucket$inboundSchema: z.ZodMiniType<
-  CoverageBucket,
+export const ManagedDeviceCoverageBucket$inboundSchema: z.ZodMiniType<
+  ManagedDeviceCoverageBucket,
   unknown
-> = openEnums.inboundSchema(CoverageBucket);
+> = openEnums.inboundSchema(ManagedDeviceCoverageBucket);
 
 /** @internal */
-export const PolicyState$inboundSchema: z.ZodMiniType<PolicyState, unknown> =
-  openEnums.inboundSchema(PolicyState);
+export const ManagedDevicePolicyState$inboundSchema: z.ZodMiniType<
+  ManagedDevicePolicyState,
+  unknown
+> = openEnums.inboundSchema(ManagedDevicePolicyState);
 
 /** @internal */
 export const ManagedDevice$inboundSchema: z.ZodMiniType<
@@ -133,7 +139,7 @@ export const ManagedDevice$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     agent_state: z.optional(ManagedDeviceAgentState$inboundSchema),
-    coverage_bucket: CoverageBucket$inboundSchema,
+    coverage_bucket: ManagedDeviceCoverageBucket$inboundSchema,
     external_id: z.string(),
     first_seen_at: z.pipe(
       z.iso.datetime({ offset: true }),
@@ -153,7 +159,7 @@ export const ManagedDevice$inboundSchema: z.ZodMiniType<
     ),
     os_name: z.optional(z.string()),
     os_version: z.optional(z.string()),
-    policy_state: z.optional(PolicyState$inboundSchema),
+    policy_state: z.optional(ManagedDevicePolicyState$inboundSchema),
     provider: z.string(),
     serial_number: z.optional(z.string()),
     user_email: z.optional(z.string()),

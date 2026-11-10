@@ -31,7 +31,14 @@ import (
 const staffChallengePrefix = "adminMCPChallenge:"
 const staffBrowserProofCookie = "__Host-admin-mcp-proof"
 const staffCodeLifetime = 10 * time.Minute
-const staffAuthorizationLifetime = 24 * time.Hour
+
+// staffInactivityTimeout is how long a connection survives without a token
+// refresh. It matches the admin session inactivity timeout, so a connection
+// and the browser session behind it lapse together. Refreshing restarts it.
+// The connection has no absolute limit of its own: live staff verification
+// ends it when the staff member loses access or the linked admin session
+// reaches its maximum lifetime.
+const staffInactivityTimeout = 48 * time.Hour
 
 type staffChallenge struct {
 	ID            string    `json:"id"`
@@ -85,7 +92,7 @@ type StaffOAuthAuthorization struct {
 func NewStaffOAuthAuthorization(clients staffClientStore, store staffAuthorizationStore, challengeCache cache.Cache, verifier adminSessionVerifier, cipher *encryption.Client, resource string) *StaffOAuthAuthorization {
 	return &StaffOAuthAuthorization{
 		clients: clients, store: store, cache: cache.NewTypedObjectCache[staffChallenge](nil, challengeCache, cache.SuffixNone),
-		verifier: verifier, cipher: cipher, resource: resource, writes: WriteConfig{Enabled: false, Operations: nil},
+		verifier: verifier, cipher: cipher, resource: resource, writes: WriteConfig{Enabled: false},
 	}
 }
 
@@ -127,7 +134,7 @@ func (s *StaffOAuthAuthorization) AuthorizeHandler() http.Handler {
 			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_request", Description: "invalid PKCE S256 challenge"})
 			return
 		}
-		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.WritesAvailable())
+		scopes, ok := normalizeRequestedScopes(r.URL.Query().Get("scope"), s.writes.Enabled)
 		if !ok {
 			staffPreAuthenticationError(w, r, client, request.RedirectURI, request.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 			return
@@ -259,7 +266,7 @@ var staffConsentPage = template.Must(template.New("staff-consent").Parse(`<!doct
 <h1>Connect Staff Admin MCP</h1>
 <p>{{.ClientName}} requests access to staff administration. The callback is {{.RedirectURI}}.</p>
 {{if .Write}}
-<p><strong>This client also requests admin:write.</strong> It may prepare staff changes. Each change still needs your separate approval in this admin site before it runs.</p>
+<p><strong>This client also requests admin:write.</strong> It can change customer and platform data as soon as it calls a write tool. The client is expected to ask you first, but the server does not enforce that, so approve write access only for a client you trust.</p>
 {{else}}
 <p>Access is read-only.</p>
 {{end}}
@@ -321,7 +328,7 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 	}
 	// Revalidate against the current switch: writes may have been turned off
 	// between authorize and consent.
-	scopes, ok := normalizeRequestedScopes(strings.Join(challenge.Scopes, " "), s.writes.WritesAvailable())
+	scopes, ok := normalizeRequestedScopes(strings.Join(challenge.Scopes, " "), s.writes.Enabled)
 	if !ok {
 		staffRedirectError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "invalid_scope", Description: "requested scope is not available"})
 		return
@@ -331,7 +338,7 @@ func (s *StaffOAuthAuthorization) connectPost(w http.ResponseWriter, r *http.Req
 		Subject: urn.NewUserSubject(staff.OIDCSubject).String(), ClientID: challenge.ClientID,
 		SessionEnc: encryptedSession, ResourceURI: s.resource, Scopes: scopes,
 		CodeHash: staffTokenHash(code), CodeChallenge: challenge.CodeChallenge, RedirectURI: challenge.RedirectURI,
-		ExpiresAt: now.Add(staffAuthorizationLifetime), GrantExpires: now.Add(staffCodeLifetime),
+		ExpiresAt: now.Add(staffInactivityTimeout), GrantExpires: now.Add(staffCodeLifetime),
 	}
 	if err := s.store.Authorize(r.Context(), input); err != nil {
 		if errors.Is(err, errStaffGrant) {
@@ -416,7 +423,6 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client 
 		Setup:          false,
 		Status:         http.StatusBadRequest,
 		Reason:         oauthui.ReasonDefault,
-		Approval:       false,
 		ErrorID:        "",
 		CallbackURL:    callback,
 		Code:           oauthErr.Code,
@@ -425,6 +431,7 @@ func staffPreAuthenticationError(w http.ResponseWriter, r *http.Request, client 
 		ClientID:       client.ID,
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
+		ProviderName:   "",
 	}
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
 }
@@ -481,7 +488,6 @@ func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code,
 		Setup:          false,
 		Status:         status,
 		Reason:         reason,
-		Approval:       false,
 		ErrorID:        "",
 		Code:           code,
 		Description:    description,
@@ -490,6 +496,7 @@ func staffBrowserError(w http.ResponseWriter, r *http.Request, status int, code,
 		ClientID:       "",
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy Admin",
+		ProviderName:   "",
 	})
 }
 

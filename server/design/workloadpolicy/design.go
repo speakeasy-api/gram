@@ -252,7 +252,7 @@ var _ = Service("workloadIdentities", func() {
 	})
 
 	Method("withdrawSubject", func() {
-		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.")
+		Description("Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.")
 
 		Payload(func() {
 			Attribute("id", String, "The admission id.", func() {
@@ -264,7 +264,7 @@ var _ = Service("workloadIdentities", func() {
 			security.ProjectPayload()
 		})
 
-		Result(WorkloadIdentityPolicy)
+		Result(WithdrawnWorkloadSubjectPolicy)
 
 		HTTP(func() {
 			DELETE("/rpc/workloadIdentities.withdrawSubject")
@@ -533,6 +533,17 @@ var WorkloadIdentityPolicy = Type("WorkloadIdentityPolicy", func() {
 	Required("issuers", "admissions")
 })
 
+var WithdrawnWorkloadSubjectPolicy = Type("WithdrawnWorkloadSubjectPolicy", func() {
+	Description("The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.")
+
+	Extend(WorkloadIdentityPolicy)
+	Attribute("withdrawn_tier", String, "The tier of the admission that was withdrawn: organization or project.", func() {
+		Enum("organization", "project")
+	})
+
+	Required("withdrawn_tier")
+})
+
 var WorkloadPlatformConstant = Type("WorkloadPlatformConstant", func() {
 	Description("A value a catalog platform supplies, the same for every customer.")
 
@@ -560,11 +571,28 @@ var WorkloadPlatformVariable = Type("WorkloadPlatformVariable", func() {
 	Required("key", "tier", "label", "help", "placeholder", "pattern", "pattern_message")
 })
 
+var WorkloadPlatformSubjectAlternative = Type("WorkloadPlatformSubjectAlternative", func() {
+	Description("An access rule a catalog platform offers in place of its default.")
+
+	Attribute("key", String, "Identifies the choice within the platform.")
+	Attribute("label", String, "What the operator chooses it by.")
+	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
+	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
+
+	Required("key", "label", "template", "wildcard")
+})
+
 var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
-	Description("The access rule a catalog platform produces.")
+	Description("The access rule a catalog platform produces by default, and the others the operator may choose instead.")
 
 	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
 	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
+	// Both are optional, and label defaults to an empty string, so a dashboard
+	// deployed ahead of its server can still read a catalog that leaves them out.
+	Attribute("label", String, "Names the default rule beside its alternatives. Empty where there are none.", func() {
+		Default("")
+	})
+	Attribute("alternatives", ArrayOf(WorkloadPlatformSubjectAlternative), "Other rules the operator may choose instead, in the order they are offered. Absent where there are none.")
 
 	Required("template", "wildcard")
 })

@@ -7,6 +7,7 @@ import { mcpServersCreate } from "../funcs/mcpServersCreate.js";
 import { mcpServersDelete } from "../funcs/mcpServersDelete.js";
 import { mcpServersDeleteToolMetadata } from "../funcs/mcpServersDeleteToolMetadata.js";
 import { mcpServersGet } from "../funcs/mcpServersGet.js";
+import { mcpServersGetUsageImpact } from "../funcs/mcpServersGetUsageImpact.js";
 import { mcpServersList } from "../funcs/mcpServersList.js";
 import { mcpServersListForOrg } from "../funcs/mcpServersListForOrg.js";
 import { mcpServersListToolFilters } from "../funcs/mcpServersListToolFilters.js";
@@ -20,6 +21,7 @@ import { ListMcpServersResult } from "../models/components/listmcpserversresult.
 import { ListToolFiltersResult } from "../models/components/listtoolfiltersresult.js";
 import { ListToolMetadataResult } from "../models/components/listtoolmetadataresult.js";
 import { McpServer } from "../models/components/mcpserver.js";
+import { McpServerUsageImpact } from "../models/components/mcpserverusageimpact.js";
 import { SetToolMetadataBatchResult } from "../models/components/settoolmetadatabatchresult.js";
 import { ToolMetadata } from "../models/components/toolmetadata.js";
 import {
@@ -42,6 +44,10 @@ import {
   GetMcpServerRequest,
   GetMcpServerSecurity,
 } from "../models/operations/getmcpserver.js";
+import {
+  GetMcpServerUsageImpactRequest,
+  GetMcpServerUsageImpactSecurity,
+} from "../models/operations/getmcpserverusageimpact.js";
 import {
   ListMcpServersRequest,
   ListMcpServersSecurity,
@@ -161,6 +167,25 @@ export class McpServers extends ClientSDK {
     options?: RequestOptions,
   ): Promise<McpServer> {
     return unwrapAsync(mcpServersGet(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpServerUsageImpact mcpServers
+   *
+   * @remarks
+   * Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.
+   */
+  async getUsageImpact(
+    request: GetMcpServerUsageImpactRequest,
+    security?: GetMcpServerUsageImpactSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<McpServerUsageImpact> {
+    return unwrapAsync(mcpServersGetUsageImpact(
       this,
       request,
       security,

@@ -14,6 +14,14 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	domains, err := s.q.OrgCountCustomDomainDiagnostics(ctx, repo.OrgCountCustomDomainDiagnosticsParams{OrgID: s.orgID(), Domain: s.spec.CustomDomain})
+	if err != nil {
+		return fmt.Errorf("count custom domain diagnostics: %w", err)
+	}
+	if domains != 1 {
+		return fmt.Errorf("expected one illustrative custom domain, got %d", domains)
+	}
+
 	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
 	if err != nil {
 		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
@@ -134,6 +142,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		read("risk findings", &findingCount, byOrg(s.q.PostflightCountFindings)),
 		read("members", &memberCount, byOrg(s.q.PostflightCountMembers)),
 		{
+			what:  "security audit logs",
+			count: byOrg(s.q.PostflightCountSecurityAuditLogs),
+			fail:  postflightMustEqual(6, "expected 6 security audit logs, found %d"),
+		},
+		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
 			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
@@ -141,7 +154,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "setup tasks",
 			count: byOrg(s.q.PostflightCountSetupTasks),
-			fail:  postflightMustEqual(11, "expected 11 setup task selections, found %d"),
+			fail:  postflightMustEqual(10, "expected 10 setup task selections, found %d"),
 		},
 		flag("security onboarding", s.q.PostflightSecurityOnboardingInvalid, "expected customized Security onboarding selection"),
 		flag("onboarding stack", s.q.PostflightOnboardingStackInvalid, "expected the recorded onboarding stack"),
@@ -363,6 +376,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountApprovals),
 			fail:  postflightMustEqual(4, "expected 4 tool approval requests, found %d"),
 		},
+		// The one seeded MCP server review awaiting a decision.
+		{
+			what:  "mcp reviews",
+			count: byOrg(s.q.PostflightCountMCPReviews),
+			fail:  postflightMustEqual(1, "expected 1 requested mcp review, found %d"),
+		},
 		{
 			what: "foreign-org chats",
 			count: func() (int64, error) {
@@ -412,11 +431,6 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "mcp skill links",
 			count: byProject(s.q.PostflightCountMCPSkillLinks),
 			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
-		},
-		{
-			what:  "approvals server",
-			count: byProject(s.q.PostflightCountApprovalsServers),
-			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
 		},
 		{
 			what:  "hosted toolset wrappers",
@@ -478,17 +492,25 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountMDMDevices),
 			fail:  postflightMustEqual(7, "expected 7 mdm devices, found %d"),
 		},
-		// The policy states coverage refines agent_active into: one attested
-		// machine and one behind, beside a third with no report.
+		// The machines only their agents list, which the Devices tab marks
+		// "Not in an MDM": one enforcing, one gone quiet.
+		{
+			what:  "agent-only device syncs",
+			count: byOrg(s.q.PostflightCountAgentOnlyDeviceSyncs),
+			fail:  postflightMustEqual(2, "expected 2 device agent syncs for serials no MDM device holds, found %d"),
+		},
+		// The policy states coverage refines agent_active into: three attested
+		// machines (two agent-only) and one behind, beside the Macs with no
+		// report of their own.
 		{
 			what:  "device agent state reports",
 			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
-			fail:  postflightMustEqual(2, "expected 2 device agent state reports, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 device agent state reports, found %d"),
 		},
 		{
 			what:  "attested device agent state reports",
 			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
-			fail:  postflightMustEqual(1, "expected 1 state report applying its served etag, found %d"),
+			fail:  postflightMustEqual(3, "expected 3 state reports applying their served etag, found %d"),
 		},
 		{
 			what:  "outdated device agent state reports",

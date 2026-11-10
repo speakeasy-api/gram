@@ -169,7 +169,7 @@ func drainSpool(ctx context.Context, dir string) DrainSummary {
 				// The same recovery as a live send: one fresh token and one
 				// resend in the same project, else record the refusal. Never
 				// fall back to a key.
-				cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: envDebugLog(), ConfigPath: entry.ConfigPath, ConfigError: ""}
+				cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", BrowserLogin: false, Nonblocking: false, DebugLog: envDebugLog(), ConfigPath: entry.ConfigPath, ConfigError: "", InstallRoute: ""}
 				res, replayCreds = recoverTokenRejection(cfg, a.c, res, func(fresh creds) ingestResult {
 					return cl.send(ctx, fresh, entry.Envelope, entry.IdempotencyKey)
 				})
@@ -385,7 +385,7 @@ func resolveDrainAuth(entry spoolEntry, key string, memo map[string]drainAuth) d
 	}
 	a := drainAuth{c: creds{ServerURL: "", APIKey: "", Project: "", Email: "", Org: "", Source: credEnv}, ok: false, orgKey: ""}
 	if !insecureServerURL(entry.ServerURL) {
-		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: ""}
+		cfg := Config{ServerURL: entry.ServerURL, SiteURL: "", ProjectSlug: entry.ProjectSlug, OrgID: entry.OrgID, HooksAPIKey: "", AgentKey: false, BrowserLogin: false, Nonblocking: false, DebugLog: "", ConfigPath: entry.ConfigPath, ConfigError: "", InstallRoute: ""}
 		if entry.ConfigPath != "" {
 			if fc, err := readFileConfig(entry.ConfigPath); err == nil &&
 				sameDeployment(fc.ServerURL, fc.Org, entry.ServerURL, entry.OrgID) {

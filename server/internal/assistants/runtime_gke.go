@@ -52,10 +52,7 @@ const (
 // The Kit runtime addresses the same Agent Sandbox resources.
 const gkeClaimUIDLabel = sandbox.ClaimUIDLabel
 
-var (
-	gkeSandboxClaimGVR = sandbox.Claims
-	gkePodGVR          = sandbox.Pods
-)
+var gkePodGVR = sandbox.Pods
 
 // GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
 // client targets the (separate) assistant cluster and is built from its endpoint
@@ -394,7 +391,7 @@ func (g *GKERuntimeBackend) waitForSandbox(ctx context.Context, claimName string
 // resolveRunnerPod finds the claim's runner across managed controller versions.
 // An empty IP means the pod is not ready yet, so the caller keeps polling.
 func (g *GKERuntimeBackend) resolveRunnerPod(ctx context.Context, claim *unstructured.Unstructured) (podIP string, image string, err error) {
-	pods, err := sandbox.RunningPodsForClaim(ctx, g.config.Dynamic, g.config.Namespace, claim)
+	pods, err := sandbox.RunningPodsForClaim(ctx, g.config.Dynamic, g.config.Namespace, claim, sandbox.Sandboxes)
 	if err != nil {
 		return "", "", fmt.Errorf("list runner pods for claim %s: %w", claim.GetUID(), err)
 	}

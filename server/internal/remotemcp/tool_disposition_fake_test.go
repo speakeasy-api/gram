@@ -3,6 +3,7 @@ package remotemcp_test
 import (
 	"context"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 )
 
@@ -21,8 +22,16 @@ func (f fakeToolDispositionResolver) Dispositions(_ context.Context, _, _ string
 	return f.dispositions, f.err
 }
 
+func (f fakeToolDispositionResolver) ToolCatalog(_ context.Context, _, _ string) (map[string]string, error) {
+	return f.dispositions, f.err
+}
+
+func (f fakeToolDispositionResolver) RecordMissingTools(_ context.Context, _, _, _ string, _ []tooldisposition.ToolRecord) error {
+	return f.err
+}
+
 // emptyResolver resolves every tool to the empty disposition, reducing each
 // check to a pure tool-name match.
-func emptyResolver() remotemcp.ToolDispositionResolver {
+func emptyResolver() remotemcp.ToolCatalogStore {
 	return fakeToolDispositionResolver{dispositions: nil, err: nil}
 }

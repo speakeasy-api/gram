@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -96,8 +97,23 @@ func postIDJAGToken(t *testing.T, ctx context.Context, ti *testInstance, slug, c
 	return postIDJAGTokenWithAuthorization(t, ctx, ti, slug, clientID, assertion, "", resources...)
 }
 
+// postIDJAGTokenHandled posts through the error handler the token route mounts,
+// for answers the handler returns rather than writes.
+func postIDJAGTokenHandled(t *testing.T, ctx context.Context, ti *testInstance, slug, clientID, assertion string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleToken).ServeHTTP(w, newIDJAGTokenRequest(ctx, slug, clientID, assertion, ""))
+	return w
+}
+
 func postIDJAGTokenWithAuthorization(t *testing.T, ctx context.Context, ti *testInstance, slug, clientID, assertion, authorization string, resources ...string) *httptest.ResponseRecorder {
 	t.Helper()
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleToken(w, newIDJAGTokenRequest(ctx, slug, clientID, assertion, authorization, resources...)))
+	return w
+}
+
+func newIDJAGTokenRequest(ctx context.Context, slug, clientID, assertion, authorization string, resources ...string) *http.Request {
 	form := url.Values{
 		"grant_type": {oauthwire.GrantTypeJWTBearer},
 		"client_id":  {clientID},
@@ -111,10 +127,7 @@ func postIDJAGTokenWithAuthorization(t *testing.T, ctx context.Context, ti *test
 	}
 	routeCtx := chi.NewRouteContext()
 	routeCtx.URLParams.Add("mcpSlug", slug)
-	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
-	w := httptest.NewRecorder()
-	require.NoError(t, ti.service.HandleToken(w, req))
-	return w
+	return req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
 }
 
 func newIDJAGTestService(t *testing.T, trustedCertificates ...*x509.Certificate) (context.Context, *testInstance, idJAGTestAssertion, string) {

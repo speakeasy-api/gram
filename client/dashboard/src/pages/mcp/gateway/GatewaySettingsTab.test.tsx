@@ -53,7 +53,9 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("./GatewayDiscoverySection", () => ({
   GatewayDiscoverySection: () => null,
 }));
-vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
   () => ({ AuthenticationSectionBody: vi.fn() }),

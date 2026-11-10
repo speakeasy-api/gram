@@ -6,8 +6,9 @@
     <title>Speakeasy</title>
     <style>
       /* One shared shell: a dotted panel with the resource's tile, a coloured
-   eyebrow, a serif title, up to two lines, tags and one action, over a Speakeasy
-   footer. Square corners and hairline borders throughout. */
+   eyebrow, a serif title, up to two lines, optional rows, tags and one action,
+   over a Speakeasy footer. Catalog results show a sideways row of smaller cards
+   in the same style. Square corners and hairline borders throughout. */
       :root {
         color-scheme: light dark;
         --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 9%));
@@ -153,6 +154,33 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
       }
+      .rows {
+        margin-top: 14px;
+        list-style: none;
+        border-top: 1px solid var(--hair);
+      }
+      .rows li {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 7px 0;
+        border-bottom: 1px solid var(--hair);
+        font-size: 13px;
+      }
+      .row-label {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .row-meta {
+        flex: none;
+        color: var(--muted);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
       .button {
         margin-left: auto;
         display: inline-flex;
@@ -184,6 +212,142 @@
         width: 14px;
         height: 14px;
         fill: currentColor;
+      }
+      /* Catalog results: a row of small cards that scrolls sideways and
+   snaps to each card. */
+      .carousel {
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .track {
+        display: flex;
+        gap: 12px;
+        margin: 0;
+        padding: 14px;
+        list-style: none;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        scroll-padding: 14px;
+        overscroll-behavior-x: contain;
+        background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      /* Arrows sit over the track's edges on a translucent backdrop, so it
+   reads as scrollable. Each shows only while there is more to scroll that
+   way. */
+      .viewport {
+        position: relative;
+      }
+      .nav {
+        position: absolute;
+        top: 50%;
+        z-index: 1;
+        display: grid;
+        place-items: center;
+        width: 34px;
+        height: 34px;
+        margin-top: -17px;
+        padding: 0;
+        border: 1px solid var(--line);
+        background: color-mix(in srgb, var(--surface) 70%, transparent);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+        color: var(--fg);
+        cursor: pointer;
+      }
+      .nav[hidden] {
+        display: none;
+      }
+      .nav:hover {
+        background: color-mix(in srgb, var(--surface) 90%, transparent);
+      }
+      .nav:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+      }
+      .nav svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+      }
+      .nav-prev {
+        left: 8px;
+      }
+      .nav-prev svg {
+        transform: scaleX(-1);
+      }
+      .nav-next {
+        right: 8px;
+      }
+      .track:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: -2px;
+      }
+      .slide {
+        flex: none;
+        width: min(260px, calc(100% - 40px));
+        scroll-snap-align: start;
+      }
+      .mini {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        padding: 16px;
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .mini-head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .mini .tile {
+        flex: none;
+        width: 44px;
+        height: 44px;
+        font-size: 15px;
+      }
+      .mini .icon {
+        width: 20px;
+        height: 20px;
+      }
+      .mini-title {
+        min-width: 0;
+      }
+      h2 {
+        margin: 2px 0 0;
+        font: 400 19px/1.2 var(--serif);
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .clamp {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+      }
+      .mini .foot {
+        margin-top: auto;
+        padding-top: 16px;
+      }
+      button.button {
+        border: 0;
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      .empty,
+      .more {
+        padding: 16px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .more {
+        padding-top: 0;
+        padding-bottom: 12px;
       }
       /* A narrow card puts the panel above the text so the text keeps the
    card's full width. */
@@ -261,16 +425,79 @@
             }
           }
         }
-        // A result without a card, such as a refusal, clears any earlier card,
-        // hides the frame and reports zero height so the host can collapse it.
-        function render(meta) {
+        // Each carousel shows an arrow only while it can scroll that way, and
+        // an arrow scrolls by most of a view so one card stays in sight.
+        // One resize listener for the page: each render replaces the
+        // carousels, so it only updates the ones on screen now.
+        var carouselUpdates = [];
+        window.addEventListener("resize", function () {
+          for (var i = 0; i < carouselUpdates.length; i++) {
+            carouselUpdates[i]();
+          }
+        });
+        function setupCarousels() {
+          carouselUpdates = [];
+          var viewports = root.querySelectorAll(".viewport");
+          for (var i = 0; i < viewports.length; i++) {
+            (function (viewport) {
+              var track = viewport.querySelector(".track");
+              var prev = viewport.querySelector(".nav-prev");
+              var next = viewport.querySelector(".nav-next");
+              if (!track || !prev || !next) {
+                return;
+              }
+              function update() {
+                var max = track.scrollWidth - track.clientWidth;
+                prev.hidden = track.scrollLeft <= 1;
+                next.hidden = track.scrollLeft >= max - 1;
+              }
+              function scrollBy(direction) {
+                track.scrollBy({
+                  left: direction * Math.max(track.clientWidth * 0.8, 200),
+                  behavior: "smooth",
+                });
+              }
+              prev.addEventListener("click", function () {
+                scrollBy(-1);
+              });
+              next.addEventListener("click", function () {
+                scrollBy(1);
+              });
+              track.addEventListener("scroll", update, { passive: true });
+              carouselUpdates.push(update);
+              update();
+            })(viewports[i]);
+          }
+        }
+        // A result without a card, such as a text-only tool's, clears any earlier card,
+        // hides the frame and reports a one-pixel height so the host can
+        // collapse it.
+        //
+        // Neither MCP Apps nor ChatGPT lets a result opt out of the view: the
+        // view is linked on the tool, fixed at tools/list. call_platform_tool
+        // and execute link it because they reach card tools, so their
+        // text-only and failed results still get a frame. Whether a one-pixel
+        // frame collapses is up to the host. ChatGPT can be asked to drop the
+        // widget, so done=true (a result has arrived) with no card does that.
+        function render(meta, done) {
           var card = meta && meta[CARD_KEY];
           root.innerHTML = typeof card === "string" ? card : "";
           frame.hidden = root.innerHTML === "";
+          setupCarousels();
+          // Hosts read a zero height as unknown and keep a default-sized
+          // frame, so an empty result reports one pixel instead.
           notify("ui/notifications/size-changed", {
             width: document.documentElement.scrollWidth,
-            height: frame.offsetHeight,
+            height: frame.hidden ? 1 : frame.offsetHeight,
           });
+          if (
+            done &&
+            frame.hidden &&
+            window.openai &&
+            typeof window.openai.requestClose === "function"
+          ) {
+            window.openai.requestClose();
+          }
         }
 
         window.addEventListener("message", function (event) {
@@ -286,7 +513,7 @@
             applyHostContext(message.result.hostContext);
             notify("ui/notifications/initialized", {});
           } else if (message.method === "ui/notifications/tool-result") {
-            render(message.params && message.params._meta);
+            render(message.params && message.params._meta, true);
           } else if (
             message.method === "ui/notifications/host-context-changed"
           ) {
@@ -295,6 +522,31 @@
         });
 
         root.addEventListener("click", function (event) {
+          // A catalog card's Add button sends its request to the chat as the
+          // user's message; the agent then adds the server with its usual
+          // confirmation. The text is read as text and never parsed as markup.
+          var ask =
+            event.target.closest &&
+            event.target.closest("button[data-message]");
+          if (ask) {
+            event.preventDefault();
+            var text = ask.getAttribute("data-message");
+            if (!text) {
+              return;
+            }
+            if (
+              window.openai &&
+              typeof window.openai.sendFollowUpMessage === "function"
+            ) {
+              window.openai.sendFollowUpMessage({ prompt: text });
+            } else {
+              request("ui/message", {
+                role: "user",
+                content: [{ type: "text", text: text }],
+              });
+            }
+            return;
+          }
           var link = event.target.closest && event.target.closest("a[href]");
           if (!link) {
             return;
@@ -322,10 +574,30 @@
           protocolVersion: "2026-01-26",
         });
 
-        // ChatGPT also exposes the result directly on window.openai.
+        // ChatGPT also exposes the result directly on window.openai. The
+        // widget can mount before the result lands, with both globals still
+        // null; that is not an empty result, so it does not close the widget.
+        // toolResponseMetadata can be the result's _meta itself or an
+        // envelope that keeps the MCP result, with its _meta, inside.
+        function openAIMeta(metadata) {
+          if (!metadata || metadata[CARD_KEY] !== undefined) {
+            return metadata;
+          }
+          var results = [metadata.mcp_tool_result, metadata.call_tool_result];
+          for (var i = 0; i < results.length; i++) {
+            if (results[i] && results[i]._meta) {
+              return results[i]._meta;
+            }
+          }
+          return metadata;
+        }
         function renderFromOpenAI() {
           setTheme(window.openai.theme);
-          render(window.openai.toolResponseMetadata);
+          render(
+            openAIMeta(window.openai.toolResponseMetadata),
+            window.openai.toolOutput != null ||
+              window.openai.toolResponseMetadata != null,
+          );
         }
         if (window.openai) {
           renderFromOpenAI();

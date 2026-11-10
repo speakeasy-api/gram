@@ -1,10 +1,16 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
+import type { ChatSessionLink } from "@gram/client/models/components/chatsessionlink.js";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatLogsTable } from "./ChatLogsTable";
+import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
+
+const { sessionLinks } = vi.hoisted(() => ({
+  sessionLinks: [] as ChatSessionLink[],
+}));
 
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -45,7 +51,7 @@ vi.mock("@gram/client/react-query/members.js", () => ({
 vi.mock("@gram/client/react-query/listChatSessionLinks.js", () => ({
   // No lineage edges by default: rows render without the icon cluster, and
   // the hook never reaches useGramContext (no SDK provider in these tests).
-  useListChatSessionLinks: () => ({ data: { links: [] } }),
+  useListChatSessionLinks: () => ({ data: { links: sessionLinks } }),
 }));
 
 vi.mock("@gram/client/react-query/chatSetPinned.js", () => ({
@@ -113,10 +119,100 @@ function renderTable(ui: ReactNode) {
 describe("ChatLogsTable", () => {
   afterEach(() => {
     cleanup();
+    sessionLinks.length = 0;
     vi.restoreAllMocks();
   });
 
-  it("shows duration and message count under the start time, not the chat id", () => {
+  it.each(["asc", "desc"] as const)(
+    "preserves Activity %s order instead of moving subagents below parents",
+    (direction) => {
+      sessionLinks.push({
+        parentChatId: "parent",
+        childChatId: "child",
+        parentCaptured: true,
+        childCaptured: true,
+        kind: "subagent",
+        targetHarness: "claude-tag",
+        createdAt: new Date(),
+      });
+      const parent = { ...makeChat("parent"), title: "Parent session" };
+      const child = {
+        ...makeChat("child"),
+        title: "Child session",
+        lastMessageTimestamp: new Date("2026-01-01T12:05:00Z"),
+      };
+      const chats = direction === "asc" ? [parent, child] : [child, parent];
+      renderTable(
+        <ChatLogsTable
+          chats={chats}
+          sort={{ id: "chronological", direction }}
+          onDeleteChat={() => {}}
+          onSelectChat={() => {}}
+          isLoading={false}
+          error={null}
+        />,
+      );
+
+      const rows = screen.getAllByRole("row").slice(1);
+      expect(rows).toHaveLength(2);
+      chats.forEach((chat, index) => {
+        expect(within(rows[index]!).getAllByText(chat.title!)).not.toHaveLength(
+          0,
+        );
+      });
+      expect(screen.getByText("Subagent")).toBeTruthy();
+    },
+  );
+
+  it("labels a sorted subagent whose parent is not on the page without adding a row", () => {
+    sessionLinks.push({
+      parentChatId: "off-page-parent",
+      childChatId: "child",
+      parentCaptured: true,
+      childCaptured: true,
+      kind: "subagent",
+      targetHarness: "claude-tag",
+      createdAt: new Date(),
+    });
+    renderTable(
+      <ChatLogsTable
+        chats={[makeChat("child")]}
+        sort={{ id: "chronological", direction: "desc" }}
+        onDeleteChat={() => {}}
+        onSelectChat={() => {}}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getAllByRole("row")).toHaveLength(2);
+    expect(screen.getByText("Subagent")).toBeTruthy();
+  });
+
+  it("shows unknown cost, not $0, for a session whose agent reports no cost", () => {
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          { ...makeChat("chat-codex"), totalCost: 0, totalTokens: 900 },
+          { ...makeChat("chat-claude"), totalCost: 0.1234, totalTokens: 900 },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getAllByLabelText(UNKNOWN_COST_EXPLANATION)).toHaveLength(1);
+    expect(screen.getByText("$0.1234")).toBeTruthy();
+    expect(screen.queryByText("$0.0000")).toBeNull();
+  });
+
+  it("shows duration and message count under the last activity time, not the chat id", () => {
     const chatId = "chat_01HXQ1P84WV3S9J7Z52DKVE7NE";
 
     renderTable(
@@ -143,10 +239,16 @@ describe("ChatLogsTable", () => {
     expect(screen.getByTitle("Duration").textContent).toBe("3m");
   });
 
-  it("shows created and last activity timestamps", () => {
+  it("shows a session of a day or more in days and hours", () => {
+    const createdAt = new Date("2026-11-02T16:00:00Z");
+    // 5570m 34s after it started.
+    const lastMessageTimestamp = new Date(
+      createdAt.getTime() + (5570 * 60 + 34) * 1000,
+    );
+
     renderTable(
       <ChatLogsTable
-        chats={[makeChat("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")]}
+        chats={[{ ...makeChat("chat-long"), createdAt, lastMessageTimestamp }]}
         onDeleteChat={() => {
           /* test stub */
         }}
@@ -158,15 +260,65 @@ describe("ChatLogsTable", () => {
       />,
     );
 
-    // The column shows when the session started and how long it ran. Both
-    // timestamps in full wrapped the column mid-date for two values that are
-    // nearly always the same minute, so the exact pair moved to the title.
-    const started = screen.getByText(/^Jan 1, \d{2}:00$/);
-    expect(started).toBeTruthy();
-    expect(started.getAttribute("title")).toMatch(
-      /^Created Jan 1, \d{2}:00 · Last activity Jan 1, \d{2}:03$/,
-    );
+    expect(screen.getByTitle("Duration").textContent).toBe("3d 20h");
   });
+
+  it("does not round a session just under a day up to 1d", () => {
+    const createdAt = new Date("2026-11-02T16:00:00Z");
+    // 23h 59m 59.6s after it started.
+    const lastMessageTimestamp = new Date(createdAt.getTime() + 86_399_600);
+
+    renderTable(
+      <ChatLogsTable
+        chats={[
+          { ...makeChat("chat-almost-day"), createdAt, lastMessageTimestamp },
+        ]}
+        onDeleteChat={() => {
+          /* test stub */
+        }}
+        onSelectChat={() => {
+          /* test stub */
+        }}
+        isLoading={false}
+        error={null}
+      />,
+    );
+
+    expect(screen.getByTitle("Duration").textContent).toBe("1440m");
+  });
+
+  it.each([true, false])(
+    "shows last message time, falling back to creation when absent (has messages: %s)",
+    (hasMessages) => {
+      const chat = makeChat("chat-activity");
+      if (!hasMessages) {
+        // Exercise the defensive fallback for responses missing this SDK-required field.
+        // @ts-expect-error Missing timestamp is intentional for this regression case.
+        chat.lastMessageTimestamp = undefined;
+      }
+
+      renderTable(
+        <ChatLogsTable
+          chats={[chat]}
+          onDeleteChat={() => {}}
+          onSelectChat={() => {}}
+          isLoading={false}
+          error={null}
+        />,
+      );
+
+      const activity = screen.getByTitle(/^Created .* · Last activity /);
+      expect(activity.textContent).toBe(
+        activity.getAttribute("title")?.split(" · Last activity ")[1],
+      );
+      expect(activity.textContent).toMatch(
+        hasMessages ? /^Jan 1, \d{2}:03$/ : /^Jan 1, \d{2}:00$/,
+      );
+      expect(activity.getAttribute("title")).toMatch(
+        /^Created Jan 1, \d{2}:00 · Last activity /,
+      );
+    },
+  );
 
   it("shows the normalized product surface for a session source", () => {
     renderTable(

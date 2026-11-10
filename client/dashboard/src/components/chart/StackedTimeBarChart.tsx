@@ -8,10 +8,105 @@ import {
 } from "@/components/chart/chartTheme";
 import { useChartZoom } from "@/components/chart/useChartZoom";
 import type { TimeSeriesDataset } from "@/components/observe/toolUsageTimeSeriesChartData";
-import type { ChartOptions } from "chart.js";
+import { TOOLTIP } from "@/components/chart/palette";
+import type { Chart, ChartOptions, TooltipModel } from "chart.js";
 import { useIsDarkTheme } from "@/lib/theme";
 import { useEffect, useMemo } from "react";
 import { Bar } from "react-chartjs-2";
+
+const STRIP_TOOLTIP_ID = "stacked-time-bar-strip-tooltip";
+const STRIP_TOOLTIP_GAP = 8;
+
+/**
+ * Chart.js `external` tooltip for the compact strip: a fixed-position element
+ * on the body, so it is not clipped by the canvas or by any overflow on the
+ * panels around it. Sits above the pointer, or below it when the viewport
+ * has no room above.
+ */
+function renderStripTooltip({
+  chart,
+  tooltip,
+}: {
+  chart: Chart;
+  tooltip: TooltipModel<"bar">;
+}): void {
+  let el = document.getElementById(STRIP_TOOLTIP_ID);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = STRIP_TOOLTIP_ID;
+    el.setAttribute("role", "tooltip");
+    Object.assign(el.style, {
+      position: "fixed",
+      zIndex: "50",
+      pointerEvents: "none",
+      padding: "6px 8px",
+      fontSize: "11px",
+      lineHeight: "1.4",
+      whiteSpace: "nowrap",
+      background: TOOLTIP.backgroundColor,
+      color: TOOLTIP.bodyColor,
+      border: `${TOOLTIP.borderWidth}px solid ${TOOLTIP.borderColor}`,
+    });
+    document.body.appendChild(el);
+    // Fixed to the viewport, so any scroll would leave it behind the strip.
+    // Capture, because the page scrolls inside containers, not the window.
+    window.addEventListener("scroll", hideStripTooltip, {
+      capture: true,
+      passive: true,
+    });
+  }
+
+  if (tooltip.opacity === 0 || tooltip.dataPoints.length === 0) {
+    el.style.opacity = "0";
+    return;
+  }
+
+  // textContent only: labels come from data and must not be parsed as HTML.
+  el.replaceChildren();
+  for (const line of tooltip.title) {
+    const title = document.createElement("div");
+    title.textContent = line;
+    Object.assign(title.style, {
+      color: TOOLTIP.titleColor,
+      fontWeight: "600",
+      marginBottom: "2px",
+    });
+    el.appendChild(title);
+  }
+  for (const line of [
+    ...tooltip.body.flatMap((item) => item.lines),
+    ...tooltip.afterBody,
+  ]) {
+    if (!line) continue;
+    const row = document.createElement("div");
+    row.textContent = line;
+    el.appendChild(row);
+  }
+
+  const canvas = chart.canvas.getBoundingClientRect();
+  const { width, height } = el.getBoundingClientRect();
+  const x = canvas.left + tooltip.caretX;
+  const left = Math.min(
+    Math.max(STRIP_TOOLTIP_GAP, x - width / 2),
+    window.innerWidth - width - STRIP_TOOLTIP_GAP,
+  );
+  const above = canvas.top - height - STRIP_TOOLTIP_GAP;
+  const top =
+    above >= STRIP_TOOLTIP_GAP
+      ? above
+      : Math.min(
+          canvas.bottom + STRIP_TOOLTIP_GAP,
+          window.innerHeight - height - STRIP_TOOLTIP_GAP,
+        );
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.style.opacity = "1";
+}
+
+function hideStripTooltip(): void {
+  const el = document.getElementById(STRIP_TOOLTIP_ID);
+  if (el) el.style.opacity = "0";
+}
 
 export function StackedTimeBarChart({
   labels,
@@ -66,6 +161,12 @@ export function StackedTimeBarChart({
     resetZoom();
   }, [dataSignature, resetZoom]);
 
+  // The strip tooltip lives on the body, so it outlives the chart unless
+  // hidden when the chart goes away mid-hover — including when it swaps to
+  // the no-data state, which unmounts the Bar.
+  const hasData = labels.length > 0 && datasets.length > 0;
+  useEffect(() => (compact ? hideStripTooltip : undefined), [compact, hasData]);
+
   // Chart.js resolves bar sizing from the dataset, not from the scale, so the
   // strip's near-continuous bars have to be set here.
   const sizedDatasets = useMemo(
@@ -113,15 +214,10 @@ export function StackedTimeBarChart({
         position: "nearest" as const,
         yAlign: "center" as const,
         caretPadding: 8,
-        ...(compact
-          ? {
-              displayColors: false,
-              padding: 6,
-              titleFont: { size: 10 },
-              bodyFont: { size: 10 },
-              titleMarginBottom: 2,
-            }
-          : {}),
+        // The strip is shorter than its own tooltip, and a canvas tooltip is
+        // clipped at the canvas edge. Compact draws it as HTML on the page
+        // instead, so it can hang outside the strip.
+        ...(compact ? { enabled: false, external: renderStripTooltip } : {}),
         // Index-mode hover activates every series at that x. Drop zeros so a
         // sparse multi-series chart doesn't build a tooltip listing every
         // inactive source (which balloons until it covers the chart). Returning

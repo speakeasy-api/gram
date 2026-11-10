@@ -1,4 +1,4 @@
-import { Radius } from "@/elements/types";
+import type { Radius } from "@/elements/types";
 import { useElements } from "./useElements";
 
 /**

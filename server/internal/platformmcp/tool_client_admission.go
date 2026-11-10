@@ -59,7 +59,7 @@ func modeGuidance(mode string) string {
 func registerUnavailableClientAdmissionTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Which Apps Can Sign In",
+		Title:       "See Which Apps Can Sign In",
 		Description: "Show which apps can sign in to an MCP server. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, unavailableTool("client_admission"))
@@ -83,7 +83,7 @@ func setMCPClientAdmissionAnnotations() *mcp.ToolAnnotations {
 func registerClientAdmissionTools(reg *Registrar, registrations *RegistrationService) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp_client_admission",
-		Title:       "Which Apps Can Sign In",
+		Title:       "See Which Apps Can Sign In",
 		Description: "Show which MCP clients are allowed to sign in to one MCP server: the setting in force now, the settings you can choose, and any custom client ID metadata URLs this MCP server allows on top. Read this before proposing a change.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPClientAdmissionToolInput) (*mcp.CallToolResult, MCPClientAdmissionToolOutput, error) {

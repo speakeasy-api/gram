@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -298,6 +299,114 @@ func TestResyncMCPServerRemoteSessionIssuers(t *testing.T) {
 		require.Error(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, "", uuid.Nil, nil))
 		require.Equal(t, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, storedIssuer(t, ctx, ti.conn, projectID, serverID),
 			"a rejected resync must not have written anything")
+	})
+}
+
+func associateClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID, clientID uuid.UUID) {
+	t.Helper()
+	require.NoError(t, testrepo.New(conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        organizationID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
+}
+
+func TestResyncMCPServerRemoteSessionIssuers_Associations(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	unset := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+
+	// Two servers keep the issuer shared, so capture proves nothing and every
+	// association below is one the test wrote.
+	sharedIssuer := func(t *testing.T, name string) (uuid.UUID, uuid.UUID, uuid.UUID) {
+		t.Helper()
+		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-"+name)
+		associated := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, name+"-a")
+		sibling := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, name+"-b")
+		return userIssuerID, associated, sibling
+	}
+
+	t.Run("an association holds on a multi-provider issuer", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID, associated, sibling := sharedIssuer(t, "assoc-multi")
+		clientID, provider := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-multi-a")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-multi-b")
+		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
+
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+
+		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, associated))
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, sibling), "a server with no association keeps the issuer derivation")
+	})
+
+	t.Run("no association keeps the issuer derivation", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID, first, second := sharedIssuer(t, "assoc-none")
+		_, provider := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-none")
+
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+
+		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, first))
+		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, second))
+	})
+
+	t.Run("associations to several providers leave it unset", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID, associated, _ := sharedIssuer(t, "assoc-several")
+		firstClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-several-a")
+		secondClient, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-several-b")
+		associateClient(t, ctx, ti.conn, orgID, projectID, associated, firstClient)
+		associateClient(t, ctx, ti.conn, orgID, projectID, associated, secondClient)
+
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated))
+	})
+
+	t.Run("an association reconcile prunes stops counting", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID, associated, _ := sharedIssuer(t, "assoc-pruned")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-a")
+		_, remaining := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-pruned-b")
+		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+
+		require.NoError(t, repo.New(ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{
+			RemoteSessionClientID: clientID,
+			ProjectID:             conv.ToNullUUID(projectID),
+		}))
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+
+		require.Equal(t, conv.ToNullUUID(remaining), storedIssuer(t, ctx, ti.conn, projectID, associated), "the column is derived after the prune")
+	})
+
+	t.Run("a detach falls back to the issuer derivation", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID, associated, _ := sharedIssuer(t, "assoc-detach")
+		clientID, provider := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-detach-a")
+		seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-detach-b")
+		associateClient(t, ctx, ti.conn, orgID, projectID, associated, clientID)
+		resync(t, ctx, ti.conn, orgID, projectID, userIssuerID)
+		require.Equal(t, conv.ToNullUUID(provider), storedIssuer(t, ctx, ti.conn, projectID, associated))
+
+		require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+			McpServerID:           associated.String(),
+			RemoteSessionClientID: clientID.String(),
+		}))
+
+		require.Equal(t, unset, storedIssuer(t, ctx, ti.conn, projectID, associated))
 	})
 }
 

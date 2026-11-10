@@ -2,7 +2,7 @@ import { Badge, type BadgeProps } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { telemetrySearchLogs } from "@gram/client/funcs/telemetrySearchLogs";
-import { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
+import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import { ServiceError } from "@gram/client/models/errors/serviceerror";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useToolset } from "@gram/client/react-query/toolset.js";

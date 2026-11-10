@@ -21,7 +21,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -143,6 +146,46 @@ func TestRemoteSessionRecheck_RevokedNoExpiryGrantReadsRejected(t *testing.T) {
 	sess = storedSession(t, ctx, fx)
 	require.Equal(t, string(remotesessions.ValidationOutcomeValid), sess.ValidationStatus.String)
 	require.Equal(t, map[string]int64{"rejected_by_member": 1, "valid": 1}, validationCounts(t, fx.reader))
+	require.NoError(t, fx.ti.service.Shutdown(ctx))
+}
+
+// A registration the server offers through a typed auth client is re-checked in
+// the background like a linked one: its own token is presented and the verdict
+// is recorded, with no user session issuer link.
+func TestRemoteSessionRecheck_ProbesAnOfferedRegistrationWithoutASignInLink(t *testing.T) {
+	t.Parallel()
+
+	prefix := "recheck-typed-" + uuid.NewString()[:8]
+	ctx, fx := seedStandaloneValidationFixture(t, prefix)
+	projectID, orgID := consentTestTenant(t, ctx)
+	shared := fx.endpoint.UserSessionIssuerID
+	q := remotesessions_repo.New(fx.ti.conn)
+	require.NoError(t, q.DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, remotesessions_repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: fx.clientID, ProjectID: conv.ToNullUUID(projectID)}))
+
+	registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
+	fixtures := authclientfixtures.New(fx.ti.conn)
+	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
+	fx.ti.service.SetAuthClientPermitted(true)
+	_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+	require.NoError(t, err)
+	insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, registration, fx.subject, "typed-token", fx.member.url)
+	shapeGrantForKeepalive(t, ctx, fx.ti, projectID, shared, registration, fx.subject, recheckTestInterval+time.Hour, "jti-"+prefix)
+	fx.clientID = registration
+
+	fx.member.set(memberRejects)
+	checked, err := fx.ti.service.SweepRemoteSessionRechecks(ctx)
+	require.NoError(t, err)
+	require.Equal(t, 1, checked)
+	requireProbe(t, fx.member.drain(), "typed-token", false, false)
+
+	sess := storedSession(t, ctx, fx)
+	require.Equal(t, string(remotesessions.ValidationOutcomeRejectedByMember), sess.ValidationStatus.String)
+	require.Equal(t, map[string]int64{"keepalive": 1}, validationTriggers(t, fx.reader))
+	linked, err := q.CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{RemoteSessionClientID: registration, UserSessionIssuerID: shared, ProjectID: projectID, OrganizationID: orgID})
+	require.NoError(t, err)
+	require.False(t, linked, "the sweep writes no link")
 	require.NoError(t, fx.ti.service.Shutdown(ctx))
 }
 

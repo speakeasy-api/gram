@@ -4,6 +4,7 @@
 
 import { agentCreateSessionHandoff } from "../funcs/agentCreateSessionHandoff.js";
 import { agentDeleteAiScanTarget } from "../funcs/agentDeleteAiScanTarget.js";
+import { agentGetClaudeObservabilityPlugin } from "../funcs/agentGetClaudeObservabilityPlugin.js";
 import { agentGetConfiguration } from "../funcs/agentGetConfiguration.js";
 import { agentGetMyConnections } from "../funcs/agentGetMyConnections.js";
 import { agentGetPlugins } from "../funcs/agentGetPlugins.js";
@@ -12,6 +13,7 @@ import { agentHideMcpServer } from "../funcs/agentHideMcpServer.js";
 import { agentListAiScanTargets } from "../funcs/agentListAiScanTargets.js";
 import { agentListSyncedUsers } from "../funcs/agentListSyncedUsers.js";
 import { agentReportAIScan } from "../funcs/agentReportAIScan.js";
+import { agentReportCrash } from "../funcs/agentReportCrash.js";
 import { agentReportSessionMoved } from "../funcs/agentReportSessionMoved.js";
 import { agentReportState } from "../funcs/agentReportState.js";
 import { agentUnhideMcpServer } from "../funcs/agentUnhideMcpServer.js";
@@ -27,6 +29,7 @@ import { GetPluginsResult } from "../models/components/getpluginsresult.js";
 import { GetSessionMetaResult } from "../models/components/getsessionmetaresult.js";
 import { ListAiScanTargetsResult } from "../models/components/listaiscantargetsresult.js";
 import { ListSyncedUsersResult } from "../models/components/listsyncedusersresult.js";
+import { ReportCrashResult } from "../models/components/reportcrashresult.js";
 import { ReportStateResult } from "../models/components/reportstateresult.js";
 import {
   CreateAgentSessionHandoffRequest,
@@ -36,6 +39,11 @@ import {
   DeleteAiScanTargetRequest,
   DeleteAiScanTargetSecurity,
 } from "../models/operations/deleteaiscantarget.js";
+import {
+  GetAgentClaudeObservabilityPluginRequest,
+  GetAgentClaudeObservabilityPluginResponse,
+  GetAgentClaudeObservabilityPluginSecurity,
+} from "../models/operations/getagentclaudeobservabilityplugin.js";
 import {
   GetAgentMyConnectionsRequest,
   GetAgentMyConnectionsSecurity,
@@ -68,6 +76,10 @@ import {
   ReportAgentAIScanRequest,
   ReportAgentAIScanSecurity,
 } from "../models/operations/reportagentaiscan.js";
+import {
+  ReportAgentCrashRequest,
+  ReportAgentCrashSecurity,
+} from "../models/operations/reportagentcrash.js";
 import {
   ReportAgentSessionMovedRequest,
   ReportAgentSessionMovedSecurity,
@@ -122,6 +134,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<DeleteAiScanTargetResult> {
     return unwrapAsync(agentDeleteAiScanTarget(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getClaudeObservabilityPlugin agent
+   *
+   * @remarks
+   * Download the organization's Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude's cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user's previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.
+   */
+  async getClaudeObservabilityPlugin(
+    request?: GetAgentClaudeObservabilityPluginRequest | undefined,
+    security?: GetAgentClaudeObservabilityPluginSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetAgentClaudeObservabilityPluginResponse> {
+    return unwrapAsync(agentGetClaudeObservabilityPlugin(
       this,
       request,
       security,
@@ -274,6 +305,25 @@ export class Agent extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(agentReportAIScan(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * reportCrash agent
+   *
+   * @remarks
+   * Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.
+   */
+  async reportCrash(
+    request: ReportAgentCrashRequest,
+    security?: ReportAgentCrashSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ReportCrashResult> {
+    return unwrapAsync(agentReportCrash(
       this,
       request,
       security,

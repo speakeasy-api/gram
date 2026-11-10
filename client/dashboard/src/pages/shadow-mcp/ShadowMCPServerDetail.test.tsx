@@ -2,13 +2,14 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { type ReactElement, type ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import { formatShortDate } from "@/components/access/shadow-mcp-utils";
@@ -21,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   useRiskListPolicies: vi.fn(),
   useRoles: vi.fn(),
   useNavigate: vi.fn(),
-  useRoutes: vi.fn(),
   useShadowMCPInventoryServer: vi.fn(),
   useShadowMCPInventoryUsers: vi.fn(),
   useUpdateShadowMCPInventoryServerNameMutation: vi.fn(),
@@ -33,17 +33,17 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: mocks.useNavigate,
   useParams: () => ({
     serverSlug: "github-example-com-mcp-d8860eea",
   }),
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-  // The user column links to the identity page, which reads the slugs off the
-  // location to scope that link.
-  useLocation: () => ({ pathname: "/acme/projects/default/shadow-mcp" }),
+}));
+
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+  useProjectSlugForRequests: () => "default",
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -57,12 +57,12 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: mocks.useRoutes,
-  useOrgRoutes: () => ({}),
-}));
+vi.mock("@/components/page-layout", async () => {
+  // The real trail, so the breadcrumb test reads the links a user would see.
+  const { PageHeader } = await vi.importActual<
+    typeof import("@/components/page-header")
+  >("@/components/page-header");
 
-vi.mock("@/components/page-layout", () => {
   function Page({ children }: { children: ReactNode }) {
     return <div>{children}</div>;
   }
@@ -70,7 +70,7 @@ vi.mock("@/components/page-layout", () => {
   function Header({ children }: { children?: ReactNode }) {
     return <div>{children}</div>;
   }
-  Header.Breadcrumbs = () => null;
+  Header.Breadcrumbs = PageHeader.Breadcrumbs;
 
   function Body({ children }: { children: ReactNode }) {
     return <main>{children}</main>;
@@ -98,6 +98,7 @@ vi.mock("@/components/page-layout", () => {
 });
 
 vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({}),
   useProject: mocks.useProject,
 }));
 
@@ -389,6 +390,21 @@ function inventoryServer(
   };
 }
 
+// The user column links to the identity page, which reads the slugs off the
+// location to scope that link.
+const render = (ui: ReactElement) =>
+  renderView(ui, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={[
+          "/acme/projects/default/shadow-ai/mcps/github-example-com-mcp-d8860eea",
+        ]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+
 function renderDetailPage() {
   const queryClient = new QueryClient();
   return render(
@@ -437,14 +453,6 @@ describe("ShadowMCPServerDetail", () => {
       isLoading: false,
     });
     mocks.useNavigate.mockReturnValue(mocks.navigate);
-    // The user column opens the project-level identity page.
-    mocks.useRoutes.mockReturnValue({
-      identities: {
-        detail: {
-          overview: { href: (urn: string) => `/identities/${urn}/overview` },
-        },
-      },
-    });
     mocks.useShadowMCPInventoryServer.mockReturnValue({
       data: inventoryServer(),
       error: null,
@@ -517,6 +525,28 @@ describe("ShadowMCPServerDetail", () => {
     );
   });
 
+  // The page is opened from the MCP approvals tab of Guardrails, and the
+  // sidebar highlights Guardrails, so the trail leads back there rather than
+  // through the retired Shadow AI section its URL still carries.
+  it("leads the breadcrumb back to the MCP approvals tab of Guardrails", () => {
+    renderDetailPage();
+
+    const trail = screen.getByRole("navigation", { name: "Breadcrumb" });
+    expect(
+      within(trail)
+        .getByRole("link", { name: "Guardrails" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/risk-policies");
+    expect(
+      within(trail)
+        .getByRole("link", { name: "MCP approvals" })
+        .getAttribute("href"),
+    ).toBe("/acme/projects/default/risk-policies?tab=mcp-approvals");
+    expect(within(trail).getByText("GitHub MCP")).toBeTruthy();
+    expect(within(trail).queryByText("Shadow AI")).toBeNull();
+    expect(within(trail).queryByText("MCPs")).toBeNull();
+  });
+
   it("renders user sources and only links email-backed users to their employee page", () => {
     const lastCalled = new Date("2026-01-04T10:00:00Z");
     renderDetailPage();
@@ -535,7 +565,7 @@ describe("ShadowMCPServerDetail", () => {
     ).toBeTruthy();
     fireEvent.click(emailRow!);
     expect(mocks.navigate).toHaveBeenCalledWith(
-      "/identities/email%3Aalex%40example.com/overview",
+      "/acme/projects/default/identities/email%3Aalex%40example.com/overview",
     );
 
     const noEmailRow = screen.getByText("sam@example.com").closest("tr");

@@ -19,8 +19,9 @@ import {
   PlugZapIcon,
   ListChecksIcon,
   ChartColumnStackedIcon,
-  ArrowRightLeftIcon,
   ActivityIcon,
+  GlobeIcon,
+  MessageSquareIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -104,10 +105,10 @@ export const ADMIN_NAV_GROUPS = [
         icon: KeyRoundIcon,
       },
       {
-        to: "/external-mcp-migration",
-        label: "External MCP migration",
-        keywords: "external mcp attachments remote servers migrate cutover",
-        icon: ArrowRightLeftIcon,
+        to: "/custom-domains",
+        label: "Custom domains",
+        keywords: "dns cname routing target hostname domain vanity",
+        icon: GlobeIcon,
       },
       {
         to: "/fleet-health",
@@ -115,6 +116,12 @@ export const ADMIN_NAV_GROUPS = [
         keywords:
           "hook clients curl binary versions sessions inference device agents speakeasyd rollout",
         icon: ActivityIcon,
+      },
+      {
+        to: "/platform-mcp-feedback",
+        label: "Platform MCP feedback",
+        keywords: "feedback reports ratings notes users platform mcp",
+        icon: MessageSquareIcon,
       },
       {
         to: "/mcp-setup",

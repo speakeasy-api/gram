@@ -4,7 +4,7 @@ import type {
   DownloadPluginPackageRequest,
   QueryParamPlatform,
 } from "@gram/client/models/operations/downloadpluginpackage.js";
-import { Gram } from "@gram/client";
+import type { Gram } from "@gram/client";
 import { toast } from "sonner";
 import {
   downloadBlob,
@@ -13,6 +13,8 @@ import {
 } from "@/lib/download";
 
 export type PluginPackagePlatform = QueryParamPlatform;
+/** The part of the SDK client that plugin package downloads use. */
+export type PluginsClient = Pick<Gram, "plugins">;
 type PluginPackageScope = Pick<
   DownloadPluginPackageRequest,
   "gramProject" | "gramSession"
@@ -34,7 +36,7 @@ export async function downloadResponse(
 }
 
 export async function downloadPluginPackage(
-  client: Gram,
+  client: PluginsClient,
   pluginId: string,
   platform: PluginPackagePlatform,
   scope: PluginPackageScope,
@@ -54,7 +56,7 @@ export async function downloadPluginPackage(
 }
 
 export function usePluginPackageDownload(
-  client: Gram,
+  client: PluginsClient,
   pluginId: string,
   onMenuOpenChange: (open: boolean) => void,
   scope: PluginPackageScope,

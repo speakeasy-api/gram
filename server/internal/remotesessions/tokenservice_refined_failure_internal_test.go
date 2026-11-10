@@ -13,6 +13,7 @@ import (
 
 	jose "github.com/go-jose/go-jose/v4"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -98,7 +99,17 @@ func TestRefreshErrorIs(t *testing.T) {
 			want: ErrRemoteSessionUnavailable,
 		},
 		{
-			name: "caller canceled mid-POST",
+			name: "client load hits a broken query",
+			err:  refreshClientLoadError(&pgconn.PgError{Code: "42P01"}),
+			want: nil,
+		},
+		{
+			name: "caller canceled before the POST",
+			err:  fmt.Errorf("re-read active remote_session: %w", context.Canceled),
+			want: nil,
+		},
+		{
+			name: "detached POST canceled independently of the caller",
 			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.Canceled),
 			want: ErrRemoteSessionUnavailable,
 		},

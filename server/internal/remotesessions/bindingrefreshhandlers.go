@@ -96,7 +96,8 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock exact refreshed grant")
 	}
-	if _, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: binding.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID}); err != nil {
+	detached, err := op.queries.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ID: binding.ID, PrincipalID: op.principalID, ProjectID: op.projectID, OrganizationID: op.organizationID, UserSessionIssuerID: op.issuerID})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "replace refreshed attachment")
 	}
 	attached, err := op.queries.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: op.projectID, OrganizationID: op.organizationID, PrincipalID: op.principalID, UserSessionIssuerID: op.issuerID, SubjectUrn: op.subject.String(), RemoteSessionID: source.RemoteSession.ID})
@@ -109,10 +110,10 @@ func (s *Service) CompleteBindingRefresh(ctx context.Context, payload *gen.Compl
 	if attached.GrantGeneration != attempt.GrantGeneration {
 		return nil, oops.C(oops.CodeConflict)
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, binding.ID, binding.RemoteSessionID, binding.RemoteSessionClientID, binding.GrantGeneration); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionDetach, audit.ActionAgentConnectionDetach, binding.ID, binding.RemoteSessionID, binding.RemoteSessionClientID, binding.GrantGeneration, detached.UpstreamAccount); err != nil {
 		return nil, err
 	}
-	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, attached.ID, attached.RemoteSessionID, attached.RemoteSessionClientID, attached.GrantGeneration); err != nil {
+	if err := s.logBinding(ctx, op, audit.ActionRemoteSessionAttach, audit.ActionAgentConnectionAttach, attached.ID, attached.RemoteSessionID, attached.RemoteSessionClientID, attached.GrantGeneration, upstreamAccount(source.RemoteSession)); err != nil {
 		return nil, err
 	}
 	if err := op.tx.Commit(ctx); err != nil {
