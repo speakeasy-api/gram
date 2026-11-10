@@ -1,6 +1,7 @@
 package dailyoutcomes
 
 import (
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
@@ -11,7 +12,7 @@ const minOrgsPerLabel = 3
 // uncountedOrganizations are Speakeasy's own. Their attempts are kept but do not count
 // toward minOrgsPerLabel, so they cannot make one customer's vendor look shared.
 var uncountedOrganizations = map[string]struct{}{
-	"5a25158b-24dc-4d49-b03d-e85acfbea59c": {}, // speakeasy-team
+	constants.SpeakeasyTeamOrganizationID: {},
 }
 
 // DayRow is one row of mcp_connection_outcomes_daily, without its day.

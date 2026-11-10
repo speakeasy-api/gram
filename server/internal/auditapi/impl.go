@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -40,7 +41,7 @@ const listAuditLogsPageSize = 50
 // Speakeasy staff actions in customer orgs (e.g. via the dev-tools org
 // override) are shown under a collective label instead of the staff member's
 // email. Logs viewed within the Speakeasy org itself are not masked.
-const speakeasyTeamOrganizationID = "5a25158b-24dc-4d49-b03d-e85acfbea59c"
+const speakeasyTeamOrganizationID = constants.SpeakeasyTeamOrganizationID
 
 type Service struct {
 	tracer trace.Tracer
