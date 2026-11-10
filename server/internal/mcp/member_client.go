@@ -185,8 +185,10 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	mintedSession := ""
 	tunnelError := ""
 	answered := memberRejection{challenges: nil, sent: nil, headers: p.Headers}
+	answeredStatus := 0
 	interceptResponse := p.UpstreamResponseInterceptor
 	p.UpstreamResponseInterceptor = func(ctx context.Context, resp *http.Response) error {
+		answeredStatus = resp.StatusCode
 		mintedSession = resp.Header.Get(proxy.McpSessionIDHeader)
 		tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
 		answered.challenges = resp.Header.Values("WWW-Authenticate")
@@ -209,6 +211,8 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 	if exchangeErr != nil {
 		attempt.recordFailure(record, exchangeErr)
+		// A 401 or 403 whose body then failed is still the member's answer.
+		attempt.recordRejection(record, answeredStatus, answered)
 		return nil, exchangeErr
 	}
 	attempt.mu.Lock()
@@ -217,12 +221,9 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 		attempt.lastTunnelError = tunnelError
 		attempt.lastRetryAfter = rec.header.Get("Retry-After")
 		attempt.lastErr = nil
-		if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
-			attempt.rejected = rec.status
-			attempt.rejectedAnswer = answered
-		}
 	}
 	attempt.mu.Unlock()
+	attempt.recordRejection(record, rec.status, answered)
 	return &http.Response{
 		Status:           fmt.Sprintf("%d %s", rec.status, http.StatusText(rec.status)),
 		StatusCode:       rec.status,
@@ -253,6 +254,16 @@ func (a *memberAttempt) recordFailure(record bool, err error) {
 	a.lastTunnelError = ""
 	a.lastRetryAfter = ""
 	a.lastErr = err
+}
+
+func (a *memberAttempt) recordRejection(record bool, status int, answer memberRejection) {
+	if !record || (status != http.StatusUnauthorized && status != http.StatusForbidden) {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.rejected = status
+	a.rejectedAnswer = answer
 }
 
 func (a *memberAttempt) failure() error {

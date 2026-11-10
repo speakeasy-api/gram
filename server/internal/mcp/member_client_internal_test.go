@@ -527,6 +527,7 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 		status    int
 		challenge string
 		redirect  bool
+		bodyFails bool
 		want      mcpconnectionattempts.Code
 	}{
 		"401":                             {status: http.StatusUnauthorized, want: mcpconnectionattempts.CodeProviderRejected},
@@ -534,6 +535,8 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 		"403 insufficient_scope":          {status: http.StatusForbidden, challenge: `Bearer error="insufficient_scope", scope="repo"`, want: mcpconnectionattempts.Code{}},
 		"403 without challenge":           {status: http.StatusForbidden, want: mcpconnectionattempts.Code{}},
 		"401 after cross-origin redirect": {status: http.StatusUnauthorized, redirect: true, want: mcpconnectionattempts.Code{}},
+		"401 whose body fails":            {status: http.StatusUnauthorized, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
+		"403 invalid_token, body fails":   {status: http.StatusForbidden, challenge: `Bearer error="invalid_token"`, bodyFails: true, want: mcpconnectionattempts.CodeProviderRejected},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -543,6 +546,14 @@ func TestMemberClientFailureRecordsOnlyRejectedCredentials(t *testing.T) {
 				sawAuthorization.Store(r.Header.Get("Authorization") != "", true)
 				if tc.challenge != "" {
 					w.Header().Set("WWW-Authenticate", tc.challenge)
+				}
+				if tc.bodyFails {
+					w.Header().Set("Content-Type", "application/json")
+					w.Header().Set("Content-Length", "64")
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte("{"))
+					_ = http.NewResponseController(w).Flush()
+					panic(http.ErrAbortHandler)
 				}
 				w.WriteHeader(tc.status)
 			}))
