@@ -39,6 +39,7 @@ func TestInertDemoSessionsReadAsConnected(t *testing.T) {
 		require.NoError(t, err, key)
 		require.True(t, remotesessions.StoredSignInUsable(enc, sess, now), "%s reads as connected", key)
 		require.False(t, sess.RefreshTokenEncrypted.Valid, "%s stays inert: no refresh token", key)
+		require.False(t, sess.RefreshExpiresAt.Valid, "%s holds no refresh token, so it states no refresh deadline", key)
 	}
 
 	// The idle re-check never presents the dummy token to an upstream.
