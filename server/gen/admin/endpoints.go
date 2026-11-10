@@ -125,6 +125,7 @@ type Endpoints struct {
 	BackfillMcpConnectGrants                goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
+	ListCustomDomains                       goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -258,6 +259,7 @@ func NewEndpoints(s Service) *Endpoints {
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
+		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -371,6 +373,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
+	e.ListCustomDomains = m(e.ListCustomDomains)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2822,5 +2825,28 @@ func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.RedeployProject(ctx, p)
+	}
+}
+
+// NewListCustomDomainsEndpoint returns an endpoint function that calls the
+// method "listCustomDomains" of service "admin".
+func NewListCustomDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomDomainsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomDomains(ctx, p)
 	}
 }

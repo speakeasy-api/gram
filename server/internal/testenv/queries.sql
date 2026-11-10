@@ -2682,3 +2682,9 @@ SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id AND deleted 
 -- name: GetEnvironmentEntryFixture :one
 -- Reads one environment entry by environment and name.
 SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;
