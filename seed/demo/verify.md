@@ -370,8 +370,8 @@ open their effective assignments; the dropdown always offers compact member sear
     in Sessions. The Service Account Server shows **Shared credential** with its static
     Authorization header (locally the MCP fixture's shared token). The Pass-Through Token
     Server shows **Manual**; locally its Custom Headers list a required, secret
-    Authorization header forwarded from the caller's `X-Upstream-Token`, and no
-    auth-challenge warning appears. All three use the Display,
+    `X-Upstream-Token` header forwarded from the caller's request, and neither
+    a legacy pass-through nor an auth-challenge warning appears. All three use the Display,
     Identity, Server URL, Sessions, Tool Filtering, Danger Zone order, with
     Custom Headers directly after the Identity controls. In Postgres, only the
     Per-User OAuth Server row in `mcp_servers` has `remote_session_issuer_id` set, to the
@@ -716,7 +716,8 @@ open their effective assignments; the dropdown always offers compact member sear
       - `service-account` (`whoami`): returns `shared-service-account` with
         `auth: shared-token`.
       - `pass-through-token` (`whoami`): create a token at
-        `GRAM_MCP_FIXTURE_URL/tokens`, send it as `X-Upstream-Token`;
+        `GRAM_MCP_FIXTURE_URL/tokens` and send it in the `X-Upstream-Token`
+        request header;
         `whoami` returns that email with `auth: own-token`.
       - `auto-configured-oauth`: first, as an admin, open its **Settings →
         Identity → User Identity → Auto-Configure → Save**; the provider then

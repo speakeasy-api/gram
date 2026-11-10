@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle(path, s.mcpHandler(s.authenticateOAuth(path)))
 	}
 	mux.Handle(fixtureauth.PathSharedMCP, s.mcpHandler(s.authenticateShared))
+	mux.Handle(fixtureauth.PathOwnTokenMCP, s.mcpHandler(s.authenticateOwnToken))
 	mux.Handle(fixtureauth.PathOpenMCP, s.mcpHandler(authenticateOpen))
 	if s.cfg.DevIDPURL != "" {
 		mux.HandleFunc("GET /.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP, s.emaProtectedResourceMetadata)
@@ -797,6 +798,26 @@ func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 	}
 }
 
+// authenticateOwnToken lets every request in, so a client can connect and
+// list tools, but only a request carrying the caller's own token (a personal
+// token or a per-user OAuth token) in OwnTokenHeader gets an identity. Tools
+// refuse to run without one.
+func (s *Server) authenticateOwnToken(r *http.Request) (identity, *authFailure) {
+	tok := strings.TrimSpace(r.Header.Get(fixtureauth.OwnTokenHeader))
+	if tok == "" {
+		return identity{}, nil
+	}
+	id, err := s.accessIdentity(tok, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), fixtureauth.OAuthResource(s.issuer))
+	if err != nil {
+		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: `Bearer realm="mcp-fixture-own-token"`, message: fixtureauth.OwnTokenHeader + " is not a valid fixture token"}
+	}
+	id.Auth = "own-token"
+	return id, nil
+}
+
+// errNoIdentity is what a tool returns when the caller sent no token.
+var errNoIdentity = errors.New("send your own token in the " + fixtureauth.OwnTokenHeader + " header (create one at /tokens)")
+
 // authenticateOpen lets every request in.
 func authenticateOpen(*http.Request) (identity, *authFailure) {
 	return identity{Name: "anonymous", Auth: "none", Scopes: fixtureauth.DefaultScopes}, nil
@@ -807,7 +828,7 @@ func authenticateOpen(*http.Request) (identity, *authFailure) {
 
 func (s *Server) tokensGet(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": "X-Upstream-Token"})
+	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": fixtureauth.OwnTokenHeader})
 }
 
 func (s *Server) tokensPost(w http.ResponseWriter, r *http.Request) {
@@ -827,7 +848,7 @@ func (s *Server) tokensPost(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
-	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": "X-Upstream-Token", "Email": email, "Token": pair.AccessToken})
+	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": fixtureauth.OwnTokenHeader, "Email": email, "Token": pair.AccessToken})
 }
 
 func (s *Server) mcpHandler(auth authenticator) http.Handler {
@@ -875,6 +896,9 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 		Description: "Show who you are signed in as and how you authenticated.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, whoamiOut, error) {
+		if id.Name == "" {
+			return nil, whoamiOut{}, errNoIdentity
+		}
 		out := whoamiOut{Identity: id.Name, Auth: id.Auth, Scopes: id.Scopes}
 		if id.ExpiresAt != nil {
 			out.ExpiresAt = id.ExpiresAt.UTC().Format(time.RFC3339)
@@ -886,6 +910,9 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 		Description: "Send text back unchanged.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in echoIn) (*mcp.CallToolResult, echoOut, error) {
+		if id.Name == "" {
+			return nil, echoOut{}, errNoIdentity
+		}
 		return nil, echoOut{Text: in.Text}, nil
 	})
 	mcp.AddTool(srv, &mcp.Tool{
@@ -893,6 +920,9 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 		Description: "List the notes you saved. Each identity has its own notes.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(context.Context, *mcp.CallToolRequest, struct{}) (*mcp.CallToolResult, notesOut, error) {
+		if id.Name == "" {
+			return nil, notesOut{}, errNoIdentity
+		}
 		if !fixtureauth.HasScope(id.Scopes, fixtureauth.ScopeNotesRead) {
 			return nil, notesOut{}, errors.New("this token lacks the notes:read scope")
 		}
@@ -902,6 +932,9 @@ func (s *Server) mcpServer(id identity) *mcp.Server {
 		Name:        "add_note",
 		Description: "Save a note for the signed-in identity. Notes live in memory until the fixture restarts.",
 	}, func(_ context.Context, _ *mcp.CallToolRequest, in noteIn) (*mcp.CallToolResult, notesOut, error) {
+		if id.Name == "" {
+			return nil, notesOut{}, errNoIdentity
+		}
 		if !fixtureauth.HasScope(id.Scopes, fixtureauth.ScopeNotesWrite) {
 			return nil, notesOut{}, errors.New("this token lacks the notes:write scope")
 		}

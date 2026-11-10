@@ -26,11 +26,11 @@
 <body>
 <main>
   <h1>Personal tokens</h1>
-  <p>Create your own token for the fixture's shared-token endpoint, the way you would on a vendor's API token page.</p>
+  <p>Create your own token, the way you would on a vendor's API token page.</p>
   {{if .Token}}
   <div class="token" id="token">
     <p>Token for <strong>{{.Email}}</strong>. Send it to Speakeasy in this request header:</p>
-    <code id="header">{{.Header}}: Bearer {{.Token}}</code>
+    <code id="header">{{.Header}}: {{.Token}}</code>
   </div>
   {{end}}
   <form method="post" action="/tokens">

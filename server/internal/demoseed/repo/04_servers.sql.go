@@ -1669,7 +1669,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
   ($3::uuid, $2::uuid, 'Service Account Server', 'service-account',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/shared'),
   ($4::uuid, $2::uuid, 'Pass-Through Token Server', 'pass-through-token',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared')
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/own-token')
 `
 
 type ServersInsertRemoteMCPServersParams struct {

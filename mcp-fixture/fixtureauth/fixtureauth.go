@@ -65,6 +65,10 @@ const (
 	PathAutoMCP = "/mcp/auto"
 	// PathSharedMCP takes the shared token or a caller's own token.
 	PathSharedMCP = "/mcp/shared"
+	// PathOwnTokenMCP lets anyone connect and list tools, but every tool call
+	// needs the caller's own token in the OwnTokenHeader request header, like
+	// an API that takes a personal API key.
+	PathOwnTokenMCP = "/mcp/own-token"
 	// PathOpenMCP needs no credentials at all.
 	PathOpenMCP = "/mcp/open"
 	// PathEMAMCP takes access tokens from the dev-idp's resource
@@ -87,6 +91,10 @@ const EMAScope = ScopeNotesRead
 func EMAAuthorizationServer(devIDPURL string) string {
 	return strings.TrimRight(devIDPURL, "/") + "/resource-as/" + EMAResourceSlug
 }
+
+// OwnTokenHeader is the request header PathOwnTokenMCP reads the caller's own
+// token from.
+const OwnTokenHeader = "X-Upstream-Token"
 
 // PersonalTokenTTL is how long a token from the personal token page lives.
 const PersonalTokenTTL = 30 * 24 * time.Hour

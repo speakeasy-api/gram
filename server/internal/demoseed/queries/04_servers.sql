@@ -18,7 +18,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
   (@slack_id::uuid, @project_id::uuid, 'Service Account Server', 'service-account',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/shared'),
   (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
-   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared');
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/own-token');
 
 -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients

@@ -142,24 +142,24 @@ needs and the shared demo org must never have:
   (`mcp-fixture/`, pitchfork daemon `mcp-fixture`, `GRAM_MCP_FIXTURE_URL`): an
   OAuth 2.1 server (sign in by picking an email; dynamic registration, client
   ID metadata documents, PKCE, refresh rotation, tokens bound to the requested
-  resource), MCP endpoints `/mcp/oauth`, `/mcp/auto`, `/mcp/shared` and
-  `/mcp/open` and `/mcp/ema`, a personal token page at `/tokens`, a stub of
+  resource), MCP endpoints `/mcp/oauth`, `/mcp/auto`, `/mcp/shared`,
+  `/mcp/own-token`, `/mcp/open` and `/mcp/ema`, a personal token page at `/tokens`, a stub of
   the demo API, and a tunnel agent on the local tunnel gateway. Its credentials live in
   `fixtureauth` and are checked in on purpose. `local_mcp_fixture.go` points
   the local org at it:
 
-  | Server                             | Tests                                                                                                | Locally                                                                                 |
-  | ---------------------------------- | ---------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key                        | Calls the fixture's API stub (`ACME_SERVER_URL` system environment)                     |
-  | Read-Only Tool Subset              | A second toolset over the same API with only read-only tools; gateway membership, killswitch history | Same API stub                                                                           |
-  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                                       | Same API stub                                                                           |
-  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                                           | Its authorization server metadata is the fixture's                                      |
-  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections                        | `/mcp/oauth`; seeded sign-ins hold real fixture tokens                                  |
-  | Service Account Server             | One static shared credential for every caller                                                        | `/mcp/shared` with the checked-in shared token                                          |
-  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                                          | `/mcp/shared`; the caller sends `X-Upstream-Token` (create one at `/tokens`)            |
-  | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration                                   | `/mcp/auto`, with no client until an admin saves Auto-Configure                         |
-  | Tunnelled Private Server           | A server on a private network, reached through a tunnel                                              | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open` |
-  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG                               | `/mcp/ema`, through the dev-idp (below)                                                 |
+  | Server                             | Tests                                                                                                | Locally                                                                                         |
+  | ---------------------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+  | OpenAPI Server (API Key)           | A server generated from an OpenAPI document, reached with a Speakeasy API key                        | Calls the fixture's API stub (`ACME_SERVER_URL` system environment)                             |
+  | Read-Only Tool Subset              | A second toolset over the same API with only read-only tools; gateway membership, killswitch history | Same API stub                                                                                   |
+  | Server-Specific Sign-In            | A hosted server with its own Speakeasy sign-in                                                       | Same API stub                                                                                   |
+  | External OAuth Server              | Callers bring a token from the customer's own OAuth server                                           | Its authorization server metadata is the fixture's                                              |
+  | Per-User OAuth Server              | Each person signs in upstream: expiry, refresh, scope pins, agent connections                        | `/mcp/oauth`; seeded sign-ins hold real fixture tokens                                          |
+  | Service Account Server             | One static shared credential for every caller                                                        | `/mcp/shared` with the checked-in shared token                                                  |
+  | Pass-Through Token Server          | Each caller's own token, forwarded upstream                                                          | `/mcp/own-token`; the caller's `X-Upstream-Token` header is forwarded (create one at `/tokens`) |
+  | Auto-Configured OAuth Server       | An admin sets up sign-in through discovery and client registration                                   | `/mcp/auto`, with no client until an admin saves Auto-Configure                                 |
+  | Tunnelled Private Server           | A server on a private network, reached through a tunnel                                              | The fixture's tunnel agent connects with `fixtureauth.TunnelKey` and serves `/mcp/open`         |
+  | Enterprise Sign-In (ID-JAG) Server | Sign-in through the company identity provider, exchanged for an ID-JAG                               | `/mcp/ema`, through the dev-idp (below)                                                         |
 
   The Enterprise Sign-In (ID-JAG) Server is wired by `local_ema.go`. The
   dev-idp plays the company identity provider: the seed creates its EMA app,

@@ -51,12 +51,8 @@ type LocalMCPFixtureOptions struct {
 const (
 	fixtureProviderName       = "MCP Fixture OAuth"
 	fixtureEnvironmentFixedID = "0000-4000-a000-000000007008"
-	// fixtureOwnTokenHeader is the request header a Pass-Through Token Server
-	// caller puts their own upstream token in; Speakeasy forwards it as
-	// Authorization.
-	fixtureOwnTokenHeader = "X-Upstream-Token" // #nosec G101 -- a header name, not a credential
-	fixtureAPIEnvVar      = "ACME_SERVER_URL"
-	demoOAuthResource     = "https://mcp-fixture.example.com/mcp/oauth"
+	fixtureAPIEnvVar          = "ACME_SERVER_URL"
+	demoOAuthResource         = "https://mcp-fixture.example.com/mcp/oauth"
 )
 
 // wireLocalMCPFixture rewires, in the local org only:
@@ -238,14 +234,16 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 	}
 
 	// 4. The Pass-Through Token Server: each caller brings their own upstream
-	// token in X-Upstream-Token, forwarded as Authorization.
-	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, ID: s.det("remotemcp-github"), ProjectID: proj})
+	// token in a request header Speakeasy forwards unchanged (Manual identity:
+	// users manage their own headers). The fixture's own-token endpoint lets
+	// anyone connect but runs tools only for a caller with a token.
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathOwnTokenMCP, ID: s.det("remotemcp-github"), ProjectID: proj})
 	if err := expect("point the pass-through server", n, err); err != nil {
 		return err
 	}
 	n, err = q.LocalFixtureUpsertForwardedHeader(ctx, repo.LocalFixtureUpsertForwardedHeaderParams{
 		ID: s.det("remote-header-pass-through"), RemoteMcpServerID: s.det("remotemcp-github"), ProjectID: proj,
-		Name: "Authorization", FromRequestHeader: fixtureOwnTokenHeader,
+		Name: fixtureauth.OwnTokenHeader, FromRequestHeader: fixtureauth.OwnTokenHeader,
 	})
 	if err := expect("forward the caller's token", n, err); err != nil {
 		return err

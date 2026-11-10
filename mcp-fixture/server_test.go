@@ -334,7 +334,7 @@ func TestPersonalTokenPage(t *testing.T) {
 	_, err := io.Copy(&body, resp.Body)
 	require.NoError(t, err)
 	_ = resp.Body.Close()
-	_, after, found := strings.Cut(body.String(), "X-Upstream-Token: Bearer ")
+	_, after, found := strings.Cut(body.String(), fixtureauth.OwnTokenHeader+": ")
 	require.True(t, found, "the page shows the header to send")
 	tok, _, _ := strings.Cut(after, "<")
 	who := callTool(t, base+fixtureauth.PathSharedMCP, tok, "whoami", nil)
@@ -424,4 +424,49 @@ func TestEMAEndpointNeedsTheDevIDP(t *testing.T) {
 	resp := get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP)
 	_ = resp.Body.Close()
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}
+
+type headerTransport struct{ name, value string }
+
+func (h headerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	if h.value != "" {
+		r.Header.Set(h.name, h.value)
+	}
+	return http.DefaultTransport.RoundTrip(r)
+}
+
+func TestOwnTokenEndpoint(t *testing.T) {
+	t.Parallel()
+	_, base := startFixture(t, time.Hour)
+	connect := func(token string) *mcp.ClientSession {
+		client := mcp.NewClient(&mcp.Implementation{Name: "fixture-test", Version: "1.0.0"}, nil)
+		session, err := client.Connect(t.Context(), &mcp.StreamableClientTransport{
+			Endpoint:   base + fixtureauth.PathOwnTokenMCP,
+			HTTPClient: &http.Client{Transport: headerTransport{name: fixtureauth.OwnTokenHeader, value: token}},
+		}, nil)
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = session.Close() })
+		return session
+	}
+
+	// Anyone can connect and list tools, so a setup probe sees a working
+	// server, but a tool call without a token is refused.
+	anonymous := connect("")
+	tools, err := anonymous.ListTools(t.Context(), nil)
+	require.NoError(t, err)
+	require.NotEmpty(t, tools.Tools)
+	res, err := anonymous.CallTool(t.Context(), &mcp.CallToolParams{Name: "whoami", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.True(t, res.IsError, "a call without the caller's own token must fail")
+
+	pair, err := fixtureauth.IssueTokens(base, fixtureauth.Resource(base, fixtureauth.PathSharedMCP), "personal-token", "pat@fixture.test", nil, time.Hour, time.Now())
+	require.NoError(t, err)
+	res, err = connect(pair.AccessToken).CallTool(t.Context(), &mcp.CallToolParams{Name: "whoami", Arguments: map[string]any{}})
+	require.NoError(t, err)
+	require.False(t, res.IsError, "%v", res.Content)
+	out, ok := res.StructuredContent.(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "pat@fixture.test", out["identity"])
+	require.Equal(t, "own-token", out["auth"])
 }
