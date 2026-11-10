@@ -54,13 +54,16 @@ type connectionEnding struct {
 }
 
 // connectionClients is the clients seeded attempts come from.
+// demoScriptVersion is the seeded HTTP library version, as its User-Agent names it.
+const demoScriptVersion = "0.28.1"
+
 var connectionClients = []struct{ family, version string }{
 	{mcpconnectionattempts.FamilyCodexCLI, "0.77.0"},
 	{mcpconnectionattempts.FamilyClaudeCode, "2.0.14"},
 	{mcpconnectionattempts.FamilyCursor, "2.0.77"},
 	{mcpconnectionattempts.FamilyVSCode, "1.105.1"},
 	{mcpconnectionattempts.FamilyOpenAIConnector, "1.0.0"},
-	{mcpconnectionattempts.FamilyScript, "0.28.1"},
+	{mcpconnectionattempts.FamilyScript, demoScriptVersion},
 }
 
 var connectionEndings = []connectionEnding{
@@ -340,15 +343,16 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
 	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
 	seeded := []struct {
-		scope mcpconnectionattempts.Scope
-		step  mcpconnectionattempts.Step
-		what  mcpconnectionattempts.Happened
-		opts  []mcpconnectionattempts.Option
+		scope  mcpconnectionattempts.Scope
+		step   mcpconnectionattempts.Step
+		what   mcpconnectionattempts.Happened
+		caller string
+		opts   []mcpconnectionattempts.Option
 	}{
-		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, workload...)},
-		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, workload...)},
-		{assistant, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted, []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials), mcpconnectionattempts.Detail("assistant_tokens_not_issued")}},
-		{s.connectionServerScope(), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected, []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person), mcpconnectionattempts.RequestMethod("initialize"), mcpconnectionattempts.Provider(demoConnectionProvider)}},
+		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, workload...)},
+		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, "workload", append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, workload...)},
+		{assistant, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted, "assistant", []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials), mcpconnectionattempts.Detail("assistant_tokens_not_issued")}},
+		{s.connectionServerScope(), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected, "", []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person), mcpconnectionattempts.RequestMethod("initialize"), mcpconnectionattempts.Provider(demoConnectionProvider)}},
 	}
 	rows := make([]mcpconnectionattempts.Row, 0, len(seeded))
 	for n, row := range seeded {
@@ -359,8 +363,13 @@ func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
 			return nil, fmt.Errorf("build connection token event: %w", err)
 		}
 		built.TraceID = md5Hex(s.name(key))
-		if row.step == mcpconnectionattempts.StepMCPRequest {
+		switch row.step {
+		case mcpconnectionattempts.StepMCPRequest:
 			s.setConnectionClient(&built, key)
+		case mcpconnectionattempts.StepInboundToken:
+			// A workload or assistant asks with an HTTP library from a machine of its own, not a person's device.
+			built.ClientFamily, built.ClientVersion = mcpconnectionattempts.FamilyScript, demoScriptVersion
+			built.DeviceKey = md5Hex(s.name("connection-device-" + row.caller))
 		}
 		rows = append(rows, built)
 	}
