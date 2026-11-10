@@ -87,16 +87,16 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if want == "" {
 		return none, nil
 	}
-	var matched, outage remotesessions.UpstreamToken
-	var outageIssuer uuid.UUID
+	var matched, held remotesessions.UpstreamToken
+	var heldIssuer uuid.UUID
 	found := 0
 	for issuerID, entry := range tokens {
 		if entry.HeldWithoutToken() {
 			// A held grant on the member's own issuer answers for it even when its resource
 			// no longer matches: it carries no bearer, and the alternative is an anonymous call.
 			routes := upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID)
-			if routes && heldOutranks(entry, issuerID, outage, outageIssuer) {
-				outage, outageIssuer = entry, issuerID
+			if routes && heldOutranks(entry, issuerID, held, heldIssuer) {
+				held, heldIssuer = entry, issuerID
 			}
 			continue
 		}
@@ -107,8 +107,8 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
-		if outage.HeldWithoutToken() {
-			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
+		if held.HeldWithoutToken() {
+			return held, metaMemberClientCredentialError(member, held.ClientCredentialErr)
 		}
 		if member.remoteSessionIssuerID.Valid {
 			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {

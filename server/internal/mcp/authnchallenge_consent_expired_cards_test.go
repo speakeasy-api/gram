@@ -611,3 +611,45 @@ func TestServeConsentAction_RefreshUnreadableSignInPointsToTheCard(t *testing.T)
 		require.Contains(t, strings.ReplaceAll(renderConsentAt(t, fx, location), "&#39;", "'"), "Your saved sign-in can't be renewed. Disconnect this service, then connect it again.")
 	})
 }
+
+// Verify answers a renewal the configuration refused the same way whether or not the access token can be read.
+func TestServeConsentAction_VerifyMisconfiguredRenewalMatchesReadableGrant(t *testing.T) {
+	t.Parallel()
+
+	refused := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"unauthorized_client"}`))
+	}))
+	t.Cleanup(refused.Close)
+	verify := func(name string, access string, accessExpiresIn time.Duration) url.Values {
+		ctx, fx := seedMetaValidationFixture(t, name+"-"+uuid.NewString()[:8])
+		pointVerifyAtTokenEndpoint(t, ctx, fx, refused.URL)
+		if access != "not-ciphertext" {
+			sealed, err := fx.ti.enc.Encrypt([]byte(access))
+			require.NoError(t, err)
+			access = sealed
+		}
+		refresh, err := fx.ti.enc.Encrypt([]byte("refresh-token"))
+		require.NoError(t, err)
+		_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+			SubjectUrn: fx.subject, UserSessionIssuerID: fx.endpoint.UserSessionIssuerID, RemoteSessionClientID: fx.clientID,
+			AccessTokenEncrypted: access, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(accessExpiresIn)),
+			RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: conv.ToPGText(fx.member.url),
+		})
+		require.NoError(t, err)
+		w, err := postValidate(t, fx, fx.clientID)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusSeeOther, w.Code)
+		location, err := url.Parse(w.Header().Get("Location"))
+		require.NoError(t, err)
+		query := location.Query()
+		require.Empty(t, query.Get("validate_unfinished"), "retrying can't fix a refused renewal")
+		require.Equal(t, fx.clientID.String(), query.Get("validate_failed"))
+		return query
+	}
+
+	readable := verify("verify-misconfigured-readable", "stale-token", -time.Minute)
+	unreadable := verify("verify-misconfigured-unreadable", "not-ciphertext", time.Hour)
+	require.Equal(t, readable.Get("validate_notice"), unreadable.Get("validate_notice"))
+}

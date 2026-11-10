@@ -292,8 +292,9 @@ func (s *Service) probeRemoteSession(
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
 			if candidate.HeldWithoutToken() {
-				// Nothing stored can be read, so it checks as not connected.
-				if candidate.SignInUnreadable() {
+				// Only an outage can clear on a retry. An unreadable or refused
+				// grant gets the remedy a readable grant refused the same way gets.
+				if !candidate.SessionUnavailable() {
 					continue
 				}
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {

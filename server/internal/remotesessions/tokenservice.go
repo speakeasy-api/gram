@@ -1148,33 +1148,11 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 		if attached && sess.SubjectUrn.Kind != urn.SessionSubjectKindUser {
 			return true, nil
 		}
-		stored := readStoredTokens(m.enc, sess, now)
-		if stored.unreadable {
+		// The rule resolution uses: a live readable access token serves, even
+		// inside the expiry skew, and a readable usable refresh token renews.
+		if !readStoredTokens(m.enc, sess, now).usable {
 			return true, nil
 		}
-		if accessTokenUsable(sess, now) {
-			// Resolution forwards this token without a refresh, or renews it
-			// when it can't be read, which the refresh check below judges.
-			if stored.access != "" {
-				continue
-			}
-			if stored.accessErr == nil {
-				return true, nil
-			}
-		}
-		if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
-			if plain, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err == nil && plain != "" {
-				continue
-			}
-		}
-		// A failed early refresh still forwards the access token until its
-		// actual deadline. Do not force reconnect during that grace window.
-		if accessTokenLive(sess, now) {
-			if plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted); err == nil && plain != "" {
-				continue
-			}
-		}
-		return true, nil
 	}
 	return false, nil
 }

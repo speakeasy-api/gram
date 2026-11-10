@@ -71,6 +71,9 @@ type storedTokens struct {
 
 	// usable is a grant whose stored access token can serve now or whose refresh token can renew it.
 	usable bool
+
+	// refreshRead marks that the refresh token was decrypted, so refreshErr is its answer.
+	refreshRead bool
 }
 
 // readStoredTokens is the one rule for whether a grant's stored tokens can be used, shared by resolution and status.
@@ -80,14 +83,16 @@ func readStoredTokens(enc *encryption.Client, sess remotesessions_repo.RemoteSes
 	if !authorizationUsable(sess, now) {
 		return read
 	}
-	if sess.AccessTokenEncrypted != "" {
+	// A lapsed access token is never sent, so it is never decrypted either.
+	if sess.AccessTokenEncrypted != "" && accessTokenLive(sess, now) {
 		read.access, read.accessErr = enc.Decrypt(sess.AccessTokenEncrypted)
-		if read.accessErr == nil && read.access != "" && accessTokenLive(sess, now) {
+		if read.accessErr == nil && read.access != "" {
 			read.usable = true
 			return read
 		}
 	}
 	if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
+		read.refreshRead = true
 		if _, read.refreshErr = enc.Decrypt(sess.RefreshTokenEncrypted.String); read.refreshErr == nil {
 			read.usable = true
 			return read

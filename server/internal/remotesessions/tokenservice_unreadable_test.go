@@ -530,3 +530,50 @@ func TestRefreshNow_LapsedGrantSkipsTheDecrypt(t *testing.T) {
 	require.Empty(t, logs.levelOf("remote session stored refresh token could not be decrypted"))
 	require.Zero(t, refreshes.Load())
 }
+
+// A lapsed access token is never sent, so one this key can't read is an ordinary lapsed grant, not a key problem.
+func TestResolveAccessTokens_LapsedUnreadableAccessIsAnOrdinaryReconnect(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, logs := unreadableEnv(t, "unreadable-lapsed-access", &refreshes, healingRefresh)
+	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: "not-ciphertext", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+		RefreshTokenRotated: true, Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+
+	require.True(t, needsReconnect(t, env))
+	require.Equal(t, remotesessions.RemoteSessionExpired, storedSessionStatus(t, env).Status)
+	_, err = resolveAll(t, env)
+	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+	require.NotErrorIs(t, err, remotesessions.ErrStoredSignInUnreadable)
+	require.Empty(t, logs.levelOf("remote session stored"))
+	require.Zero(t, storedTokenUnreadableCount(t, env, remotesessionmetrics.StoredTokenAccess, remotesessionmetrics.StoredTokenNeedsSignIn))
+}
+
+// An empty access token with a refresh token that can renew it needs no reconnect, as resolution renews it.
+func TestRemoteSessionsNeedReconnect_EmptyAccessWithReadableRefreshRenews(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	env, _ := unreadableEnv(t, "empty-access-renews", &refreshes, healingRefresh)
+	current, err := env.q.GetActiveRemoteSession(t.Context(), repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	_, err = env.q.UpdateRemoteSessionTokensIfUnchanged(t.Context(), repo.UpdateRemoteSessionTokensIfUnchangedParams{
+		SubjectUrn: env.subject, RemoteSessionClientID: env.clientID, ExpectedUpdatedAt: current.UpdatedAt,
+		AccessTokenEncrypted: "", AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)),
+		RefreshTokenEncrypted: current.RefreshTokenEncrypted, Scopes: current.Scopes,
+	})
+	require.NoError(t, err)
+
+	require.False(t, needsReconnect(t, env))
+	tokens, err := resolveAll(t, env)
+	require.NoError(t, err)
+	for _, entry := range tokens {
+		require.Equal(t, "healed-access", entry.Token)
+	}
+}

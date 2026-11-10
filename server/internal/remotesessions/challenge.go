@@ -1252,9 +1252,11 @@ func (m *ChallengeManager) remoteSessionStates(rows []remotesessions_repo.ListRe
 		}
 		// A refresh token this key can't read can't be sent, so Refresh is not offered.
 		if canRefresh {
-			if _, err := m.enc.Decrypt(stored.RefreshTokenEncrypted.String); err != nil {
-				canRefresh = false
+			refreshErr := read.refreshErr
+			if !read.refreshRead {
+				_, refreshErr = m.enc.Decrypt(stored.RefreshTokenEncrypted.String)
 			}
+			canRefresh = refreshErr == nil
 		}
 		var accessExpiresAt *time.Time
 		if row.AccessExpiresAt.Valid {

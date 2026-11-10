@@ -561,7 +561,9 @@ func newAgentCredentialReader(db *pgxpool.Pool, enc *encryption.Client, organiza
 // describe sets entry's credential mode, as the dashboard's "Acting on behalf
 // of" reads it: a server that asks no person to sign in uses a shared
 // credential, and otherwise the agent acts for the people whose connections
-// are assigned to it.
+// are assigned to it. connection_expired differs from that panel: it uses the
+// resolution rule, so a connection whose stored tokens can't be read or that
+// stores none is expired, while the panel reads only the expiry fields.
 func (r *agentCredentialReader) describe(ctx context.Context, server platformrepo.ListPlatformMCPInventoryRow, entry *AgentMCPServerAccess) error {
 	auth, err := authclients.ReadServerAuthentication(ctx, r.db, r.organizationID, server.McpServerID)
 	if err != nil {

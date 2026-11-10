@@ -381,8 +381,8 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return none, nil
 	}
 
-	var match, outage remotesessions.UpstreamToken
-	var outageIssuer uuid.UUID
+	var match, held remotesessions.UpstreamToken
+	var heldIssuer uuid.UUID
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
@@ -392,8 +392,8 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 			continue
 		}
 		if entry.HeldWithoutToken() {
-			if heldOutranks(entry, issuerID, outage, outageIssuer) {
-				outage, outageIssuer = entry, issuerID
+			if heldOutranks(entry, issuerID, held, heldIssuer) {
+				held, heldIssuer = entry, issuerID
 			}
 			continue
 		}
@@ -401,8 +401,8 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		match = entry
 	}
 	switch {
-	case found == 0 && outage.HeldWithoutToken():
-		return none, outage.ClientCredentialErr
+	case found == 0 && held.HeldWithoutToken():
+		return none, held.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {
 			return none, err
