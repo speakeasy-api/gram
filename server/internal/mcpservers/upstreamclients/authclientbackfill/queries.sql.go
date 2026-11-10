@@ -875,7 +875,25 @@ WHERE s.id = $3::uuid
           OR (rp.id IS NULL AND r.url = b.resource)
         ))
         OR (t.id IS NOT NULL
-            AND s.remote_session_issuer_id = b.remote_session_issuer_id
+            AND ARRAY(
+                  -- The one live provider the server's live client associations name.
+                  SELECT DISTINCT c.remote_session_issuer_id
+                  FROM mcp_server_remote_session_clients AS a
+                  JOIN remote_session_clients AS c
+                    ON c.id = a.remote_session_client_id
+                   AND c.deleted IS FALSE
+                   AND (c.project_id = a.project_id
+                        OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+                  JOIN remote_session_issuers AS provider
+                    ON provider.id = c.remote_session_issuer_id
+                   AND provider.deleted IS FALSE
+                   AND (provider.project_id = a.project_id
+                        OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+                  WHERE a.mcp_server_id = s.id
+                    AND a.project_id = s.project_id
+                    AND a.organization_id = p.organization_id
+                    AND a.deleted IS FALSE
+                )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
             AND t.resource_identifier = b.resource)
       )
   )
@@ -1989,7 +2007,25 @@ WHERE b.id = $1::uuid
       OR (rp.id IS NULL AND r.url = b.resource)
     ))
     OR (t.id IS NOT NULL
-        AND s.remote_session_issuer_id = b.remote_session_issuer_id
+        AND ARRAY(
+              -- The one live provider the server's live client associations name.
+              SELECT DISTINCT c.remote_session_issuer_id
+              FROM mcp_server_remote_session_clients AS a
+              JOIN remote_session_clients AS c
+                ON c.id = a.remote_session_client_id
+               AND c.deleted IS FALSE
+               AND (c.project_id = a.project_id
+                    OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+              JOIN remote_session_issuers AS provider
+                ON provider.id = c.remote_session_issuer_id
+               AND provider.deleted IS FALSE
+               AND (provider.project_id = a.project_id
+                    OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+              WHERE a.mcp_server_id = s.id
+                AND a.project_id = s.project_id
+                AND a.organization_id = b.organization_id
+                AND a.deleted IS FALSE
+            )::uuid[] = ARRAY[b.remote_session_issuer_id]::uuid[]
         AND t.resource_identifier = b.resource)
   )
 ORDER BY s.id
@@ -2017,8 +2053,8 @@ type ListEMABindingServersRow struct {
 // chains only a request whose own inbound issuer the binding names. It is a
 // remote server whose valid persisted protected resource names the binding's
 // resource, or, with no valid persisted record, whose URL names it; or a
-// tunneled server whose resource identifier names it under its own derived
-// issuer. A remote server whose valid record lists authorization servers
+// tunneled server whose resource identifier names it and whose client
+// associations name the binding's issuer as their one provider. A remote server whose valid record lists authorization servers
 // without the binding's issuer is returned as issuer_not_allowed, since the
 // runtime would refuse it. direct reports that the server's own issuer is the
 // binding's.
