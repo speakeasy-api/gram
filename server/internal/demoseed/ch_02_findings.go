@@ -846,15 +846,15 @@ func (s *seeder) chfGatewayDiscovery(ctx context.Context, ch driver.Conn) error 
 }
 
 var (
-	// Weighted member pick: support 5, ops 3, linear 1, slack 1 of every 10.
+	// Weighted member pick: support 5, ops 3, Per-User OAuth Server 1, slack 1 of every 10.
 	chfGatewayMembers = [10]string{"support", "support", "support", "support", "support", "ops", "ops", "ops", "linear", "slack"}
 	chfGatewayTools   = map[string][]string{
 		"support": {"search_logs", "get_customer", "query_db", "fetch_traces"},
-		"ops":     {"list_deploys", "check_health", "get_metrics", "process_refund"},
-		"linear":  {"list_issues", "create_issue", "get_issue"},
-		"slack":   {"send_message", "list_channels"},
+		"ops":     {"list_deploys", "check_health", "get_metrics", "fetch_traces"},
+		"linear":  {"list_notes", "add_note", "whoami"},
+		"slack":   {"whoami", "echo"},
 	}
-	chfGatewayToolsets = map[string]string{"support": "acme-support-tools", "ops": "acme-ops"}
+	chfGatewayToolsets = map[string]string{"support": "openapi-api-key", "ops": "read-only-subset"}
 )
 
 // chfGatewayMemberCalls: member calls dispatched through the gateway. They
@@ -956,7 +956,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	return rows
 }
 
-// chfGatewayGoneCalls: dispatches to GitHub from before it left the gateway
+// chfGatewayGoneCalls: dispatches to the Shared or Own Token Server from before it left the gateway
 // (its membership is soft-deleted in Postgres three days ago). They count
 // toward the gateway's dispatched-call totals but must not appear in Calls by
 // member.
@@ -964,7 +964,7 @@ func (s *seeder) chfGatewayGoneCalls(ctx context.Context, ch driver.Conn) error 
 	gateway := s.det("metamcp-1").String()
 	member := s.det("mcpserver-github").String()
 	remote := s.det("remotemcp-github").String()
-	tools := []string{"list_pull_requests", "get_issue", "search_code"}
+	tools := []string{"list_notes", "echo", "whoami"}
 	handles := []string{"amara", "priya", "mateo"}
 	rows := make([]chfTelemetryRow, 0, 24)
 	for n := range 24 {

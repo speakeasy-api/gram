@@ -89,14 +89,14 @@ func (s *seeder) seedServers(ctx context.Context) error {
 
 	if err := s.q.ServersInsertHostedToolsetMCPServers(ctx, repo.ServersInsertHostedToolsetMCPServersParams{
 		Toolset1:         s.toolset1(),
-		SupportMcpSlug:   s.spec.OrgSlug + "-support",
+		SupportMcpSlug:   s.spec.OrgSlug + "-openapi-api-key",
 		Toolset2:         s.toolset2(),
-		OpsMcpSlug:       s.spec.OrgSlug + "-ops",
+		OpsMcpSlug:       s.spec.OrgSlug + "-read-only-subset",
 		Toolset3:         s.toolset3(),
-		PartnerMcpSlug:   s.spec.OrgSlug + "-partner",
+		PartnerMcpSlug:   s.spec.OrgSlug + "-server-specific-sign-in",
 		PartnerIssuerID:  s.usIssuer(),
 		Toolset4:         s.toolset4(),
-		DiscoveryMcpSlug: s.spec.OrgSlug + "-oauth-discovery",
+		DiscoveryMcpSlug: s.spec.OrgSlug + "-external-oauth",
 		ProjectID:        proj,
 	}); err != nil {
 		return fmt.Errorf("insert demo hosted toolset mcp servers: %w", err)
@@ -307,16 +307,19 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		return fmt.Errorf("insert demo removed github meta member: %w", err)
 	}
 	if err := s.q.ServersInsertGatewayEndpoints(ctx, repo.ServersInsertGatewayEndpointsParams{
-		GatewayEndpointID: s.det("endpoint-gateway"),
-		ProjectID:         proj,
-		MetaID:            s.det("metamcp-1"),
-		GatewaySlug:       s.spec.OrgSlug + "-gateway",
-		LinearEndpointID:  s.det("endpoint-linear"),
-		LinearServerID:    s.det("mcpserver-linear"),
-		LinearSlug:        s.spec.OrgSlug + "-per-user-oauth",
-		SlackEndpointID:   s.det("endpoint-slack"),
-		SlackServerID:     s.det("mcpserver-slack"),
-		SlackSlug:         s.spec.OrgSlug + "-slack",
+		GatewayEndpointID:     s.det("endpoint-gateway"),
+		ProjectID:             proj,
+		MetaID:                s.det("metamcp-1"),
+		GatewaySlug:           s.spec.OrgSlug + "-gateway",
+		LinearEndpointID:      s.det("endpoint-linear"),
+		LinearServerID:        s.det("mcpserver-linear"),
+		LinearSlug:            s.spec.OrgSlug + "-per-user-oauth",
+		SlackEndpointID:       s.det("endpoint-slack"),
+		SlackServerID:         s.det("mcpserver-slack"),
+		SlackSlug:             s.spec.OrgSlug + "-service-account",
+		PassThroughEndpointID: s.det("endpoint-github"),
+		PassThroughServerID:   s.det("mcpserver-github"),
+		PassThroughSlug:       s.spec.OrgSlug + "-pass-through-token",
 	}); err != nil {
 		return fmt.Errorf("insert demo gateway endpoints: %w", err)
 	}
@@ -742,7 +745,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 // tunnel, so the tunnel Overview has a source to chart without a live agent.
 func (s *seeder) seedServersTunnel(ctx context.Context) error {
 	proj := s.projectID()
-	slug := s.spec.OrgSlug + "-private-inventory"
+	slug := s.spec.OrgSlug + "-tunnelled-private"
 	if err := s.q.ServersInsertPrivateInventoryTunnel(ctx, repo.ServersInsertPrivateInventoryTunnelParams{
 		ID:        s.tunnelSourceID(),
 		ProjectID: proj,
@@ -940,10 +943,10 @@ func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
 		NotionEndpointID:   s.det("endpoint-notion"),
 		ProjectID:          proj,
 		NotionServerID:     s.det("mcpserver-notion"),
-		NotionSlug:         s.spec.OrgSlug + "-notion",
+		NotionSlug:         s.spec.OrgSlug + "-auto-configured-oauth",
 		DeepwikiEndpointID: s.det("endpoint-deepwiki"),
 		DeepwikiServerID:   s.det("mcpserver-deepwiki"),
-		DeepwikiSlug:       s.spec.OrgSlug + "-deepwiki",
+		DeepwikiSlug:       s.spec.OrgSlug + "-no-auth",
 	}); err != nil {
 		return fmt.Errorf("insert demo notion and deepwiki endpoints: %w", err)
 	}

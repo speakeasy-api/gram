@@ -216,6 +216,26 @@ func (q *Queries) LocalFixtureListLiveSessions(ctx context.Context, arg LocalFix
 	return items, nil
 }
 
+const localFixturePointExternalOAuth = `-- name: LocalFixturePointExternalOAuth :execrows
+UPDATE external_oauth_server_metadata SET metadata = $1::jsonb, authorization_server_issuer = NULL, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid AND deleted IS FALSE
+`
+
+type LocalFixturePointExternalOAuthParams struct {
+	Metadata  []byte
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The External OAuth Server's authorization server: the running fixture's.
+func (q *Queries) LocalFixturePointExternalOAuth(ctx context.Context, arg LocalFixturePointExternalOAuthParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixturePointExternalOAuth, arg.Metadata, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localFixturePointIssuer = `-- name: LocalFixturePointIssuer :execrows
 UPDATE remote_session_issuers
 SET issuer = $1::text,
@@ -329,62 +349,18 @@ func (q *Queries) LocalFixturePointProtectedResource(ctx context.Context, arg Lo
 }
 
 const localFixturePointRemoteServer = `-- name: LocalFixturePointRemoteServer :execrows
-UPDATE remote_mcp_servers SET url = $1::text, name = $2::text, updated_at = clock_timestamp()
-WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+UPDATE remote_mcp_servers SET url = $1::text, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid AND deleted IS FALSE
 `
 
 type LocalFixturePointRemoteServerParams struct {
 	Url       string
-	Name      string
 	ID        uuid.UUID
 	ProjectID uuid.UUID
 }
 
 func (q *Queries) LocalFixturePointRemoteServer(ctx context.Context, arg LocalFixturePointRemoteServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, localFixturePointRemoteServer,
-		arg.Url,
-		arg.Name,
-		arg.ID,
-		arg.ProjectID,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const localFixtureRenameAuthClient = `-- name: LocalFixtureRenameAuthClient :execrows
-UPDATE mcp_auth_clients SET name = $1::text, updated_at = clock_timestamp()
-WHERE id = $2::uuid AND organization_id = $3::text AND deleted IS FALSE
-`
-
-type LocalFixtureRenameAuthClientParams struct {
-	Name           string
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-func (q *Queries) LocalFixtureRenameAuthClient(ctx context.Context, arg LocalFixtureRenameAuthClientParams) (int64, error) {
-	result, err := q.db.Exec(ctx, localFixtureRenameAuthClient, arg.Name, arg.ID, arg.OrganizationID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
-const localFixtureRenameServer = `-- name: LocalFixtureRenameServer :execrows
-UPDATE mcp_servers SET name = $1::text, updated_at = clock_timestamp()
-WHERE id = $2::uuid AND project_id = $3::uuid AND deleted IS FALSE
-`
-
-type LocalFixtureRenameServerParams struct {
-	Name      string
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-}
-
-func (q *Queries) LocalFixtureRenameServer(ctx context.Context, arg LocalFixtureRenameServerParams) (int64, error) {
-	result, err := q.db.Exec(ctx, localFixtureRenameServer, arg.Name, arg.ID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, localFixturePointRemoteServer, arg.Url, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -404,6 +380,27 @@ type LocalFixtureSetHeaderValueParams struct {
 
 func (q *Queries) LocalFixtureSetHeaderValue(ctx context.Context, arg LocalFixtureSetHeaderValueParams) (int64, error) {
 	result, err := q.db.Exec(ctx, localFixtureSetHeaderValue, arg.Value, arg.ID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureSetRemoteHeaderValue = `-- name: LocalFixtureSetRemoteHeaderValue :execrows
+UPDATE remote_mcp_server_headers h SET value = $1::text, is_secret = FALSE, updated_at = clock_timestamp()
+FROM remote_mcp_servers r
+WHERE h.id = $2::uuid AND h.remote_mcp_server_id = r.id
+  AND r.project_id = $3::uuid AND h.deleted IS FALSE AND h.value IS NOT NULL
+`
+
+type LocalFixtureSetRemoteHeaderValueParams struct {
+	Value     string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalFixtureSetRemoteHeaderValue(ctx context.Context, arg LocalFixtureSetRemoteHeaderValueParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetRemoteHeaderValue, arg.Value, arg.ID, arg.ProjectID)
 	if err != nil {
 		return 0, err
 	}
@@ -460,6 +457,33 @@ func (q *Queries) LocalFixtureSetSessionTokens(ctx context.Context, arg LocalFix
 	return result.RowsAffected(), nil
 }
 
+const localFixtureSetTunnelKey = `-- name: LocalFixtureSetTunnelKey :execrows
+UPDATE tunneled_mcp_servers SET key_hash = $1::text, key_prefix = $2::text, status = 'active', updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalFixtureSetTunnelKeyParams struct {
+	KeyHash   string
+	KeyPrefix string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The Tunnelled Private Server's tunnel takes the fixture daemon's checked-in
+// agent key, so the tunnel is live locally. The shared seed keeps it inert.
+func (q *Queries) LocalFixtureSetTunnelKey(ctx context.Context, arg LocalFixtureSetTunnelKeyParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureSetTunnelKey,
+		arg.KeyHash,
+		arg.KeyPrefix,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localFixtureUpsertEnvironment = `-- name: LocalFixtureUpsertEnvironment :exec
 
 INSERT INTO environments (id, organization_id, project_id, name, slug, description)
@@ -504,6 +528,39 @@ func (q *Queries) LocalFixtureUpsertEnvironmentEntry(ctx context.Context, arg Lo
 		arg.Name,
 		arg.Value,
 		arg.EnvironmentID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localFixtureUpsertForwardedHeader = `-- name: LocalFixtureUpsertForwardedHeader :execrows
+INSERT INTO remote_mcp_server_headers (id, remote_mcp_server_id, name, description, is_required, is_secret, value_from_request_header)
+SELECT $1::uuid, r.id, $2::text, 'Your own upstream token, forwarded from this request header', TRUE, TRUE, $3::text
+FROM remote_mcp_servers r
+WHERE r.id = $4::uuid AND r.project_id = $5::uuid AND r.deleted IS FALSE
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name, value_from_request_header = EXCLUDED.value_from_request_header,
+    value = NULL, deleted_at = NULL, updated_at = clock_timestamp()
+`
+
+type LocalFixtureUpsertForwardedHeaderParams struct {
+	ID                uuid.UUID
+	Name              string
+	FromRequestHeader string
+	RemoteMcpServerID uuid.UUID
+	ProjectID         uuid.UUID
+}
+
+// Upserted by a fixed id, so a reseed rewrites it in place.
+func (q *Queries) LocalFixtureUpsertForwardedHeader(ctx context.Context, arg LocalFixtureUpsertForwardedHeaderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localFixtureUpsertForwardedHeader,
+		arg.ID,
+		arg.Name,
+		arg.FromRequestHeader,
+		arg.RemoteMcpServerID,
 		arg.ProjectID,
 	)
 	if err != nil {

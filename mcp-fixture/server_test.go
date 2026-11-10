@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -279,4 +280,64 @@ func TestAPIStub(t *testing.T) {
 	require.Equal(t, "cus_42", body["id"])
 	health := decode[map[string]any](t, get(t, base+fixtureauth.PathAPI+"/health/check"))
 	require.Equal(t, "ok", health["status"])
+}
+
+func TestTokensAreBoundToTheirResource(t *testing.T) {
+	t.Parallel()
+	_, base := startFixture(t, time.Hour)
+
+	auto, err := fixtureauth.IssueTokens(base, fixtureauth.Resource(base, fixtureauth.PathAutoMCP), "client", "sam@fixture.test", nil, time.Hour, time.Now())
+	require.NoError(t, err)
+	who := callTool(t, base+fixtureauth.PathAutoMCP, auto.AccessToken, "whoami", nil)
+	require.Equal(t, "sam@fixture.test", who["identity"])
+
+	// The same token is refused at the other OAuth endpoint.
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+fixtureauth.PathOAuthMCP, strings.NewReader(`{}`))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+auto.AccessToken)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+	// A token for another server's resource (External OAuth) works nowhere here.
+	foreign, err := fixtureauth.IssueTokens(base, "https://speakeasy.test/mcp/external", "client", "sam@fixture.test", nil, time.Hour, time.Now())
+	require.NoError(t, err)
+	for _, path := range []string{fixtureauth.PathOAuthMCP, fixtureauth.PathAutoMCP, fixtureauth.PathSharedMCP} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+path, strings.NewReader(`{}`))
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+foreign.AccessToken)
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, path)
+	}
+
+	meta := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathAutoMCP))
+	require.Equal(t, fixtureauth.Resource(base, fixtureauth.PathAutoMCP), meta["resource"])
+}
+
+func TestOpenEndpointNeedsNoCredentials(t *testing.T) {
+	t.Parallel()
+	_, base := startFixture(t, time.Hour)
+	who := callTool(t, base+fixtureauth.PathOpenMCP, "", "whoami", nil)
+	require.Equal(t, "anonymous", who["identity"])
+	require.Equal(t, "none", who["auth"])
+}
+
+func TestPersonalTokenPage(t *testing.T) {
+	t.Parallel()
+	_, base := startFixture(t, time.Hour)
+	resp := postForm(t, base+"/tokens", url.Values{"email": {"pat@fixture.test"}})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	var body strings.Builder
+	_, err := io.Copy(&body, resp.Body)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	_, after, found := strings.Cut(body.String(), "X-Upstream-Token: Bearer ")
+	require.True(t, found, "the page shows the header to send")
+	tok, _, _ := strings.Cut(after, "<")
+	who := callTool(t, base+fixtureauth.PathSharedMCP, tok, "whoami", nil)
+	require.Equal(t, "pat@fixture.test", who["identity"])
+	require.Equal(t, "own-token", who["auth"])
 }

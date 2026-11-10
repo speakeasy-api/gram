@@ -18,6 +18,8 @@ import (
 	"time"
 
 	mcpfixture "github.com/speakeasy-api/gram/mcp-fixture"
+	"github.com/speakeasy-api/gram/mcp-fixture/fixtureauth"
+	"github.com/speakeasy-api/gram/tunnel/agent"
 )
 
 func main() {
@@ -29,6 +31,7 @@ func main() {
 	keyFile := flag.String("ssl-key-file", os.Getenv("GRAM_SSL_KEY_FILE"), "TLS key file")
 	ttl := flag.Duration("access-token-ttl", durationEnv("GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL", time.Hour), "access token lifetime")
 	suggested := flag.String("suggested-emails", envOr("GRAM_MCP_FIXTURE_SUGGESTED_EMAILS", "alex@fixture.test,sam@fixture.test"), "comma-separated emails offered on the sign-in page")
+	tunnelGateway := flag.String("tunnel-gateway-url", os.Getenv("GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL"), "local tunnel gateway to serve the open endpoint through (empty: no tunnel)")
 	flag.Parse()
 
 	useTLS, err := tlsMode(*certFile, *keyFile)
@@ -65,6 +68,10 @@ func main() {
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
+
+	if *tunnelGateway != "" {
+		runTunnelAgent(ctx, logger, *tunnelGateway, *baseURL)
+	}
 
 	logger.Info("mcp fixture listening", "address", *address, "base_url", *baseURL)
 	if useTLS {
@@ -151,4 +158,29 @@ func checkBaseURL(raw string, useTLS bool) error {
 		return fmt.Errorf("base URL %q must be an origin, without a path, query or fragment", raw)
 	}
 	return nil
+}
+
+// runTunnelAgent serves the fixture's open endpoint through the local tunnel
+// gateway with the checked-in key, as a customer's agent on a private network
+// would. The agent retries until the gateway is up and the seed has stored
+// the key's hash.
+func runTunnelAgent(ctx context.Context, logger *slog.Logger, gatewayURL, baseURL string) {
+	a, err := agent.New(agent.Config{
+		GatewayURL:     gatewayURL,
+		APIKey:         fixtureauth.TunnelKey,
+		LocalMCPURL:    strings.TrimRight(baseURL, "/") + fixtureauth.PathOpenMCP,
+		ServiceVersion: "mcp-fixture",
+		Metadata:       map[string]string{"source": "mcp-fixture"},
+		// Diagnostics are for real customer networks.
+		DisableDiagnostics: true,
+	}, logger.With("component", "tunnel-agent"))
+	if err != nil {
+		logger.Error("tunnel agent disabled", "error", err)
+		return
+	}
+	go func() {
+		if err := a.Run(ctx); err != nil && ctx.Err() == nil {
+			logger.Error("tunnel agent stopped", "error", err)
+		}
+	}()
 }

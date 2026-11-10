@@ -245,12 +245,24 @@ ON CONFLICT (toolset_id)
 DO UPDATE SET environment_id = EXCLUDED.environment_id, updated_at = clock_timestamp();
 
 -- name: LocalFixturePointRemoteServer :execrows
-UPDATE remote_mcp_servers SET url = @url::text, name = @name::text, updated_at = clock_timestamp()
+UPDATE remote_mcp_servers SET url = @url::text, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 
--- name: LocalFixtureRenameServer :execrows
-UPDATE mcp_servers SET name = @name::text, updated_at = clock_timestamp()
-WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+-- name: LocalFixtureSetRemoteHeaderValue :execrows
+UPDATE remote_mcp_server_headers h SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
+FROM remote_mcp_servers r
+WHERE h.id = @id::uuid AND h.remote_mcp_server_id = r.id
+  AND r.project_id = @project_id::uuid AND h.deleted IS FALSE AND h.value IS NOT NULL;
+
+-- Upserted by a fixed id, so a reseed rewrites it in place.
+-- name: LocalFixtureUpsertForwardedHeader :execrows
+INSERT INTO remote_mcp_server_headers (id, remote_mcp_server_id, name, description, is_required, is_secret, value_from_request_header)
+SELECT @id::uuid, r.id, @name::text, 'Your own upstream token, forwarded from this request header', TRUE, TRUE, @from_request_header::text
+FROM remote_mcp_servers r
+WHERE r.id = @remote_mcp_server_id::uuid AND r.project_id = @project_id::uuid AND r.deleted IS FALSE
+ON CONFLICT (id) DO UPDATE
+SET name = EXCLUDED.name, value_from_request_header = EXCLUDED.value_from_request_header,
+    value = NULL, deleted_at = NULL, updated_at = clock_timestamp();
 
 -- name: LocalFixturePointIssuer :execrows
 UPDATE remote_session_issuers
@@ -293,10 +305,6 @@ SET client_id = @client_id::text, client_id_metadata_uri = @client_id::text,
     callback_base_url = @callback_base_url::text, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 
--- name: LocalFixtureRenameAuthClient :execrows
-UPDATE mcp_auth_clients SET name = @name::text, updated_at = clock_timestamp()
-WHERE id = @id::uuid AND organization_id = @organization_id::text AND deleted IS FALSE;
-
 -- name: LocalFixtureSetHeaderValue :execrows
 UPDATE mcp_auth_client_headers SET value = @value::text, is_secret = FALSE, updated_at = clock_timestamp()
 WHERE id = @id::uuid AND organization_id = @organization_id::text;
@@ -329,3 +337,14 @@ WHERE id = @id::uuid AND remote_session_client_id = ANY(@client_ids::uuid[]) AND
     SELECT 1 FROM remote_session_clients c
     WHERE c.id = remote_sessions.remote_session_client_id AND c.project_id = @project_id::uuid
   );
+
+-- The External OAuth Server's authorization server: the running fixture's.
+-- name: LocalFixturePointExternalOAuth :execrows
+UPDATE external_oauth_server_metadata SET metadata = @metadata::jsonb, authorization_server_issuer = NULL, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The Tunnelled Private Server's tunnel takes the fixture daemon's checked-in
+-- agent key, so the tunnel is live locally. The shared seed keeps it inert.
+-- name: LocalFixtureSetTunnelKey :execrows
+UPDATE tunneled_mcp_servers SET key_hash = @key_hash::text, key_prefix = @key_prefix::text, status = 'active', updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;

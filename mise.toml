@@ -250,6 +250,9 @@ GRAM_MCP_FIXTURE_ADDRESS = "{{env.GRAM_BIND_IP}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 GRAM_MCP_FIXTURE_URL = "{{env.GRAM_HTTP_SCHEME}}://{{env.GRAM_HOST}}:{{env.GRAM_MCP_FIXTURE_PORT}}"
 ## Short access tokens make expiry and refresh visible; refresh tokens last 30 days.
 GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
+## The fixture runs a tunnel agent through the local gateway, serving its open
+## MCP endpoint as the seeded Tunnelled Private Server.
+GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL = "ws://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}/connect"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

@@ -45,7 +45,15 @@ import (
 //go:embed templates/*.html
 var templateFS embed.FS
 
-var signInPage = template.Must(template.ParseFS(templateFS, "templates/signin.html"))
+var (
+	signInPage = template.Must(template.ParseFS(templateFS, "templates/signin.html"))
+	tokensPage = template.Must(template.ParseFS(templateFS, "templates/tokens.html"))
+)
+
+// oauthPaths are the MCP endpoints that take the fixture's OAuth tokens. Each
+// is its own protected resource: a token works only at the endpoint it was
+// issued for.
+var oauthPaths = []string{fixtureauth.PathOAuthMCP, fixtureauth.PathAutoMCP}
 
 // Config configures a fixture server.
 type Config struct {
@@ -103,17 +111,26 @@ func (s *Server) Handler() http.Handler {
 	// Authorization server.
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", s.authorizationServerMetadata)
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.authorizationServerMetadata)
-	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.protectedResourceMetadata)
-	mux.HandleFunc("GET /.well-known/oauth-protected-resource"+fixtureauth.PathOAuthMCP, s.protectedResourceMetadata)
+	mux.HandleFunc("GET /.well-known/oauth-protected-resource", s.protectedResourceMetadata(fixtureauth.PathOAuthMCP))
+	for _, path := range oauthPaths {
+		mux.HandleFunc("GET /.well-known/oauth-protected-resource"+path, s.protectedResourceMetadata(path))
+	}
 	mux.HandleFunc("POST /oauth/register", s.register)
 	mux.HandleFunc("GET /oauth/authorize", s.authorizeGet)
 	mux.HandleFunc("POST /oauth/authorize", s.authorizePost)
 	mux.HandleFunc("POST /oauth/token", s.token)
 	mux.HandleFunc("POST /oauth/revoke", s.revoke)
 
+	// Personal tokens, like a vendor's "create API token" page.
+	mux.HandleFunc("GET /tokens", s.tokensGet)
+	mux.HandleFunc("POST /tokens", s.tokensPost)
+
 	// MCP endpoints.
-	mux.Handle(fixtureauth.PathOAuthMCP, s.mcpHandler(s.authenticateOAuth))
+	for _, path := range oauthPaths {
+		mux.Handle(path, s.mcpHandler(s.authenticateOAuth(path)))
+	}
 	mux.Handle(fixtureauth.PathSharedMCP, s.mcpHandler(s.authenticateShared))
+	mux.Handle(fixtureauth.PathOpenMCP, s.mcpHandler(authenticateOpen))
 
 	// Demo API stub.
 	mux.Handle(fixtureauth.PathAPI+"/", http.StripPrefix(fixtureauth.PathAPI, apiStub()))
@@ -166,14 +183,16 @@ func (s *Server) authorizationServerMetadata(w http.ResponseWriter, _ *http.Requ
 	})
 }
 
-func (s *Server) protectedResourceMetadata(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]any{
-		"resource":                 fixtureauth.OAuthResource(s.issuer),
-		"resource_name":            "Speakeasy MCP fixture (per-user OAuth)",
-		"authorization_servers":    []string{s.issuer},
-		"scopes_supported":         fixtureauth.DefaultScopes,
-		"bearer_methods_supported": []string{"header"},
-	})
+func (s *Server) protectedResourceMetadata(path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, _ *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"resource":                 fixtureauth.Resource(s.issuer, path),
+			"resource_name":            "Speakeasy MCP fixture (" + path + ")",
+			"authorization_servers":    []string{s.issuer},
+			"scopes_supported":         fixtureauth.DefaultScopes,
+			"bearer_methods_supported": []string{"header"},
+		})
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -333,8 +352,13 @@ func (s *Server) validate(ctx context.Context, ar authorizeRequest) (client, str
 	if ar.CodeChallenge == "" || ar.CodeChallengeMethod != "S256" {
 		return c, "PKCE with code_challenge_method=S256 is required", nil
 	}
-	if ar.Resource != "" && ar.Resource != fixtureauth.OAuthResource(s.issuer) {
-		return c, "unknown resource " + ar.Resource, nil
+	// Any absolute resource is accepted and the token is bound to it, so a
+	// client signing in for another server (External OAuth) gets a token that
+	// the fixture's own endpoints refuse.
+	if ar.Resource != "" {
+		if u, err := url.Parse(ar.Resource); err != nil || !u.IsAbs() || u.Host == "" || u.Fragment != "" {
+			return c, "resource must be an absolute URL without a fragment", nil
+		}
 	}
 	for sc := range strings.FieldsSeq(ar.Scope) {
 		if !slices.Contains(fixtureauth.DefaultScopes, sc) {
@@ -496,7 +520,7 @@ func (s *Server) exchangeCode(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_target", "resource does not match the authorization request")
 		return
 	}
-	s.issue(w, code.Email(), code.ClientID, code.Scopes())
+	s.issue(w, code.Email(), code.ClientID, code.Scopes(), code.Resource)
 }
 
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
@@ -527,11 +551,16 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 		oauthError(w, http.StatusBadRequest, "invalid_grant", "refresh token was already used or revoked")
 		return
 	}
-	s.issue(w, rt.Email(), rt.ClientID, scopes)
+	s.issue(w, rt.Email(), rt.ClientID, scopes, rt.Resource)
 }
 
-func (s *Server) issue(w http.ResponseWriter, email, clientID string, scopes []string) {
-	pair, err := fixtureauth.IssueTokens(s.issuer, fixtureauth.OAuthResource(s.issuer), clientID, email, scopes, s.cfg.AccessTokenTTL, time.Now())
+// issue returns a token pair bound to resource, by default the per-user OAuth
+// endpoint.
+func (s *Server) issue(w http.ResponseWriter, email, clientID string, scopes []string, resource string) {
+	if resource == "" {
+		resource = fixtureauth.OAuthResource(s.issuer)
+	}
+	pair, err := fixtureauth.IssueTokens(s.issuer, resource, clientID, email, scopes, s.cfg.AccessTokenTTL, time.Now())
 	if err != nil {
 		oauthError(w, http.StatusInternalServerError, "server_error", err.Error())
 		return
@@ -543,7 +572,7 @@ func (s *Server) issue(w http.ResponseWriter, email, clientID string, scopes []s
 		"expires_in":    int(s.cfg.AccessTokenTTL.Seconds()),
 		"refresh_token": pair.RefreshToken,
 		"scope":         pair.Scope,
-		"resource":      fixtureauth.OAuthResource(s.issuer),
+		"resource":      resource,
 	})
 }
 
@@ -620,7 +649,9 @@ func bearer(r *http.Request) string {
 	return ""
 }
 
-func (s *Server) accessIdentity(tok string) (identity, error) {
+// accessIdentity checks an access token issued by this fixture for one of
+// resources.
+func (s *Server) accessIdentity(tok string, resources ...string) (identity, error) {
 	c, err := fixtureauth.Parse(tok, fixtureauth.KindAccess)
 	if err != nil {
 		return identity{}, err
@@ -628,7 +659,7 @@ func (s *Server) accessIdentity(tok string) (identity, error) {
 	if c.Issuer != s.issuer {
 		return identity{}, errors.New("token was issued by another fixture")
 	}
-	if !slices.Contains(c.Audience, fixtureauth.OAuthResource(s.issuer)) {
+	if !slices.ContainsFunc(resources, func(r string) bool { return slices.Contains(c.Audience, r) }) {
 		return identity{}, errors.New("token audience is not this server")
 	}
 	if s.isRevoked(c.ID) {
@@ -638,33 +669,39 @@ func (s *Server) accessIdentity(tok string) (identity, error) {
 	return identity{Name: c.Email(), Auth: "oauth", Scopes: c.Scopes(), ExpiresAt: &exp}, nil
 }
 
-func (s *Server) authenticateOAuth(r *http.Request) (identity, *authFailure) {
+// authenticateOAuth takes OAuth tokens issued for the endpoint at path.
+func (s *Server) authenticateOAuth(path string) authenticator {
+	resource := fixtureauth.Resource(s.issuer, path)
 	challenge := fmt.Sprintf(`Bearer resource_metadata=%q, scope=%q`,
-		s.issuer+"/.well-known/oauth-protected-resource"+fixtureauth.PathOAuthMCP,
+		s.issuer+"/.well-known/oauth-protected-resource"+path,
 		strings.Join(fixtureauth.DefaultScopes, " "))
-	tok := bearer(r)
-	if tok == "" {
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
+	return func(r *http.Request) (identity, *authFailure) {
+		tok := bearer(r)
+		if tok == "" {
+			return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge, message: "sign in required"}
+		}
+		// Like many real servers, an OAuth endpoint also takes a service
+		// account key: the shared token.
+		if tok == fixtureauth.SharedToken {
+			return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
+		}
+		id, err := s.accessIdentity(tok, resource)
+		if err != nil {
+			return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: err.Error()}
+		}
+		return id, nil
 	}
-	// Like many real servers, the OAuth endpoint also takes a service
-	// account key: the shared token.
-	if tok == fixtureauth.SharedToken {
-		return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
-	}
-	id, err := s.accessIdentity(tok)
-	if err != nil {
-		return identity{}, &authFailure{status: http.StatusUnauthorized, challenge: challenge + `, error="invalid_token"`, message: err.Error()}
-	}
-	return id, nil
 }
 
+// authenticateShared takes the shared token, or a caller's own token: a
+// personal token or a per-user OAuth token.
 func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 	tok := bearer(r)
 	if tok == fixtureauth.SharedToken {
 		return identity{Name: fixtureauth.SharedIdentity, Auth: "shared-token", Scopes: fixtureauth.DefaultScopes}, nil
 	}
 	if tok != "" {
-		if id, err := s.accessIdentity(tok); err == nil {
+		if id, err := s.accessIdentity(tok, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), fixtureauth.OAuthResource(s.issuer)); err == nil {
 			id.Auth = "own-token"
 			return id, nil
 		}
@@ -672,8 +709,41 @@ func (s *Server) authenticateShared(r *http.Request) (identity, *authFailure) {
 	return identity{}, &authFailure{
 		status:    http.StatusUnauthorized,
 		challenge: `Bearer realm="mcp-fixture-shared"`,
-		message:   "send the shared token or your own fixture access token as a bearer token",
+		message:   "send the shared token or your own fixture token (from /tokens) as a bearer token",
 	}
+}
+
+// authenticateOpen lets every request in.
+func authenticateOpen(*http.Request) (identity, *authFailure) {
+	return identity{Name: "anonymous", Auth: "none", Scopes: fixtureauth.DefaultScopes}, nil
+}
+
+// ---------------------------------------------------------------------------
+// Personal tokens
+
+func (s *Server) tokensGet(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": "X-Upstream-Token"})
+}
+
+func (s *Server) tokensPost(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad form", http.StatusBadRequest)
+		return
+	}
+	email := strings.TrimSpace(r.PostForm.Get("email"))
+	if email == "" || !strings.Contains(email, "@") {
+		http.Error(w, "Enter an email address to create a token for.", http.StatusBadRequest)
+		return
+	}
+	pair, err := fixtureauth.IssueTokens(s.issuer, fixtureauth.Resource(s.issuer, fixtureauth.PathSharedMCP), "personal-token", email, nil, fixtureauth.PersonalTokenTTL, time.Now())
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_ = tokensPage.Execute(w, map[string]any{"Suggested": s.cfg.SuggestedEmails, "Header": "X-Upstream-Token", "Email": email, "Token": pair.AccessToken})
 }
 
 func (s *Server) mcpHandler(auth authenticator) http.Handler {

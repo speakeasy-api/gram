@@ -356,8 +356,8 @@ const deployInsertExternalOAuthMetadata = `-- name: DeployInsertExternalOAuthMet
 INSERT INTO external_oauth_server_metadata
   (id, project_id, slug, metadata, authorization_server_issuer)
 VALUES
-  ($1, $2::uuid, 'acme-oauth-discovery',
-   '{"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/oauth/authorize","token_endpoint":"https://auth.example.com/oauth/token","registration_endpoint":"https://auth.example.com/oauth/register"}'::jsonb,
+  ($1, $2::uuid, 'external-oauth',
+   '{"issuer":"https://mcp-fixture.example.com","authorization_endpoint":"https://mcp-fixture.example.com/oauth/authorize","token_endpoint":"https://mcp-fixture.example.com/oauth/token","registration_endpoint":"https://mcp-fixture.example.com/oauth/register","response_types_supported":["code"],"grant_types_supported":["authorization_code","refresh_token"],"code_challenge_methods_supported":["S256"],"token_endpoint_auth_methods_supported":["none"]}'::jsonb,
    NULL)
 `
 
@@ -637,17 +637,17 @@ const deployInsertToolsets = `-- name: DeployInsertToolsets :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
                       external_oauth_server_id)
 VALUES
-  ($1, $2::text, $3::uuid, 'Acme Support Tools', 'acme-support-tools',
+  ($1, $2::text, $3::uuid, 'OpenAPI Server (API Key)', 'openapi-api-key',
    'Support workflows: logs, refunds, customer lookups.', NULL),
-  ($4, $2::text, $3::uuid, 'Acme Ops', 'acme-ops',
+  ($4, $2::text, $3::uuid, 'Read-Only Tool Subset', 'read-only-subset',
    'Operational checks and deploy tooling.', NULL),
   -- The OAuth-protected server, kept separate from the two above: attaching
   -- a session issuer changes what a server's authentication tab and install
   -- instructions say, and the support server is the one a visitor meets
   -- first.
-  ($5, $2::text, $3::uuid, 'Acme Partner Gateway', 'acme-partner-gateway',
+  ($5, $2::text, $3::uuid, 'Server-Specific Sign-In', 'server-specific-sign-in',
    'Tools Acme exposes to partner agents, behind OAuth.', NULL),
-  ($6, $2::text, $3::uuid, 'Acme OAuth Discovery', 'acme-oauth-discovery',
+  ($6, $2::text, $3::uuid, 'External OAuth Server', 'external-oauth',
    'Demonstrates external OAuth metadata source choices.',
    $7::uuid)
 `
@@ -808,7 +808,7 @@ func (q *Queries) DeployInsertUserSessionClient(ctx context.Context, arg DeployI
 
 const deployInsertUserSessionIssuer = `-- name: DeployInsertUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug, authn_challenge_mode, session_duration)
-VALUES ($1, $2::uuid, $3::text, 'acme-partner-gateway', 'interactive', make_interval(secs => 30 * 24 * 60 * 60))
+VALUES ($1, $2::uuid, $3::text, 'server-specific-sign-in', 'interactive', make_interval(secs => 30 * 24 * 60 * 60))
 `
 
 type DeployInsertUserSessionIssuerParams struct {

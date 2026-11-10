@@ -491,7 +491,7 @@ const serversInsertEMAMCPServers = `-- name: ServersInsertEMAMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Acme Tracker', 'acme-tracker',
+  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
    NULL, $3::uuid, $4::uuid, 'disabled'),
   ($5::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
    NULL, $6::uuid, $4::uuid, 'disabled')
@@ -574,7 +574,7 @@ func (q *Queries) ServersInsertEMAProviderOrder(ctx context.Context, arg Servers
 
 const serversInsertEMARemoteMCPServers = `-- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Acme Tracker', 'acme-tracker',
+  ($1::uuid, $2::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
    'streamable-http', 'https://mcp.acme-tracker.example/mcp'),
   ($3::uuid, $2::uuid, 'Acme Wiki', 'acme-wiki',
    'streamable-http', 'https://mcp.acme-wiki.example/mcp')
@@ -708,7 +708,7 @@ func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, 
 const serversInsertEngineeringEssentialsServers = `-- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT $1::uuid, id, name FROM mcp_servers
-WHERE project_id = $2::uuid AND slug = 'shared-token'
+WHERE project_id = $2::uuid AND slug = 'pass-through-token'
 `
 
 type ServersInsertEngineeringEssentialsServersParams struct {
@@ -818,20 +818,25 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   ($5::uuid, $2::uuid, NULL,
    $6::uuid, $7::text),
   ($8::uuid, $2::uuid, NULL,
-   $9::uuid, $10::text)
+   $9::uuid, $10::text),
+  ($11::uuid, $2::uuid, NULL,
+   $12::uuid, $13::text)
 `
 
 type ServersInsertGatewayEndpointsParams struct {
-	GatewayEndpointID uuid.UUID
-	ProjectID         uuid.UUID
-	MetaID            uuid.UUID
-	GatewaySlug       string
-	LinearEndpointID  uuid.UUID
-	LinearServerID    uuid.UUID
-	LinearSlug        string
-	SlackEndpointID   uuid.UUID
-	SlackServerID     uuid.UUID
-	SlackSlug         string
+	GatewayEndpointID     uuid.UUID
+	ProjectID             uuid.UUID
+	MetaID                uuid.UUID
+	GatewaySlug           string
+	LinearEndpointID      uuid.UUID
+	LinearServerID        uuid.UUID
+	LinearSlug            string
+	SlackEndpointID       uuid.UUID
+	SlackServerID         uuid.UUID
+	SlackSlug             string
+	PassThroughEndpointID uuid.UUID
+	PassThroughServerID   uuid.UUID
+	PassThroughSlug       string
 }
 
 // Endpoint slugs on the platform domain are globally unique and org-slug
@@ -848,6 +853,9 @@ func (q *Queries) ServersInsertGatewayEndpoints(ctx context.Context, arg Servers
 		arg.SlackEndpointID,
 		arg.SlackServerID,
 		arg.SlackSlug,
+		arg.PassThroughEndpointID,
+		arg.PassThroughServerID,
+		arg.PassThroughSlug,
 	)
 	return err
 }
@@ -1384,10 +1392,10 @@ INSERT INTO mcp_servers (id, project_id, name, slug,
   ($1::uuid, $2::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    $3::uuid,
    $4::uuid, 'private'),
-  ($5::uuid, $2::uuid, 'Slack', 'slack',
+  ($5::uuid, $2::uuid, 'Service Account Server', 'service-account',
    $6::uuid,
    $7::uuid, 'private'),
-  ($8::uuid, $2::uuid, 'Shared or Own Token Server', 'shared-token',
+  ($8::uuid, $2::uuid, 'Pass-Through Token Server', 'pass-through-token',
    $9::uuid,
    $10::uuid, 'private')
 `
@@ -1492,7 +1500,7 @@ const serversInsertNotionUserSessionIssuer = `-- name: ServersInsertNotionUserSe
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authn_challenge_mode, session_duration,
                                   authorization_server_mode) VALUES
-  ($1::uuid, $2::uuid, $3::text, 'notion',
+  ($1::uuid, $2::uuid, $3::text, 'auto-configured-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint')
 `
 
@@ -1592,7 +1600,7 @@ func (q *Queries) ServersInsertPrivateInventoryEndpoint(ctx context.Context, arg
 const serversInsertPrivateInventoryMCPServer = `-- name: ServersInsertPrivateInventoryMCPServer :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Private inventory', $3::text,
+  ($1::uuid, $2::uuid, 'Tunnelled Private Server', $3::text,
    $4::uuid, 'private')
 `
 
@@ -1616,7 +1624,7 @@ func (q *Queries) ServersInsertPrivateInventoryMCPServer(ctx context.Context, ar
 const serversInsertPrivateInventoryTunnel = `-- name: ServersInsertPrivateInventoryTunnel :exec
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
                                   status, agent_version, last_seen_at) VALUES
-  ($1::uuid, $2::uuid, 'Private inventory tunnel',
+  ($1::uuid, $2::uuid, 'Tunnelled Private Server tunnel',
    md5($3::text), 'demo_inert', 'active', '0.2.0', NULL)
 `
 
@@ -1671,9 +1679,9 @@ const serversInsertRemoteMCPServers = `-- name: ServersInsertRemoteMCPServers :e
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   ($1::uuid, $2::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
-  ($3::uuid, $2::uuid, 'Slack', 'slack',
-   'streamable-http', 'https://mcp.slack.com/mcp'),
-  ($4::uuid, $2::uuid, 'Shared or Own Token Server', 'shared-token',
+  ($3::uuid, $2::uuid, 'Service Account Server', 'service-account',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared'),
+  ($4::uuid, $2::uuid, 'Pass-Through Token Server', 'pass-through-token',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/shared')
 `
 
@@ -1897,9 +1905,9 @@ const serversInsertSignInExampleMCPServers = `-- name: ServersInsertSignInExampl
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Notion', 'notion',
+  ($1::uuid, $2::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
    NULL, $3::uuid, $4::uuid, 'private'),
-  ($5::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+  ($5::uuid, $2::uuid, 'No-Auth Server', 'no-auth',
    NULL, $6::uuid, $7::uuid, 'private')
 `
 
@@ -1930,9 +1938,9 @@ func (q *Queries) ServersInsertSignInExampleMCPServers(ctx context.Context, arg 
 
 const serversInsertSignInExampleRemoteMCPServers = `-- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  ($1::uuid, $2::uuid, 'Notion', 'notion',
-   'streamable-http', 'https://mcp.notion.com/mcp'),
-  ($3::uuid, $2::uuid, 'DeepWiki', 'deepwiki',
+  ($1::uuid, $2::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto'),
+  ($3::uuid, $2::uuid, 'No-Auth Server', 'no-auth',
    'streamable-http', 'https://mcp.deepwiki.com/mcp')
 `
 
@@ -2109,7 +2117,7 @@ VALUES
    'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
    now() - interval '10 days', 'none'),
   ($5::uuid, $2::uuid, $3::text,
-   $6::uuid, 'gram_demo_client_slack', NULL,
+   $6::uuid, 'gram_demo_client_service_account', NULL,
    'Cursor', ARRAY['http://127.0.0.1:41294/callback'],
    now() - interval '8 days', 'none'),
   ($7::uuid, $2::uuid, $3::text,
@@ -2157,7 +2165,7 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
   ($3::uuid, $4::uuid, $2::text, 'per-user-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  ($5::uuid, $4::uuid, $2::text, 'slack',
+  ($5::uuid, $4::uuid, $2::text, 'service-account',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   ($6::uuid, $4::uuid, $2::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),

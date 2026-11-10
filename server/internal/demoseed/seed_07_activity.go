@@ -65,9 +65,9 @@ func (s *seeder) seedActivity(ctx context.Context) error {
 	}
 	for i := 12; i >= 1; i-- {
 		u := demoUsers[i%6]
-		subject := "Acme Support Tools"
+		subject := "OpenAPI Server (API Key)"
 		if i%2 == 0 {
-			subject = "Acme Ops"
+			subject = "Read-Only Tool Subset"
 		}
 		if err := s.q.ActivityInsertProjectAuditLog(ctx, repo.ActivityInsertProjectAuditLogParams{
 			ID:                 s.det("audit-" + strconv.Itoa(i)),

@@ -158,4 +158,4 @@ func uploadMCPAppArchive(ctx context.Context, blob assets.BlobStore) (uploadedAs
 }
 
 // MCPAppToolsetSlug is the seeded toolset the MCP App is attached to.
-const MCPAppToolsetSlug = "acme-support-tools"
+const MCPAppToolsetSlug = "openapi-api-key"

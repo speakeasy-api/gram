@@ -15,9 +15,9 @@
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/oauth'),
-  (@slack_id::uuid, @project_id::uuid, 'Slack', 'slack',
-   'streamable-http', 'https://mcp.slack.com/mcp'),
-  (@github_id::uuid, @project_id::uuid, 'Shared or Own Token Server', 'shared-token',
+  (@slack_id::uuid, @project_id::uuid, 'Service Account Server', 'service-account',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/shared'),
+  (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
    'streamable-http', 'https://mcp-fixture.example.com/mcp/shared');
 
 -- Remote-backed servers must carry a Speakeasy-as-AS issuer for their lifetime
@@ -37,7 +37,7 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'shared'),
   (@linear_id::uuid, @project_id::uuid, @org_id::text, 'per-user-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
-  (@slack_id::uuid, @project_id::uuid, @org_id::text, 'slack',
+  (@slack_id::uuid, @project_id::uuid, @org_id::text, 'service-account',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
   (@gateway_id::uuid, @project_id::uuid, @org_id::text, 'acme-agent-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint'),
@@ -51,10 +51,10 @@ INSERT INTO mcp_servers (id, project_id, name, slug,
   (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
    @remote_linear_id::uuid,
    @issuer_linear_id::uuid, 'private'),
-  (@slack_id::uuid, @project_id::uuid, 'Slack', 'slack',
+  (@slack_id::uuid, @project_id::uuid, 'Service Account Server', 'service-account',
    @remote_slack_id::uuid,
    @issuer_slack_id::uuid, 'private'),
-  (@github_id::uuid, @project_id::uuid, 'Shared or Own Token Server', 'shared-token',
+  (@github_id::uuid, @project_id::uuid, 'Pass-Through Token Server', 'pass-through-token',
    @remote_github_id::uuid,
    @issuer_workforce_id::uuid, 'private');
 
@@ -175,7 +175,7 @@ WHERE organization_id = @org_id::text AND workos_slug = 'engineer';
 -- name: ServersInsertEngineeringEssentialsServers :execrows
 INSERT INTO plugin_servers (plugin_id, mcp_server_id, display_name)
 SELECT @plugin_id::uuid, id, name FROM mcp_servers
-WHERE project_id = @project_id::uuid AND slug = 'shared-token';
+WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
 
 -- Leave instructions NULL so Settings starts with the editable built-in
 -- instructions, matching the gateway's initialize and server/discover text.
@@ -190,16 +190,16 @@ WHERE project_id = @project_id::uuid AND slug = 'shared-token';
 -- public server that needs no sign-in at all.
 -- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
-   'streamable-http', 'https://mcp.notion.com/mcp'),
-  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+  (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/auto'),
+  (@deepwiki_id::uuid, @project_id::uuid, 'No-Auth Server', 'no-auth',
    'streamable-http', 'https://mcp.deepwiki.com/mcp');
 
 -- name: ServersInsertNotionUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authn_challenge_mode, session_duration,
                                   authorization_server_mode) VALUES
-  (@id::uuid, @project_id::uuid, @org_id::text, 'notion',
+  (@id::uuid, @project_id::uuid, @org_id::text, 'auto-configured-oauth',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
 -- DeepWiki takes no credential, so it sits under the shared workforce issuer
@@ -208,9 +208,9 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
+  (@notion_id::uuid, @project_id::uuid, 'Auto-Configured OAuth Server', 'auto-configured-oauth',
    NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private'),
-  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+  (@deepwiki_id::uuid, @project_id::uuid, 'No-Auth Server', 'no-auth',
    NULL, @remote_deepwiki_id::uuid, @issuer_workforce_id::uuid, 'private');
 
 -- Each gets an endpoint of its own, as a server added in the dashboard does:
@@ -387,7 +387,9 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
   (@linear_endpoint_id::uuid, @project_id::uuid, NULL,
    @linear_server_id::uuid, @linear_slug::text),
   (@slack_endpoint_id::uuid, @project_id::uuid, NULL,
-   @slack_server_id::uuid, @slack_slug::text);
+   @slack_server_id::uuid, @slack_slug::text),
+  (@pass_through_endpoint_id::uuid, @project_id::uuid, NULL,
+   @pass_through_server_id::uuid, @pass_through_slug::text);
 
 -- Tunnel example, deliberately disconnected: its activity history must not
 -- fabricate a live customer agent in the shared demo environment. The key
@@ -397,13 +399,13 @@ INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, sl
 -- name: ServersInsertPrivateInventoryTunnel :exec
 INSERT INTO tunneled_mcp_servers (id, project_id, name, key_hash, key_prefix,
                                   status, agent_version, last_seen_at) VALUES
-  (@id::uuid, @project_id::uuid, 'Private inventory tunnel',
+  (@id::uuid, @project_id::uuid, 'Tunnelled Private Server tunnel',
    md5(@key_seed::text), 'demo_inert', 'active', '0.2.0', NULL);
 
 -- name: ServersInsertPrivateInventoryMCPServer :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, tunneled_mcp_server_id,
                          visibility) VALUES
-  (@id::uuid, @project_id::uuid, 'Private inventory', @slug::text,
+  (@id::uuid, @project_id::uuid, 'Tunnelled Private Server', @slug::text,
    @tunnel_id::uuid, 'private');
 
 -- name: ServersInsertPrivateInventoryEndpoint :exec
@@ -463,7 +465,7 @@ WHERE id = @workforce_issuer::uuid
 
 -- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
+  (@tracker_id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
    'streamable-http', 'https://mcp.acme-tracker.example/mcp'),
   (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
    'streamable-http', 'https://mcp.acme-wiki.example/mcp');
@@ -472,7 +474,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@tracker_id::uuid, @project_id::uuid, 'Acme Tracker', 'acme-tracker',
+  (@tracker_id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
    NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'disabled'),
   (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
    NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'disabled');
@@ -571,7 +573,7 @@ VALUES
    'Claude Code', ARRAY['http://127.0.0.1:41293/callback'],
    now() - interval '10 days', 'none'),
   (@slack_client_id::uuid, @project_id::uuid, @org_id::text,
-   @slack_issuer_id::uuid, 'gram_demo_client_slack', NULL,
+   @slack_issuer_id::uuid, 'gram_demo_client_service_account', NULL,
    'Cursor', ARRAY['http://127.0.0.1:41294/callback'],
    now() - interval '8 days', 'none'),
   (@gateway_client_id::uuid, @project_id::uuid, @org_id::text,

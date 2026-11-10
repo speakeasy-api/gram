@@ -2679,6 +2679,10 @@ ORDER BY id;
 -- Reads an auth client header's stored value and secrecy.
 SELECT value, is_secret FROM mcp_auth_client_headers WHERE id = @id AND deleted IS FALSE;
 
+-- name: GetRemoteMCPServerHeaderFixture :one
+-- Reads a remote MCP server header's static value or forwarding source.
+SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_headers WHERE id = @id AND deleted IS FALSE;
+
 -- name: GetEnvironmentEntryFixture :one
 -- Reads one environment entry by environment and name.
 SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;

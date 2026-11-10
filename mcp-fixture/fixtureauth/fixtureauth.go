@@ -25,6 +25,11 @@ import (
 // account key that every caller of a server uses.
 const SharedToken = "fixture-shared-token-not-a-secret"
 
+// TunnelKey is the tunnel agent key the fixture daemon connects to the local
+// tunnel gateway with. The local seed stores its hash on the Tunnelled
+// Private Server, so the tunnel is live right after seeding.
+const TunnelKey = "gram_tunnel_05360ec0d82da35bbbe6ce936c7697e31b7c13d19d5be23effb52b7664440477"
+
 // SharedIdentity is the identity a request authenticated with SharedToken
 // acts as.
 const SharedIdentity = "shared-service-account"
@@ -53,10 +58,20 @@ var DefaultScopes = []string{ScopeNotesRead, ScopeNotesWrite}
 
 // Paths, relative to the fixture's base URL.
 const (
-	PathOAuthMCP  = "/mcp/oauth"
+	// PathOAuthMCP takes the fixture's own per-user OAuth tokens.
+	PathOAuthMCP = "/mcp/oauth"
+	// PathAutoMCP is a second OAuth-protected resource, for a server whose
+	// sign-in an admin sets up through discovery and client registration.
+	PathAutoMCP = "/mcp/auto"
+	// PathSharedMCP takes the shared token or a caller's own token.
 	PathSharedMCP = "/mcp/shared"
-	PathAPI       = "/acme-api"
+	// PathOpenMCP needs no credentials at all.
+	PathOpenMCP = "/mcp/open"
+	PathAPI     = "/acme-api"
 )
+
+// PersonalTokenTTL is how long a token from the personal token page lives.
+const PersonalTokenTTL = 30 * 24 * time.Hour
 
 // Claims is every claim a fixture token can carry. Unused claims are empty.
 type Claims struct {
@@ -171,8 +186,11 @@ func IssueTokens(issuer, resource, clientID, email string, scopes []string, acce
 
 // OAuthResource is the resource identifier of the fixture's OAuth-protected
 // MCP endpoint for a fixture served at baseURL.
-func OAuthResource(baseURL string) string {
-	return strings.TrimRight(baseURL, "/") + PathOAuthMCP
+func OAuthResource(baseURL string) string { return Resource(baseURL, PathOAuthMCP) }
+
+// Resource is the resource identifier of the fixture endpoint at path.
+func Resource(baseURL, path string) string {
+	return strings.TrimRight(baseURL, "/") + path
 }
 
 // HasScope reports whether scopes contains want.

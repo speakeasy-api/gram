@@ -2,6 +2,7 @@ package demoseed
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -18,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/tunnel/wire"
 )
 
 // LocalMCPFixtureOptions points seeded servers at the throwaway MCP fixture
@@ -36,16 +38,16 @@ type LocalMCPFixtureOptions struct {
 	Encryption *encryption.Client
 }
 
-// Names the local org shows for the servers wired to the fixture. They say
-// what each server demonstrates, not which vendor it once imitated.
+// Fixed values for the servers wired to the fixture.
 const (
-	fixtureOAuthServerName    = "Per-User OAuth Server"
-	fixtureSharedServerName   = "Shared or Own Token Server"
 	fixtureProviderName       = "MCP Fixture OAuth"
-	fixtureSignInClientName   = "Fixture OAuth sign-in"
 	fixtureEnvironmentFixedID = "0000-4000-a000-000000007008"
-	fixtureAPIEnvVar          = "ACME_SERVER_URL"
-	demoOAuthResource         = "https://mcp-fixture.example.com/mcp/oauth"
+	// fixtureOwnTokenHeader is the request header a Pass-Through Token Server
+	// caller puts their own upstream token in; Speakeasy forwards it as
+	// Authorization.
+	fixtureOwnTokenHeader = "X-Upstream-Token"
+	fixtureAPIEnvVar      = "ACME_SERVER_URL"
+	demoOAuthResource     = "https://mcp-fixture.example.com/mcp/oauth"
 )
 
 // wireLocalMCPFixture rewires, in the local org only:
@@ -120,13 +122,30 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		return err
 	}
 
-	// 2. The Per-User OAuth Server.
-	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: resource, Name: fixtureOAuthServerName, ID: s.det("remotemcp-linear"), ProjectID: proj})
-	if err := expect("point the OAuth remote server", n, err); err != nil {
+	// The External OAuth Server sends callers to sign in at the fixture's
+	// authorization server, as if it were the customer's own.
+	metadata, err := json.Marshal(map[string]any{
+		"issuer":                                base,
+		"authorization_endpoint":                base + "/oauth/authorize",
+		"token_endpoint":                        base + "/oauth/token",
+		"registration_endpoint":                 base + "/oauth/register",
+		"scopes_supported":                      fixtureauth.DefaultScopes,
+		"response_types_supported":              []string{"code"},
+		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
+		"code_challenge_methods_supported":      []string{"S256"},
+		"token_endpoint_auth_methods_supported": []string{"none"},
+	})
+	if err != nil {
+		return fmt.Errorf("wire local mcp fixture: external oauth metadata: %w", err)
+	}
+	n, err = q.LocalFixturePointExternalOAuth(ctx, repo.LocalFixturePointExternalOAuthParams{Metadata: metadata, ID: s.det("external-oauth-discovery"), ProjectID: proj})
+	if err := expect("point the external oauth server", n, err); err != nil {
 		return err
 	}
-	n, err = q.LocalFixtureRenameServer(ctx, repo.LocalFixtureRenameServerParams{Name: fixtureOAuthServerName, ID: s.det("mcpserver-linear"), ProjectID: proj})
-	if err := expect("rename the OAuth server", n, err); err != nil {
+
+	// 2. The Per-User OAuth Server.
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: resource, ID: s.det("remotemcp-linear"), ProjectID: proj})
+	if err := expect("point the OAuth remote server", n, err); err != nil {
 		return err
 	}
 	n, err = q.LocalFixturePointIssuer(ctx, repo.LocalFixturePointIssuerParams{Issuer: base, Scopes: fixtureauth.DefaultScopes, Name: fixtureProviderName, ID: s.det("remote-identity-provider-linear"), ProjectID: proj})
@@ -148,10 +167,6 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		ClientID: remotesessions.ClientMetadataDocumentURL(opts.ServerURL, mainClient), CallbackBaseUrl: serverURL, ID: mainClient, ProjectID: proj,
 	})
 	if err := expect("point the sign-in client", n, err); err != nil {
-		return err
-	}
-	n, err = q.LocalFixtureRenameAuthClient(ctx, repo.LocalFixtureRenameAuthClientParams{Name: fixtureSignInClientName, ID: s.det("auth-client-linear"), OrganizationID: org})
-	if err := expect("rename the sign-in auth client", n, err); err != nil {
 		return err
 	}
 
@@ -199,17 +214,59 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		}
 	}
 
-	// 3. The Shared or Own Token Server.
-	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, Name: fixtureSharedServerName, ID: s.det("remotemcp-github"), ProjectID: proj})
-	if err := expect("point the shared-token remote server", n, err); err != nil {
+	// 3. The Service Account Server: every caller shares the checked-in
+	// token, sent as a static Authorization header (Settings shows "Shared
+	// credential").
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, ID: s.det("remotemcp-slack"), ProjectID: proj})
+	if err := expect("point the service account server", n, err); err != nil {
 		return err
 	}
-	n, err = q.LocalFixtureRenameServer(ctx, repo.LocalFixtureRenameServerParams{Name: fixtureSharedServerName, ID: s.det("mcpserver-github"), ProjectID: proj})
-	if err := expect("rename the shared-token server", n, err); err != nil {
+	n, err = q.LocalFixtureSetRemoteHeaderValue(ctx, repo.LocalFixtureSetRemoteHeaderValueParams{Value: "Bearer " + fixtureauth.SharedToken, ID: s.det("agent-identity-header-slack"), ProjectID: proj})
+	if err := expect("set the service account token", n, err); err != nil {
 		return err
 	}
+
+	// 4. The Pass-Through Token Server: each caller brings their own upstream
+	// token in X-Upstream-Token, forwarded as Authorization.
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathSharedMCP, ID: s.det("remotemcp-github"), ProjectID: proj})
+	if err := expect("point the pass-through server", n, err); err != nil {
+		return err
+	}
+	n, err = q.LocalFixtureUpsertForwardedHeader(ctx, repo.LocalFixtureUpsertForwardedHeaderParams{
+		ID: s.det("remote-header-pass-through"), RemoteMcpServerID: s.det("remotemcp-github"), ProjectID: proj,
+		Name: "Authorization", FromRequestHeader: fixtureOwnTokenHeader,
+	})
+	if err := expect("forward the caller's token", n, err); err != nil {
+		return err
+	}
+	// The typed shared credential (used once upstream auth is enforced)
+	// carries the same checked-in token.
 	n, err = q.LocalFixtureSetHeaderValue(ctx, repo.LocalFixtureSetHeaderValueParams{Value: "Bearer " + fixtureauth.SharedToken, ID: s.det("auth-client-github-token-header"), OrganizationID: org})
-	if err := expect("set the shared token", n, err); err != nil {
+	if err := expect("set the typed shared token", n, err); err != nil {
+		return err
+	}
+
+	// 5. The Auto-Configured OAuth Server: a second OAuth-protected fixture
+	// endpoint with no client yet. An admin's "Set up sign-in" discovers its
+	// authorization server and registers a client, as with a real vendor.
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathAutoMCP, ID: s.det("remotemcp-notion"), ProjectID: proj})
+	if err := expect("point the auto-configured oauth server", n, err); err != nil {
+		return err
+	}
+
+	// 6. The No-Auth Server: the fixture's open endpoint, so it works offline.
+	n, err = q.LocalFixturePointRemoteServer(ctx, repo.LocalFixturePointRemoteServerParams{Url: base + fixtureauth.PathOpenMCP, ID: s.det("remotemcp-deepwiki"), ProjectID: proj})
+	if err := expect("point the no-auth server", n, err); err != nil {
+		return err
+	}
+
+	// 7. The Tunnelled Private Server: the fixture daemon's tunnel agent
+	// connects with the checked-in key, so its hash goes on the seeded tunnel.
+	n, err = q.LocalFixtureSetTunnelKey(ctx, repo.LocalFixtureSetTunnelKeyParams{
+		KeyHash: wire.HashKey(fixtureauth.TunnelKey), KeyPrefix: fixtureauth.TunnelKey[:len(wire.KeyPrefix)+6],
+		ID: s.tunnelSourceID(), ProjectID: proj,
+	})
+	if err := expect("set the tunnel key", n, err); err != nil {
 		return err
 	}
 
