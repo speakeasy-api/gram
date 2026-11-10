@@ -1175,6 +1175,18 @@ WHERE c.id = @id
   AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
   AND c.deleted IS FALSE;
 
+-- name: LockRemoteSessionClientTemplate :one
+-- Reads the client a new client is created from, holding it against a
+-- concurrent secret rotation, re-registration or rejection until the copy
+-- commits. FOR SHARE lets other copies and foreign-key checks proceed. Same
+-- visibility as GetRemoteSessionClientByID.
+SELECT c.*
+FROM remote_session_clients AS c
+WHERE c.id = @id
+  AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND c.organization_id = @organization_id))
+  AND c.deleted IS FALSE
+FOR SHARE;
+
 -- name: GetUserSessionIssuerForProject :one
 SELECT id, project_id
 FROM user_session_issuers
