@@ -1,4 +1,5 @@
-import { ProductTier, useProductTier } from "@/hooks/useProductTier";
+import type { ProductTier } from "@/hooks/useProductTier";
+import { useProductTier } from "@/hooks/useProductTier";
 import { productTierColors } from "@/components/product-tier-utils";
 
 export const ProductTierBadge = ({

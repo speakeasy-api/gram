@@ -81,6 +81,7 @@ type Endpoints struct {
 	SetMcpServerScopePin                    goa.Endpoint
 	GetMcpServerToolCalls                   goa.Endpoint
 	GetHookClients                          goa.Endpoint
+	GetOrganizationHookFleet                goa.Endpoint
 	ListRegistryPromotionCandidates         goa.Endpoint
 	GetRegistryPromotionCandidate           goa.Endpoint
 	PromoteRegistryCandidate                goa.Endpoint
@@ -124,6 +125,7 @@ type Endpoints struct {
 	BackfillMcpConnectGrants                goa.Endpoint
 	GetProjectRedeployPreview               goa.Endpoint
 	RedeployProject                         goa.Endpoint
+	ListCustomDomains                       goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -213,6 +215,7 @@ func NewEndpoints(s Service) *Endpoints {
 		SetMcpServerScopePin:                    NewSetMcpServerScopePinEndpoint(s, a.APIKeyAuth),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsEndpoint(s, a.APIKeyAuth),
 		GetHookClients:                          NewGetHookClientsEndpoint(s, a.APIKeyAuth),
+		GetOrganizationHookFleet:                NewGetOrganizationHookFleetEndpoint(s, a.APIKeyAuth),
 		ListRegistryPromotionCandidates:         NewListRegistryPromotionCandidatesEndpoint(s, a.APIKeyAuth),
 		GetRegistryPromotionCandidate:           NewGetRegistryPromotionCandidateEndpoint(s, a.APIKeyAuth),
 		PromoteRegistryCandidate:                NewPromoteRegistryCandidateEndpoint(s, a.APIKeyAuth),
@@ -256,6 +259,7 @@ func NewEndpoints(s Service) *Endpoints {
 		BackfillMcpConnectGrants:                NewBackfillMcpConnectGrantsEndpoint(s, a.APIKeyAuth),
 		GetProjectRedeployPreview:               NewGetProjectRedeployPreviewEndpoint(s, a.APIKeyAuth),
 		RedeployProject:                         NewRedeployProjectEndpoint(s, a.APIKeyAuth),
+		ListCustomDomains:                       NewListCustomDomainsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -325,6 +329,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetMcpServerScopePin = m(e.SetMcpServerScopePin)
 	e.GetMcpServerToolCalls = m(e.GetMcpServerToolCalls)
 	e.GetHookClients = m(e.GetHookClients)
+	e.GetOrganizationHookFleet = m(e.GetOrganizationHookFleet)
 	e.ListRegistryPromotionCandidates = m(e.ListRegistryPromotionCandidates)
 	e.GetRegistryPromotionCandidate = m(e.GetRegistryPromotionCandidate)
 	e.PromoteRegistryCandidate = m(e.PromoteRegistryCandidate)
@@ -368,6 +373,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.BackfillMcpConnectGrants = m(e.BackfillMcpConnectGrants)
 	e.GetProjectRedeployPreview = m(e.GetProjectRedeployPreview)
 	e.RedeployProject = m(e.RedeployProject)
+	e.ListCustomDomains = m(e.ListCustomDomains)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -1808,6 +1814,29 @@ func NewGetHookClientsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) 
 	}
 }
 
+// NewGetOrganizationHookFleetEndpoint returns an endpoint function that calls
+// the method "getOrganizationHookFleet" of service "admin".
+func NewGetOrganizationHookFleetEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetOrganizationHookFleetPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetOrganizationHookFleet(ctx, p)
+	}
+}
+
 // NewListRegistryPromotionCandidatesEndpoint returns an endpoint function that
 // calls the method "listRegistryPromotionCandidates" of service "admin".
 func NewListRegistryPromotionCandidatesEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
@@ -2796,5 +2825,28 @@ func NewRedeployProjectEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return s.RedeployProject(ctx, p)
+	}
+}
+
+// NewListCustomDomainsEndpoint returns an endpoint function that calls the
+// method "listCustomDomains" of service "admin".
+func NewListCustomDomainsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ListCustomDomainsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ListCustomDomains(ctx, p)
 	}
 }

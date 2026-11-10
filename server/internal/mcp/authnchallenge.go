@@ -1419,6 +1419,7 @@ func (s *Service) remoteSessionResolveFailed(ctx context.Context, logger *slog.L
 func (s *Service) recordRemoteSessionOutcome(ctx context.Context, authentication *issuerGateAuthentication, reason string, code mcpconnectionattempts.Code, causes ...error) {
 	// Only a fresh, admitted standalone refresh row replaces this gate row.
 	if remotesessions.RefreshFailureRecorded(errors.Join(causes...)) {
+		contextvalues.ClaimRefreshConnectionReference(ctx)
 		return
 	}
 	endpoint := authentication.endpoint

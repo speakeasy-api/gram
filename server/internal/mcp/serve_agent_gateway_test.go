@@ -671,7 +671,7 @@ func TestServeAgentGateway_BrokenConnectionLinksAgentSignIn(t *testing.T) {
 		projectSlug = project.Slug
 	}
 	require.NotEmpty(t, projectSlug)
-	link := fmt.Sprintf("/%s/projects/%s/identities/agents/%s/edit?step=2", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
+	link := fmt.Sprintf("/%s/projects/%s/identities/agent:%s/mcp-sign-in", authCtx.OrganizationSlug, projectSlug, fx.agent.ID)
 	editors := "Ask someone who can edit this agent"
 
 	call := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
@@ -738,7 +738,7 @@ func TestServeAgentGateway_ServerWithoutSignInAsksProjectAdmin(t *testing.T) {
 	require.True(t, isError, text)
 	require.Contains(t, text, fmt.Sprintf("server %q needs a credential configured for it in Speakeasy", fx.granted))
 	require.Contains(t, text, "Ask an admin of the server's project to add or fix the server's credential, then retry")
-	require.NotContains(t, text, "/edit?step=2", "the agent's sign-in step cannot add a server's credential")
+	require.NotContains(t, text, "/mcp-sign-in", "the agent's MCP sign-in tab cannot add a server's credential")
 	require.NotContains(t, text, "re-authentication")
 	require.NotContains(t, text, "administrator")
 	require.Positive(t, refusals.Load(), "the upstream answered the call with its 401")

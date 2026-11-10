@@ -6,7 +6,7 @@ import { defineFrontendTool, type FrontendTool } from "@/elements";
 import type { Gram } from "@gram/client";
 import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
-import { ToolCallMessagePartComponent } from "@assistant-ui/react";
+import type { ToolCallMessagePartComponent } from "@assistant-ui/react";
 import { useMemo } from "react";
 import { z } from "zod";
 import { useAssistantDraft } from "../useAssistantDraft";

@@ -35,7 +35,10 @@ type Service interface {
 	// user access.
 	UnlinkEMA(context.Context, *UnlinkEMAPayload) (res *IdentityChainingPreparation, err error)
 	// Register a remote_session_client by supplying a client_id and optional
-	// client_secret obtained out-of-band from the upstream issuer.
+	// client_secret obtained out-of-band from the upstream issuer. With
+	// template_client_id, the new client instead reuses a stored client's upstream
+	// registration: the server copies that client's secret and callback into the
+	// new record, and neither is returned to the caller.
 	CreateRemoteSessionClient(context.Context, *CreateRemoteSessionClientPayload) (res *types.RemoteSessionClient, err error)
 	// Register a remote_session_client in Client ID Metadata Document (CIMD) mode.
 	// Speakeasy generates the client_id (the URL of a hosted client metadata
@@ -157,6 +160,18 @@ type CreateRemoteSessionClientPayload struct {
 	ClientID string
 	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
+	TemplateClientID *string
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string

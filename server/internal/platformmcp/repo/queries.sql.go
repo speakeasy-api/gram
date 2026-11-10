@@ -2761,7 +2761,7 @@ func (q *Queries) GetPlatformMCPInstallTarget(ctx context.Context, arg GetPlatfo
 }
 
 const getPlatformMCPInventoryItem = `-- name: GetPlatformMCPInventoryItem :one
-SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
+SELECT mcp_server_id, project_id, project_name, project_slug, mcp_name, mcp_slug, visibility, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, upstream_url, registration_id, source_kind, catalog_provider, catalog_reference, registration_status, registration_remote_mcp_server_id, registration_user_session_issuer_id, registration_mcp_server_id, registration_mcp_endpoint_id, readiness_state, readiness_checked_at, readiness_expires_at
 FROM (
     SELECT
         m.id AS mcp_server_id,
@@ -2775,7 +2775,6 @@ FROM (
         m.tunneled_mcp_server_id,
         m.toolset_id,
         m.unproxied_mcp_server_id,
-        m.builtin_backend,
         COALESCE(remote.url, '') AS upstream_url,
         COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
         COALESCE(registration.source_kind, '') AS source_kind,
@@ -2830,6 +2829,7 @@ FROM (
     WHERE m.id = $6
       AND m.project_id = $7
       AND m.deleted IS FALSE
+      AND m.builtin_backend IS NULL
 ) AS inventory
 `
 
@@ -2855,7 +2855,6 @@ type GetPlatformMCPInventoryItemRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
-	BuiltinBackend                  pgtype.Text
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
 	SourceKind                      string
@@ -2894,7 +2893,6 @@ func (q *Queries) GetPlatformMCPInventoryItem(ctx context.Context, arg GetPlatfo
 		&i.TunneledMcpServerID,
 		&i.ToolsetID,
 		&i.UnproxiedMcpServerID,
-		&i.BuiltinBackend,
 		&i.UpstreamUrl,
 		&i.RegistrationID,
 		&i.SourceKind,
@@ -3459,7 +3457,25 @@ WHERE registration.mcp_server_id = $1
   AND registration.project_id = $3
   AND registration.status = 'registered'
   AND registration.deleted IS FALSE
-  AND server.remote_session_issuer_id IS NULL
+  AND cardinality(ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = server.id
+        AND a.project_id = registration.project_id
+        AND a.organization_id = registration.organization_id
+        AND a.deleted IS FALSE
+  )::uuid[]) = 0
 ORDER BY registration.id
 LIMIT 1
 `
@@ -5547,7 +5563,6 @@ SELECT
     m.tunneled_mcp_server_id,
     m.toolset_id,
     m.unproxied_mcp_server_id,
-    m.builtin_backend,
     m.user_session_issuer_id,
     COALESCE(remote.url, '') AS upstream_url,
     COALESCE(registration.id, '00000000-0000-0000-0000-000000000000'::uuid) AS registration_id,
@@ -5601,6 +5616,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  -- A retired approvals server serves nothing until a cleanup migration deletes it.
+  AND m.builtin_backend IS NULL
   AND ($6::boolean OR m.id = ANY($7::uuid[]))
   AND ($8::uuid IS NULL OR m.project_id = $8::uuid)
   AND ($9::uuid IS NULL OR m.id > $9::uuid)
@@ -5675,7 +5692,6 @@ type ListPlatformMCPInventoryRow struct {
 	TunneledMcpServerID             uuid.NullUUID
 	ToolsetID                       uuid.NullUUID
 	UnproxiedMcpServerID            uuid.NullUUID
-	BuiltinBackend                  pgtype.Text
 	UserSessionIssuerID             uuid.NullUUID
 	UpstreamUrl                     string
 	RegistrationID                  uuid.UUID
@@ -5732,7 +5748,6 @@ func (q *Queries) ListPlatformMCPInventory(ctx context.Context, arg ListPlatform
 			&i.TunneledMcpServerID,
 			&i.ToolsetID,
 			&i.UnproxiedMcpServerID,
-			&i.BuiltinBackend,
 			&i.UserSessionIssuerID,
 			&i.UpstreamUrl,
 			&i.RegistrationID,
@@ -5766,6 +5781,8 @@ JOIN projects AS project
  AND project.organization_id = $1
  AND project.deleted IS FALSE
 WHERE m.deleted IS FALSE
+  -- Same retired approvals server rule as ListPlatformMCPInventory.
+  AND m.builtin_backend IS NULL
   AND ($2::uuid IS NULL OR m.project_id = $2::uuid)
   AND ($3::uuid IS NULL OR m.id > $3::uuid)
   AND (

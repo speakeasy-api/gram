@@ -15,10 +15,13 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2"
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 	"github.com/google/uuid"
+	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,6 +31,8 @@ const (
 
 	meterSteps   = "mcp.connection.steps"
 	meterDropped = "mcp.connection.events.dropped"
+
+	meterReferenceTimeouts = "mcp.connection.references.timed_out"
 
 	insertStatement = `INSERT INTO %s (
 		organization_id, project_id, attempt_id, attempt_started_at, event_time,
@@ -74,6 +79,16 @@ const (
 
 	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add up to 5s on the writer.
 	defaultLogsCheckTimeout = 500 * time.Millisecond
+
+	// referenceLogsTimeout is how long a failure waits for its logs answer; a slower one shows no reference.
+	referenceLogsTimeout = 100 * time.Millisecond
+
+	// referenceLogsOffTTL is how long a logs-off answer serves references. Staying stale only hides a reference.
+	referenceLogsOffTTL = 30 * time.Second
+
+	// referenceLogsOnTTL is how long a logs-on answer serves references. It matches the writer's own
+	// per-flush answer, so a reference outlives a logs-off change no longer than a queued row does.
+	referenceLogsOnTTL = defaultFlushInterval
 
 	// unknownTableCode is ClickHouse's UNKNOWN_TABLE, seen when code ships before its migration.
 	unknownTableCode = 60
@@ -388,6 +403,9 @@ type Recorder struct {
 	steps       metric.Int64Counter
 	dropped     metric.Int64Counter
 
+	// referenceTimeouts counts references not shown because the logs check outran its wait.
+	referenceTimeouts metric.Int64Counter
+
 	queue        chan Row
 	stop         chan struct{}
 	done         chan struct{}
@@ -406,6 +424,31 @@ type Recorder struct {
 
 	// dropTotals counts rows per reason, so Shutdown can report what its drain lost.
 	dropTotals map[dropReason]*atomic.Int64
+
+	// insertFailing is set while the last insert failed, so references stop promising rows.
+	insertFailing atomic.Bool
+
+	// referableOrgs remembers each organization's logs answer for references. Nil checks every time.
+	referableOrgs *simplelru.LRU[string, referableOrg]
+
+	// referableMu guards referableOrgs. It is never held during a logs check.
+	referableMu sync.Mutex
+
+	// referenceChecks runs one background logs check per organization, so a slow one holds no request up.
+	referenceChecks singleflight.Group
+}
+
+// referableOrg is one logs answer and when it was read.
+type referableOrg struct {
+	allowed bool
+	at      time.Time
+}
+
+func (o referableOrg) ttl() time.Duration {
+	if o.allowed {
+		return referenceLogsOnTTL
+	}
+	return referenceLogsOffTTL
 }
 
 func newDropCounters() map[dropReason]*atomic.Int64 {
@@ -454,30 +497,44 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterDropped), attr.SlogError(err))
 	}
+	referenceTimeouts, err := meter.Int64Counter(meterReferenceTimeouts,
+		metric.WithDescription("MCP connection references not shown because the logs check was slower than its wait."),
+		metric.WithUnit("{reference}"))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterReferenceTimeouts), attr.SlogError(err))
+	}
 
 	writerCtx, cancelWriter := context.WithCancel(context.Background())
 	r := &Recorder{
-		logger:       logger,
-		conn:         conn,
-		limiter:      newOnceLimiter(),
-		logsEnabled:  logsEnabled,
-		deviceKeys:   nil,
-		exporter:     nil,
-		capture:      nil,
-		cfg:          cfg,
-		steps:        steps,
-		dropped:      dropped,
-		queue:        make(chan Row, cfg.queueSize),
-		stop:         make(chan struct{}),
-		done:         make(chan struct{}),
-		stopOnce:     sync.Once{},
-		writerCtx:    writerCtx,
-		cancelWriter: cancelWriter,
-		stopMu:       sync.RWMutex{},
-		stopped:      false,
-		lastDrop:     newDropCounters(),
-		unfinished:   atomic.Int64{},
-		dropTotals:   newDropCounters(),
+		logger:      logger,
+		conn:        conn,
+		limiter:     newOnceLimiter(),
+		logsEnabled: logsEnabled,
+		deviceKeys:  nil,
+		exporter:    nil,
+		capture:     nil,
+		cfg:         cfg,
+		steps:       steps,
+		dropped:     dropped,
+
+		referenceTimeouts: referenceTimeouts,
+		queue:             make(chan Row, cfg.queueSize),
+		stop:              make(chan struct{}),
+		done:              make(chan struct{}),
+		stopOnce:          sync.Once{},
+		writerCtx:         writerCtx,
+		cancelWriter:      cancelWriter,
+		stopMu:            sync.RWMutex{},
+		stopped:           false,
+		lastDrop:          newDropCounters(),
+		unfinished:        atomic.Int64{},
+		dropTotals:        newDropCounters(),
+
+		insertFailing: atomic.Bool{},
+		referableOrgs: newReferableOrgs(),
+		referableMu:   sync.Mutex{},
+
+		referenceChecks: singleflight.Group{},
 	}
 	for _, opt := range opts {
 		opt(r)
@@ -491,28 +548,45 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 // writing it. Use mcpconnectionattemptstest rather than calling this.
 func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
-		logger:       slog.New(slog.DiscardHandler),
-		conn:         nil,
-		limiter:      nil,
-		logsEnabled:  logsEnabled,
-		deviceKeys:   nil,
-		exporter:     nil,
-		capture:      capture,
-		cfg:          config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
-		steps:        nil,
-		dropped:      nil,
-		queue:        nil,
-		stop:         nil,
-		done:         nil,
-		stopOnce:     sync.Once{},
-		writerCtx:    context.Background(),
-		cancelWriter: nil,
-		stopMu:       sync.RWMutex{},
-		stopped:      false,
-		lastDrop:     newDropCounters(),
-		unfinished:   atomic.Int64{},
-		dropTotals:   newDropCounters(),
+		logger:      slog.New(slog.DiscardHandler),
+		conn:        nil,
+		limiter:     nil,
+		logsEnabled: logsEnabled,
+		deviceKeys:  nil,
+		exporter:    nil,
+		capture:     capture,
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
+		steps:       nil,
+		dropped:     nil,
+
+		referenceTimeouts: nil,
+		queue:             nil,
+		stop:              nil,
+		done:              nil,
+		stopOnce:          sync.Once{},
+		writerCtx:         context.Background(),
+		cancelWriter:      nil,
+		stopMu:            sync.RWMutex{},
+		stopped:           false,
+		lastDrop:          newDropCounters(),
+		unfinished:        atomic.Int64{},
+		dropTotals:        newDropCounters(),
+
+		insertFailing: atomic.Bool{},
+		referableOrgs: nil,
+		referableMu:   sync.Mutex{},
+
+		referenceChecks: singleflight.Group{},
 	}
+}
+
+func newReferableOrgs() *simplelru.LRU[string, referableOrg] {
+	orgs, err := simplelru.NewLRU[string, referableOrg](onceMaxOrgs, nil)
+	if err != nil {
+		// Only a non-positive size fails, and this is a constant.
+		panic("connection reference cache size must be positive")
+	}
+	return orgs
 }
 
 // limit is how much a row is held back before it is queued.
@@ -547,7 +621,10 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats and rows past its queue share are held back and written later as a
 // count; a held key evicted before then is lost as repeats_lost. It reports capture/queue
-// acceptance, not eventual persistence; held-back and rejected rows return false.
+// acceptance, not eventual persistence; held-back and rejected rows return false. A held-back
+// row still leaves a reference: every row folded together is stored under one id, the first's.
+// That row holds one held request's details, so its id names the failure, not which request
+// it was; rows with no known subject leave none, since different callers fold together.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) bool {
 	return r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
@@ -557,6 +634,13 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return false
 	}
 	var row Row
+	referenced := false
+	// Runs last: a failure that leaves no id of its own still hides an earlier one.
+	defer func() {
+		if !referenced {
+			r.leaveReference(ctx, step, row.OrganizationID, uuid.Nil, what)
+		}
+	}()
 	// Recording must never panic a request.
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -592,20 +676,30 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 		r.dropLostRepeats(ctx, decision.lost)
 		if !decision.allowed {
+			// Callers with no known subject fold together, so the shared id isn't this caller's.
+			if onceKeyOf(row).subject != "" {
+				r.leaveReference(ctx, step, row.OrganizationID, decision.foldID, what)
+				referenced = true
+			}
 			return false
 		}
 		row.Repeats = decision.repeats
+		if decision.foldID != uuid.Nil {
+			row.AttemptID = decision.foldID
+		}
 	}
 	if !row.unstored {
 		r.countStep(ctx, row)
 	}
 	if r.capture != nil {
-		if reason, _ := r.organizationAllowed(r.writerCtx, row.OrganizationID); reason == "" {
+		if reason, _ := r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout); reason == "" {
 			if row.unstored {
 				r.countStep(ctx, row)
 			}
 			r.stampClient(&row)
 			r.capture(row)
+			r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
+			referenced = true
 			return true
 		}
 		return false
@@ -615,7 +709,92 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, reason, events(row), nil)
 		return false
 	}
+	r.leaveReference(ctx, step, row.OrganizationID, row.AttemptID, what)
+	referenced = true
 	return true
+}
+
+// leaveReference puts a failure's id on ctx if a row can honestly be expected for it. The row is
+// still in memory at this point, so this rules out only what is knowable now: logs off, and a
+// ClickHouse that refused the last insert. A check that fails shows nothing.
+func (r *Recorder) leaveReference(ctx context.Context, step Step, organizationID string, id uuid.UUID, what Happened) {
+	if step == StepDiscoveryMember || !contextvalues.ConnectionReferenceWanted(ctx) {
+		return
+	}
+	worth := FailureWorthAReference(what)
+	if !worth && step != StepProviderRefresh {
+		return
+	}
+	reference := ""
+	if worth && id != uuid.Nil && !r.insertFailing.Load() && r.logsAllowForReference(ctx, organizationID) {
+		reference = id.String()
+	}
+	if step == StepProviderRefresh {
+		if _, failed := what.(Code); failed {
+			contextvalues.SetRefreshConnectionReference(ctx, reference)
+		}
+		return
+	}
+	contextvalues.SetConnectionReference(ctx, reference)
+}
+
+// FailureWorthAReference is true for a failure the person can ask about. A refresh that worked or
+// a person's own decline isn't one.
+func FailureWorthAReference(what Happened) bool {
+	code, ok := what.(Code)
+	if !ok {
+		return false
+	}
+	meaning := catalog[code.name]
+	return meaning.Outcome == OutcomeFailed || meaning.Outcome == OutcomeBlocked
+}
+
+// referenceLogsAnswer asks the logs setting off the writer's and record's panic guards, so it has
+// its own: a logs check that panics shows no reference.
+func (r *Recorder) referenceLogsAnswer(organizationID string) (allowed bool) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			r.drop(context.Background(), dropPanic, 1, fmt.Errorf("connection reference logs check: %v", recovered))
+			allowed = false
+		}
+	}()
+	reason, _ := r.organizationAllowed(organizationID, r.cfg.logsCheckTimeout)
+	return reason == ""
+}
+
+// logsAllowForReference waits a bounded time for one background logs check per organization.
+// A slow check answers false now and fills the cache for the next failure.
+func (r *Recorder) logsAllowForReference(ctx context.Context, organizationID string) bool {
+	if r.referableOrgs == nil {
+		return r.referenceLogsAnswer(organizationID)
+	}
+	r.referableMu.Lock()
+	cached, ok := r.referableOrgs.Get(organizationID)
+	r.referableMu.Unlock()
+	if ok && time.Since(cached.at) < cached.ttl() {
+		return cached.allowed
+	}
+	answer := r.referenceChecks.DoChan(organizationID, func() (any, error) {
+		allowed := r.referenceLogsAnswer(organizationID)
+		r.referableMu.Lock()
+		r.referableOrgs.Add(organizationID, referableOrg{allowed: allowed, at: time.Now()})
+		r.referableMu.Unlock()
+		return allowed, nil
+	})
+	timer := time.NewTimer(referenceLogsTimeout)
+	defer timer.Stop()
+	select {
+	case result := <-answer:
+		allowed, _ := result.Val.(bool)
+		return allowed
+	case <-timer.C:
+		if r.referenceTimeouts != nil {
+			r.referenceTimeouts.Add(ctx, 1)
+		}
+		return false
+	case <-ctx.Done():
+		return false
+	}
 }
 
 // admitOnce applies the Once limits under stopMu, so a row held back before stopping is in the final pass.
@@ -624,10 +803,10 @@ func (r *Recorder) admitOnce(row Row) (decision onceDecision, stopped bool) {
 	defer r.stopMu.RUnlock()
 
 	if r.stopped {
-		return onceDecision{allowed: false, repeats: 0, lost: 0}, true
+		return onceDecision{allowed: false, repeats: 0, lost: 0, foldID: uuid.Nil}, true
 	}
 	if r.queueReserved() {
-		return onceDecision{allowed: false, repeats: 0, lost: r.limiter.holdBack(row)}, false
+		return r.limiter.holdBack(row), false
 	}
 	return r.limiter.take(row, time.Now()), false
 }
@@ -838,7 +1017,7 @@ func (r *Recorder) run() {
 			reason, checked := organizations[row.OrganizationID]
 			if !checked {
 				var err error
-				reason, err = r.organizationAllowed(r.writerCtx, row.OrganizationID)
+				reason, err = r.organizationAllowed(row.OrganizationID, r.cfg.logsCheckTimeout)
 				organizations[row.OrganizationID] = reason
 				if err != nil {
 					r.drop(context.Background(), reason, events(row), err)
@@ -907,21 +1086,22 @@ func (r *Recorder) surviving(n int, fn func()) {
 
 // Stores reports whether rows on scope may be stored, so a caller can skip costly detail
 // for a row that would be dropped. A failed check reports true; the writer decides then.
-func (r *Recorder) Stores(ctx context.Context, scope Scope) bool {
+// It checks on the recorder's own context, so a cancelled request can't read as logs off.
+func (r *Recorder) Stores(scope Scope) bool {
 	if r == nil {
 		return false
 	}
-	reason, _ := r.organizationAllowed(ctx, scope.organizationID)
+	reason, _ := r.organizationAllowed(scope.organizationID, r.cfg.logsCheckTimeout)
 	return reason != dropLogsOff
 }
 
 // organizationAllowed is the one place that decides whether an organization's attempts
 // are stored. It returns why not, or "" to store them. A check that fails means do not store.
-func (r *Recorder) organizationAllowed(ctx context.Context, organizationID string) (dropReason, error) {
+func (r *Recorder) organizationAllowed(organizationID string, timeout time.Duration) (dropReason, error) {
 	if r.logsEnabled == nil {
 		return dropLogsOff, nil
 	}
-	ctx, cancel := context.WithTimeout(ctx, r.cfg.logsCheckTimeout)
+	ctx, cancel := context.WithTimeout(r.writerCtx, timeout)
 	defer cancel()
 
 	enabled, err := r.logsEnabled(ctx, organizationID)
@@ -946,6 +1126,7 @@ func (r *Recorder) insert(rows []Row) bool {
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))
 	err := appendRowsInto(ctx, r.conn, r.cfg.table, rows)
+	r.insertFailing.Store(err != nil)
 	if err == nil {
 		return true
 	}

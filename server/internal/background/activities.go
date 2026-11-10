@@ -213,6 +213,7 @@ func NewActivities(
 	k8sClient *k8s.KubernetesClients,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
+	customDomainTargetSuffix string,
 	siteURL *url.URL,
 	orgHosts *orghost.Resolver,
 	billingTracker billing.Tracker,
@@ -317,6 +318,7 @@ func NewActivities(
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
 				remotesessions.WithRefreshConnectionRecorder(connections),
+				remotesessions.WithRefreshFeatureFlags(features),
 			),
 		)
 	}
@@ -409,7 +411,7 @@ func NewActivities(
 		getOktaApplicationSyncCandidates: activities.NewGetOktaApplicationSyncCandidates(oktaApplicationSyncer),
 		runOktaApplicationSync:           activities.NewRunOktaApplicationSync(oktaApplicationSyncer),
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
-		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy),
+		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, customDomainTargetSuffix, emailService, orgHosts),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
 		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),
@@ -430,7 +432,7 @@ func NewActivities(
 		reconcileTrialConversionKeys:     activities.NewReconcileEnterpriseTrialConversionKeys(logger, conversionPolicyReconciler),
 		transitionDeployment:             activities.NewTransitionDeployment(logger, db),
 		validateDeployment:               activities.NewValidateDeployment(logger, db, billingRepo),
-		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger, expectedTargetCNAME, expectedARecords),
+		verifyCustomDomain:               activities.NewVerifyCustomDomain(logger, db, auditLogger),
 		generateToolsetEmbeddings:        activities.NewGenerateToolsetEmbeddingsActivity(tracerProvider, db, ragService, logger),
 		listToolsetsForIndexing:          activities.NewListToolsetsForIndexing(db),
 		dispatchTrigger:                  activities.NewDispatchTrigger(triggerApp),

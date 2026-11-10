@@ -7,7 +7,8 @@ import {
   type JsonRenderNode,
 } from "@/elements/lib/generative-ui";
 import { AlertCircleIcon } from "lucide-react";
-import { ElementType, FC, PropsWithChildren, useMemo } from "react";
+import type { ElementType, FC, PropsWithChildren } from "react";
+import { useMemo } from "react";
 
 // Import all components from the generative-ui plugin ui directory
 import {

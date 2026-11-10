@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/hashicorp/golang-lru/v2/simplelru"
 	"golang.org/x/time/rate"
 
@@ -54,6 +55,9 @@ type onceEntry struct {
 	limiter  *rate.Limiter
 	pending  uint32
 	template Row
+
+	// foldID is the id every row held back since the last write folds into, and is written with.
+	foldID uuid.UUID
 }
 
 // onceDecision is what happened to one row.
@@ -66,6 +70,9 @@ type onceDecision struct {
 
 	// lost is how many held-back rows evicted keys took with them.
 	lost int
+
+	// foldID is the attempt id the row is stored under when it folds: held back, or carrying repeats.
+	foldID uuid.UUID
 }
 
 // onceLimiter holds back Once rows, which have no proof of a real flow behind them, and
@@ -109,7 +116,7 @@ func onceKeyOf(row Row) onceKey {
 func (l *onceLimiter) entry(key onceKey) *onceEntry {
 	entry, ok := l.keys.Get(key)
 	if !ok {
-		entry = &onceEntry{limiter: rate.NewLimiter(rate.Every(onceKeyInterval), onceKeyBurst), pending: 0, template: Row{}} //nolint:exhaustruct // the zero row until one is held back
+		entry = &onceEntry{limiter: rate.NewLimiter(rate.Every(onceKeyInterval), onceKeyBurst), pending: 0, template: Row{}, foldID: uuid.Nil} //nolint:exhaustruct // the zero row until one is held back
 		l.keys.Add(key, entry)
 	}
 	return entry
@@ -124,10 +131,14 @@ func (l *onceLimiter) org(organizationID string) *rate.Limiter {
 	return org
 }
 
-func (l *onceLimiter) hold(key onceKey, entry *onceEntry, row Row) {
+func (l *onceLimiter) hold(key onceKey, entry *onceEntry, row Row) uuid.UUID {
+	if entry.pending == 0 {
+		entry.foldID = row.AttemptID
+	}
 	entry.pending++
 	entry.template = row
 	l.withPending[key] = struct{}{}
+	return entry.foldID
 }
 
 func (l *onceLimiter) takeLost() int {
@@ -147,19 +158,20 @@ func (l *onceLimiter) take(row Row, now time.Time) onceDecision {
 	reservation := entry.limiter.ReserveN(now, 1)
 	if reservation.DelayFrom(now) > 0 {
 		reservation.CancelAt(now)
-		l.hold(key, entry, row)
-		return onceDecision{allowed: false, repeats: 0, lost: l.takeLost()}
+		foldID := l.hold(key, entry, row)
+		return onceDecision{allowed: false, repeats: 0, lost: l.takeLost(), foldID: foldID}
 	}
 	if !l.org(row.OrganizationID).AllowN(now, 1) {
 		reservation.CancelAt(now)
-		l.hold(key, entry, row)
-		return onceDecision{allowed: false, repeats: 0, lost: l.takeLost()}
+		foldID := l.hold(key, entry, row)
+		return onceDecision{allowed: false, repeats: 0, lost: l.takeLost(), foldID: foldID}
 	}
-	repeats := entry.pending
+	repeats, foldID := entry.pending, entry.foldID
 	entry.pending = 0
+	entry.foldID = uuid.Nil
 	entry.template = Row{} //nolint:exhaustruct // drops the held-back row
 	delete(l.withPending, key)
-	return onceDecision{allowed: true, repeats: repeats, lost: l.takeLost()}
+	return onceDecision{allowed: true, repeats: repeats, lost: l.takeLost(), foldID: foldID}
 }
 
 // allowOrganization spends from the organization's ceiling alone, for a Start row.
@@ -170,15 +182,15 @@ func (l *onceLimiter) allowOrganization(organizationID string, now time.Time) bo
 	return l.org(organizationID).AllowN(now, 1)
 }
 
-// holdBack counts a row another limit refused, and returns any count lost to eviction.
-func (l *onceLimiter) holdBack(row Row) int {
+// holdBack counts a row another limit refused. Its decision holds any count lost to eviction and the id it folds into.
+func (l *onceLimiter) holdBack(row Row) onceDecision {
 	key := onceKeyOf(row)
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.hold(key, l.entry(key), row)
-	return l.takeLost()
+	foldID := l.hold(key, l.entry(key), row)
+	return onceDecision{allowed: false, repeats: 0, lost: l.takeLost(), foldID: foldID}
 }
 
 // pendingRows returns one row per key with a held-back count, for bursts that stopped. The row
@@ -203,7 +215,9 @@ func (l *onceLimiter) pendingRows(now time.Time, last bool) []Row {
 		}
 		row := entry.template
 		row.Repeats = entry.pending - 1
+		row.AttemptID = entry.foldID
 		entry.pending = 0
+		entry.foldID = uuid.Nil
 		entry.template = Row{} //nolint:exhaustruct // drops the held-back row
 		delete(l.withPending, key)
 		rows = append(rows, row)

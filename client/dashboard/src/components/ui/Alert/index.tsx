@@ -1,7 +1,7 @@
 import { cva, type VariantProps } from "class-variance-authority";
-import { Modifier, Variant } from "./types";
+import type { Modifier, Variant } from "./types";
 import { Icon } from "@/components/ui/Icon";
-import { iconNames } from "../Icon/names";
+import type { iconNames } from "../Icon/names";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 

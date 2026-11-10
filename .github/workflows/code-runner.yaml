@@ -137,18 +137,34 @@ jobs:
         # The preceding step already built and loaded the image.
         run: mise run --skip-deps test:code-runner-image
       - name: Locate Go caches
+        id: go-cache
         run: |
           echo "GO_BUILD_CACHE=$(go env GOCACHE)" >> "$GITHUB_ENV"
           echo "GO_MOD_CACHE=$(go env GOMODCACHE)" >> "$GITHUB_ENV"
-      - name: Cache Go integration build
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
+          echo "week=$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+      # The Go cache is ~2.3 GB, and the repository's Actions cache is capped
+      # at 10 GB. Saving it per commit evicted the BuildKit layers above, so
+      # image builds recompiled the pinned Monty stage from source. Only main
+      # saves, at most once a week per dependency set; pull requests restore.
+      - name: Restore Go integration build
+        id: go-restore
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0 # zizmor: ignore[cache-poisoning]
         with:
           path: |
             ${{ env.GO_BUILD_CACHE }}
             ${{ env.GO_MOD_CACHE }}
-          key: code-mode-go-github-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-${{ github.sha }}
+          key: code-mode-go-github-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-${{ steps.go-cache.outputs.week }}
           restore-keys: |
-            code-mode-go-github-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-
+            code-mode-go-github-v2-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', 'go.mod', 'go.sum') }}-
+            code-mode-go-github-v2-${{ runner.os }}-${{ runner.arch }}-
       # Go cannot track changes to the external Rust/Monty executables. Reuse
       # compiled packages, but always execute the integration tests.
       - run: mise run test:code-mode -count=1
+      - name: Save Go integration build
+        if: github.event_name == 'push' && steps.go-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ env.GO_BUILD_CACHE }}
+            ${{ env.GO_MOD_CACHE }}
+          key: ${{ steps.go-restore.outputs.cache-primary-key }}

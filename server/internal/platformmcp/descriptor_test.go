@@ -428,6 +428,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	for _, name := range []string{
 		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
+		"get_custom_domain_status",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",
@@ -692,7 +693,7 @@ func TestAdvertisedInventoryBackendKindIsClosed(t *testing.T) {
 	require.NotNil(t, mcps.Items)
 	backendKind := mcps.Items.Properties["backend_kind"]
 	require.NotNil(t, backendKind)
-	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "built_in", "legacy"}, backendKind.Enum)
+	require.Equal(t, []any{"hosted", "remote", "tunneled", "unproxied", "legacy"}, backendKind.Enum)
 }
 
 func TestClientAdmissionToolInputsInferSchemas(t *testing.T) {

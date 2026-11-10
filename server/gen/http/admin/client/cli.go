@@ -2392,6 +2392,48 @@ func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHo
 	return v, nil
 }
 
+// BuildGetOrganizationHookFleetPayload builds the payload for the admin
+// getOrganizationHookFleet endpoint from CLI flags.
+func BuildGetOrganizationHookFleetPayload(adminGetOrganizationHookFleetOrganizationID string, adminGetOrganizationHookFleetWindowDays string, adminGetOrganizationHookFleetAdminSessionToken string) (*admin.GetOrganizationHookFleetPayload, error) {
+	var err error
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationHookFleetOrganizationID
+	}
+	var windowDays int
+	{
+		if adminGetOrganizationHookFleetWindowDays != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminGetOrganizationHookFleetWindowDays, 10, strconv.IntSize)
+			windowDays = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
+			}
+			if windowDays < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
+			}
+			if windowDays > 89 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 89, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationHookFleetAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationHookFleetAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationHookFleetPayload{}
+	v.OrganizationID = organizationID
+	v.WindowDays = windowDays
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListRegistryPromotionCandidatesPayload builds the payload for the admin
 // listRegistryPromotionCandidates endpoint from CLI flags.
 func BuildListRegistryPromotionCandidatesPayload(adminListRegistryPromotionCandidatesCursor string, adminListRegistryPromotionCandidatesStatus string, adminListRegistryPromotionCandidatesLimit string, adminListRegistryPromotionCandidatesAdminSessionToken string) (*admin.ListRegistryPromotionCandidatesPayload, error) {
@@ -3651,6 +3693,42 @@ func BuildRedeployProjectPayload(adminRedeployProjectBody string, adminRedeployP
 		ProjectID:                  body.ProjectID,
 		ExpectedActiveDeploymentID: body.ExpectedActiveDeploymentID,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListCustomDomainsPayload builds the payload for the admin
+// listCustomDomains endpoint from CLI flags.
+func BuildListCustomDomainsPayload(adminListCustomDomainsOrganizationID string, adminListCustomDomainsDNSRoutingMethod string, adminListCustomDomainsAdminSessionToken string) (*admin.ListCustomDomainsPayload, error) {
+	var err error
+	var organizationID *string
+	{
+		if adminListCustomDomainsOrganizationID != "" {
+			organizationID = &adminListCustomDomainsOrganizationID
+		}
+	}
+	var dnsRoutingMethod *string
+	{
+		if adminListCustomDomainsDNSRoutingMethod != "" {
+			dnsRoutingMethod = &adminListCustomDomainsDNSRoutingMethod
+			if !(*dnsRoutingMethod == "per_domain_cname" || *dnsRoutingMethod == "shared_cname" || *dnsRoutingMethod == "a_record" || *dnsRoutingMethod == "unknown") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("dns_routing_method", *dnsRoutingMethod, []any{"per_domain_cname", "shared_cname", "a_record", "unknown"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListCustomDomainsAdminSessionToken != "" {
+			adminSessionToken = &adminListCustomDomainsAdminSessionToken
+		}
+	}
+	v := &admin.ListCustomDomainsPayload{}
+	v.OrganizationID = organizationID
+	v.DNSRoutingMethod = dnsRoutingMethod
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

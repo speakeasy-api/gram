@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	testAgentSignIn = "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	testAgentSignIn = "https://app.example.com/acme/projects/default/identities/agent:agent-1/mcp-sign-in"
 	testAgentAccess = "https://app.example.com/acme/projects/default/identities/agent:agent-1/permissions"
 )
 
@@ -288,7 +288,7 @@ func TestMemberFailureSignIn_MarksRowsByErrorType(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			row := memberFailureSignIn(tc.gate, member, tc.err)
+			row := memberFailureSignIn(t.Context(), tc.gate, member, tc.err)
 			require.Equal(t, metamcp.SignInError, row.Status)
 			require.Equal(t, tc.detail, row.Detail)
 			require.Equal(t, tc.reconnects, row.Reconnect)

@@ -68,6 +68,8 @@ pitchfork = "2.33.1"
 [env]
 # Share Go compilation caches across worktrees, including nested tool builds.
 GOFLAGS = "-trimpath"
+# Unset an inherited SSL_CERT_FILE (e.g. from Claude Code) that breaks local login.
+SSL_CERT_FILE = false
 
 ###########################
 ## Runtime configuration ##

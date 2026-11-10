@@ -499,6 +499,12 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
           permissions: {
             component: IdentityAgentSection,
           },
+          mcpSignIn: {
+            component: IdentityAgentSection,
+          },
+          auditTrail: {
+            component: IdentityAgentSection,
+          },
           credentials: {
             component: IdentityAgentSection,
           },

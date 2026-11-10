@@ -2,7 +2,7 @@ import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useRBAC } from "@/hooks/useRBAC";
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { cn } from "@/lib/utils";
 import { invalidateAllToolset } from "@gram/client/react-query/toolset.js";
 import { useUpdateToolsetMutation } from "@gram/client/react-query/updateToolset.js";

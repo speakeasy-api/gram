@@ -68,6 +68,7 @@ trackedFiles:
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationHookFleet.ts: {}
   src/funcs/adminGetOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminGetOrganizationOnboardingStack.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
@@ -85,6 +86,7 @@ trackedFiles:
   src/funcs/adminGetSupportCoverage.ts: {}
   src/funcs/adminGetSupportMatrix.ts: {}
   src/funcs/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/funcs/adminListCustomDomains.ts: {}
   src/funcs/adminListCustomerUsage.ts: {}
   src/funcs/adminListGlobalIssuerConvergenceCandidates.ts: {}
   src/funcs/adminListGlobalIssuers.ts: {}
@@ -159,6 +161,7 @@ trackedFiles:
   src/models/components/adminbulkupdateaccounttyperesult.ts: {}
   src/models/components/adminchatanalysissettings.ts: {}
   src/models/components/adminchatanalysistriggerresult.ts: {}
+  src/models/components/admincustomdomain.ts: {}
   src/models/components/admincustomerusage.ts: {}
   src/models/components/admincustomerusageproductcost.ts: {}
   src/models/components/admincustomerusageresponse.ts: {}
@@ -166,6 +169,10 @@ trackedFiles:
   src/models/components/adminhookclientorganization.ts: {}
   src/models/components/adminhookclientsessioncell.ts: {}
   src/models/components/adminhookclientsresult.ts: {}
+  src/models/components/adminhookfleetbucket.ts: {}
+  src/models/components/adminhookfleetinstall.ts: {}
+  src/models/components/adminhookfleetresult.ts: {}
+  src/models/components/adminhookfleetversion.ts: {}
   src/models/components/admininferencehookcell.ts: {}
   src/models/components/admininferencekey.ts: {}
   src/models/components/admininferencekeycause.ts: {}
@@ -173,6 +180,7 @@ trackedFiles:
   src/models/components/admininferencekeyrepairresult.ts: {}
   src/models/components/admininferencekeyrepairstate.ts: {}
   src/models/components/admininferencespendmonth.ts: {}
+  src/models/components/adminlistcustomdomainsresult.ts: {}
   src/models/components/adminlistorganizationactivityresult.ts: {}
   src/models/components/adminlistorganizationmembersresult.ts: {}
   src/models/components/adminlistorganizationprojectsresult.ts: {}
@@ -362,6 +370,7 @@ trackedFiles:
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetorganizationhookfleet.ts: {}
   src/models/operations/admingetorganizationonboardingplaybook.ts: {}
   src/models/operations/admingetorganizationonboardingstack.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
@@ -375,6 +384,7 @@ trackedFiles:
   src/models/operations/admingetstripesubscriptioncandidate.ts: {}
   src/models/operations/admingetsupportcoverage.ts: {}
   src/models/operations/admingetupstreamoauthmigrationstatus.ts: {}
+  src/models/operations/adminlistcustomdomains.ts: {}
   src/models/operations/adminlistcustomerusage.ts: {}
   src/models/operations/adminlistglobalissuerconvergencecandidates.ts: {}
   src/models/operations/adminlistglobalissuers.ts: {}
@@ -431,6 +441,8 @@ trackedFiles:
   src/react-query/adminGetOrganization.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.core.ts: {}
   src/react-query/adminGetOrganizationChatAnalysisSettings.ts: {}
+  src/react-query/adminGetOrganizationHookFleet.core.ts: {}
+  src/react-query/adminGetOrganizationHookFleet.ts: {}
   src/react-query/adminGetOrganizationStats.core.ts: {}
   src/react-query/adminGetOrganizationStats.ts: {}
   src/react-query/adminGetPaygBillingSummary.core.ts: {}
@@ -460,6 +472,8 @@ trackedFiles:
   src/react-query/adminGetSupportMatrix.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.core.ts: {}
   src/react-query/adminGetUpstreamOAuthMigrationStatus.ts: {}
+  src/react-query/adminListCustomDomains.core.ts: {}
+  src/react-query/adminListCustomDomains.ts: {}
   src/react-query/adminListCustomerUsage.core.ts: {}
   src/react-query/adminListCustomerUsage.ts: {}
   src/react-query/adminListGlobalIssuerConvergenceCandidates.core.ts: {}
@@ -1053,6 +1067,19 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationHookFleet:
+    speakeasy-default-admin-get-organization-hook-fleet:
+      parameters:
+        query:
+          organization_id: "<id>"
+          window_days: 30
+      responses:
+        "200":
+          application/json: {"generations": [], "installs": [], "latest_version": "<value>", "legacy_events": 959358, "organization_id": "<id>", "quiet_after_days": 589245, "quiet_installs": 215014, "routes": [], "since": "2025-07-28T06:59:30.196Z", "total_installs": 961682, "truncated": false, "versions": [], "window_days": 865157}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetOrganizationOnboarding:
     speakeasy-default-admin-get-organization-onboarding:
       parameters:
@@ -1268,6 +1295,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  adminListCustomDomains:
+    speakeasy-default-admin-list-custom-domains:
+      responses:
+        "200":
+          application/json: {"custom_domains": [{"activated": true, "created_at": "2025-05-04T02:08:12.050Z", "domain": "precious-obesity.name", "id": "3693e93a-8ede-4aed-a934-2f0a97ee985d", "organization_id": "<id>", "organization_name": "<value>", "organization_slug": "<value>", "verified": true}]}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminListCustomerUsage:
     speakeasy-default-admin-list-customer-usage:
       parameters:

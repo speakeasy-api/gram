@@ -116,6 +116,11 @@ type ListFacetsPayload struct {
 	// Category of entries to compute facet values from, matching the list being
 	// filtered. Defaults to 'configuration'.
 	Category string
+	// Who initiated the entries to compute facet values from, matching the list
+	// being filtered: 'user' for changes initiated by a person, API key, agent or
+	// assistant, or 'system' for changes Speakeasy made on its own, such as
+	// background jobs. Omit for both.
+	Origin *string
 }
 
 // ListPayload is the payload type of the auditlogs service list method.
@@ -155,6 +160,10 @@ type ListPayload struct {
 	// the platform's configuration, or 'security' for machine access and other
 	// security-relevant activity such as workloads admitting themselves.
 	Category string
+	// Who initiated the entries to list: 'user' for changes initiated by a person,
+	// API key, agent or assistant, or 'system' for changes Speakeasy made on its
+	// own, such as background jobs. Omit for both.
+	Origin *string
 }
 
 // MakeUnauthorized builds a goa.ServiceError from an error.

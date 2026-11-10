@@ -37,6 +37,8 @@ func prepareTunneledEMA(t *testing.T) (context.Context, tunneledEMAFixture) {
 	require.NoError(t, q.SeedTunneledMCPServerFixture(ctx, backfill.SeedTunneledMCPServerFixtureParams{ID: server, ProjectID: *auth.ProjectID, Slug: pgtype.Text{String: "server-" + server.String(), Valid: true}, TunneledMcpServerID: uuid.NullUUID{UUID: source, Valid: true}}))
 	require.NoError(t, q.SetServerUserSessionIssuerFixture(ctx, backfill.SetServerUserSessionIssuerFixtureParams{ID: server, UserSessionIssuerID: uuid.NullUUID{UUID: usi, Valid: true}}))
 	require.NoError(t, q.SetServerRemoteSessionIssuerFixture(ctx, backfill.SetServerRemoteSessionIssuerFixtureParams{ID: server, RemoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}))
+	_, err = q.SeedAssociationFixture(ctx, backfill.SeedAssociationFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: server, RemoteSessionClientID: client})
+	require.NoError(t, err)
 	_, err = q.SeedTunneledHeaderFixture(ctx, backfill.SeedTunneledHeaderFixtureParams{TunneledMcpServerID: source, Name: "X-Enterprise-Key", IsSecret: true, Value: pgtype.Text{String: "test-secret", Valid: true}})
 	require.NoError(t, err)
 	binding, err := q.SeedEMABindingFixture(ctx, backfill.SeedEMABindingFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserSessionIssuerID: usi, RemoteSessionIssuerID: issuer, RemoteSessionClientID: uuid.NullUUID{UUID: client, Valid: true}, Resource: resource, RequestedScopes: []string{"read"}})
@@ -73,9 +75,11 @@ func TestUpdateServer_ReconcilesTunneledEMAResourceReach(t *testing.T) {
 	_, err := f.ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource + "/different")})
 	require.NoError(t, err)
 	f.assertEMA(t, ctx, false)
+	// The association that lets the EMA client reach the server also owns
+	// its route as upstream OAuth, so no standalone client takes over.
 	links, err := backfill.New(f.ti.conn).ListBackfillLinkedServersFixture(ctx, f.standalone)
 	require.NoError(t, err)
-	require.Equal(t, []uuid.UUID{f.server}, links)
+	require.Empty(t, links)
 	_, err = f.ti.service.UpdateServer(ctx, &gen.UpdateServerPayload{ID: f.source.String(), ResourceIdentifier: new(f.resource)})
 	require.NoError(t, err)
 	f.assertEMA(t, ctx, true)

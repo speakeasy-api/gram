@@ -106,7 +106,7 @@ func probeOnOrganizationGateway(t *testing.T, ctx context.Context, service *Serv
 	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New(), OrganizationID: "org_1", MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	client := remotesessions.Client{ID: uuid.New(), ProjectID: clientProject, IssuerURL: "https://auth.example.com"}
 	state := AuthnChallengeState{Subject: &subject, FlowID: uuid.NewString(), CreatedAt: time.Now()}
-	return service.probeRemoteSession(ctx, remotesessions.RefreshAttribution{}, testenv.NewLogger(t), mcpconnectionattempts.Option{}, endpoint, state, client, nil, trigger)
+	return service.probeRemoteSession(ctx, remotesessions.RefreshAttribution{}, testenv.NewLogger(t), mcpconnectionattempts.Option{}, endpoint, state, client, nil, nil, trigger)
 }
 
 // probeOnNoProject probes a client this organization gateway can't reach, which fails before any lookup.
@@ -242,7 +242,7 @@ func statusReadFailure(t *testing.T, pool *pgxpool.Pool) error {
 	service := &Service{remoteChallengeMgr: remotesessions.NewChallengeManager(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), pool, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, &url.URL{Scheme: "http", Host: "localhost"})}
 	endpoint := &ResolvedMcpEndpoint{ProjectID: uuid.New(), OrganizationID: "org_1", UserSessionIssuerID: uuid.New()}
 	client := remotesessions.Client{ID: uuid.New(), RemoteSessionIssuerID: uuid.New()}
-	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID})
+	return service.noUsableCredentialRefusal(t.Context(), testenv.NewLogger(t), endpoint, urn.NewUserSubject("user_1"), client, nil, new(remotesessions.SkippedClients), []uuid.UUID{endpoint.ProjectID})
 }
 
 // A store outage reading the card stops the check like any outage: retry notice, auth_check_unavailable row.
