@@ -275,10 +275,8 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		"the withdrawal's snapshot lost the agent because the other tier kept the assignment")
 }
 
-// A sibling project's issuer is invisible in the caller's list, so it must not be
-// withdrawable by supplying its UUID. GetWorkloadIssuer and SoftDeleteWorkloadIssuer
-// once scoped on organization alone, which made a row the caller could not observe
-// a row it could destroy.
+// The response names the tier that was withdrawn, so a client can tell whether
+// the same subject is still admitted at the other tier.
 func TestWithdrawSubject_NamesTheProjectTier(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
@@ -314,6 +312,10 @@ func TestWithdrawSubject_NamesTheProjectTier(t *testing.T) {
 	require.Empty(t, after.Admissions)
 }
 
+// A sibling project's issuer is invisible in the caller's list, so it must not be
+// withdrawable by supplying its UUID. GetWorkloadIssuer and SoftDeleteWorkloadIssuer
+// once scoped on organization alone, which made a row the caller could not observe
+// a row it could destroy.
 func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
