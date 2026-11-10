@@ -272,6 +272,10 @@ type Client struct {
 	// getHookClients endpoint.
 	GetHookClientsDoer goahttp.Doer
 
+	// GetOrganizationHookFleet Doer is the HTTP client used to make requests to
+	// the getOrganizationHookFleet endpoint.
+	GetOrganizationHookFleetDoer goahttp.Doer
+
 	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
 	// requests to the listRegistryPromotionCandidates endpoint.
 	ListRegistryPromotionCandidatesDoer goahttp.Doer
@@ -528,6 +532,7 @@ func NewClient(
 		SetMcpServerScopePinDoer:                    doer,
 		GetMcpServerToolCallsDoer:                   doer,
 		GetHookClientsDoer:                          doer,
+		GetOrganizationHookFleetDoer:                doer,
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
 		PromoteRegistryCandidateDoer:                doer,
@@ -2115,6 +2120,30 @@ func (c *Client) GetHookClients() goa.Endpoint {
 		resp, err := c.GetHookClientsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getHookClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationHookFleet returns an endpoint that makes HTTP requests to the
+// admin service getOrganizationHookFleet server.
+func (c *Client) GetOrganizationHookFleet() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationHookFleetRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationHookFleetResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationHookFleetRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationHookFleetDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationHookFleet", err)
 		}
 		return decodeResponse(resp)
 	}
