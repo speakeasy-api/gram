@@ -66,7 +66,7 @@ const renderNav = () =>
   renderHook(() => useProjectNavRoutes(), { wrapper: MemoryRouter });
 
 describe("useProjectNavRoutes", () => {
-  it("removes Signals intelligence when entitlement is disabled or a refresh fails", () => {
+  it("removes Signals Intelligence when entitlement is disabled or a refresh fails", () => {
     testState.productFeatures.data.signalsIntelligenceEnabled = true;
     const { result, rerender } = renderNav();
     const visible = () =>

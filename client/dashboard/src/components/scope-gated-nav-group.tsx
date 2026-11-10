@@ -1,5 +1,12 @@
-import { CollapsibleNavGroup, CollapsibleNavItem } from "@/components/nav-menu";
+import {
+  CollapsibleNavGroup,
+  CollapsibleNavItem,
+  ReleaseStageNavSection,
+} from "@/components/nav-menu";
 import { ReleaseStage } from "@/components/release-stage-badge";
+
+// Stable items lead each group; staged items follow, most mature first.
+const STAGE_ORDER: ReleaseStage[] = ["beta", "preview"];
 import { useRBAC } from "@/hooks/useRBAC";
 import { AppRoute } from "@/routes";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
@@ -54,13 +61,33 @@ export function ScopeGatedNavGroup({
       defaultHref={first.item.href()}
       stage={stage}
     >
-      {visible.map((entry) => (
-        <CollapsibleNavItem
-          key={entry.item.url}
-          item={entry.item}
-          label={entry.label}
-        />
-      ))}
+      {visible
+        .filter((entry) => !entry.item.stage)
+        .map((entry) => (
+          <CollapsibleNavItem
+            key={entry.item.url}
+            item={entry.item}
+            label={entry.label}
+          />
+        ))}
+      {STAGE_ORDER.map((sectionStage) => {
+        const staged = visible.filter(
+          (entry) => entry.item.stage === sectionStage,
+        );
+        if (staged.length === 0) return null;
+        return (
+          <ReleaseStageNavSection key={sectionStage} stage={sectionStage}>
+            {staged.map((entry) => (
+              <CollapsibleNavItem
+                key={entry.item.url}
+                item={entry.item}
+                label={entry.label}
+                stageSection={sectionStage}
+              />
+            ))}
+          </ReleaseStageNavSection>
+        );
+      })}
     </CollapsibleNavGroup>
   );
 }
