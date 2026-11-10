@@ -190,6 +190,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		return err
 	}
 	rows = append(rows, requestRows...)
+	tokenRows, err := s.connectionWorkloadRows()
+	if err != nil {
+		return err
+	}
+	rows = append(rows, tokenRows...)
 	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
@@ -322,4 +327,42 @@ func (s *seeder) stoppedAttemptRows(attempt mcpconnectionattempts.Attempt, key s
 	member.TraceID = md5Hex(s.name(key + "-member"))
 	member.ClientFamily, member.DeviceKey = first.ClientFamily, first.DeviceKey
 	return append(rows, member), nil
+}
+
+// connectionWorkloadRows seeds token requests from a workload and an assistant, and a server
+// that rejected the credential on initialize, one of each on the last few days.
+func (s *seeder) connectionWorkloadRows() ([]mcpconnectionattempts.Row, error) {
+	admitted := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/payments-api:ref:refs/heads/main")
+	stranger := urn.NewWorkloadSubject(s.det("workload-issuer-1"), "repo:acme/sandbox:ref:refs/heads/experiment")
+	person := urn.NewUserSubject(s.userID("amara"))
+	workload := []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer), mcpconnectionattempts.UserSessionIssuer(s.usIssuer())}
+	server := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppWorkload)
+	sharedServer := mcpconnectionattempts.AuthorizationServerScope(s.orgID(), s.projectID(), s.usIssuer(), mcpconnectionattempts.AppWorkload)
+	assistant := mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR)
+	seeded := []struct {
+		scope mcpconnectionattempts.Scope
+		step  mcpconnectionattempts.Step
+		what  mcpconnectionattempts.Happened
+		opts  []mcpconnectionattempts.Option
+	}{
+		{server, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&admitted)}, workload...)},
+		{sharedServer, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted, append([]mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&stranger), mcpconnectionattempts.Detail("subject_not_admitted")}, workload...)},
+		{assistant, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSignInMethodNotAccepted, []mcpconnectionattempts.Option{mcpconnectionattempts.Grant(oauthwire.GrantTypeClientCredentials), mcpconnectionattempts.Detail("assistant_tokens_not_issued")}},
+		{s.connectionServerScope(), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected, []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&person), mcpconnectionattempts.RequestMethod("initialize"), mcpconnectionattempts.Provider(demoConnectionProvider)}},
+	}
+	rows := make([]mcpconnectionattempts.Row, 0, len(seeded))
+	for n, row := range seeded {
+		key := "connection-token-" + strconv.Itoa(n)
+		started := s.now.AddDate(0, 0, -n-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
+		built, err := mcpconnectionattempts.RowAt(mcpconnectionattempts.AttemptAt(s.det(key), started, row.scope), row.step, row.what, true, started, row.opts...)
+		if err != nil {
+			return nil, fmt.Errorf("build connection token event: %w", err)
+		}
+		built.TraceID = md5Hex(s.name(key))
+		if row.step == mcpconnectionattempts.StepMCPRequest {
+			s.setConnectionClient(&built, key)
+		}
+		rows = append(rows, built)
+	}
+	return rows, nil
 }
