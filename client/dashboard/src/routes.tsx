@@ -164,7 +164,7 @@ const ROUTE_STRUCTURE = {
     },
   },
   signalsIntelligence: {
-    title: "Signals intelligence",
+    title: "Signals Intelligence",
     url: "signals-intelligence",
     icon: "radio",
     stage: "preview",
