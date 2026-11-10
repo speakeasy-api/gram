@@ -32,6 +32,9 @@ const sessionPolicyTTL = 5 * time.Minute
 // caller must 401 into reauth rather than reinterpret the policy.
 var errToolSelectionResourceMismatch = errors.New("session tool selection is bound to a different endpoint")
 
+// errSessionPolicyGone marks a bearer whose session row is gone: the token is no good, nothing is down.
+var errSessionPolicyGone = errors.New("session policy gone")
+
 // errToolSelectionLoad marks a post-validation policy-store failure. The
 // bearer token itself is valid; the request still fails closed, but logs must
 // distinguish this operational or stored-data failure from bad credentials.
@@ -117,6 +120,9 @@ func endpointAcceptsToolSelectionResource(endpoint *ResolvedMcpEndpoint, resourc
 	return endpoint.McpServerID.Valid && endpoint.ToolsetID.Valid && resource == "toolset:"+endpoint.ToolsetID.UUID.String()
 }
 
+// liveSessionPolicyKey bypasses the short-lived HTTP policy cache during code callbacks.
+type liveSessionPolicyKey struct{}
+
 // loadSessionPolicy resolves tool selection and refreshability for a validated
 // session JTI. The selection is nil for an all-tools session. Any error means the request
 // must be rejected: missing row (a live jti always has one — refresh
@@ -126,16 +132,22 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 	issuerID := endpoint.UserSessionIssuerID.String()
 
 	var entry sessionPolicyEntry
-	if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
-		entry = cached
-	} else {
+	live, _ := ctx.Value(liveSessionPolicyKey{}).(bool)
+	cachedPolicy := false
+	if !live {
+		if cached, err := s.sessionPolicyCache.Get(ctx, sessionPolicyCacheKey(issuerID, jti)); err == nil {
+			entry = cached
+			cachedPolicy = true
+		}
+	}
+	if !cachedPolicy {
 		row, derr := usersessions_repo.New(s.db).GetUserSessionPolicyByJTI(ctx, usersessions_repo.GetUserSessionPolicyByJTIParams{
 			UserSessionIssuerID: endpoint.UserSessionIssuerID,
 			Jti:                 jti,
 		})
 		if derr != nil {
 			if errors.Is(derr, pgx.ErrNoRows) {
-				return sessionPolicy{}, fmt.Errorf("user session row not found for jti")
+				return sessionPolicy{}, fmt.Errorf("user session row not found for jti: %w", errSessionPolicyGone)
 			}
 			return sessionPolicy{}, fmt.Errorf("load session policy: %w", derr)
 		}
@@ -146,8 +158,10 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 			Refreshable:  row.Refreshable,
 			CredentialID: row.CredentialID,
 		}
-		if cerr := s.sessionPolicyCache.Store(ctx, entry); cerr != nil {
-			s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+		if !live {
+			if cerr := s.sessionPolicyCache.Store(ctx, entry); cerr != nil {
+				s.logger.WarnContext(ctx, "cache session policy", attr.SlogError(cerr))
+			}
 		}
 	}
 

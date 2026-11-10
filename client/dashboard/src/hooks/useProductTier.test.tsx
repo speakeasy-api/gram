@@ -1,7 +1,8 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { emptySession, SessionContext } from "@/contexts/Auth";
-import { ProductTier, useProductTier } from "./useProductTier";
+import type { ProductTier } from "./useProductTier";
+import { useProductTier } from "./useProductTier";
 
 const renderTier = (session: {
   rawGramAccountType: string;

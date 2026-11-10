@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
@@ -135,7 +136,7 @@ func (s *Service) prepareBoundFederatedLogin(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		return nil, err
 	}
-	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host}
+	state.Browser = &ChallengeBrowserBinding{CookieID: state.ID, OriginHash: sha256Hex(browser), CallbackHash: "", CallbackOrigin: target.Scheme + "://" + target.Host, ConsentOrigin: "", Handoff: "", BoundAt: time.Time{}}
 	phase, callbackHash := "bootstrap", ""
 	if origin.Scheme == target.Scheme && origin.Host == target.Host {
 		phase, callbackHash = "ready", state.Browser.OriginHash
@@ -356,11 +357,14 @@ func federatedCallbackURL(callback string) (*url.URL, error) {
 
 // Never retain arbitrary upstream error strings: they may contain credentials.
 func federatedFailure(cause error) (oops.Code, error) {
+	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
+		if errors.Is(cause, remotesessions.ErrFederatedSigning) {
+			return oops.CodeUnavailable, errors.Join(remotesessions.ErrFederatedUnavailable, remotesessions.ErrFederatedSigning)
+		}
+		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
+	}
 	if errors.Is(cause, remotesessions.ErrFederatedSigning) {
 		return oops.CodeUnexpected, remotesessions.ErrFederatedSigning
-	}
-	if errors.Is(cause, remotesessions.ErrFederatedUnavailable) {
-		return oops.CodeUnavailable, remotesessions.ErrFederatedUnavailable
 	}
 	if errors.Is(cause, remotesessions.ErrFederatedConfiguration) {
 		return oops.CodeFailedPrecondition, remotesessions.ErrFederatedConfiguration
@@ -410,7 +414,10 @@ func (s *Service) finishFederatedFailure(w http.ResponseWriter, r *http.Request,
 		return responseErr
 	}
 	if state.FirstParty {
-		return failure
+		if declined {
+			return fmt.Errorf("complete identity login: %w", s.firstPartyBrowserError(oops.WithBrowserReason(failure, oauthui.ReasonCanceled)))
+		}
+		return s.firstPartyBrowserError(failure)
 	}
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")

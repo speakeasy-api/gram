@@ -345,6 +345,17 @@ type ListSourcesResponseBody struct {
 	Sources []string `form:"sources" json:"sources" xml:"sources"`
 }
 
+// CountByUserResponseBody is the type of the "chat" service "countByUser"
+// endpoint HTTP response body.
+type CountByUserResponseBody struct {
+	// Users ranked by session count, highest first, truncated to the requested
+	// limit
+	Users []*ChatUserSessionCountResponseBody `form:"users" json:"users" xml:"users"`
+	// Total sessions across all users; equals the unfiltered chat.list total for
+	// the same range
+	Total int `form:"total" json:"total" xml:"total"`
+}
+
 // ListSessionLinksResponseBody is the type of the "chat" service
 // "listSessionLinks" endpoint HTTP response body.
 type ListSessionLinksResponseBody struct {
@@ -2716,6 +2727,187 @@ type ListSourcesGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// CountByUserUnauthorizedResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "unauthorized" error.
+type CountByUserUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserForbiddenResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "forbidden" error.
+type CountByUserForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserBadRequestResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "bad_request" error.
+type CountByUserBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserNotFoundResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "not_found" error.
+type CountByUserNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserConflictResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "conflict" error.
+type CountByUserConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserUnsupportedMediaResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "unsupported_media" error.
+type CountByUserUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserInvalidResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "invalid" error.
+type CountByUserInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserInvariantViolationResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "invariant_violation"
+// error.
+type CountByUserInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserUnexpectedResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "unexpected" error.
+type CountByUserUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// CountByUserGatewayErrorResponseBody is the type of the "chat" service
+// "countByUser" endpoint HTTP response body for the "gateway_error" error.
+type CountByUserGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListSessionLinksUnauthorizedResponseBody is the type of the "chat" service
 // "listSessionLinks" endpoint HTTP response body for the "unauthorized" error.
 type ListSessionLinksUnauthorizedResponseBody struct {
@@ -3164,6 +3356,20 @@ type ChatTotalsResponseBody struct {
 	RiskOnly int64 `form:"risk_only" json:"risk_only" xml:"risk_only"`
 }
 
+// ChatUserSessionCountResponseBody is used to define fields on response body
+// types.
+type ChatUserSessionCountResponseBody struct {
+	// Speakeasy user ID. Empty for sessions with no Speakeasy user (external
+	// users, agent actors).
+	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// The user's email, empty when unknown
+	Email string `form:"email" json:"email" xml:"email"`
+	// The user's display name, empty when unknown
+	DisplayName string `form:"display_name" json:"display_name" xml:"display_name"`
+	// Number of sessions; equals the chat.list total when filtered to this user
+	Count int `form:"count" json:"count" xml:"count"`
+}
+
 // ChatSessionLinkResponseBody is used to define fields on response body types.
 type ChatSessionLinkResponseBody struct {
 	// Chat id of the parent session in this relationship. Absent when the caller's
@@ -3469,6 +3675,27 @@ func NewListSourcesResponseBody(res *chat.ListSourcesResult) *ListSourcesRespons
 		}
 	} else {
 		body.Sources = []string{}
+	}
+	return body
+}
+
+// NewCountByUserResponseBody builds the HTTP response body from the result of
+// the "countByUser" endpoint of the "chat" service.
+func NewCountByUserResponseBody(res *chat.CountChatsByUserResult) *CountByUserResponseBody {
+	body := &CountByUserResponseBody{
+		Total: res.Total,
+	}
+	if res.Users != nil {
+		body.Users = make([]*ChatUserSessionCountResponseBody, len(res.Users))
+		for i, val := range res.Users {
+			if val == nil {
+				body.Users[i] = nil
+				continue
+			}
+			body.Users[i] = marshalChatChatUserSessionCountToChatUserSessionCountResponseBody(val)
+		}
+	} else {
+		body.Users = []*ChatUserSessionCountResponseBody{}
 	}
 	return body
 }
@@ -5328,6 +5555,146 @@ func NewListSourcesGatewayErrorResponseBody(res *goa.ServiceError) *ListSourcesG
 	return body
 }
 
+// NewCountByUserUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserUnauthorizedResponseBody(res *goa.ServiceError) *CountByUserUnauthorizedResponseBody {
+	body := &CountByUserUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserForbiddenResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserForbiddenResponseBody(res *goa.ServiceError) *CountByUserForbiddenResponseBody {
+	body := &CountByUserForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserBadRequestResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserBadRequestResponseBody(res *goa.ServiceError) *CountByUserBadRequestResponseBody {
+	body := &CountByUserBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserNotFoundResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserNotFoundResponseBody(res *goa.ServiceError) *CountByUserNotFoundResponseBody {
+	body := &CountByUserNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserConflictResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserConflictResponseBody(res *goa.ServiceError) *CountByUserConflictResponseBody {
+	body := &CountByUserConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserUnsupportedMediaResponseBody(res *goa.ServiceError) *CountByUserUnsupportedMediaResponseBody {
+	body := &CountByUserUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserInvalidResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserInvalidResponseBody(res *goa.ServiceError) *CountByUserInvalidResponseBody {
+	body := &CountByUserInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserInvariantViolationResponseBody(res *goa.ServiceError) *CountByUserInvariantViolationResponseBody {
+	body := &CountByUserInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserUnexpectedResponseBody builds the HTTP response body from the
+// result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserUnexpectedResponseBody(res *goa.ServiceError) *CountByUserUnexpectedResponseBody {
+	body := &CountByUserUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewCountByUserGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "countByUser" endpoint of the "chat" service.
+func NewCountByUserGatewayErrorResponseBody(res *goa.ServiceError) *CountByUserGatewayErrorResponseBody {
+	body := &CountByUserGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListSessionLinksUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listSessionLinks" endpoint of the "chat" service.
 func NewListSessionLinksUnauthorizedResponseBody(res *goa.ServiceError) *ListSessionLinksUnauthorizedResponseBody {
@@ -5471,13 +5838,14 @@ func NewListSessionLinksGatewayErrorResponseBody(res *goa.ServiceError) *ListSes
 }
 
 // NewListChatsPayload builds a chat service listChats endpoint payload.
-func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
+func NewListChatsPayload(search *string, externalUserID *string, userID *string, source *string, assistantID *string, agentID *string, sourceKind *string, excludeSourceKind *string, hasRisk *string, accountType *string, pinned *string, minRiskScore *int, from *string, to *string, limit int, offset int, sortBy string, sortOrder string, pinnedFirst bool, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListChatsPayload {
 	v := &chat.ListChatsPayload{}
 	v.Search = search
 	v.ExternalUserID = externalUserID
 	v.UserID = userID
 	v.Source = source
 	v.AssistantID = assistantID
+	v.AgentID = agentID
 	v.SourceKind = sourceKind
 	v.ExcludeSourceKind = excludeSourceKind
 	v.HasRisk = hasRisk
@@ -5490,6 +5858,7 @@ func NewListChatsPayload(search *string, externalUserID *string, userID *string,
 	v.Offset = offset
 	v.SortBy = sortBy
 	v.SortOrder = sortOrder
+	v.PinnedFirst = pinnedFirst
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken
@@ -5645,6 +6014,19 @@ func NewSubmitFeedbackPayload(body *SubmitFeedbackRequestBody, sessionToken *str
 // NewListSourcesPayload builds a chat service listSources endpoint payload.
 func NewListSourcesPayload(sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.ListSourcesPayload {
 	v := &chat.ListSourcesPayload{}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+	v.ChatSessionsToken = chatSessionsToken
+
+	return v
+}
+
+// NewCountByUserPayload builds a chat service countByUser endpoint payload.
+func NewCountByUserPayload(from *string, to *string, limit int, sessionToken *string, projectSlugInput *string, chatSessionsToken *string) *chat.CountByUserPayload {
+	v := &chat.CountByUserPayload{}
+	v.From = from
+	v.To = to
+	v.Limit = limit
 	v.SessionToken = sessionToken
 	v.ProjectSlugInput = projectSlugInput
 	v.ChatSessionsToken = chatSessionsToken

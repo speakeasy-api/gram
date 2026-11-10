@@ -1,4 +1,5 @@
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { Text } from "@/components/ui/Text";
 import type { AnalyticsDataset } from "@gram/client/models/components/analyticsdataset.js";
 import type { JSX } from "react";

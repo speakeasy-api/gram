@@ -20,7 +20,7 @@ import {
 import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import { ServerIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
-import { catalogLogoClassName } from "./logo";
+import { CatalogLogo } from "./CatalogLogo";
 import type {
   GuardrailServerSummary,
   GuardrailsPhase,
@@ -31,6 +31,7 @@ const ACTION_LABELS = {
   warn: { chip: "Warn", label: "Warn & confirm" },
   block: { chip: "Deny", label: "Deny the request" },
   quarantine: { chip: "Quarantine", label: "Quarantine session" },
+  require_approval: { chip: "Approval", label: "Require approval" },
 } as const;
 
 // Chip labels for the summary; the full detector names are too long to sit
@@ -43,14 +44,12 @@ const DETECTOR_CHIP_LABELS: Partial<Record<RuleCategory, string>> = {
 };
 
 /** The catalog install's Guardrails step: a recommended, pre-filled guardrail
- *  the user can switch off (Add to Project then installs without one),
+ *  the user can switch off or skip (either installs without one),
  *  summarized, with the full editor one click away. */
 export function CatalogGuardrailsPhase({
   releaseState,
-  onClose,
 }: {
   releaseState: GuardrailsPhase;
-  onClose: () => void;
 }): JSX.Element {
   const mode = useDetectorMode();
   const [enabled, setEnabled] = useState(true);
@@ -119,11 +118,7 @@ export function CatalogGuardrailsPhase({
 
       {enabled ? (
         <>
-          <GuardrailSummary
-            releaseState={releaseState}
-            single={single}
-            mode={mode}
-          />
+          <GuardrailSummary releaseState={releaseState} mode={mode} />
           <Text small muted>
             Adjust detectors, tools or action later on the server&apos;s{" "}
             <span className="text-foreground font-medium">Guardrails</span> tab,
@@ -148,8 +143,8 @@ export function CatalogGuardrailsPhase({
               Back
             </Button>
           ) : null}
-          <Button variant="tertiary" onClick={onClose}>
-            Cancel
+          <Button variant="tertiary" onClick={() => void releaseState.skip()}>
+            Skip
           </Button>
         </div>
         <Button
@@ -172,34 +167,23 @@ function ServerSummaryRow({
 }: {
   server: GuardrailServerSummary;
 }): JSX.Element {
-  const facts = [
-    `${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`,
-    ...(server.destructiveTools.length > 0
-      ? [`${server.destructiveTools.length} destructive`]
-      : []),
-    ...(server.oauth ? ["OAuth"] : []),
-  ];
   return (
     <div className="flex items-center gap-3">
       <div className="bg-muted flex size-10 shrink-0 items-center justify-center border">
-        {server.iconUrl ? (
-          <img
-            src={server.iconUrl}
-            alt=""
-            className={cn(
-              "size-6",
-              catalogLogoClassName(server.registrySpecifier),
-            )}
-          />
-        ) : (
-          <ServerIcon className="text-muted-foreground size-4" />
-        )}
+        <CatalogLogo
+          server={server}
+          alt=""
+          className={cn("size-6")}
+          fallback={<ServerIcon className="text-muted-foreground size-4" />}
+        />
       </div>
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{server.name}</div>
-        <Text small muted>
-          {facts.join(" · ")}
-        </Text>
+        {server.oauth ? (
+          <Text small muted>
+            OAuth
+          </Text>
+        ) : null}
       </div>
     </div>
   );
@@ -207,20 +191,13 @@ function ServerSummaryRow({
 
 function GuardrailSummary({
   releaseState,
-  single,
   mode,
 }: {
   releaseState: GuardrailsPhase;
-  single: GuardrailServerSummary | undefined;
   mode: ReturnType<typeof useDetectorMode>;
 }): JSX.Element {
-  const { guardrail, servers } = releaseState;
+  const { guardrail } = releaseState;
   const action = ACTION_LABELS[effectiveAction(guardrail)];
-  const destructive = [
-    ...new Set(servers.flatMap((server) => server.destructiveTools)),
-  ];
-  const inspectsDestructive = guardrail.categories.has("destructive_tool");
-  const toolCount = single?.toolCount;
 
   return (
     <dl className="divide-border divide-y border px-3">
@@ -239,19 +216,7 @@ function GuardrailSummary({
         )}
       </SummaryRow>
       <SummaryRow label="Tools">
-        <span className="text-sm">
-          {toolCount ? `All ${toolCount} tools` : "All tools"}
-          {inspectsDestructive && destructive.length > 0
-            ? " · destructive:"
-            : ""}
-        </span>
-        {inspectsDestructive
-          ? destructive.map((tool) => (
-              <Badge key={tool} variant="warning" className="normal-case">
-                {tool}
-              </Badge>
-            ))
-          : null}
+        <span className="text-sm">All tools</span>
       </SummaryRow>
       <SummaryRow label="Inspects">
         <span className="text-sm">Tool requests · Tool responses</span>

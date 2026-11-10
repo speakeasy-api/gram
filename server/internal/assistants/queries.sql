@@ -121,7 +121,26 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
-SELECT t.id, t.slug, (t.mcp_enabled IS FALSE AND t.mcp_slug IS NOT NULL)::bool AS enables_mcp
+-- enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
+-- legacyalias: drop disabled_wrapper with AIM-670.
+SELECT t.id, t.slug, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+)::bool AS enables_mcp, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+)::bool AS disabled_wrapper
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -328,38 +347,22 @@ WHERE t.project_id = @project_id
 ORDER BY so.seen_at DESC, so.id DESC
 LIMIT 1;
 
--- name: EnableMCPForToolsets :many
--- Flips mcp_enabled to TRUE for the listed toolsets in a project. Newly
--- attached toolsets are enabled so users don't have to do it separately; the
--- caller picks them by ResolveToolsetsForWrite's enables_mcp under its lock.
-UPDATE toolsets
-SET mcp_enabled = TRUE,
-    updated_at = clock_timestamp()
-WHERE id = ANY(@toolset_ids::UUID[])
-  AND project_id = @project_id
-  AND mcp_enabled IS FALSE
-  AND mcp_slug IS NOT NULL
-  AND deleted IS FALSE
-RETURNING id;
-
 -- name: LoadAssistantMcpServers :many
--- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug,
--- mcp_enabled and default environment, and sort first so they win runtime id
+-- Hosted rows (canonical wrapper, id = toolset id) keep the toolset slug and
+-- default environment, and sort first so they win runtime id
 -- collisions. The address is the server's own endpoint: platform first, else
 -- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
--- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
--- toolset slug fallback is removed.
+-- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
+-- caller fills in from legacyalias until the toolset slug fallback is removed.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
-  CASE WHEN t.id IS NOT NULL THEN CASE
-    WHEN t.mcp_enabled IS NOT TRUE THEN 'disabled'
-    WHEN t.mcp_is_public THEN 'public'
-    ELSE 'private'
-  END ELSE ms.visibility END::text AS visibility,
-  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  ms.visibility::text AS visibility,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  -- legacyalias: drop with AIM-670.
+  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
@@ -631,11 +634,20 @@ RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_
 -- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 -- backfilled on first owned send so dashboard ownership checks accept the
 -- legitimate owner.
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, NOW(), NOW())
+--
+-- session_surface is the server-derived product surface for sources that the
+-- inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+-- the same assistants runtime as every other assistant). It is stamped from the
+-- persisted thread source kind, never from a request header, and an existing
+-- value is kept.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, sqlc.narg('session_surface')::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
-  updated_at = NOW();
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
+  updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id;
 
 -- name: UpsertAssistantThread :one
 INSERT INTO assistant_threads (
@@ -1193,18 +1205,23 @@ WHERE assistant_id = @assistant_id
 
 -- name: ListInactiveAssistantRuntimesForReap :many
 -- Returns runtime rows that still carry backend metadata and are safe to
--- collect, in two cases:
+-- collect, in three cases:
 --   1. Orphans: finalized (soft-deleted or ended; the state value is ignored
 --      since a tombstone can carry any state, e.g. one stamped by a racing
---      turn) or under a soft-deleted assistant, whose owning assistant has had
---      no runtime activity since @inactive_before — i.e. Stop/Reap never
---      completed. A live row under a live assistant is never an orphan: an
---      idle runtime keeps its VM until the assistant is deleted.
+--      turn) or under a soft-deleted assistant or project, whose owning
+--      assistant has had no runtime activity since @inactive_before — i.e.
+--      Stop/Reap never completed. A live row under a live assistant and project
+--      is never an orphan: inactivity alone does not discard its workspace.
 --   2. Superseded backend: a row on a backend the process no longer targets
 --      (backend <> @target_backend), parked at @stopped_state after its warm
 --      window. Collecting it frees the deprecated backend's resources so the
 --      next admit lands on the target backend. Active/starting/expiring rows
 --      are left to finish, so a live assistant is never disrupted mid-turn.
+--   3. Retired Kit runtimes: version 3 rows own every object and credential
+--      they name, and a new row never inherits their metadata, so collecting
+--      one cannot affect the assistant's current runtime. They skip the
+--      inactivity check, which a busy assistant would never satisfy. Rows still
+--      in switch_retiring belong to the pending switch retirement sweep.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
@@ -1220,6 +1237,12 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
             AND a.project_id = r.project_id
             AND a.deleted IS TRUE
         )
+        OR EXISTS (
+          SELECT 1
+          FROM projects p
+          WHERE p.id = r.project_id
+            AND p.deleted IS TRUE
+        )
       )
       AND NOT EXISTS (
         SELECT 1
@@ -1234,6 +1257,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.deleted IS NOT TRUE
       AND r.ended IS NOT TRUE
       AND r.state = @stopped_state
+    )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
     )
   )
 ORDER BY r.updated_at ASC
@@ -1269,8 +1297,8 @@ WHERE id = @runtime_id
 -- Returns live v2 runtime rows that carry backend metadata for runtime
 -- reconciliation sweeps. Only `active` rows qualify: `starting` rows are
 -- mid-boot, while expiring/stopped rows are already being torn down or await
--- re-admission. Rows orphaned by a deleted assistant belong to the
--- deleted-assistant janitor and are excluded here.
+-- re-admission. Rows orphaned by a deleted assistant or project belong to the
+-- inactivity janitor and are excluded here so maintenance cannot delay collection.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.state = @active_state
@@ -1284,6 +1312,12 @@ WHERE r.state = @active_state
     WHERE a.id = r.assistant_id
       AND a.project_id = r.project_id
       AND a.deleted IS TRUE
+  )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM projects p
+    WHERE p.id = r.project_id
+      AND p.deleted IS TRUE
   )
 ORDER BY r.updated_at ASC;
 
@@ -1859,8 +1893,10 @@ FOR SHARE OF r, a;
 
 -- name: GetKitRuntimeSessionBinding :one
 -- Existence only: never load any previous transcript contents into the guest.
+-- Pending user input is the current turn; only a non-user message shows the
+-- assistant took part in earlier turns.
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1918,11 +1954,6 @@ LEFT JOIN assistant_threads t ON t.id = s.assistant_thread_id
 LEFT JOIN chats c ON c.id = t.chat_id AND c.project_id = s.project_id AND c.deleted IS FALSE
 WHERE s.project_id = @project_id AND s.assistant_id = @assistant_id AND s.runtime_id = @runtime_id
 ORDER BY s.acp_session_id;
-
--- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= @project_id AND chat_id= @chat_id
-AND id <> ALL(@current_message_ids::uuid[])) AS has_prior;
 
 -- name: ResolveKitCurrentUserMessage :many
 -- Dashboard idempotency_key is the caller's message ID, not an event UUID or text match.
@@ -2044,3 +2075,23 @@ SELECT pg_advisory_unlock(hashtext('asst:' || @assistant_id::text))::boolean AS 
 
 -- name: GetAssistantTransactionIsolationForTest :one
 SELECT current_setting('transaction_isolation')::text AS isolation;
+
+-- name: RetireMCPServerEndpointsFixture :exec
+-- Test fixture: retires every endpoint of one MCP server.
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: SoftDeleteCustomDomainFixture :exec
+-- Test fixture: soft-deletes a custom domain under its endpoints.
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id AND organization_id = @organization_id;
+
+-- name: BackdateMCPEndpointBySlugFixture :exec
+-- Test fixture: makes one endpoint a day older than when it was created.
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = @slug AND project_id = @project_id;
+
+-- name: LockKitLocalWorkloadSubject :exec
+-- Serializes kit workload provisioning for one external subject across
+-- projects. The key is the caller's canonical JSON encoding of the subject.
+SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
+
+-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;

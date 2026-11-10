@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/authz"
 )
 
 const maxAccessRoleMutationReceiptPayloadBytes = 16 << 10
@@ -28,6 +30,11 @@ type AccessRoleMutationReceiptResult struct {
 	MCPAccess      MCPConnectSummary `json:"mcp_access"`
 	ResultCategory string            `json:"result_category"`
 	Reconciliation string            `json:"reconciliation"`
+	// SensitiveScopesAdded names the sensitive permissions the write gave the
+	// role that it did not hold before, as the audit log records them. Empty
+	// for every write so far: the MCP and inference role tools grant
+	// mcp:connect and inference:execute, neither of which is sensitive.
+	SensitiveScopesAdded []string `json:"sensitive_scopes_added,omitempty"`
 }
 
 type AccessRoleMutationTransaction func(context.Context, pgx.Tx) (AccessRoleMutationReceiptResult, error)
@@ -88,7 +95,7 @@ func accessRoleMutationInputHash(operation string, normalized any) (string, erro
 }
 
 func accessRoleMutationOperation(operation string) bool {
-	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole
+	return operation == operationCreateMCPAccessRole || operation == operationUpdateMCPAccessRole || operation == operationConfigureInferenceAccessRole
 }
 
 func encodeAccessRoleMutationReceipt(operation string, result AccessRoleMutationReceiptResult) ([]byte, error) {
@@ -139,13 +146,19 @@ func validAccessRoleMutationReceiptResult(operation string, result AccessRoleMut
 	switch operation {
 	case operationCreateMCPAccessRole:
 		expectedCategory = "created"
-	case operationUpdateMCPAccessRole:
+	case operationUpdateMCPAccessRole, operationConfigureInferenceAccessRole:
 		expectedCategory = "updated"
 	default:
 		return false
 	}
 	if result.ResultCategory != expectedCategory {
 		return false
+	}
+	for _, scope := range result.SensitiveScopesAdded {
+		entry, ok := authz.ScopeEntryFor(authz.Scope(scope))
+		if !ok || !entry.Sensitive() {
+			return false
+		}
 	}
 	return result.Reconciliation == "complete" || result.Reconciliation == "pending"
 }

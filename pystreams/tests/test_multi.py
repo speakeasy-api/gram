@@ -8,8 +8,8 @@ import pytest
 
 from pystreams.cmd import multi as multi_mod
 from pystreams.cmd.receiver import ReceiverGroup
-from pystreams.risk.enforce_handler import PresidioEnforceHandler
 from pystreams.risk.handler import PresidioHandler
+from pystreams.risk.presidio_enforce_handler import PresidioEnforceHandler
 
 
 class _StopAfterActivation(Exception):

@@ -7,7 +7,7 @@ import {
   findMcpServerActivity,
   hasDefaultPluginServer,
 } from "@/components/project-guide/journeyStatus";
-import { AUTOMATIC_CATALOG_SERVER_NAMES } from "@/components/project-guide/journeys";
+import { AUTOMATIC_CATALOG_SERVER_SPECIFIERS } from "@/components/project-guide/journeys";
 import type {
   ProjectGuideEventCard,
   ProjectGuideOperationReport,
@@ -22,11 +22,10 @@ import {
 import { useProjectSlugForRequests, useSlugs } from "@/contexts/Sdk";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   extractAuthType,
-  isPulseMcpServer,
-  requiresManualSetup,
+  supportsAutomaticOAuth,
 } from "@/pages/catalog/hooks/serverMetadata";
 import {
   filterToHttpRemotes,
@@ -40,7 +39,6 @@ import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js"
 import type { Plugin } from "@gram/client/models/components/plugin.js";
 import type { RemoteMcpServer } from "@gram/client/models/components/remotemcpserver.js";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
-import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import {
   invalidateAllGetMcpServerActivity,
   useGetMcpServerActivity,
@@ -75,17 +73,17 @@ const LAST_CALL_PRECISION_MS = 1_000;
 
 const CLIENTS: McpGuideClient[] = ["claude", "codex", "cursor"];
 
-function serverName(server: PulseMCPServer): string {
+function serverName(server: CatalogServer): string {
   return server.title ?? server.registrySpecifier;
 }
 
 function compareCatalogServers(
-  left: PulseMCPServer,
-  right: PulseMCPServer,
+  left: CatalogServer,
+  right: CatalogServer,
 ): number {
-  const rank = (server: PulseMCPServer): number => {
-    const index = AUTOMATIC_CATALOG_SERVER_NAMES.indexOf(
-      serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
+  const rank = (server: CatalogServer): number => {
+    const index = AUTOMATIC_CATALOG_SERVER_SPECIFIERS.indexOf(
+      server.registrySpecifier as (typeof AUTOMATIC_CATALOG_SERVER_SPECIFIERS)[number],
     );
     return index === -1 ? Number.POSITIVE_INFINITY : index;
   };
@@ -95,25 +93,23 @@ function compareCatalogServers(
   );
 }
 
-function canConfigureWithoutUserCredentials(server: PulseMCPServer): boolean {
+function canConfigureWithoutUserCredentials(server: CatalogServer): boolean {
   const authType = extractAuthType(server);
   return (
     authType === "none" ||
-    (authType === "oauth" && !requiresManualSetup(server))
+    (authType === "oauth" && supportsAutomaticOAuth(server))
   );
 }
 
 function curateCatalogServers(
-  servers: ExternalMCPServer[] | undefined,
-): PulseMCPServer[] | undefined {
+  servers: CatalogServer[] | undefined,
+): CatalogServer[] | undefined {
   if (!servers) return undefined;
   return servers
-    .filter(isPulseMcpServer)
-    .filter((server) => server.meta["com.pulsemcp/server"]?.isOfficial === true)
     .filter(canConfigureWithoutUserCredentials)
     .filter((server) =>
-      AUTOMATIC_CATALOG_SERVER_NAMES.includes(
-        serverName(server) as (typeof AUTOMATIC_CATALOG_SERVER_NAMES)[number],
+      AUTOMATIC_CATALOG_SERVER_SPECIFIERS.includes(
+        server.registrySpecifier as (typeof AUTOMATIC_CATALOG_SERVER_SPECIFIERS)[number],
       ),
     )
     .sort(compareCatalogServers);
@@ -201,7 +197,7 @@ function selectedServerReadiness(
   remoteServers: RemoteMcpServer[],
   endpoints: McpEndpoint[],
   plugins: Plugin[],
-  selectedServer: PulseMCPServer,
+  selectedServer: CatalogServer,
 ): boolean {
   const server = catalogBackedMcpServers(servers, remoteServers, [
     filterToHttpRemotes(selectedServer),
@@ -218,8 +214,8 @@ function selectedServerReadiness(
 function catalogServerForMcp(
   mcpServer: McpServer | undefined,
   remoteServers: Array<{ id: string; url: string }> | undefined,
-  catalogServers: PulseMCPServer[] | undefined,
-): PulseMCPServer | undefined {
+  catalogServers: CatalogServer[] | undefined,
+): CatalogServer | undefined {
   const remote = remoteServers?.find(
     (candidate) => candidate.id === mcpServer?.remoteMcpServerId,
   );
@@ -237,7 +233,7 @@ export function useMcpGuideOperations(): {
   activityBaselinePending: boolean;
   catalogError: boolean;
   catalogPending: boolean;
-  catalogServers: PulseMCPServer[] | undefined;
+  catalogServers: CatalogServer[] | undefined;
   client: McpGuideClient;
   connectionPromptCopied: boolean;
   promptCopied: boolean;
@@ -254,8 +250,8 @@ export function useMcpGuideOperations(): {
   prompt: string | undefined;
   prepareActivityBaseline: () => Promise<boolean>;
   retryCatalog: () => void;
-  selectServer: (server: PulseMCPServer) => void;
-  selectedServer: PulseMCPServer | undefined;
+  selectServer: (server: CatalogServer) => void;
+  selectedServer: CatalogServer | undefined;
   serverName: string | undefined;
   setClient: (client: McpGuideClient) => void;
   connectionPrompts: Record<McpGuideClient, string> | undefined;
@@ -270,7 +266,7 @@ export function useMcpGuideOperations(): {
   const canViewToolLogs = useCanViewToolLogs();
   const queryClient = useQueryClient();
   const [selectedServerOverride, setSelectedServerOverride] = useState<
-    PulseMCPServer | undefined
+    CatalogServer | undefined
   >(undefined);
   const [client, setClient] = useState<McpGuideClient>("claude");
   const [connectionPromptCopied, setConnectionPromptCopied] = useState(false);
@@ -307,8 +303,7 @@ export function useMcpGuideOperations(): {
   });
 
   const allCatalogServers = useMemo(
-    () =>
-      catalog.data?.servers?.filter(isPulseMcpServer).map(filterToHttpRemotes),
+    () => catalog.data?.servers?.map(filterToHttpRemotes),
     [catalog.data?.servers],
   );
   const catalogServers = useMemo(
@@ -873,7 +868,7 @@ export function useMcpGuideOperations(): {
     connectionPrompts,
     toolLogsHref: canViewToolLogs ? routes.logs.href() : undefined,
     mcpServerHref: mcpServer
-      ? routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))
+      ? routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))
       : routes.home.href(),
   };
 }

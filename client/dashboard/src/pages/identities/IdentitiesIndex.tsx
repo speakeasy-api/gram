@@ -1,3 +1,5 @@
+import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { IdentitySyncCallout } from "@/components/setup-empty-state";
 import {
   buildEmployees,
@@ -15,22 +17,19 @@ import {
 import { Info } from "lucide-react";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { defineFilters, useFilterState } from "@/components/filters";
-import {
-  useOrganization,
-  useSession,
-  useIsPlatformAdmin,
-} from "@/contexts/Auth";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
 import { useSdkClient, useProjectSlugForRequests } from "@/contexts/Sdk";
 import { Page } from "@/components/page-layout";
 import { RequireScope } from "@/components/require-scope";
-import { AgentOwner } from "@/pages/agents/agent-admin";
+import { AgentOwner, AgentStatus } from "@/pages/agents/agent-admin";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { Button } from "@/components/ui/Button";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { Badge } from "@/components/ui/Badge";
-import { Column, type SortDescriptor, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { type SortDescriptor, Table } from "@/components/ui/Table";
 import { sortTableData } from "@/components/ui/Table/sorting";
 import { dateTimeFormatters } from "@/lib/dates";
 import { useHideInsightsDock } from "@/components/insights-context";
@@ -47,7 +46,10 @@ import { ActingPrincipal } from "@/components/ui/ActingPrincipal";
 import { Bot, Plus, User } from "lucide-react";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, Outlet, useLocation, useNavigate } from "react-router";
-import { useCatalogEntries } from "@/pages/agents/credentials/workloadCatalog";
+import {
+  catalogEntryForIssuer,
+  useCatalogEntries,
+} from "@/pages/agents/credentials/workloadCatalog";
 import { useWorkloadIdentities } from "@gram/client/react-query/workloadIdentities.js";
 import {
   identityKindOf,
@@ -556,16 +558,18 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const client = useGramContext();
   const sdk = useSdkClient();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const scopeOverride = useRBACScopeOverride();
   const { hasScope } = useRBAC();
   const canReadOrganization = hasScope("org:read", organization.id);
   const canAdminOrganization = hasScope("org:admin", organization.id);
+  const inferenceSetupFlag = useFeatureFlag(
+    FEATURE_FLAGS.inferenceWorkloadSetup,
+  );
   // Match the existing agent screen's supported sessions, without changing scope.
   const agentsEnabled =
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
-    !session.impersonatorEmail &&
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+    !session.impersonatorEmail;
   const [search, setSearch] = useState("");
   // Honours `?sort=<column>:<asc|desc>` so a handoff can open the list on the
   // order it was talking about — the dashboard's Top Users "View all" means
@@ -613,6 +617,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       lifecycleKey,
       ownerKey,
       registered,
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
@@ -639,10 +644,16 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
     [agentsQuery.data],
   );
 
+  // The agents roster lists agents only; the people reads below would be
+  // requests whose every row it discards. Members stay: they name owners.
+  const peopleShown = kind === "person";
   const membersQuery = useMembers(undefined, undefined, {
     throwOnError: false,
   });
-  const rolesQuery = useRoles(undefined, undefined, { throwOnError: false });
+  const rolesQuery = useRoles(undefined, undefined, {
+    enabled: peopleShown,
+    throwOnError: false,
+  });
   // Usage is the only project-scoped read here, and it is what surfaces the
   // identities the directory has never heard of.
   //
@@ -653,6 +664,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const usageQuery = useQuery({
     queryKey: identityRosterQueryKey(organization.id, projectSlug),
     queryFn: () => fetchIdentityRoster(client, projectSlug),
+    enabled: peopleShown,
     throwOnError: false,
   });
   // The MDM fleet, read once and folded to a bucket per identity. It is not
@@ -662,7 +674,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const deviceCoverageQuery = useQuery({
     queryKey: deviceCoverageQueryKey(organization.id),
     queryFn: () => fetchDeviceCoverage(client),
-    enabled: canReadOrganization,
+    enabled: peopleShown && canReadOrganization,
     throwOnError: false,
   });
   const deviceCoverage = canReadOrganization
@@ -675,7 +687,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   const directoryPeopleQuery = useQuery({
     queryKey: directoryPeopleQueryKey(organization.id),
     queryFn: () => fetchDirectoryPeople(client),
-    enabled: canAdminOrganization,
+    enabled: peopleShown && canAdminOrganization,
     throwOnError: false,
   });
   const directoryPeople = canAdminOrganization
@@ -688,19 +700,19 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
   // in flight or one that never came back.
   const rosterLoading =
     membersQuery.isLoading ||
-    rolesQuery.isLoading ||
-    usageQuery.isLoading ||
-    (canReadOrganization && directoryPeopleQuery.isLoading) ||
+    (peopleShown &&
+      (rolesQuery.isLoading ||
+        usageQuery.isLoading ||
+        (canReadOrganization && directoryPeopleQuery.isLoading))) ||
     (agentsEnabled && agentsQuery.isLoading);
   const rosterFailed =
     membersQuery.isError ||
-    rolesQuery.isError ||
-    usageQuery.isError ||
+    (peopleShown && (rolesQuery.isError || usageQuery.isError)) ||
     (agentsEnabled && agentsQuery.isError);
   const retryRoster = () => {
     if (membersQuery.isError) void membersQuery.refetch();
-    if (rolesQuery.isError) void rolesQuery.refetch();
-    if (usageQuery.isError) void usageQuery.refetch();
+    if (peopleShown && rolesQuery.isError) void rolesQuery.refetch();
+    if (peopleShown && usageQuery.isError) void usageQuery.refetch();
     if (agentsEnabled && agentsQuery.isError) void agentsQuery.refetch();
   };
 
@@ -1025,9 +1037,7 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       // A catalog platform by its own name; anything else was registered by
       // hand and carries the label its operator gave it. "Custom" is the
       // fallback for one that was left unnamed, not the name of all of them.
-      const known = catalog.entries.find(
-        (entry) => entry.issuer.value === admission.issuer,
-      );
+      const known = catalogEntryForIssuer(catalog.entries, admission.issuer);
       const label =
         known?.displayName ?? (admission.issuerName.trim() || "Custom");
       const names = byAgent.get(admission.agentId);
@@ -1089,24 +1099,11 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
       {
         key: "status",
         header: "Status",
-        width: "140px",
+        width: "220px",
         render: (identity) => {
           const agent = agentsById.get(identity.registeredAgentId ?? "");
           if (!agent) return null;
-          return (
-            <Badge
-              size="sm"
-              variant={
-                agent.lifecycle === "active"
-                  ? "success"
-                  : agent.lifecycle === "revoked"
-                    ? "destructive"
-                    : "warning"
-              }
-            >
-              {agent.lifecycle}
-            </Badge>
-          );
+          return <AgentStatus agent={agent} />;
         },
       },
       {
@@ -1149,46 +1146,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
           );
         },
       },
-      {
-        key: "actions",
-        header: "Actions",
-        width: "160px",
-        render: (identity) => {
-          const agentId = identity.registeredAgentId ?? "";
-          if (agentId === "") return null;
-          return (
-            // Stops the row's own click from firing underneath: the row opens
-            // the agent, and Edit is a different destination.
-            <div
-              className="flex items-center justify-end gap-2"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Button asChild size="sm" variant="primary">
-                <Link to={routes.identities.agents.edit.href(agentId)}>
-                  Edit
-                </Link>
-              </Button>
-              <Button asChild size="sm" variant="secondary">
-                <Link
-                  to={routes.identities.detail.overview.href(
-                    encodeIdentityUrn(identityUrnForEmployee(identity)),
-                  )}
-                >
-                  View
-                </Link>
-              </Button>
-            </div>
-          );
-        },
-      },
     ],
-    [
-      agentsById,
-      platformsByAgent,
-      workloads.isSuccess,
-      workloads.isError,
-      routes,
-    ],
+    [agentsById, platformsByAgent, workloads.isSuccess, workloads.isError],
   );
   // One sorted list, split by what the row is. The filters above still narrow
   // both; the Kind column is dropped inside each table because the heading
@@ -1278,6 +1237,15 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
                 Set up Claude Tag
               </Link>
             </Button>
+            {inferenceSetupFlag.status === "enabled" && (
+              <Button asChild variant="secondary">
+                <Link
+                  to={`${routes.identities.agents.new.href()}?capability=inference`}
+                >
+                  Set up inference
+                </Link>
+              </Button>
+            )}
             <Button asChild variant="primary">
               <Link to={routes.identities.agents.new.href()}>
                 <Plus className="size-4" aria-hidden="true" />
@@ -1512,7 +1480,7 @@ function IdentityGroup({
               at all. It is collapsed to nothing instead of removed: the column
               tracks come from the grid template, so a zero-height row costs no
               layout, where sr-only would take the cells out of the subgrid. */}
-          <div className="border-border min-h-0 flex-1 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
+          <div className="border-border min-h-0 overflow-y-auto overscroll-y-contain border-b [&_table]:border-t-0 [&_table]:border-b-0 [&_thead]:h-0 [&_thead]:overflow-hidden [&_thead_th]:h-0 [&_thead_th]:overflow-hidden [&_thead_th]:border-0 [&_thead_th]:p-0">
             <Table
               columns={columns}
               data={rows.slice(0, visible)}

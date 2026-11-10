@@ -16,12 +16,13 @@ type McpServerAuthentication struct {
 	ProjectID string
 	// Whether the MCP server is public.
 	Public bool
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool
-	// configured when authentication is required and at least one enabled client
-	// is offered; setup_incomplete when it is required and none is;
-	// no_auth_required when the upstream explicitly needs none; undecided when
-	// nobody has said.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool
+	// configured when the server offers at least one enabled auth client;
+	// setup_incomplete when no auth client was ever linked to it, live or
+	// detached, but it has a live upstream OAuth client or a credential header on
+	// its source that no auth client records yet; no_auth_required otherwise.
 	Status string
 	// The auth clients the server offers.
 	Clients []*AuthClient

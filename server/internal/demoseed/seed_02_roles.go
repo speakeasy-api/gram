@@ -2,6 +2,8 @@ package demoseed
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
@@ -31,9 +33,13 @@ type rolesCustomRole struct {
 // generated, never literal, so each tenant's rows stay its own.
 var rolesCustomRoles = []rolesCustomRole{
 	{
+		// Holds both scopes of the "Review other members' sessions"
+		// task, so the role editor and the grant dialog have a complete
+		// sensitive task to show; Engineer below holds mcp:write without
+		// environment:read, an incomplete one.
 		slug: "session-reviewer", name: "Session Reviewer",
-		description: "Reads chat transcripts across the organization for quality review.",
-		scopes:      []string{"chat:read"},
+		description: "Reads chat transcripts across the organization and tool-call logs in the demo project for quality review.",
+		scopes:      []string{"chat:read", "log:read"},
 		members:     []string{"hana", "jonas"},
 		agents:      []string{},
 	},
@@ -164,7 +170,7 @@ var rolesMDMDevices = []rolesMDMDevice{
 	{3, "C02DEMO0003", "priya-mbp", "macOS", "14.7", "priya", true, "1 day"},
 	// The contractor's machine: enrolled, but the agent stopped reporting.
 	{4, "C02DEMO0004", "mateo-mbp", "macOS", "14.6", "mateo", true, "6 days"},
-	// The one Windows machine, and one of the two with no agent at all.
+	// The one Windows machine Jamf enrolled, and the one with no agent at all.
 	{5, "WINDEMO0005", "HANA-WIN11", "Windows", "11 23H2", "hana", true, "8 hours"},
 	{6, "C02DEMO0006", "lucas-mbp", "macOS", "15.3", "lucas", true, "3 hours"},
 	// A spare laptop the MDM reports against an address no member holds: the
@@ -582,6 +588,12 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 	if err := s.q.RolesDeleteDeviceAgentDeviceSyncs(ctx, org); err != nil {
 		return fmt.Errorf("delete demo device agent device syncs: %w", err)
 	}
+	if err := s.q.RolesDeleteDeviceAgentStateReports(ctx, org); err != nil {
+		return fmt.Errorf("delete demo device agent state reports: %w", err)
+	}
+	// The policy every active agent was last served, and the one it replaced.
+	currentEtag := s.policyEtag("current")
+	previousEtag := s.policyEtag("previous")
 	for i, u := range demoUsers {
 		userID := s.userID(u.handle)
 		if err := s.q.RolesInsertUserAccount(ctx, repo.RolesInsertUserAccountParams{
@@ -609,22 +621,35 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// Agent heartbeats, split so coverage has more than one answer to
 		// give. The first three reported minutes ago (agent_active); the
 		// contractor's last check-in is six days old (agent_stale); the last
-		// two never installed it (no_agent). A fleet where every row is the
+		// two have none here (Lucas's is added below). A fleet where every row is the
 		// same colour tells an admin nothing, which is the whole job of this
 		// page.
 		if i < 4 {
 			lastSeenAgo := "6 days"
+			servedEtag := conv.ToPGTextEmpty("")
 			if i < 3 {
 				lastSeenAgo = "12 minutes"
+				servedEtag = conv.ToPGText(currentEtag)
 			}
 			if err := s.q.RolesInsertDeviceAgentSync(ctx, repo.RolesInsertDeviceAgentSyncParams{
 				OrganizationID: org,
 				Email:          s.email(u.handle),
 				LastSeenAgo:    lastSeenAgo,
+				ServedEtag:     servedEtag,
 			}); err != nil {
 				return fmt.Errorf("insert demo device agent sync %s: %w", u.handle, err)
 			}
 		}
+	}
+	// Lucas runs the agent only on his Windows desktop, so his heartbeat is
+	// fresh while his MacBook has no agent of its own.
+	if err := s.q.RolesInsertDeviceAgentSync(ctx, repo.RolesInsertDeviceAgentSyncParams{
+		OrganizationID: org,
+		Email:          s.email("lucas"),
+		LastSeenAgo:    "11 minutes",
+		ServedEtag:     conv.ToPGText(currentEtag),
+	}); err != nil {
+		return fmt.Errorf("insert demo device agent sync lucas: %w", err)
 	}
 
 	// Three personal accounts across two providers: a contractor on his own
@@ -740,6 +765,13 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 		// Installed, then went quiet: the drift case, and the row worth
 		// chasing.
 		{"C02DEMO0004", "mateo", "mateo-mbp", "6 days"},
+		// Two machines Jamf never enrolled, so only their agents list them
+		// (the Devices tab's "Not in an MDM" rows). Amara's build box
+		// enforces policy; Priya's old laptop went quiet after she moved to
+		// a new one. Both owners' enrolled laptops already answer by their
+		// own serials, so these leave the MDM coverage buckets unchanged.
+		{"H4DEMO0101", "amara", "amara-build-mini", "9 minutes"},
+		{"C02DEMO0102", "priya", "priya-old-mbp", "5 days"},
 	}
 	for _, d := range deviceSyncs {
 		if err := s.q.RolesInsertDeviceAgentDeviceSync(ctx, repo.RolesInsertDeviceAgentDeviceSyncParams{
@@ -752,5 +784,68 @@ func (s *seeder) seedRolesAccountsAndDevices(ctx context.Context) error {
 			return fmt.Errorf("insert demo device agent device sync %s: %w", d.serial, err)
 		}
 	}
+
+	// State reports, so coverage can say whether each active machine
+	// enforces the policy it was served. Amara's applied it, Jonas's is still
+	// on the previous one because Claude Code's managed settings are not
+	// writable, and Priya's runs a build that does not report. Three answers,
+	// for the same reason the heartbeats above are split. Amara's build box
+	// reports too, so the agent-only rows include an enforcing machine.
+	reports := []struct {
+		serial, owner, hostname, os, arch, reportedAgo, etag, appliedAgo, tools string
+		degraded                                                                int32
+	}{
+		{
+			"C02DEMO0001", "amara", "amara-mbp", "darwin", "arm64", "8 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":2},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0},` +
+				`{"tool":"codex","layer":"off","outcome":"skipped","restart_required":false,"action_required":false}]`,
+			0,
+		},
+		{
+			"C02DEMO0002", "jonas", "jonas-mbp", "darwin", "arm64", "14 minutes", previousEtag, "9 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"error","error_kind":"permission_denied","restart_required":false,"action_required":true},` +
+				`{"tool":"cursor","layer":"user","outcome":"armed","restart_required":true,"action_required":false,"drift_corrections":0}]`,
+			1,
+		},
+		{
+			"H4DEMO0101", "amara", "amara-build-mini", "darwin", "arm64", "6 minutes", currentEtag, "2 days",
+			`[{"tool":"claude_code","layer":"managed","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0}]`,
+			0,
+		},
+		// Lucas's Windows desktop, whose agent reports no serial. It must not
+		// stand in for his MacBook, which has no agent of its own: the Mac
+		// reads "No policy report", and the desktop gets its own row.
+		{
+			"", "lucas", "LUCAS-DESKTOP", "windows", "amd64", "11 minutes", currentEtag, "3 days",
+			`[{"tool":"cursor","layer":"user","outcome":"armed","restart_required":false,"action_required":false,"drift_corrections":0}]`,
+			0,
+		},
+	}
+	for _, r := range reports {
+		if err := s.q.RolesInsertDeviceAgentStateReport(ctx, repo.RolesInsertDeviceAgentStateReportParams{
+			OrganizationID:    org,
+			Email:             s.email(r.owner),
+			SerialNumber:      r.serial,
+			Hostname:          r.hostname,
+			ReportedAgo:       r.reportedAgo,
+			AppliedEtag:       r.etag,
+			AppliedAgo:        r.appliedAgo,
+			Tools:             []byte(r.tools),
+			DegradedToolCount: r.degraded,
+			SpeakeasydVersion: "0.42.0",
+			Os:                r.os,
+			Arch:              r.arch,
+		}); err != nil {
+			return fmt.Errorf("insert demo device agent state report %s: %w", r.hostname, err)
+		}
+	}
 	return nil
+}
+
+// policyEtag is a device-agent policy etag in the shape GetPlugins serves: a
+// hex sha256.
+func (s *seeder) policyEtag(label string) string {
+	sum := sha256.Sum256([]byte(s.name("policy-etag-" + label)))
+	return hex.EncodeToString(sum[:])
 }

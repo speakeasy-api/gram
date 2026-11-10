@@ -9,11 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 
-	meteringv1 "github.com/speakeasy-api/gram/infra/gen/gram/metering/v1"
 	riskv1 "github.com/speakeasy-api/gram/infra/gen/gram/risk/v1"
 	"github.com/speakeasy-api/gram/infra/pkg/gcp"
 	risk_analysis "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
-	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/risk/categories"
 	riskrepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -34,11 +32,6 @@ func newCategoryScopeAnalyzer(
 		testenv.NewMeterProvider(t),
 		conn,
 		nil,
-		&risk_analysis.StubPIIScanner{},
-		nil,
-		nil,
-		nil,
-		nil,
 		nil,
 		newPresidioPub(),
 		gitleaksPub,
@@ -48,11 +41,7 @@ func newCategoryScopeAnalyzer(
 		newLLMPub(),
 		newToolCallPub(),
 		newAccountIdentityPub(),
-		mustCustomRuleScanner(t, conn),
 		mustCELEngine(t),
-		nil,
-		nil,
-		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 		false,
 	)
 	require.NoError(t, err)
@@ -90,22 +79,7 @@ func insertCategoryScopeMessage(t *testing.T, conn *pgxpool.Pool, td testData, r
 	return id
 }
 
-func requireOnlyMessagePersisted(t *testing.T, conn *pgxpool.Pool, td testData, messageID uuid.UUID) {
-	t.Helper()
-	rows, err := riskrepo.New(conn).ListRiskResultsByProjectAndPolicy(t.Context(), riskrepo.ListRiskResultsByProjectAndPolicyParams{
-		ProjectID:    td.projectID,
-		RiskPolicyID: td.policyID,
-		PageLimit:    100,
-	})
-	require.NoError(t, err)
-	require.NotEmpty(t, rows)
-	for _, row := range rows {
-		require.True(t, row.ChatMessageID.Valid)
-		require.Equal(t, messageID, row.ChatMessageID.UUID)
-	}
-}
-
-func TestAnalyzeBatch_GitleaksCategoryScopeSubsetsInlineAndPublish(t *testing.T) {
+func TestAnalyzeBatch_GitleaksCategoryScopeSubsetsPublish(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
@@ -120,10 +94,9 @@ func TestAnalyzeBatch_GitleaksCategoryScopeSubsetsInlineAndPublish(t *testing.T)
 
 	require.Len(t, *published, 1)
 	require.Equal(t, userID.String(), (*published)[0].GetChatMessageId())
-	requireOnlyMessagePersisted(t, conn, td, userID)
 }
 
-func TestAnalyzeBatch_CustomCategoryScopeSubsetsInlineAndPublish(t *testing.T) {
+func TestAnalyzeBatch_CustomCategoryScopeSubsetsPublish(t *testing.T) {
 	t.Parallel()
 
 	conn := cloneDB(t)
@@ -168,5 +141,4 @@ func TestAnalyzeBatch_CustomCategoryScopeSubsetsInlineAndPublish(t *testing.T) {
 
 	require.Len(t, *published, 1)
 	require.Equal(t, userID.String(), (*published)[0].GetChatMessageId())
-	requireOnlyMessagePersisted(t, conn, td, userID)
 }

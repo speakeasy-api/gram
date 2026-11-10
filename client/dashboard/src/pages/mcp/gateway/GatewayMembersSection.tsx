@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { Page } from "@/components/page-layout";
 import { SourceMcpIcon } from "@/components/sources/SourceCard";
 import { RequireScope } from "@/components/require-scope";
@@ -43,7 +44,6 @@ import {
   Code,
   FileCode,
   Globe,
-  Loader2,
   Plus,
   Server,
   Trash2,
@@ -192,7 +192,9 @@ function MemberNameCell({ row }: { row: MemberRow }): JSX.Element {
       <div className="flex min-w-0 flex-col">
         {row.server ? (
           <Link
-            to={routes.mcp.x.overview.href(mcpServerRouteParam(row.server))}
+            to={routes.mcp.details.overview.href(
+              mcpServerRouteParam(row.server),
+            )}
             className="truncate font-medium hover:underline"
           >
             {name}
@@ -643,7 +645,7 @@ export function GatewayMembersSection({
             >
               {mutating && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Remove server</Button.Text>

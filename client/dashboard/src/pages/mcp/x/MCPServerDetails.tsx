@@ -1,4 +1,7 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { ProviderSetupPage } from "./setup/ProviderSetupPage";
 import { isKnownEnumValue } from "@/lib/enum";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
 import {
   invalidateMcpServerQueries,
@@ -7,6 +10,7 @@ import {
 } from "@/lib/mcp-server-visibility";
 import { handleError } from "@/lib/errors";
 import { Page } from "@/components/page-layout";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -26,6 +30,7 @@ import type {
   McpServerVisibility,
 } from "@gram/client/models/components/mcpserver.js";
 import { useGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
+import { isNotNotFound } from "@/lib/query-errors";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
 import { useGetTunneledMcpServer } from "@gram/client/react-query/getTunneledMcpServer.js";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
@@ -46,15 +51,18 @@ import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
   activeTabFromPath,
-  initialTabFromHash,
-  isLegacyAuthenticationTabPath,
   mcpServerTabHref,
   MCP_SERVER_TAB_URLS,
   standsInForToolset,
   tabForServer,
+  tabSegmentFromPath,
 } from "./MCPServerDetailsRouting";
+import { ToolsetRedirectPage } from "../ToolsetRedirect";
+import { serverTabForToolsetTab } from "../toolsetRedirectRouting";
+import { isNotFoundError } from "@/lib/route-errors";
 import {
   HostedPromptsTab,
   HostedResourcesTab,
@@ -65,34 +73,35 @@ import { useHostedVisibilityGuard } from "./hosted/useHostedVisibilityGuard";
 import { InspectTab } from "./tabs/InspectTab";
 import { OverviewTab } from "./tabs/OverviewTab";
 import { MCP_AGENT_SETUP_SECTION_ID } from "./tabs/settings/sections/AgentSetupSection";
-import { MCP_AUTHENTICATION_SECTION_ID } from "./tabs/settings/sections/authentication/AuthenticationSection";
 import { MCP_PUBLIC_ACCESS_SECTION_ID } from "./tabs/settings/sections/PublicAccessSection";
 import { ClientsAndSessionsTab } from "@/components/sessions/ClientsAndSessionsTab";
 import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
+import { RemoteSkillsTabRoute } from "./tabs/skills/RemoteSkillsTab";
+import { MCPSkillsTabRoute } from "../MCPSkillsTab";
 
 export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
   const activeTab = activeTabFromPath(location.pathname, idOrSlug);
   const tabContentRef = useTabScrollReset(activeTab);
-  const legacyAuthenticationPath = isLegacyAuthenticationTabPath(
-    location.pathname,
-    idOrSlug,
-  );
+  const tabSegment = tabSegmentFromPath(location.pathname, idOrSlug);
 
   const {
     data: mcpServer,
+    error: mcpServerError,
     isLoading,
     isError,
   } = useGetMcpServer(getMcpServerArgs(idOrSlug), undefined, {
     enabled: idOrSlug !== "",
+    throwOnError: isNotNotFound,
   });
 
   const mcpServerId = mcpServer?.id ?? "";
@@ -124,15 +133,42 @@ export default function MCPServerDetails(): JSX.Element | null {
   if (!idOrSlug) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
+  // Not a server: maybe a legacy toolset slug or `/mcp/x` link.
+  if (isNotFoundError(mcpServerError)) {
+    return (
+      <ToolsetRedirectPage
+        toolsetSlug={idOrSlug}
+        tabSegment={tabSegment}
+        serverLookupMissed
+      />
+    );
+  }
   if (isError || (!isLoading && !mcpServer)) {
     return <Navigate to={routes.mcp.href()} replace />;
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
-  if (!mcpServer) return null;
-  if (legacyAuthenticationPath) {
+  if (!mcpServer) return <SplashScreen />;
+  if (activeTab === "setup") {
+    if (providerSetupRollout === "loading") return <SplashScreen />;
+    if (providerSetupRollout !== "enabled")
+      return (
+        <Navigate
+          to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
+          replace
+        />
+      );
+    return (
+      <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
+        <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+      </RequireScope>
+    );
+  }
+  // Retired tab segments (`authentication`, the toolset page's `performance`).
+  if (tabSegment !== undefined && !activeTab) {
+    const target = serverTabForToolsetTab(tabSegment, location.hash);
     return (
       <Navigate
-        to={`${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`}
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(target.tab, hosted))}${location.search}${target.hash}`}
         replace
       />
     );
@@ -158,15 +194,10 @@ export default function MCPServerDetails(): JSX.Element | null {
     );
   }
   if (!activeTab) {
-    const initialTab = tabForServer(initialTabFromHash(location.hash), hosted);
-    const hash =
-      location.hash === `#${MCP_AUTHENTICATION_SECTION_ID}`
-        ? `#${MCP_AUTHENTICATION_SECTION_ID}`
-        : "";
-
+    const target = serverTabForToolsetTab(undefined, location.hash);
     return (
       <Navigate
-        to={`${mcpServerTabHref(routes, idOrSlug, initialTab)}${hash}`}
+        to={`${mcpServerTabHref(routes, idOrSlug, tabForServer(target.tab, hosted))}${location.search}${target.hash}`}
         replace
       />
     );
@@ -174,12 +205,15 @@ export default function MCPServerDetails(): JSX.Element | null {
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
     // Overview needs the loaded toolset only when the read's summary is missing.
+    // Skills reads links by server id and owns its flag and access checks.
     const needsToolset =
       activeTab === "overview"
         ? !mcpServer.toolset
-        : activeTab !== "sessions" && activeTab !== "guardrails";
+        : activeTab !== "sessions" &&
+          activeTab !== "guardrails" &&
+          activeTab !== "skills";
     if (hosted && needsToolset && !hostedToolset) {
-      if (isLoadingToolset) return null;
+      if (isLoadingToolset) return <SplashScreen />;
       return (
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <Alert variant="error" dismissible={false}>
@@ -244,6 +278,21 @@ export default function MCPServerDetails(): JSX.Element | null {
             />
           )
         );
+      case "skills":
+        // Hosted servers list their own links; remote-backed servers list
+        // theirs with a note on how agents load them. The routes check the
+        // flag before the scope, and any other server lands on the overview.
+        return (
+          mcpServer &&
+          (hosted ? (
+            <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug={idOrSlug} />
+          ) : (
+            <RemoteSkillsTabRoute
+              mcpServer={mcpServer}
+              mcpServerSlug={idOrSlug}
+            />
+          ))
+        );
       case "team-access":
         return (
           mcpServer && (
@@ -254,18 +303,22 @@ export default function MCPServerDetails(): JSX.Element | null {
                 level="page"
               >
                 {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
-                <MCPTeamAccessTab
-                  resourceId={mcpServer.id}
-                  serverName={mcpServer.name ?? undefined}
-                  tools={hostedToolset?.tools}
-                />
+                {mcpServer.remoteMcpServerId ? (
+                  <RemoteTeamAccessTab server={mcpServer} />
+                ) : (
+                  <MCPTeamAccessTab
+                    resourceId={mcpServer.id}
+                    serverName={mcpServer.name ?? undefined}
+                    tools={hostedToolset?.tools}
+                  />
+                )}
               </RequireScope>
             </RequireScope>
           )
         );
       case "guardrails":
         // Wait out the flag lookup rather than bouncing a deep link to it.
-        if (mcpScopedFlag.status === "loading") return null;
+        if (mcpScopedFlag.status === "loading") return <SplashScreen />;
         return mcpServer && mcpScoped && !mcpServer.unproxiedMcpServerId ? (
           <GuardrailsTab mcpServer={mcpServer} />
         ) : (
@@ -316,14 +369,11 @@ export default function MCPServerDetails(): JSX.Element | null {
           substitutions={{
             [idOrSlug]: mcpServer?.name || "MCP Server",
           }}
-          skipSegments={[
-            "x",
-            // skipSegments matches by literal value, not position — if the
-            // server's own slug happens to collide with a tab name (e.g. a
-            // server slugged "settings"), guard against also skipping the
-            // server's own breadcrumb crumb.
-            ...MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug),
-          ]}
+          // skipSegments matches by literal value, not position — if the
+          // server's own slug happens to collide with a tab name (e.g. a
+          // server slugged "settings"), guard against also skipping the
+          // server's own breadcrumb crumb.
+          skipSegments={MCP_SERVER_TAB_URLS.filter((tab) => tab !== idOrSlug)}
         />
       </Page.Header>
 
@@ -588,8 +638,10 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
     isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
+  const followRenamedServer = useFollowRenamedServer();
   const update = useUpdateMcpServerMutation({
-    onSuccess: async (_data, variables) => {
+    onSuccess: async (updated, variables) => {
+      followRenamedServer(updated);
       await invalidateMcpServerQueries(queryClient);
       const next = variables.request.updateMcpServerForm.visibility;
       toast.success(mcpServerVisibilityToast(next));

@@ -341,8 +341,6 @@ func createBackingToolset(t *testing.T, ctx context.Context, ti *testInstance, s
 		Slug:                   slug + "-backing",
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
 
@@ -426,7 +424,7 @@ func TestMintUserSessionForToolsetIgnoresUngovernedWrapper(t *testing.T) {
 				urn.NewToolset(toolset.ID).String(),
 			)
 			require.NoError(t, err)
-			require.Equal(t, "http://0.0.0.0/mcp/"+toolset.McpSlug.String, claims.Issuer)
+			require.Equal(t, "http://0.0.0.0/mcp/"+slug, claims.Issuer)
 		})
 	}
 }

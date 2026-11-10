@@ -2,8 +2,8 @@ import { useProject } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
 import type { CustomDomain } from "@gram/client/models/components/customdomain.js";
 import type { DomainDNSConfig } from "@gram/client/models/components/domaindnsconfig.js";
-import { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
-import { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
+import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
+import type { ToolsetEntry } from "@gram/client/models/components/toolsetentry.js";
 import { useListDomains } from "@gram/client/react-query/listDomains.js";
 import { useCallback, useMemo, useState } from "react";
 import { buildGetMcpServerQuery } from "@gram/client/react-query/getMcpServer.js";
@@ -35,16 +35,21 @@ export function useCustomDomain(enabled = true): {
 export function useCustomDomains(enabled = true): {
   domains: CustomDomain[];
   isLoading: boolean;
+  isError: boolean;
   refetch: ReturnType<typeof useListDomains>["refetch"];
 } {
-  const { data, isLoading, refetch } = useListDomains(undefined, undefined, {
-    refetchOnWindowFocus: false,
-    retry: false,
-    throwOnError: false,
-    enabled,
-  });
+  const { data, isLoading, isError, refetch } = useListDomains(
+    undefined,
+    undefined,
+    {
+      refetchOnWindowFocus: false,
+      retry: false,
+      throwOnError: false,
+      enabled,
+    },
+  );
 
-  return { domains: data?.domains ?? [], isLoading, refetch };
+  return { domains: data?.domains ?? [], isLoading, isError, refetch };
 }
 
 // useMcpEndpointUrl resolves the runtime install URL for a single mcp_endpoint

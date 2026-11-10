@@ -1,36 +1,44 @@
 import { StackedTimeBarChart } from "@/components/chart/StackedTimeBarChart";
-import { buildToolUsageTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
-import { HumanizeDateTime } from "@/lib/dates";
-import { IdentityLink } from "@/components/identity-link";
+import { buildToolOutcomeTimeSeries } from "@/components/observe/toolUsageTimeSeriesChartData";
+import { useOtherSeriesColor } from "@/components/chart/useSeriesColors";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { telemetryGetToolUsageTargetTimeSeries } from "@gram/client/funcs/telemetryGetToolUsageTargetTimeSeries";
 import { telemetryGetToolUsageTargets } from "@gram/client/funcs/telemetryGetToolUsageTargets";
 import { telemetryGetToolUsageTotals } from "@gram/client/funcs/telemetryGetToolUsageTotals";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import { useMembers } from "@gram/client/react-query/members.js";
 import { unwrapAsync } from "@gram/client/types/fp";
-import { useAgentSessionList } from "@/pages/agents/useAgentSessionList";
-import { useQuery } from "@tanstack/react-query";
+import type { GetToolUsageTargetsResult } from "@gram/client/models/components/gettoolusagetargetsresult.js";
+import { useCanViewToolLogs } from "@/components/observe/observeDeepLink";
+import { telemetryReadRetry } from "@/components/observe/telemetryReadRetry";
+import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { useScopedToolUsagePayload } from "@/components/observe/toolUsagePayload";
+import type { ToolUsageUserFilter } from "@gram/client/models/components/toolusageuserfilter.js";
 import {
   IdentityPanel,
   IdentityPanelEmpty,
   IdentityPanelRow,
 } from "./IdentityPanel";
 import { useIdentityProject, useIdentityWindow } from "./useIdentityQueries";
+import { summarizeAgentServerUse } from "./agentServerUse";
+import { ServerOnBehalfOfLine } from "./GrantOnBehalfOf";
+import { useAgentPolicyGrants } from "./useAgentPolicyGrants";
+import { useServerInventory } from "@/pages/agents/credentials/useServerInventory";
 
 /**
  * What an agent has actually been doing, in the window the page is set to.
  *
  * Telemetry attributes a call to exactly one principal, and for an agent that
- * is the agent itself — never also the human who authorized it. So the calls
- * here are the agent's own, and "who it acted for" has to be answered from
- * its sessions instead.
+ * is the agent itself. Whom it acted for is answered per server, from the
+ * credential each call was signed in with.
  */
 export function AgentIdentityUsage({
   agent,
+  includeLocalTools = true,
 }: {
   agent: ManagedAgent;
+  /** The page's "Show local tools" choice, shared with its Tool logs. */
+  includeLocalTools?: boolean;
 }): JSX.Element {
   const client = useGramContext();
   const { from, to } = useIdentityWindow();
@@ -38,28 +46,21 @@ export function AgentIdentityUsage({
 
   // The agent's bare id, not its `agent:` urn: the telemetry filter takes the
   // principal's id and builds the urn itself.
-  const payload = useMemo(
-    () => ({
-      from,
-      to,
-      userFilters: [{ kind: "agent_id" as const, key: agent.id }],
-    }),
-    [from, to, agent.id],
+  const userFilters = useMemo<ToolUsageUserFilter[]>(
+    () => [{ kind: "agent_id", key: agent.id }],
+    [agent.id],
   );
-  // Keyed by hand. These endpoints take their subject and window in the body,
-  // and the generated key covers only the project and auth headers — so every
-  // agent and every range would share one cache entry and the first answer
-  // would be kept for all of them.
-  const key = [
-    "agent-usage",
-    gramProject,
-    agent.id,
-    from.toISOString(),
-    to.toISOString(),
-  ];
+  // Built and keyed exactly as the Tool logs further down this page build
+  // theirs, so the totals and the series are one request each for both. Keyed
+  // by hand before, the page sent each of them twice. The key carries the
+  // body (subject, window, local tools choice), which the generated key
+  // leaves out.
+  const { summaryPayload: payload, sharedQueryKey } = useScopedToolUsagePayload(
+    { userFilters, includeLocalTools, from, to },
+  );
 
   const totals = useQuery({
-    queryKey: ["totals", ...key],
+    queryKey: ["tool-usage-totals", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTotals(client, {
@@ -67,10 +68,11 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const targets = useQuery({
-    queryKey: ["targets", ...key],
+    queryKey: ["tool-usage-targets", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTargets(client, {
@@ -78,10 +80,11 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
   const series = useQuery({
-    queryKey: ["series", ...key],
+    queryKey: ["tool-usage-target-time-series", ...sharedQueryKey],
     queryFn: () =>
       unwrapAsync(
         telemetryGetToolUsageTargetTimeSeries(client, {
@@ -89,6 +92,7 @@ export function AgentIdentityUsage({
           getToolUsageSummaryPayload: payload,
         }),
       ),
+    retry: telemetryReadRetry,
     throwOnError: false,
   });
 
@@ -96,18 +100,18 @@ export function AgentIdentityUsage({
   // every render, so the chart was rebuilt each time regardless.
   const timeSeries = series.data?.targetTimeSeries;
   const points = useMemo(() => timeSeries ?? [], [timeSeries]);
+  // Split by outcome in the colors the Tool logs timeline below uses for the
+  // same calls. Stacked by source, unlabelled, its blue and pink read as
+  // success and failure; Top sources beside it already splits the calls by
+  // source.
+  const pendingColor = useOtherSeriesColor();
   const chart = useMemo(
-    () =>
-      buildToolUsageTimeSeries(
-        points,
-        (point) => point.targetLabel || point.targetId,
-        from,
-        to,
-      ),
-    [points, from, to],
+    () => buildToolOutcomeTimeSeries(points, from, to, pendingColor),
+    [points, from, to, pendingColor],
   );
   const rows = targets.data?.targets ?? [];
   const calls = totals.data?.totals?.eventCount ?? 0;
+  const failed = totals.data?.totals?.failureCount ?? 0;
 
   return (
     <>
@@ -115,7 +119,9 @@ export function AgentIdentityUsage({
         title="Tool calls"
         footer={
           calls > 0
-            ? `${calls.toLocaleString()} calls in this period, by source`
+            ? `${calls.toLocaleString()} calls in this period${
+                failed > 0 ? `, ${failed.toLocaleString()} failed` : ""
+              }`
             : undefined
         }
         // The footer's count comes from `totals`, so its failure has to reach
@@ -132,7 +138,9 @@ export function AgentIdentityUsage({
       >
         {points.length === 0 ? (
           <IdentityPanelEmpty>
-            This agent made no tool calls in this period.
+            {includeLocalTools
+              ? "This agent made no tool calls in this period."
+              : "This agent made no tool calls other than local tools in this period."}
           </IdentityPanelEmpty>
         ) : (
           <div className="p-4">
@@ -142,6 +150,9 @@ export function AgentIdentityUsage({
               bucketMs={chart.bucketMs}
               tooltipLabels={chart.tooltipLabels}
               datasets={chart.datasets}
+              // A legend names each outcome, so color is never the only
+              // signal.
+              expanded
             />
           </div>
         )}
@@ -166,7 +177,9 @@ export function AgentIdentityUsage({
       >
         {rows.length === 0 ? (
           <IdentityPanelEmpty>
-            This agent called no tools in this period.
+            {includeLocalTools
+              ? "This agent called no tools in this period."
+              : "This agent called no tools other than local tools in this period."}
           </IdentityPanelEmpty>
         ) : (
           rows
@@ -186,92 +199,129 @@ export function AgentIdentityUsage({
         )}
       </IdentityPanel>
 
-      <AgentAuthorizers agent={agent} />
+      <AgentServersPanel agent={agent} targets={targets} />
     </>
   );
 }
 
+/** What the MCP servers panel says when it has no row to show. */
+function agentServersEmptyText({
+  canReadPolicy,
+  canViewToolLogs,
+  anyServer,
+}: {
+  canReadPolicy: boolean;
+  canViewToolLogs: boolean;
+  anyServer: boolean;
+}): string {
+  if (!canReadPolicy && !canViewToolLogs)
+    return "You need permission to manage this agent, or the log:read permission on this project, to see its MCP servers.";
+  if (canReadPolicy && !anyServer)
+    return "This agent cannot connect to any MCP server.";
+  // It may connect to any server, so only its calls can name them.
+  if (!canViewToolLogs)
+    return "This agent may connect to any MCP server. You need the log:read permission on this project to see the ones it called.";
+  return "This agent called no MCP servers in this period.";
+}
+
 /**
- * The people whose authorization this agent has been acting under.
+ * Whom the agent acts for, per MCP server it can connect to, and how often it
+ * called each in the period.
  *
- * Read from its sessions, not from its calls: a tool call records the agent
- * as the caller and nothing else, because the approving human is credential
- * provenance rather than the actor. The session is the only place the two are
- * recorded together.
+ * The servers and their credentials are the Permissions tab's MCP servers
+ * section, read through the same queries: a person's own connection assigned
+ * to the agent there means it acts on that person's behalf, anything else is
+ * a shared credential that acts for no one. They used to be read off the
+ * credential each call recorded, which calls through the gateway did not
+ * carry, so every server read "No credential recorded", and a period with no
+ * such calls listed no servers at all.
+ *
+ * The counts come from the targets read the Top sources panel above already
+ * makes, so this panel adds no telemetry request.
  */
-function AgentAuthorizers({ agent }: { agent: ManagedAgent }): JSX.Element {
-  // The same read the sessions table makes, under the same key, and followed
-  // to the last page: a count over one page of fifty names the wrong people
-  // for any agent busier than that.
-  const sessions = useAgentSessionList(agent, { all: true });
-  const canManage = sessions.canManage;
-  // A session carries the authorizer's id and nothing else, so the name comes
-  // from the member list. A failed read leaves the id, which is still true.
-  // Not read at all without permission to see the sessions it names.
-  const members = useMembers(undefined, undefined, {
-    enabled: canManage,
-    throwOnError: false,
-  });
-  const nameFor = (id: string) =>
-    members.data?.members.find((member) => member.id === id)?.name || id;
-  const all = sessions.sessions;
-  // Counted per authorizer, so a name that appears once does not outrank one
-  // that appears daily, and the most recent session is kept beside it.
-  const ranked = useMemo(() => {
-    const byUser = new Map<string, { count: number; latest: Date }>();
-    for (const session of all) {
-      const id = session.authorizerUserId;
-      if (!id) continue;
-      const seen = byUser.get(id);
-      if (seen) {
-        seen.count += 1;
-        if (session.createdAt > seen.latest) seen.latest = session.createdAt;
-      } else {
-        byUser.set(id, { count: 1, latest: session.createdAt });
-      }
+function AgentServersPanel({
+  agent,
+  targets,
+}: {
+  agent: ManagedAgent;
+  targets: UseQueryResult<GetToolUsageTargetsResult>;
+}): JSX.Element {
+  const canViewToolLogs = useCanViewToolLogs();
+  const { id: projectId } = useIdentityProject();
+  const canReadPolicy = agent.permissions.write;
+  const grants = useAgentPolicyGrants(agent);
+  const inventory = useServerInventory({ lookupOnly: true });
+
+  const targetRows = canViewToolLogs ? targets.data?.targets : undefined;
+  const { rows, anyServer } = useMemo(
+    () =>
+      summarizeAgentServerUse({
+        grants: canReadPolicy ? grants.data : undefined,
+        servers: inventory.servers,
+        targets: targetRows,
+        projectId,
+      }),
+    [canReadPolicy, grants.data, inventory.servers, targetRows, projectId],
+  );
+
+  const grantsFailed = canReadPolicy && grants.isError;
+  const targetsFailed = canViewToolLogs && targets.isError;
+  const loading =
+    (canReadPolicy && grants.isPending) ||
+    (canViewToolLogs && targets.isPending);
+
+  let footer: string | undefined;
+  if (rows.length > 0) {
+    if (anyServer) {
+      footer =
+        "This agent may connect to any MCP server. Listed: the ones it called in this period.";
+    } else if (!canReadPolicy) {
+      footer =
+        "The servers this agent called in this period. Managing the agent shows every server it can reach.";
+    } else {
+      footer =
+        "Every MCP server this agent can connect to, whose credential it uses there, and its calls in this period.";
     }
-    return [...byUser.entries()].sort((a, b) => b[1].count - a[1].count);
-  }, [all]);
+  }
+
+  const empty = agentServersEmptyText({
+    canReadPolicy,
+    canViewToolLogs,
+    anyServer,
+  });
 
   return (
     <IdentityPanel
-      title="Acting for"
-      loading={canManage && sessions.isPending}
-      error={sessions.isError && all.length === 0}
-      refreshFailed={sessions.isError && all.length > 0}
-      onRetry={sessions.refetch}
-      footer={
-        ranked.length === 0
-          ? undefined
-          : // Says what is held back, the way Top sources does: five rows
-            // under a panel that reads as complete is a count of its own.
-            `${ranked.length > 5 ? `Top 5 of ${ranked.length} people. ` : ""}Counted from this agent's sessions. A tool call records the agent, not the person who authorized it.`
-      }
+      title="Acting on behalf of"
+      loading={loading}
+      error={(grantsFailed || targetsFailed) && rows.length === 0}
+      refreshFailed={(grantsFailed || targetsFailed) && rows.length > 0}
+      onRetry={() => {
+        if (grantsFailed) void grants.refetch();
+        if (targetsFailed) void targets.refetch();
+      }}
+      footer={footer}
     >
-      {!canManage ? (
-        <IdentityPanelEmpty>
-          You need permission to manage this agent to see who it acts for.
-        </IdentityPanelEmpty>
-      ) : ranked.length === 0 ? (
-        <IdentityPanelEmpty>
-          No one has authorized a session as this agent. A key or a federated
-          platform signs in as the agent alone.
-        </IdentityPanelEmpty>
+      {rows.length === 0 ? (
+        <IdentityPanelEmpty>{empty}</IdentityPanelEmpty>
       ) : (
-        ranked
-          .slice(0, 5)
-          .map(([id, entry]) => (
-            <IdentityPanelRow
-              key={id}
-              title={
-                <IdentityLink identifier={{ userId: id }}>
-                  {nameFor(id)}
-                </IdentityLink>
-              }
-              detail={<HumanizeDateTime date={entry.latest} />}
-              trailing={`${entry.count.toLocaleString()} ${entry.count === 1 ? "session" : "sessions"}`}
-            />
-          ))
+        rows.map((row) => (
+          <IdentityPanelRow
+            key={row.key}
+            title={row.name}
+            detail={
+              <ServerOnBehalfOfLine
+                agentId={agent.id}
+                resourceId={row.resourceId}
+              />
+            }
+            trailing={
+              row.calls === undefined
+                ? undefined
+                : `${row.calls.toLocaleString()} ${row.calls === 1 ? "call" : "calls"}`
+            }
+          />
+        ))
       )}
     </IdentityPanel>
   );

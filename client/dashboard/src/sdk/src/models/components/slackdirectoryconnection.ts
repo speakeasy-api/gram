@@ -59,6 +59,10 @@ export type SyncStatus = OpenEnum<typeof SyncStatus>;
  */
 export type SlackDirectoryConnection = {
   /**
+   * Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+   */
+  defaultProjectId?: string | undefined;
+  /**
    * Whether a snapshot belongs to the usable current authorization.
    */
   directoryStatus: DirectoryStatus;
@@ -98,6 +102,10 @@ export type SlackDirectoryConnection = {
    * Members observed in the last complete snapshot, including guests and bots.
    */
   memberCount: number;
+  /**
+   * Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
+   */
+  missingScopes: Array<string>;
   /**
    * Authorization status, independent of directory sync.
    */
@@ -154,6 +162,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    default_project_id: z.optional(z.string()),
     directory_status: DirectoryStatus$inboundSchema,
     disconnected_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -172,6 +181,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     member_count: z.int(),
+    missing_scopes: z.array(z.string()),
     status: SlackDirectoryConnectionStatus$inboundSchema,
     sync_members: z.optional(z.int()),
     sync_pages: z.optional(z.int()),
@@ -186,6 +196,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "default_project_id": "defaultProjectId",
       "directory_status": "directoryStatus",
       "disconnected_at": "disconnectedAt",
       "granted_scopes": "grantedScopes",
@@ -194,6 +205,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       "last_sync_failed_at": "lastSyncFailedAt",
       "last_sync_started_at": "lastSyncStartedAt",
       "member_count": "memberCount",
+      "missing_scopes": "missingScopes",
       "sync_members": "syncMembers",
       "sync_pages": "syncPages",
       "sync_phase": "syncPhase",

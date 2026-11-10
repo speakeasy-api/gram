@@ -1,6 +1,11 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  renderHook as baseRenderHook,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import type { McpServerActivity } from "@gram/client/models/components/mcpserveractivity.js";
 import type { ProjectGuideOperationReport } from "./projectGuideMachine";
 
@@ -74,19 +79,6 @@ vi.mock("@gram/client/react-query/getMcpServerActivity.js", () => ({
 vi.mock("@/components/observe/observeDeepLink", () => ({
   useCanViewToolLogs: () => toolLogsAccess.canView,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    home: { href: () => "/projects/request-project" },
-    logs: { href: () => "/projects/request-project/logs" },
-    mcp: {
-      x: {
-        overview: {
-          href: (slug: string) => `/projects/request-project/mcp/${slug}`,
-        },
-      },
-    },
-  }),
-}));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({}),
 }));
@@ -98,16 +90,14 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
 import { useMcpGuideOperations } from "./useMcpGuideOperations";
 import { markProjectGuideMcpServerSelected } from "./projectGuideStores";
 
-function catalogServer(
-  overrides: Partial<PulseMCPServer> = {},
-): PulseMCPServer {
+function catalogServer(overrides: Partial<CatalogServer> = {}): CatalogServer {
   return {
     description: "Read-only test server",
     registryId: "registry",
-    registrySpecifier: "example/read-only",
+    registrySpecifier: "app.linear/mcp",
     version: "1.0.0",
     title: "Linear",
-    meta: { "com.pulsemcp/server": { isOfficial: true } },
+    meta: {},
     toolCount: 2,
     isReadOnly: true,
     supportsDcr: true,
@@ -118,7 +108,7 @@ function catalogServer(
       },
     ],
     ...overrides,
-  } as PulseMCPServer;
+  } as CatalogServer;
 }
 
 const SERVER = catalogServer();
@@ -267,6 +257,10 @@ function serverActivity(
   };
 }
 
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
+}
+
 describe("useMcpGuideOperations", () => {
   it("exposes curated catalog choices without installing a selection", () => {
     const { result } = renderHook(() => useMcpGuideOperations());
@@ -297,14 +291,32 @@ describe("useMcpGuideOperations", () => {
     );
   });
 
+  it("rejects preferred display-title lookalikes with unapproved registry identifiers", () => {
+    queryHooks.catalog.mockReturnValue(
+      queryResult({
+        servers: [
+          catalogServer({
+            registrySpecifier: "example/linear",
+            title: "Linear",
+          }),
+          catalogServer({
+            registrySpecifier: "app.linear/mcp",
+            title: "Renamed Linear",
+          }),
+        ],
+      }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.registrySpecifier),
+    ).toEqual(["app.linear/mcp"]);
+  });
+
   it("excludes curated servers that require user-supplied credentials", () => {
     const apiKeyServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "api_key" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "manual",
     });
     queryHooks.catalog.mockReturnValue(
       queryResult({ servers: [catalogServer(), apiKeyServer] }),
@@ -317,14 +329,57 @@ describe("useMcpGuideOperations", () => {
     ).toEqual(["Linear"]);
   });
 
+  it("includes preferred explicit no-auth native records without a verification flag", () => {
+    const publicServer = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      authSetup: "none",
+    });
+    const sparse = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      meta: undefined,
+    });
+    const notPreferred = catalogServer({
+      title: "Other service",
+      registrySpecifier: "example/other",
+      authSetup: "none",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [publicServer, sparse, notPreferred] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
+  it("keeps unknown OAuth setup out of automatic onboarding but allows CIMD", () => {
+    const unknown = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      authSetup: "unknown",
+    });
+    const cimd = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [unknown, cimd] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
   it("reports OAuth setup in the activity output", async () => {
     const oauthServer = catalogServer({
       title: "Notion",
-      meta: {
-        "com.pulsemcp/server-version": {
-          "remotes[0]": { authOptions: [{ type: "oauth" }] },
-        },
-      },
+      supportsDcr: false,
+      authSetup: "dcr",
     });
     queryHooks.catalog.mockReturnValue(queryResult({ servers: [oauthServer] }));
 
@@ -614,7 +669,9 @@ describe("useMcpGuideOperations", () => {
     );
     expect(result.current.prompt).toMatch(/marked read-only/i);
     expect(result.current.prompt).toMatch(/do not create, update, or delete/i);
-    expect(result.current.toolLogsHref).toBe("/projects/request-project/logs");
+    expect(result.current.toolLogsHref).toBe(
+      "/org/projects/request-project/logs",
+    );
 
     expect(result.current.client).toBe("claude");
     expect(result.current.connectionPromptCopied).toBe(false);
@@ -779,7 +836,7 @@ describe("useMcpGuideOperations", () => {
 
     expect(view.result.current.toolLogsHref).toBeUndefined();
     expect(view.result.current.mcpServerHref).toBe(
-      "/projects/request-project/mcp/linear-governed",
+      "/org/projects/request-project/mcp/linear-governed/overview",
     );
 
     activityData.current = {

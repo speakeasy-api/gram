@@ -88,10 +88,10 @@ export function mcpServerHref(
 ): string {
   const param = mcpServerRouteParam(server);
   if (oauthStatus !== "required-unconfigured") {
-    return routes.mcp.x.overview.href(param);
+    return routes.mcp.details.overview.href(param);
   }
   // A hosted server's sign-in setup is a section of its settings.
   return standInToolset(server)
-    ? `${routes.mcp.x.settings.href(param)}#authentication`
-    : routes.mcp.x.settings.href(param);
+    ? `${routes.mcp.details.settings.href(param)}#authentication`
+    : routes.mcp.details.settings.href(param);
 }

@@ -183,6 +183,7 @@ func (c *Client) CreatePlugin(ctx context.Context, p *CreatePluginPayload) (res 
 
 // UpdatePlugin calls the "updatePlugin" endpoint of the "plugins" service.
 // UpdatePlugin may return the following errors:
+//   - "failed_precondition" (type *goa.ServiceError): resource is not in a valid state for this operation
 //   - "unauthorized" (type *goa.ServiceError): unauthorized access
 //   - "forbidden" (type *goa.ServiceError): permission denied
 //   - "bad_request" (type *goa.ServiceError): request is invalid

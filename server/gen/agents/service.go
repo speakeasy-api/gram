@@ -30,10 +30,16 @@ type Service interface {
 	Rename(context.Context, *RenamePayload) (res *ManagedAgent, err error)
 	// List safe allow-only credential grant candidates shared by the live agent,
 	// owner, and current authorizer. Candidates with unrepresentable exclusions
-	// are conservatively omitted. Issuance revalidates every grant.
+	// are conservatively omitted unless carry_exclusions is set. Issuance
+	// revalidates every grant.
 	ListDelegableGrants(context.Context, *ListDelegableGrantsPayload) (res []*AgentPolicyGrantForm, err error)
 	// ListPolicyGrants implements listPolicyGrants.
 	ListPolicyGrants(context.Context, *ListPolicyGrantsPayload) (res []*AgentPolicyGrant, err error)
+	// Check whether policy grants could be written without writing them: to
+	// agent_id, or to a new agent the caller would create for owner_user_id (the
+	// caller by default). Uses the authorization and containment rule of
+	// agents.create and agents.createPolicyGrant, which still check every write.
+	CheckPolicyGrants(context.Context, *CheckPolicyGrantsPayload) (res *CheckAgentPolicyGrantsResult, err error)
 	// CreatePolicyGrant implements createPolicyGrant.
 	CreatePolicyGrant(context.Context, *CreatePolicyGrantPayload) (res *AgentPolicyGrant, err error)
 	// UpdatePolicyGrant implements updatePolicyGrant.
@@ -85,7 +91,7 @@ const ServiceName = "agents"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [20]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
+var MethodNames = [21]string{"listSessions", "revokeSession", "list", "create", "get", "rename", "listDelegableGrants", "listPolicyGrants", "checkPolicyGrants", "createPolicyGrant", "updatePolicyGrant", "deletePolicyGrant", "listConnectionBlocks", "blockAgentOnConnection", "removeConnectionBlock", "transfer", "reassign", "suspend", "resume", "revoke", "delete"}
 
 // AgentConnectionBlock is the result type of the agents service
 // blockAgentOnConnection method.
@@ -97,6 +103,13 @@ type AgentConnectionBlock struct {
 	// client sharing it
 	RemoteSessionClientID string
 	CreatedAt             string
+}
+
+type AgentExpectedPolicy struct {
+	// Scope of the grant originally read
+	Scope string
+	// Selector of the grant originally read
+	Selector *AgentPolicySelector
 }
 
 type AgentLifecycle string
@@ -128,6 +141,15 @@ type AgentPolicyGrant struct {
 	UpdatedAt string
 }
 
+// Whether one policy grant could be written, by the same rule agents.create
+// and agents.createPolicyGrant enforce.
+type AgentPolicyGrantCheck struct {
+	// Whether the grant fits within the caller's and the owner's permissions.
+	Allowed bool
+	// Whose permissions the grant exceeds; absent when allowed.
+	LimitedBy *string
+}
+
 type AgentPolicyGrantForm struct {
 	// Agent-runtime-safe scope to grant
 	Scope string
@@ -155,8 +177,8 @@ type AgentPolicySelector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth and mcp:blocked_auth
-	// scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string
@@ -165,7 +187,13 @@ type AgentPolicySelector struct {
 }
 
 type AgentSession struct {
-	ID               string
+	ID string
+	// Who signed in: the agent itself, or a workload that federation assigns to
+	// the agent.
+	SubjectKind string
+	// The workload's subject as its platform issued it. Set only when subject_kind
+	// is workload.
+	WorkloadSubject  *string
 	ProjectID        *string
 	IssuerID         string
 	IssuerSlug       string
@@ -185,6 +213,27 @@ type BlockAgentOnConnectionPayload struct {
 	AgentID string
 	// The upstream OAuth client of the caller's own connection
 	RemoteSessionClientID string
+}
+
+// CheckAgentPolicyGrantsResult is the result type of the agents service
+// checkPolicyGrants method.
+type CheckAgentPolicyGrantsResult struct {
+	// One answer per requested grant, in request order.
+	Results []*AgentPolicyGrantCheck
+}
+
+// CheckPolicyGrantsPayload is the payload type of the agents service
+// checkPolicyGrants method.
+type CheckPolicyGrantsPayload struct {
+	SessionToken *string
+	// The agent the grants would be written to. Omit for an agent the caller would
+	// create.
+	AgentID *string
+	// Owner of the agent the caller would create, as agents.create takes it;
+	// defaults to the caller. Not allowed with agent_id, whose owner is its own.
+	OwnerUserID *string
+	// The grants to check, answered in the same order.
+	PolicyGrants []*AgentPolicyGrantForm
 }
 
 // CreatePayload is the payload type of the agents service create method.
@@ -227,6 +276,9 @@ type DeletePayload struct {
 // deletePolicyGrant method.
 type DeletePolicyGrantPayload struct {
 	SessionToken *string
+	// Optional delete precondition. Returns conflict if the current scope or
+	// selector differs; omission preserves unconditional deletion.
+	ExpectedPolicy *AgentExpectedPolicy
 	// Direct policy grant identifier
 	GrantID string
 	// First-class agent identifier
@@ -278,6 +330,11 @@ type ListDelegableGrantsPayload struct {
 	// Each narrows discovery like toolset_id; the result is the union of
 	// candidates across all of them.
 	ToolsetIds []string
+	// Keep a wildcard candidate that a narrower exclusion overlaps, and return
+	// that exclusion beside it as a blocklist-scope grant, instead of omitting the
+	// candidate. Requesting both on a key needs delegated grants version 4 or
+	// later.
+	CarryExclusions bool
 	// First-class agent identifier
 	AgentID string
 }
@@ -342,11 +399,14 @@ type ManagedAgent struct {
 	Name                    string
 	// The optional project this agent is scoped to; absent for an
 	// organization-wide agent
-	ProjectID   *string
-	Lifecycle   AgentLifecycle
-	Permissions *AgentPermissions
-	CreatedAt   string
-	UpdatedAt   string
+	ProjectID *string
+	Lifecycle AgentLifecycle
+	// An assigned connection has expired or is no longer available; an authorized
+	// editor must reconnect their own account and assign it again
+	ConnectionNeedsRefresh *bool
+	Permissions            *AgentPermissions
+	CreatedAt              string
+	UpdatedAt              string
 }
 
 // ReassignPayload is the payload type of the agents service reassign method.

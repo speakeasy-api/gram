@@ -1,58 +1,36 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
-import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
+import {
+  Navigate,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
-import {
-  AgentIdentityFacts,
-  AgentLifecycle,
-  RenameAgentButton,
-} from "@/pages/agents/agent-admin";
+import { AgentOwnership } from "@/pages/agents/AgentOwnership";
+import { AgentIdentityFacts, AgentLifecycle } from "@/pages/agents/agent-admin";
+import { AgentMcpSignIn } from "./AgentMcpSignIn";
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
+import { SignInPath } from "@/pages/agents/credentials/SignInPath";
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
+import { AgentCredentialRestrictions } from "./AgentCredentialRestrictions";
 import {
   AgentIdentityAudit,
   AgentIdentityChallenges,
 } from "./AgentIdentityActivity";
+import { AgentChatSessionsPanel } from "./AgentChatSessions";
+import { AgentIssueKey } from "./AgentIssueKey";
 import { AgentIdentityUsage } from "./AgentIdentityUsage";
 import { IdentityPanel } from "./IdentityPanel";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
 import { IdentitySection } from "./IdentitySection";
-
-/**
- * Edit and rename, for the page header: they act on the agent itself, not on
- * any one section, so they sit with its name rather than under a tab.
- */
-export function AgentHeaderActions({
-  agent,
-  refresh,
-}: {
-  agent: ManagedAgent;
-  refresh: () => void;
-}): JSX.Element {
-  const routes = useRoutes();
-  return (
-    <div className="-ml-2 flex items-center gap-1">
-      {/* Changing what the agent reaches is the same set of questions it
-          was registered with, so it is the same flow. */}
-      {/* Same gate as rename: saving the edit flow needs write access. */}
-      {agent.permissions.write && (
-        <Button asChild variant="tertiary" size="xs">
-          <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
-        </Button>
-      )}
-      <RenameAgentButton
-        agent={agent}
-        refresh={refresh}
-        variant="tertiary"
-        size="xs"
-      />
-    </div>
-  );
-}
+import { IdentityToolLogsPanel } from "./IdentityToolLogs";
+import { useShowLocalTools } from "./identityLocalTools";
+import { LocalToolsSwitch } from "./LocalToolsSwitch";
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
 export function AgentIdentityProfile({
@@ -66,12 +44,16 @@ export function AgentIdentityProfile({
   refresh: () => void;
 }): JSX.Element {
   const navigate = useNavigate();
+  const location = useLocation();
   const routes = useRoutes();
   // `?credential=new` opens issuance on this section. It is a query rather
-  // than a segment of its own because issuing is a state of the credentials
+  // than a segment of its own because issuing is a state of the Agent sign-in
   // section, and because the links that used to name the retired
   // agent-management page carry it.
   const [params, setParams] = useSearchParams();
+  // One choice for the overview's Tool calls card and its Tool logs, so the
+  // chart and the rows under it always count the same calls.
+  const [showLocalTools, setShowLocalTools] = useShowLocalTools();
   // A federated agent authenticates by exchanging its platform's token, so
   // the page must not lead with, or insist on, a key it will never hold.
   const admissions = useAgentAdmissions(agent.id);
@@ -90,10 +72,17 @@ export function AgentIdentityProfile({
         admission.matchKind !== "wildcard" || admission.wildcardActive,
     );
   const issuing = params.get("credential") === "new";
+  // Keys and federated access are revoked where they are issued, so their
+  // connection rows link there.
+  const credentialsHref = routes.identities.detail.credentials.href(
+    encodeIdentityUrn(`agent:${agent.id}`),
+  );
   const setIssuing = (open: boolean) => {
     const next = new URLSearchParams(params);
     if (open) next.set("credential", "new");
     else next.delete("credential");
+    // The issuing steps keep their place in `step`; a closed flow has none.
+    next.delete("step");
     setParams(next, { replace: true });
   };
   switch (section) {
@@ -101,15 +90,26 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Permissions"
+          timeRange
           meta="What this agent's keys may be narrowed to"
         >
           <AgentIdentityPermissions agent={agent} />
+          <AgentCredentialRestrictions agent={agent} />
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
       );
-    case "activity":
+    case "mcp-sign-in":
       return (
-        <IdentitySection title="Activity">
+        <IdentitySection
+          title="MCP sign-in"
+          meta="Which MCP servers this agent calls, and how Speakeasy signs in to each"
+        >
+          <AgentMcpSignIn agent={agent} refresh={refresh} />
+        </IdentitySection>
+      );
+    case "audit-trail":
+      return (
+        <IdentitySection title="Audit trail" timeRange>
           <AgentIdentityAudit agent={agent} subject />
           <AgentIdentityAudit agent={agent} />
         </IdentitySection>
@@ -120,6 +120,7 @@ export function AgentIdentityProfile({
           title="Controls & Safety"
           meta="Stop this agent acting, for a while or for good"
         >
+          <AgentOwnership agent={agent} />
           <AgentLifecycle
             agent={agent}
             refresh={refresh}
@@ -131,23 +132,32 @@ export function AgentIdentityProfile({
       return (
         <IdentitySection
           title="Sessions"
-          meta="Current agent sessions across the organization"
+          timeRange
+          meta="What this agent did, and the clients signed in as it"
         >
-          <ManagedAgentSessions agent={agent} variant="bare" />
+          <AgentChatSessionsPanel agent={agent} limit={10} />
+          {/* Padded rather than full-bleed: the full list carries a pager and
+              permission notes beneath its table, which need an inset. */}
+          <IdentityPanel title="MCP connections" contentClassName="p-4">
+            <ManagedAgentSessions
+              agent={agent}
+              variant="bare"
+              credentialsHref={credentialsHref}
+            />
+          </IdentityPanel>
         </IdentitySection>
       );
-    case "credentials":
+    case "sign-in":
       if (issuing) {
+        // The same steps that issued the agent's first key. The servers it
+        // reaches and how it signs in to them are the agent's, set on its
+        // own page, so a new key is not asked about them again.
         return (
           <IdentitySection
             title="Issue a key"
-            meta="Choose what this key reaches, then install it where the agent runs"
+            meta="Issue another key the way the first one was issued, then install it where the agent runs"
           >
-            <AgentAPIKeys
-              agent={agent}
-              creation
-              onDone={() => setIssuing(false)}
-            />
+            <AgentIssueKey agent={agent} onDone={() => setIssuing(false)} />
           </IdentitySection>
         );
       }
@@ -159,24 +169,27 @@ export function AgentIdentityProfile({
       // as a second thing to configure.
       return (
         <IdentitySection
-          title="Credentials"
+          title="Agent sign-in"
           meta={
             !credentialKnown
-              ? "How this agent signs in"
+              ? "How this agent proves who it is to Speakeasy"
               : federated
                 ? "The platforms that sign in as this agent, and the keys it holds"
                 : "The keys this agent holds, and the platforms that sign in as it"
           }
         >
           {/* Issuing is a flow of its own, so the button puts this section
-              into it. Without this the control is enabled and does nothing:
-              the panel only opens its own wizard in creation mode. */}
+              into it. The panel only lists and revokes keys: without this the
+              control is enabled and does nothing. */}
           {/* Whichever way in the agent actually uses comes first: a
               federated agent never holds a key, and leading with the key
               panel told it that it could not authenticate. Only the order and
               the wording wait on the read — issuing and revoking keys is
               managed under a scope of its own, so someone who may do it must
               not lose the panel because this read was refused. */}
+          {/* The same picture the wizard shows on this step: this is the
+              agent's own sign-in, not its sign-in to each MCP server. */}
+          <SignInPath hop="agent" />
           {credentialKnown && federated && (
             <AgentFederatedAccess agent={agent} />
           )}
@@ -211,20 +224,34 @@ export function AgentIdentityProfile({
       const renamed: Record<string, string> = {
         access: "permissions",
         connections: "sessions",
-        devices: "credentials",
-        provisioning: "credentials",
+        devices: "sign-in",
+        provisioning: "sign-in",
+        credentials: "sign-in",
+        activity: "audit-trail",
       };
+      // The section's own segment is swapped for the new one. A relative `..`
+      // does not work here: this renders in the identity route's place, so
+      // it climbed past the identity and landed on "Identity not found".
+      const sectionHref = (next: string) =>
+        `${location.pathname.replace(/\/[^/]*\/?$/, "")}/${next}${location.search}`;
       const moved = renamed[section];
       if (moved) {
-        return <Navigate to={`../${moved}${window.location.search}`} replace />;
+        return <Navigate to={sectionHref(moved)} replace />;
       }
       if (section !== "overview") {
-        return <Navigate to={`../overview${window.location.search}`} replace />;
+        return <Navigate to={sectionHref("overview")} replace />;
       }
       return (
         <IdentitySection
           title="Overview"
+          timeRange
           meta="What this agent has been doing, and who answers for it"
+          action={
+            <LocalToolsSwitch
+              checked={showLocalTools}
+              onCheckedChange={setShowLocalTools}
+            />
+          }
         >
           {/* Who answers for it and whether it may act, as one line. The
               rest of what this card used to hold is said by the header above
@@ -233,12 +260,19 @@ export function AgentIdentityProfile({
           {/* What the agent has actually been doing, before what it is
               allowed to do: an overview is opened to find out whether
               something is wrong, and the policy is where you look next. */}
-          <AgentIdentityUsage agent={agent} />
+          <AgentIdentityUsage
+            agent={agent}
+            includeLocalTools={showLocalTools}
+          />
+          {/* The sessions the agent's hooks recorded. Usage above can read
+              empty for an agent that is plainly working, so this is the
+              surest sign of what it has been doing. */}
+          <AgentChatSessionsPanel agent={agent} limit={3} />
           {/* Who is signed in as it right now, capped. The Sessions section
               owns the full list and the revoking; this says whether anything
               is live without making the reader go and look. */}
           <IdentityPanel
-            title="Sessions"
+            title="MCP connections"
             handoffLabel="all sessions"
             // Carries the query across: the date range lives in the URL, so a
             // bare path silently put the reader back on the default window
@@ -247,9 +281,19 @@ export function AgentIdentityProfile({
               encodeIdentityUrn(`agent:${agent.id}`),
             )}${params.toString() ? `?${params}` : ""}`}
           >
-            <ManagedAgentSessions agent={agent} variant="panel" limit={3} />
+            <ManagedAgentSessions
+              agent={agent}
+              variant="panel"
+              limit={3}
+              credentialsHref={credentialsHref}
+            />
           </IdentityPanel>
           <AgentIdentityAudit agent={agent} subject />
+          {/* Every call it made, under the usage summary's numbers. */}
+          <IdentityToolLogsPanel
+            agentId={agent.id}
+            includeLocalTools={showLocalTools}
+          />
         </IdentitySection>
       );
   }

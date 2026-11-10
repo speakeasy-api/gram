@@ -19,10 +19,18 @@ import (
 
 // BuildCallbackPayload builds the payload for the auth callback endpoint from
 // CLI flags.
-func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*auth.CallbackPayload, error) {
-	var code string
+func BuildCallbackPayload(authCallbackCode string, authCallbackError string, authCallbackState string) (*auth.CallbackPayload, error) {
+	var code *string
 	{
-		code = authCallbackCode
+		if authCallbackCode != "" {
+			code = &authCallbackCode
+		}
+	}
+	var error_ *string
+	{
+		if authCallbackError != "" {
+			error_ = &authCallbackError
+		}
 	}
 	var state *string
 	{
@@ -32,6 +40,7 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 	}
 	v := &auth.CallbackPayload{}
 	v.Code = code
+	v.Error = error_
 	v.State = state
 
 	return v, nil
@@ -39,7 +48,7 @@ func BuildCallbackPayload(authCallbackCode string, authCallbackState string) (*a
 
 // BuildLoginPayload builds the payload for the auth login endpoint from CLI
 // flags.
-func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginPartnerCode string, authLoginEmail string, authLoginSupportHandoff string) (*auth.LoginPayload, error) {
+func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLoginPartnerCode string, authLoginEmail string, authLoginSupportHandoff string, authLoginUtmSource string, authLoginUtmMedium string, authLoginUtmCampaign string, authLoginUtmTerm string, authLoginUtmContent string, authLoginAnalyticsSessionID string) (*auth.LoginPayload, error) {
 	var err error
 	var redirect *string
 	{
@@ -77,12 +86,54 @@ func BuildLoginPayload(authLoginRedirect string, authLoginOrgName string, authLo
 			supportHandoff = &authLoginSupportHandoff
 		}
 	}
+	var utmSource *string
+	{
+		if authLoginUtmSource != "" {
+			utmSource = &authLoginUtmSource
+		}
+	}
+	var utmMedium *string
+	{
+		if authLoginUtmMedium != "" {
+			utmMedium = &authLoginUtmMedium
+		}
+	}
+	var utmCampaign *string
+	{
+		if authLoginUtmCampaign != "" {
+			utmCampaign = &authLoginUtmCampaign
+		}
+	}
+	var utmTerm *string
+	{
+		if authLoginUtmTerm != "" {
+			utmTerm = &authLoginUtmTerm
+		}
+	}
+	var utmContent *string
+	{
+		if authLoginUtmContent != "" {
+			utmContent = &authLoginUtmContent
+		}
+	}
+	var analyticsSessionID *string
+	{
+		if authLoginAnalyticsSessionID != "" {
+			analyticsSessionID = &authLoginAnalyticsSessionID
+		}
+	}
 	v := &auth.LoginPayload{}
 	v.Redirect = redirect
 	v.OrgName = orgName
 	v.PartnerCode = partnerCode
 	v.Email = email
 	v.SupportHandoff = supportHandoff
+	v.UtmSource = utmSource
+	v.UtmMedium = utmMedium
+	v.UtmCampaign = utmCampaign
+	v.UtmTerm = utmTerm
+	v.UtmContent = utmContent
+	v.AnalyticsSessionID = analyticsSessionID
 
 	return v, nil
 }

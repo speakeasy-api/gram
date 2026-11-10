@@ -3,6 +3,7 @@ package telemetry
 import (
 	"cmp"
 	"context"
+	"fmt"
 	"slices"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -106,13 +107,28 @@ func (s *Service) authorizerUserOptions(ctx context.Context, orgID string, users
 }
 
 // authorizerEmails resolves the user ids agents recorded as their authorizer
-// to emails. Scoped to the organization, so an id recorded on a row never
-// resolves against another tenant's directory. A failed lookup resolves
-// nobody rather than failing the page: the id still identifies the person.
+// to emails. A failed lookup resolves nobody rather than failing the page: the
+// id still identifies the person.
 func (s *Service) authorizerEmails(ctx context.Context, orgID string, ids []string) map[string]string {
+	users, err := s.organizationUsers(ctx, orgID, ids)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to resolve tool usage authorizers", attr.SlogError(err))
+		return nil
+	}
+	labels := make(map[string]string, len(users))
+	for _, user := range users {
+		labels[user.ID] = user.Email
+	}
+	return labels
+}
+
+// organizationUsers resolves user ids recorded on telemetry rows to the people
+// they name. Scoped to the organization, so an id recorded on a row never
+// resolves against another tenant's directory.
+func (s *Service) organizationUsers(ctx context.Context, orgID string, ids []string) ([]usersRepo.User, error) {
 	ids = conv.DedupeNonEmpty(ids)
 	if len(ids) == 0 || orgID == "" {
-		return nil
+		return nil, nil
 	}
 
 	users, err := usersRepo.New(s.db).GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
@@ -120,18 +136,9 @@ func (s *Service) authorizerEmails(ctx context.Context, orgID string, ids []stri
 		OrganizationID: orgID,
 	})
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to resolve tool usage authorizers", attr.SlogError(err))
-		return nil
+		return nil, fmt.Errorf("get connected users: %w", err)
 	}
-	labels := make(map[string]string, len(users))
-	for _, user := range users {
-		// GetConnectedUsersByIDs filters removed memberships but not
-		// soft-deleted users, who must not label rows any more than the
-		// filter resolves to them.
-		if user.DeletedAt.Valid {
-			continue
-		}
-		labels[user.ID] = user.Email
-	}
-	return labels
+	// GetConnectedUsersByIDs filters removed memberships but not soft-deleted
+	// users, who must not label rows any more than the filter resolves to them.
+	return slices.DeleteFunc(users, func(user usersRepo.User) bool { return user.DeletedAt.Valid }), nil
 }

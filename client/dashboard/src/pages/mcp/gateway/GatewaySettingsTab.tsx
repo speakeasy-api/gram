@@ -1,5 +1,6 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
-import { Check, Copy, Loader2 } from "lucide-react";
+import { Check, Copy } from "lucide-react";
 import {
   DangerSettingsSection,
   FooterSaveButton,
@@ -23,6 +24,7 @@ import { NetworkAccessSection } from "@/pages/mcp/x/tabs/settings/sections/Netwo
 import { RequireScope } from "@/components/require-scope";
 import { Text } from "@/components/ui/Text";
 import { Textarea } from "@/components/moon/textarea";
+import codeInstructions from "./builtin-gateway-code-instructions.txt?raw";
 import directInstructions from "./builtin-gateway-direct-instructions.txt?raw";
 import builtInInstructions from "./builtin-gateway-instructions.txt?raw";
 import { cn } from "@/lib/utils";
@@ -208,12 +210,19 @@ export function GatewayInstructionsSection({
 }): JSX.Element {
   const { hasScope } = useRBAC();
   const canWrite = hasScope("mcp:write", metaMcpServer.projectId);
+  const servedMode =
+    metaMcpServer.discoveryMode === "code_mode" &&
+    !metaMcpServer.codeModeEnabled
+      ? "progressive"
+      : metaMcpServer.discoveryMode;
   const defaultInstructions =
-    metaMcpServer.discoveryMode === "direct"
+    servedMode === "direct"
       ? directInstructions.trimEnd()
-      : metaMcpServer.discoveryMode === "progressive"
+      : servedMode === "progressive"
         ? builtInInstructions
-        : undefined;
+        : servedMode === "code_mode"
+          ? codeInstructions.trimEnd()
+          : undefined;
   const supportsEditing =
     defaultInstructions !== undefined || !!metaMcpServer.instructions;
   const stored = metaMcpServer.instructions || defaultInstructions || "";
@@ -262,9 +271,10 @@ export function GatewayInstructionsSection({
         <SettingsSection.Title>Instructions</SettingsSection.Title>
         <SettingsSection.Description>
           Sent to every client on connect. Speakeasy&apos;s built-in
-          instructions reflect the active discovery mode; your text replaces
-          them. Save it blank to restore the built-in text. Anyone who can
-          connect to this gateway can read the text, and clients already
+          instructions reflect the active discovery mode and, when a user can
+          use any of its servers, start with a line naming them; your text
+          replaces both. Save it blank to restore the built-in text. Anyone who
+          can connect to this gateway can read the text, and clients already
           connected keep the old text until they reconnect.
         </SettingsSection.Description>
       </SettingsSection.Header>
@@ -503,7 +513,7 @@ function GatewayDangerZoneSection({
             >
               {remove.isPending && (
                 <Button.LeftIcon>
-                  <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                  <Spinner className="mr-0 size-4" />
                 </Button.LeftIcon>
               )}
               <Button.Text>Delete gateway</Button.Text>

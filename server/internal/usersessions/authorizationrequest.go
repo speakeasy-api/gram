@@ -80,9 +80,8 @@ func (r *AuthorizationRequest) ValidateRedirectableFields() error {
 
 // ValidatePostRedirect checks the remaining fields, assumed to run AFTER
 // the redirect_uri has been validated against the registered client.
-// Errors here MAY be redirected back to the client per RFC 6749 §4.1.2.1
-// (the current handler still surfaces them inline; that's a forward-
-// compatible choice).
+// Callers must separately decide whether to auto-redirect errors: matching a
+// registered callback does not establish pre-authentication trust (RFC 9700 §4.11.2).
 func (r *AuthorizationRequest) ValidatePostRedirect() error {
 	if !slices.Contains(SupportedResponseTypes, r.ResponseType) {
 		return &oauthwire.Error{Code: "unsupported_response_type", Description: fmt.Sprintf("response_type must be one of %v", SupportedResponseTypes)}

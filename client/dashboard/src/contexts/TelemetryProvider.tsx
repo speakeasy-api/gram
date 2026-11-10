@@ -1,3 +1,7 @@
+import {
+  rememberLandingUtm,
+  setAnalyticsSessionIdSource,
+} from "@/lib/signup-attribution";
 import { getServerURL, isProdHost } from "@/lib/utils";
 import posthog from "posthog-js";
 import { type ReactNode, useEffect } from "react";
@@ -61,6 +65,9 @@ export function isGramHost(serverURL: string): boolean {
   );
 }
 
+// Before the router can redirect away from the landing URL.
+rememberLandingUtm();
+
 export const TelemetryProvider = (props: {
   children: ReactNode;
 }): JSX.Element => {
@@ -81,6 +88,7 @@ export const TelemetryProvider = (props: {
         },
         "speakeasy",
       );
+  setAnalyticsSessionIdSource(ph ? () => ph.get_session_id() : null);
 
   useEffect(() => {
     // Never start RUM on the public share page — the session replay and
@@ -95,14 +103,13 @@ export const TelemetryProvider = (props: {
     }
 
     const serverURL = getServerURL();
-    if (isGramHost(serverURL)) {
-      const env = isProdHost(serverURL) ? "prod" : "dev";
+    if (isProdHost(serverURL)) {
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
         clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",
         site: "datadoghq.com",
         service: "gram",
-        env,
+        env: "prod",
         sessionSampleRate: 100,
         sessionReplaySampleRate: 100,
         trackUserInteractions: true,

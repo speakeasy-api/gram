@@ -115,6 +115,10 @@ func (s *stubTemporalClient) ExecuteCustomDomainHealthCheck(ctx context.Context,
 	return stubTemporalRun{err: nil, onGet: nil}, nil
 }
 
+// testDNSTargetSuffix is the per-domain CNAME target suffix the test service
+// is configured with.
+const testDNSTargetSuffix = "domains.example.net"
+
 type serviceTestInstance struct {
 	service        *customdomains.Service
 	conn           *pgxpool.Pool
@@ -160,6 +164,7 @@ func newTestCustomDomainsService(t *testing.T) (context.Context, *serviceTestIns
 		},
 		"cname.example.net.",
 		nil,
+		testDNSTargetSuffix,
 	)
 
 	return ctx, &serviceTestInstance{service: svc, conn: conn, sessionManager: sessionManager, temporal: temporal, repo: cdrepo.New(conn)}

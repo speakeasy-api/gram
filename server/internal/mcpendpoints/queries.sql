@@ -74,6 +74,21 @@ WHERE e.project_id = @project_id
   AND e.deleted IS FALSE
   AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
 
+-- name: ListServableMCPEndpointsByMCPServerID :many
+-- Endpoints that can serve: on the platform, or on a live, verified and activated domain of the organization.
+SELECT sqlc.embed(e)
+FROM mcp_endpoints e
+LEFT JOIN custom_domains cd
+  ON cd.id = e.custom_domain_id
+  AND cd.organization_id = @organization_id
+  AND cd.deleted IS FALSE
+  AND cd.verified
+  AND cd.activated
+WHERE e.project_id = @project_id
+  AND e.mcp_server_id = @mcp_server_id::uuid
+  AND e.deleted IS FALSE
+  AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
 -- name: ListMCPEndpointsByMetaMCPServerID :many
 SELECT *
 FROM mcp_endpoints
@@ -138,12 +153,12 @@ SET
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
 RETURNING *;
 
--- name: CheckUnifiedSlugAvailability :one
--- True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
--- the namespace (platform when custom_domain_id is NULL, else that domain).
--- Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
--- exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
--- exclude_mcp_server_id discounts the toolset backing that server. Unless
+-- name: CheckEndpointSlugAvailability :one
+-- True when no live mcp_endpoints.slug holds the slug in the namespace
+-- (platform when custom_domain_id is NULL, else that domain). Callers also
+-- check the legacy toolset alias (legacyalias.Taken).
+-- Not project-scoped, mirroring the partial unique index. exclude_toolset_id
+-- discounts the endpoints of servers backed by that toolset. Unless
 -- skip_domain_check, a supplied domain must be live and owned by
 -- organization_id or the result is false (blocks probing foreign domains).
 SELECT (
@@ -171,34 +186,22 @@ SELECT (
           AND s.toolset_id = sqlc.narg('exclude_toolset_id')::uuid
       )
     )
-) AND NOT EXISTS (
-  SELECT 1
-  FROM toolsets t
-  WHERE t.mcp_slug = @slug
-    AND t.custom_domain_id IS NOT DISTINCT FROM sqlc.narg('custom_domain_id')::uuid
-    AND t.deleted IS FALSE
-    AND (
-      sqlc.narg('exclude_toolset_id')::uuid IS NULL
-      OR t.id <> sqlc.narg('exclude_toolset_id')::uuid
-    )
-    AND (
-      sqlc.narg('exclude_mcp_server_id')::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = sqlc.narg('exclude_mcp_server_id')::uuid
-          AND s.toolset_id = t.id
-      )
-    )
 );
 
 -- name: LockSlugScope :exec
 -- Serializes competing claims on one (namespace, slug) address for the rest of
 -- the caller's transaction; the per-table unique indexes cannot see
--- cross-table collisions.
-SELECT pg_advisory_xact_lock(hashtextextended(
-  'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
-));
+-- cross-table collisions. The platform lock comes first, also for a
+-- custom-domain claim, since the platform host serves custom-domain aliases.
+SELECT
+  pg_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0)),
+  pg_advisory_xact_lock(hashtextextended(
+    'mcp_slug:' || coalesce(sqlc.narg('custom_domain_id')::uuid::text, 'platform') || '/' || @slug::text, 0
+  ));
+
+-- name: TryLockPlatformSlugScope :one
+-- LockSlugScope's platform lock without waiting, for a write that already holds another slug's lock.
+SELECT pg_try_advisory_xact_lock(hashtextextended('mcp_slug:platform/' || @slug::text, 0))::boolean AS locked;
 
 -- name: SoftDeleteMCPEndpointsByMCPServerID :many
 -- Soft-delete all endpoints that point at a given mcp server. Used when the
@@ -336,3 +339,12 @@ WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE
   AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL);
+
+-- name: ListMCPEndpointsByProjectAndSlug :many
+-- Live endpoints with a slug in the project, platform addresses first.
+SELECT *
+FROM mcp_endpoints
+WHERE project_id = @project_id
+  AND slug = @slug
+  AND deleted IS FALSE
+ORDER BY (custom_domain_id IS NULL) DESC, created_at, id;

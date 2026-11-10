@@ -16,13 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err error) {
+func zipManifest(t *testing.T, manifest []byte, runtime string) (rdr io.Reader, err error) {
 	t.Helper()
 
 	buf := &bytes.Buffer{}
 	rdr = buf
 
-	manifest := testenv.ReadFixture(t, path)
 	zipWriter := zip.NewWriter(buf)
 	defer o11y.LogDefer(t.Context(), testenv.NewLogger(t), "failed to close zip writer", func() error {
 		return zipWriter.Close()
@@ -68,8 +67,13 @@ func zipManifest(t *testing.T, path string, runtime string) (rdr io.Reader, err 
 func uploadFunctionsWithManifest(t *testing.T, ctx context.Context, assetsService *assets.Service, manifestPath, runtime string) *agen.UploadFunctionsResult {
 	t.Helper()
 
-	// Create functions zip with manifest using the helper from setup_test.go
-	zipReader, err := zipManifest(t, manifestPath, runtime)
+	return uploadFunctionsWithManifestBytes(t, ctx, assetsService, testenv.ReadFixture(t, manifestPath), runtime)
+}
+
+func uploadFunctionsWithManifestBytes(t *testing.T, ctx context.Context, assetsService *assets.Service, manifest []byte, runtime string) *agen.UploadFunctionsResult {
+	t.Helper()
+
+	zipReader, err := zipManifest(t, manifest, runtime)
 	require.NoError(t, err, "failed to create functions zip with manifest")
 
 	// Read the zip content

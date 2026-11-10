@@ -20,12 +20,11 @@
 //     disabled rules and built-in preset toggle.
 //   - ClickHouse candidates are latest live, non-shadow copies, keyset-paged by
 //     (created_at, id). The reported id resumes through -cursor.
-//   - Marks are appended to ClickHouse first, then mirrored to Postgres. Every
-//     write is scoped by organization_id + project_id + id and skips findings
-//     already dismissed, so re-runs and resumes are idempotent.
+//   - Marks are appended to ClickHouse. Every write is scoped by
+//     organization_id + project_id + id and skips findings already dismissed,
+//     so re-runs and resumes are idempotent.
 //   - Marks are reversible through the risk results restore API, which
-//     appends ClickHouse reversal copies and clears the Postgres mirror. A
-//     Postgres UPDATE alone does not undo a sweep.
+//     appends ClickHouse reversal copies.
 //
 // On interruption (Ctrl-C) or error it prints the last processed id so the run
 // can be resumed with -cursor.
@@ -434,7 +433,7 @@ func sweepPostgres(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, 
 
 		rep.scanned += int64(n)
 		rep.flagged += int64(len(ids))
-		if err := applyBatch(ctx, pool, ch, cfg, &rep, ids, reasons, cursor); err != nil {
+		if err := applyBatch(ctx, ch, cfg, &rep, ids, reasons, cursor); err != nil {
 			return rep, err
 		}
 		rep.lastCursor = cursor
@@ -544,7 +543,7 @@ func sweepClickHouse(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries
 
 		rep.scanned += int64(len(candidates))
 		rep.flagged += int64(len(ids))
-		if err := applyBatch(ctx, pool, ch, cfg, &rep, ids, reasons, cursorID); err != nil {
+		if err := applyBatch(ctx, ch, cfg, &rep, ids, reasons, cursorID); err != nil {
 			return rep, err
 		}
 		rep.lastCursor = cursorID
@@ -612,11 +611,11 @@ func reconstructCandidateMatch(ctx context.Context, reveal *risk.RevealMatcher, 
 	return risk.MatchingReconstruction(candidate.MatchLen, reveal.Candidates(ctx, chatID, candidate, anchor))
 }
 
-func applyBatch(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg config, rep *report, ids []uuid.UUID, reasons []string, cursor uuid.UUID) error {
+func applyBatch(ctx context.Context, ch *chrepo.Queries, cfg config, rep *report, ids []uuid.UUID, reasons []string, cursor uuid.UUID) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
+	changed, err := falsepositivesweep.Apply(ctx, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
 	if !cfg.dryRun {
 		rep.updated += changed
 	}

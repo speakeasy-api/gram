@@ -3,7 +3,9 @@
  */
 
 import { remoteSessionsAttachBinding } from "../funcs/remoteSessionsAttachBinding.js";
+import { remoteSessionsBeginBindingRefresh } from "../funcs/remoteSessionsBeginBindingRefresh.js";
 import { remoteSessionsCommitServerIdentityConfiguration } from "../funcs/remoteSessionsCommitServerIdentityConfiguration.js";
+import { remoteSessionsCompleteBindingRefresh } from "../funcs/remoteSessionsCompleteBindingRefresh.js";
 import { remoteSessionsCount } from "../funcs/remoteSessionsCount.js";
 import { remoteSessionsDetachBinding } from "../funcs/remoteSessionsDetachBinding.js";
 import { remoteSessionsDetachServerClientAssociation } from "../funcs/remoteSessionsDetachServerClientAssociation.js";
@@ -12,21 +14,33 @@ import { remoteSessionsList } from "../funcs/remoteSessionsList.js";
 import { remoteSessionsListBindings } from "../funcs/remoteSessionsListBindings.js";
 import { remoteSessionsListServerClientAssociations } from "../funcs/remoteSessionsListServerClientAssociations.js";
 import { remoteSessionsRevoke } from "../funcs/remoteSessionsRevoke.js";
+import { remoteSessionsTestServerConnection } from "../funcs/remoteSessionsTestServerConnection.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { BindingRefreshAttempt } from "../models/components/bindingrefreshattempt.js";
+import { BindingRefreshResult } from "../models/components/bindingrefreshresult.js";
 import { CommitServerIdentityConfigurationResult } from "../models/components/commitserveridentityconfigurationresult.js";
 import { CountRemoteSessionsResult } from "../models/components/countremotesessionsresult.js";
 import { ListBindingsResponseBody } from "../models/components/listbindingsresponsebody.js";
 import { ListServerClientAssociationsResult } from "../models/components/listserverclientassociationsresult.js";
 import { PrincipalRemoteSessionBinding } from "../models/components/principalremotesessionbinding.js";
+import { ServerConnectionTestResult } from "../models/components/serverconnectiontestresult.js";
 import { ServerIdentityImpactResult } from "../models/components/serveridentityimpactresult.js";
 import {
   AttachBindingRequest,
   AttachBindingSecurity,
 } from "../models/operations/attachbinding.js";
 import {
+  BeginBindingRefreshRequest,
+  BeginBindingRefreshSecurity,
+} from "../models/operations/beginbindingrefresh.js";
+import {
   CommitServerIdentityConfigurationRequest,
   CommitServerIdentityConfigurationSecurity,
 } from "../models/operations/commitserveridentityconfiguration.js";
+import {
+  CompleteBindingRefreshRequest,
+  CompleteBindingRefreshSecurity,
+} from "../models/operations/completebindingrefresh.js";
 import {
   CountRemoteSessionsRequest,
   CountRemoteSessionsSecurity,
@@ -60,6 +74,10 @@ import {
   RevokeRemoteSessionRequest,
   RevokeRemoteSessionSecurity,
 } from "../models/operations/revokeremotesession.js";
+import {
+  TestServerConnectionRequest,
+  TestServerConnectionSecurity,
+} from "../models/operations/testserverconnection.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
 
@@ -68,7 +86,7 @@ export class RemoteSessions extends ClientSDK {
    * attachBinding remoteSessions
    *
    * @remarks
-   * Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+   * Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
    */
   async attachBinding(
     request: AttachBindingRequest,
@@ -76,6 +94,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<PrincipalRemoteSessionBinding> {
     return unwrapAsync(remoteSessionsAttachBinding(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * beginBindingRefresh remoteSessions
+   *
+   * @remarks
+   * Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+   */
+  async beginBindingRefresh(
+    request: BeginBindingRefreshRequest,
+    security?: BeginBindingRefreshSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BindingRefreshAttempt> {
+    return unwrapAsync(remoteSessionsBeginBindingRefresh(
       this,
       request,
       security,
@@ -95,6 +132,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<CommitServerIdentityConfigurationResult> {
     return unwrapAsync(remoteSessionsCommitServerIdentityConfiguration(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * completeBindingRefresh remoteSessions
+   *
+   * @remarks
+   * Refresh an agent attachment through one exact browser OAuth attempt. Requires an ordinary human with agent write permission and ownership of the attached connection. The one-time attempt is bound to the caller, agent, issuer and original attachment; completion never selects a different sign-in.
+   */
+  async completeBindingRefresh(
+    request: CompleteBindingRefreshRequest,
+    security?: CompleteBindingRefreshSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<BindingRefreshResult> {
+    return unwrapAsync(remoteSessionsCompleteBindingRefresh(
       this,
       request,
       security,
@@ -125,7 +181,7 @@ export class RemoteSessions extends ClientSDK {
    * detachBinding remoteSessions
    *
    * @remarks
-   * Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+   * Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
    */
   async detachBinding(
     request: DetachBindingRequest,
@@ -144,7 +200,7 @@ export class RemoteSessions extends ClientSDK {
    * detachServerClientAssociation remoteSessions
    *
    * @remarks
-   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.
+   * Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.
    */
   async detachServerClientAssociation(
     request: DetachServerClientAssociationRequest,
@@ -182,7 +238,7 @@ export class RemoteSessions extends ClientSDK {
    * listRemoteSessions remoteSessions
    *
    * @remarks
-   * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, scopes).
+   * List remote_sessions in the caller's project. Supplying both principal_id and user_session_issuer_id instead lists only the ordinary human caller's eligible sessions for an agent they own, without requiring project read permission. Both filters must be supplied together. access_token_encrypted and refresh_token_encrypted are never returned — only metadata (access_expires_at, refresh_expires_at, authorization_expires_at, scopes).
    */
   async list(
     request?: ListRemoteSessionsRequest | undefined,
@@ -201,7 +257,7 @@ export class RemoteSessions extends ClientSDK {
    * listBindings remoteSessions
    *
    * @remarks
-   * Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+   * Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
    */
   async listBindings(
     request: ListBindingsRequest,
@@ -247,6 +303,25 @@ export class RemoteSessions extends ClientSDK {
     options?: RequestOptions,
   ): Promise<void> {
     return unwrapAsync(remoteSessionsRevoke(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * testServerConnection remoteSessions
+   *
+   * @remarks
+   * Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+   */
+  async testServerConnection(
+    request: TestServerConnectionRequest,
+    security?: TestServerConnectionSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ServerConnectionTestResult> {
+    return unwrapAsync(remoteSessionsTestServerConnection(
       this,
       request,
       security,

@@ -37,6 +37,15 @@ export const SCOPE_ROWS: { key: ScopeKey; label: string; hint: string }[] = [
   { key: "manage", label: "Manage", hint: "Change its settings and access" },
 ];
 
+/** "view", "view and manage", "connect, view and manage". */
+export function lineLabels(lines: ScopeKey[]): string {
+  return listLabels(
+    SCOPE_ROWS.filter((line) => lines.includes(line.key)).map((line) =>
+      line.label.toLowerCase(),
+    ),
+  );
+}
+
 /**
  * The scopes whose grant satisfies a check for this one, itself included.
  * Mirrors scopeExpansions in authz/scopes.go: read and write both satisfy
@@ -306,6 +315,11 @@ export interface ScopeState {
   /** True when a rule grants this line and nothing takes it away. */
   granted: boolean;
   /**
+   * True when this row's own block closes the line. A blocking role reads
+   * differently from one nothing was granted to: its block outranks grants.
+   */
+  blocked: boolean;
+  /**
    * True when closing or narrowing this line has to be written as a block:
    * something other than this row's own rule on this server is granting it,
    * and grants only ever add.
@@ -313,6 +327,13 @@ export interface ScopeState {
   subtracts: boolean;
   /** True when the line can be turned off here at all. */
   canRevoke: boolean;
+  /** True when no rule grants or blocks this line, so it has no effect. */
+  unset: boolean;
+  /**
+   * True when this row holds its own grant or block for this line on this
+   * server, which clearing deletes.
+   */
+  canClear: boolean;
   /** Another principal this line comes from, when one decides it. */
   via?: string;
   /** That principal's URN, so the name can link to it. */
@@ -412,6 +433,27 @@ function isClosed(cell: ScopeCell, reachable: string[] | null): boolean {
   );
 }
 
+/**
+ * Whether this line's own blocks alone close it: an unnarrowed one, or, with
+ * a catalogue, narrowed ones that between them cover every tool the grants
+ * open. A block trimming only some of those tools leaves the line open.
+ */
+function closedByOwnBlocks(
+  cell: ScopeCell,
+  catalog: ToolSelectionTool[],
+): boolean {
+  const own = cell.blocks.filter((block) => !isInherited(cell, block));
+  if (own.some(isUnnarrowed)) return true;
+  if (own.length === 0 || catalog.length === 0) return false;
+  const granted = catalog.filter((tool) =>
+    cell.grants.some((grant) => coversTool(grant, tool)),
+  );
+  return (
+    granted.length > 0 &&
+    granted.every((tool) => own.some((block) => coversTool(block, tool)))
+  );
+}
+
 export function scopeState(
   row: AccessRow,
   scope: ScopeKey,
@@ -421,12 +463,16 @@ export function scopeState(
     return {
       value: "Access unknown",
       granted: false,
+      blocked: false,
       subtracts: false,
       canRevoke: false,
+      unset: false,
+      canClear: false,
       capped: false,
     };
   }
   const cell = row.cells[scope];
+  const canClear = cell.own !== undefined || cell.ownBlock !== undefined;
   const reachable = reachableTools(cell, catalog);
   const closed = isClosed(cell, reachable);
 
@@ -436,14 +482,23 @@ export function scopeState(
     const foreign = foreignBlocks(row, cell);
     const cancelling = foreign.find(isUnnarrowed) ?? foreign[0];
     const cancellingSelf = cancelling?.principalUrn === row.principalUrn;
+    // The row's own block decides the line, so naming another principal's
+    // block beside it would only repeat the answer.
+    const blocked = closedByOwnBlocks(cell, catalog);
+    const unset = cell.grants.length === 0 && cell.blocks.length === 0;
     return {
-      value: "No access",
+      value: blocked ? "Blocked" : unset ? "Not set" : "No access",
       granted: false,
+      blocked,
       subtracts: false,
       canRevoke: false,
-      via: cancellingSelf ? undefined : cancelling?.displayName,
-      viaPrincipalUrn: cancellingSelf ? undefined : cancelling?.principalUrn,
-      note: cancellingSelf ? sourceNote(cancelling) : undefined,
+      unset,
+      canClear,
+      via: cancellingSelf || blocked ? undefined : cancelling?.displayName,
+      viaPrincipalUrn:
+        cancellingSelf || blocked ? undefined : cancelling?.principalUrn,
+      note:
+        cancellingSelf && !blocked ? sourceNote(cancelling, scope) : undefined,
       // Any block this row can neither lift nor outrank caps it, whether it
       // closed the line outright or trimmed the last tool away.
       capped: cappingBlocks(row, cell).length > 0,
@@ -463,24 +518,31 @@ export function scopeState(
   return {
     value: scope === "use" ? connectLabel(cell, catalog, reachable) : "Allowed",
     granted: true,
+    blocked: false,
     subtracts: effectiveForeignGrants(row, scope).length > 0,
     canRevoke: true,
+    unset: false,
+    canClear,
     via: cell.own || grantingSelf ? undefined : granting?.displayName,
     viaPrincipalUrn:
       cell.own || grantingSelf ? undefined : granting?.principalUrn,
-    note: cell.own || !grantingSelf ? undefined : sourceNote(granting),
+    note: cell.own || !grantingSelf ? undefined : sourceNote(granting, scope),
     capped: cappingBlocks(row, cell).length > 0,
   };
 }
 
 /**
  * How to say where a rule of this row's own principal comes from, when it is
- * not the rule this page owns for this line. A rule covering every server
- * gets no note: this page answers for one server, and where else the rule
- * reaches is not what an administrator is reading here.
+ * not the rule this page owns for this line. Only a stronger line is named: a
+ * line granted by this row's own wider rule at the same level needs no note,
+ * while one granted through Manage would otherwise read as set on its own,
+ * and stay "Allowed" after it is cleared with nothing saying why.
  */
-function sourceNote(entry: ResourceAudienceEntry): string | undefined {
-  if (entry.appliesTo === "all_resources") return undefined;
+function sourceNote(
+  entry: ResourceAudienceEntry,
+  scope: ScopeKey,
+): string | undefined {
+  if (entry.level === scope) return undefined;
   const label = SCOPE_ROWS.find((row) => row.key === entry.level)?.label;
   return label ? `included in ${label}` : undefined;
 }
@@ -545,12 +607,38 @@ export function accessSummary(
   const granted = SCOPE_ROWS.filter(
     ({ key }) => scopeState(row, key, catalog).granted,
   );
-  if (granted.length === 0) return "No access";
-  return granted
-    .map(({ key, label }) =>
+  const blocked = blockedScopes(row, catalog);
+  // Fully blocked reads as one word; a partial block is named after what
+  // the row still has, so the exception sits at the end of the line.
+  const blockedPart =
+    blocked.length === 0
+      ? []
+      : blocked.length === SCOPE_ROWS.length
+        ? ["Blocked"]
+        : [`${listLabels(blocked)} blocked`];
+  if (granted.length === 0 && blockedPart.length === 0) return "No access";
+  return [
+    ...granted.map(({ key, label }) =>
       key === "use" ? scopeState(row, key, catalog).value : label,
-    )
-    .join(" · ");
+    ),
+    ...blockedPart,
+  ].join(" · ");
+}
+
+/** The labels of the scopes this row's own block closes, weakest first. */
+export function blockedScopes(
+  row: AccessRow,
+  catalog: ToolSelectionTool[] = [],
+): string[] {
+  if (row.accessUnknown) return [];
+  return SCOPE_ROWS.filter(
+    ({ key }) => scopeState(row, key, catalog).blocked,
+  ).map(({ label }) => label);
+}
+
+function listLabels(labels: string[]): string {
+  if (labels.length < 2) return labels.join("");
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
 }
 
 /**

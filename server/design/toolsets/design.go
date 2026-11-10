@@ -1,10 +1,11 @@
 package toolsets
 
 import (
+	. "goa.design/goa/v3/dsl"
+
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
 	"github.com/speakeasy-api/gram/server/internal/constants"
-	. "goa.design/goa/v3/dsl"
 )
 
 var _ = Service("toolsets", func() {
@@ -227,34 +228,6 @@ var _ = Service("toolsets", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ListToolSchemaStaticValues"}`)
 	})
 
-	Method("checkMCPSlugAvailability", func() {
-		Description("Check if a MCP slug is taken in any scope (true means taken).\n\nDeprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.")
-
-		Payload(func() {
-			Required("slug")
-			Attribute("slug", shared.Slug, "The slug to check")
-			security.SessionPayload()
-			security.ByKeyPayload()
-			security.ProjectPayload()
-		})
-
-		Result(Boolean)
-
-		HTTP(func() {
-			GET("/rpc/toolsets.checkMCPSlugAvailability")
-			Deprecated()
-			Param("slug")
-			security.SessionHeader()
-			security.ByKeyHeader()
-			security.ProjectHeader()
-			Response(StatusOK)
-		})
-
-		Meta("openapi:operationId", "checkMCPSlugAvailability")
-		Meta("openapi:extension:x-speakeasy-name-override", "checkMCPSlugAvailability")
-		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CheckMCPSlugAvailability"}`)
-	})
-
 	Method("cloneToolset", func() {
 		Description("Clone an existing toolset with a new name")
 
@@ -359,7 +332,7 @@ var _ = Service("toolsets", func() {
 	})
 
 	Method("setUserSessionIssuer", func() {
-		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.\n\nDeprecated: use mcpServers.update instead.")
+		Description("Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.\n\nDeprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.")
 
 		Payload(func() {
 			Extend(SetUserSessionIssuerForm)
@@ -461,11 +434,11 @@ var UpdateToolsetForm = Type("UpdateToolsetForm", func() {
 	Attribute("prompt_template_names", ArrayOf(String), "List of prompt template names to include (note: for actual prompts, not tools)")
 	Attribute("tool_urns", ArrayOf(String), "List of tool URNs to include in the toolset")
 	Attribute("resource_urns", ArrayOf(String), "List of resource URNs to include in the toolset")
-	Attribute("mcp_enabled", Boolean, "Deprecated: use mcpServers.update. Whether the toolset is enabled for MCP", deprecatedHostingField("mcpServers.update"))
-	Attribute("mcp_slug", shared.Slug, "Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
-	Attribute("mcp_is_public", Boolean, "Deprecated: use mcpServers.update. Whether the toolset is public in MCP", deprecatedHostingField("mcpServers.update"))
-	Attribute("network_access_mode", shared.NetworkAccessMode, "Deprecated: use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only", deprecatedHostingField("mcpServers.update"))
-	Attribute("custom_domain_id", String, "Deprecated: use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
+	Attribute("mcp_enabled", Boolean, "Deprecated: rejected; use mcpServers.update. Whether the toolset is enabled for MCP", deprecatedHostingField("mcpServers.update"))
+	Attribute("mcp_slug", shared.Slug, "Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The slug of the MCP to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
+	Attribute("mcp_is_public", Boolean, "Deprecated: rejected; use mcpServers.update. Whether the toolset is public in MCP", deprecatedHostingField("mcpServers.update"))
+	Attribute("network_access_mode", shared.NetworkAccessMode, "Deprecated: rejected; use mcpServers.update. Where the hosted MCP is accessible: public_only, dual, or private_only", deprecatedHostingField("mcpServers.update"))
+	Attribute("custom_domain_id", String, "Deprecated: rejected; use mcpEndpoints.create or mcpEndpoints.update. The ID of the custom domain to use for the toolset", deprecatedHostingField("mcpEndpoints.create or mcpEndpoints.update"))
 	Attribute("tool_selection_mode", String, "The mode to use for tool selection")
 	security.ProjectPayload()
 	Required("slug")

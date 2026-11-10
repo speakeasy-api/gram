@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -17,6 +18,8 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  refetchScopes: vi.fn(),
+  scopesState: "ready" as "ready" | "loading" | "error",
   scimEnabled: false,
   members: [] as {
     id: string;
@@ -42,14 +45,12 @@ vi.mock("@/contexts/Auth", () => ({
     scimEnabled: mocks.scimEnabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   queryKeyAgents: () => ["agents"],
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.list } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),
@@ -65,29 +66,56 @@ vi.mock("@gram/client/react-query/directoryRoleMappings.js", () => ({
 }));
 vi.mock("@gram/client/react-query/listScopes.js", () => ({
   useListScopes: () => ({
-    data: {
-      scopes: [
-        {
-          slug: "org:read",
-          resourceType: "org",
-          visibility: "user_visible",
-          label: "Read organization",
-        },
-        {
-          slug: "project:read",
-          resourceType: "project",
-          visibility: "user_visible",
-          description: "Read projects",
-          exclusionScope: "project:blocked_read",
-        },
-        ...(["connect", "read", "write"] as const).map((action) => ({
-          slug: `mcp:${action}`,
-          resourceType: "mcp",
-          visibility: "user_visible",
-          exclusionScope: `mcp:blocked_${action}`,
-        })),
-      ],
-    },
+    isLoading: mocks.scopesState === "loading",
+    isError: mocks.scopesState === "error",
+    refetch: mocks.refetchScopes,
+    data:
+      mocks.scopesState !== "ready"
+        ? undefined
+        : {
+            scopes: [
+              {
+                slug: "org:read",
+                resourceType: "org",
+                category: "org",
+                visibility: "user_visible",
+                label: "Read organization",
+              },
+              {
+                slug: "project:read",
+                resourceType: "project",
+                category: "project",
+                visibility: "user_visible",
+                description: "Read projects",
+                exclusionScope: "project:blocked_read",
+              },
+              {
+                slug: "inference:execute",
+                resourceType: "inference",
+                category: "inference",
+                visibility: "user_visible",
+                label: "Run inference",
+                description: "Call the inference API in the selected projects.",
+              },
+              {
+                slug: "log:read",
+                resourceType: "project",
+                category: "log",
+                visibility: "user_visible",
+                label: "View tool logs",
+                description: "Read tool arguments and results.",
+                sensitive: true,
+                subScopes: [],
+              },
+              ...(["connect", "read", "write"] as const).map((action) => ({
+                slug: `mcp:${action}`,
+                resourceType: "mcp",
+                category: "mcp",
+                visibility: "user_visible",
+                exclusionScope: `mcp:blocked_${action}`,
+              })),
+            ],
+          },
   }),
 }));
 vi.mock("@gram/client/react-query/createRole.js", () => ({
@@ -146,34 +174,65 @@ const role: Role = {
   createdAt: new Date(),
   updatedAt: new Date(),
 };
-function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
+function renderEditor(
+  editingRole?: Role,
+  confirmAssignmentFor?: string,
+  extra: Partial<React.ComponentProps<typeof CreateRoleDialog>> = {},
+) {
   const client = new QueryClient();
+  const tree = (role?: Role) => (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <CreateRoleDialog
+            open
+            onOpenChange={vi.fn<(open: boolean) => void>()}
+            editingRole={role}
+            confirmAssignmentFor={confirmAssignmentFor}
+            presentation="page"
+            {...extra}
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
+  );
+  const result = render(tree(editingRole));
   return {
     client,
-    ...render(
-      <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <TooltipProvider>
-            <CreateRoleDialog
-              open
-              onOpenChange={vi.fn<(open: boolean) => void>()}
-              editingRole={editingRole}
-              confirmAssignmentFor={confirmAssignmentFor}
-              presentation="page"
-            />
-          </TooltipProvider>
-        </QueryClientProvider>
-      </MemoryRouter>,
-    ),
+    ...result,
+    /** The roles list refreshed: the same editor, handed the role as stored
+     *  now. */
+    reread: (next: Role) => result.rerender(tree(next)),
   };
 }
 // Radix tabs switch on mouse down, not click.
 function openPlatformTab() {
   fireEvent.mouseDown(screen.getByRole("tab", { name: "Platform access" }));
 }
+type SubmitLabel = "Save Changes" | "Create Role";
+function reviewButtonName(label: SubmitLabel) {
+  return label === "Save Changes" ? "Save role" : "Create role";
+}
+/** Save or create a role whose save adds a permission: the review step must
+ *  open, and the save goes through from there. */
+function submitReviewed(label: SubmitLabel) {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  fireEvent.click(
+    screen.getByRole("button", { name: reviewButtonName(label) }),
+  );
+}
+/** Save or create a role whose save adds nothing to review: the save goes
+ *  through at once, and no review step opens. */
+function submitDirect(label: SubmitLabel) {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  expect(
+    screen.queryByRole("button", { name: reviewButtonName(label) }),
+  ).toBeNull();
+}
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.scopesState = "ready";
   mocks.scimEnabled = false;
   mocks.members = [];
   // agents.list is paginated: it resolves to pages, which the dialog drains.
@@ -286,11 +345,93 @@ describe("agent assignment", () => {
     });
     openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View organization" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
+    submitReviewed("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
     ).not.toHaveProperty("agentIds");
+  });
+});
+
+describe("while the permission catalogue is unavailable", () => {
+  // The review step reads sensitivity off the catalogue, so a save sent
+  // before it loads could add a sensitive permission unreviewed.
+  function createButton(): HTMLButtonElement {
+    return screen.getByRole("button", {
+      name: "Create Role",
+    }) as HTMLButtonElement;
+  }
+
+  it("keeps the save disabled while the catalogue loads", () => {
+    mocks.scopesState = "loading";
+    renderEditor();
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    expect(createButton().disabled).toBe(true);
+    fireEvent.click(createButton());
+    expect(mocks.create).not.toHaveBeenCalled();
+  });
+
+  it("says why the save is disabled after the catalogue failed to load", () => {
+    mocks.scopesState = "error";
+    renderEditor();
+    fireEvent.change(screen.getByPlaceholderText("e.g., Project Manager"), {
+      target: { value: "Reader" },
+    });
+    expect(createButton().disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "Failed to load permissions, so the role can't be saved yet.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(mocks.refetchScopes).toHaveBeenCalledOnce();
+  });
+});
+
+describe("a role pre-filled from an access request", () => {
+  function createdGrants() {
+    submitReviewed("Create Role");
+    expect(mocks.create).toHaveBeenCalledOnce();
+    return mocks.create.mock.calls[0]![0].request.createRoleForm.grants;
+  }
+
+  it("limits the permission to the requested server", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "Connect to GitHub",
+      defaultScopes: ["mcp:connect"],
+      defaultResource: { resourceId: "server-a", projectId: "project-a" },
+    });
+    expect(createdGrants()).toEqual([
+      {
+        scope: "mcp:connect",
+        selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
+      },
+    ]);
+  });
+
+  it("limits a project permission to the requested project", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "Read the project",
+      defaultScopes: ["project:read"],
+      defaultResource: { projectId: "project-a" },
+    });
+    expect(createdGrants()).toEqual([
+      {
+        scope: "project:read",
+        selectors: [{ resourceKind: "project", resourceId: "project-a" }],
+      },
+    ]);
+  });
+
+  it("stays unrestricted when no resource was requested", () => {
+    renderEditor(undefined, undefined, {
+      defaultName: "View organization",
+      defaultScopes: ["org:read"],
+      defaultResource: { resourceId: "org-a" },
+    });
+    expect(createdGrants()).toEqual([{ scope: "org:read" }]);
   });
 });
 
@@ -339,14 +480,177 @@ describe("who holds the role under directory sync", () => {
   });
 });
 
+describe("the review step", () => {
+  it("lists what a save adds and requires confirmation for sensitive access", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    expect(review.getByText("Sensitive")).toBeTruthy();
+    expect(review.getByText("Everywhere")).toBeTruthy();
+    expect(
+      review.getByText("0 members hold this role today.", { exact: false }),
+    ).toBeTruthy();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.click(
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
+    );
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(
+      mocks.update.mock.calls[0]![0].request.updateRoleForm.addGrants,
+    ).toEqual([{ scope: "log:read", selectors: undefined }]);
+  });
+
+  it("needs no confirmation when nothing added is sensitive", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.queryByRole("checkbox")).toBeNull();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).toBeNull();
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
+  it("goes back to the form without saving", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("skips the step when the save adds no permission", () => {
+    renderEditor(role);
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe what this role can do..."),
+      { target: { value: "Updated description" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
+  function addAda() {
+    mocks.members = [
+      {
+        id: "member-1",
+        name: "Ada Lovelace",
+        email: "ada@example.com",
+        roleIds: [],
+      },
+    ];
+  }
+  function tickAda() {
+    fireEvent.click(screen.getByText("Assign Members"));
+    fireEvent.click(screen.getByText("Ada Lovelace"));
+  }
+
+  it("reviews the sensitive access new holders gain from a role that already grants it", () => {
+    // The grant diff is empty, but the member gains log:read by holding the
+    // role, which is what the audit row records; the review says so.
+    addAda();
+    renderEditor({ ...role, grants: [{ scope: "log:read" }] });
+    tickAda();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(
+      review.getByText("Sensitive access for 1 new member · 1"),
+    ).toBeTruthy();
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    expect(review.queryByText("Added permission", { exact: false })).toBeNull();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.click(
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
+    );
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.memberIds).toEqual(["member-1"]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("closes the review when the role is read again with other grants, and saves what the next review shows", () => {
+    // The roles list keeps being refreshed while the editor is open. A review
+    // opened before the role gained a grant no longer describes the save, so
+    // it closes rather than commit grants nobody reviewed; the next save is
+    // reviewed afresh and keeps the grant the role gained.
+    const { reread } = renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.getByRole("button", { name: "Save role" })).toBeTruthy();
+
+    const linear = [{ resourceKind: "mcp" as const, resourceId: "server-b" }];
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    fireEvent.click(
+      review.getByRole("checkbox", {
+        name: /I reviewed the sensitive permissions/,
+      }),
+    );
+    fireEvent.click(review.getByRole("button", { name: "Save role" }));
+    expect(mocks.update).toHaveBeenCalledOnce();
+    const form = mocks.update.mock.calls[0]![0].request.updateRoleForm;
+    expect(form.addGrants).toEqual([
+      { scope: "log:read", selectors: undefined },
+    ]);
+    expect(form.removeGrants ?? []).toEqual([]);
+  });
+
+  it("saves straight away when new holders gain nothing sensitive", () => {
+    addAda();
+    renderEditor({ ...role, grants: [{ scope: "org:read" }] });
+    tickAda();
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(
+      mocks.update.mock.calls[0]![0].request.updateRoleForm.memberIds,
+    ).toEqual(["member-1"]);
+  });
+});
+
 describe("the access grid", () => {
   /** The default project, which the servers sit in, starts open. */
   function show(editingRole: Parameters<typeof renderEditor>[0]) {
     renderEditor(editingRole);
   }
 
-  function savedForm() {
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+  function savedForm(how: "reviewed" | "direct") {
+    (how === "reviewed" ? submitReviewed : submitDirect)("Save Changes");
     expect(mocks.update).toHaveBeenCalledOnce();
     return mocks.update.mock.calls[0]![0].request.updateRoleForm;
   }
@@ -360,7 +664,7 @@ describe("the access grid", () => {
         .getByRole("button", { name: "Connect GitHub" })
         .getAttribute("aria-pressed"),
     ).toBe("false");
-    expect(savedForm().addGrants).toEqual([
+    expect(savedForm("reviewed").addGrants).toEqual([
       {
         scope: "mcp:write",
         selectors: [{ resourceKind: "mcp", resourceId: "server-a" }],
@@ -402,7 +706,7 @@ describe("the access grid", () => {
       ],
     });
     fireEvent.click(screen.getByRole("button", { name: "Block Linear" }));
-    const form = savedForm();
+    const form = savedForm("direct");
     const linear = [{ resourceKind: "mcp", resourceId: "server-b" }];
     expect(form.addGrants).toEqual(
       expect.arrayContaining([
@@ -435,7 +739,7 @@ describe("the access grid", () => {
     fireEvent.change(screen.getByDisplayValue("Original description"), {
       target: { value: "New description" },
     });
-    const form = savedForm();
+    const form = savedForm("direct");
     expect(form.addGrants ?? []).toEqual([]);
     expect(form.removeGrants ?? []).toEqual([]);
   });
@@ -500,5 +804,202 @@ describe("the access grid", () => {
         .getByRole("button", { name: "View Default" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
+  });
+});
+
+it("names the inference project selector for its permission, not View", () => {
+  renderEditor();
+  openPlatformTab();
+  fireEvent.click(screen.getByRole("button", { name: "Run inference" }));
+  expect(
+    screen.queryByRole("button", { name: "Change where View applies" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Change where Run inference applies" }),
+  );
+  expect(screen.getByRole("button", { name: "Select project A" })).toBeTruthy();
+});
+
+describe("a role read again while the editor is open", () => {
+  type Grant = Role["grants"][number];
+  const personalAuth: Grant = {
+    scope: "mcp:auth",
+    selectors: [
+      {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        clientType: "remote_session",
+        connectionOwner: "$represented_user",
+      },
+    ],
+  };
+  const blockedAuth: Grant = {
+    scope: "mcp:blocked_auth",
+    selectors: [
+      {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        clientType: "service_account",
+      },
+    ],
+  };
+  const linear: Grant["selectors"] = [
+    { resourceKind: "mcp", resourceId: "server-b" },
+  ];
+
+  /** One credential type's control, named by the credential it decides. */
+  function credential(label: string) {
+    return within(
+      screen.getByRole("group", { name: `${label} for this role` }),
+    );
+  }
+  function choose(label: string, option: string) {
+    fireEvent.click(credential(label).getByRole("button", { name: option }));
+  }
+  function chosen(label: string): string[] {
+    return credential(label)
+      .getAllByRole("button")
+      .filter((button) => button.getAttribute("aria-pressed") === "true")
+      .map((button) => button.textContent ?? "");
+  }
+  function rename() {
+    fireEvent.change(screen.getByDisplayValue("Test role"), {
+      target: { value: "Renamed role" },
+    });
+  }
+  function savedForm(how: "reviewed" | "direct") {
+    (how === "reviewed" ? submitReviewed : submitDirect)("Save Changes");
+    expect(mocks.update).toHaveBeenCalledOnce();
+    return mocks.update.mock.calls[0]![0].request.updateRoleForm;
+  }
+
+  it("does not revoke a credential rule the role gained while the editor was open", () => {
+    // The editor filled in from a read with no credential rules, and the role
+    // gained one before the person renamed it. A save works out what to take
+    // off the role from what the form holds, so renaming must not revoke a
+    // credential nobody here touched.
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [personalAuth] });
+
+    rename();
+    const form = savedForm("direct");
+    expect(form.name).toBe("Renamed role");
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a credential rule the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [personalAuth] });
+
+    expect(chosen("Each person's own account")).toEqual(["Can use"]);
+  });
+
+  it("keeps a credential rule the editor started with", () => {
+    renderEditor({ ...role, grants: [personalAuth] });
+    rename();
+    const form = savedForm("direct");
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("does not undo a block the role gained while the editor was open", () => {
+    const { reread } = renderEditor({ ...role, grants: [personalAuth] });
+    reread({ ...role, grants: [personalAuth, blockedAuth] });
+
+    rename();
+    const form = savedForm("direct");
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a block the role gained while the editor was open", () => {
+    const { reread } = renderEditor({ ...role, grants: [personalAuth] });
+    reread({ ...role, grants: [personalAuth, blockedAuth] });
+
+    expect(chosen("Service account")).toEqual(["Blocked"]);
+  });
+
+  it("does not revoke a permission the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+
+    rename();
+    const form = savedForm("direct");
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a permission the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Connect Linear" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("keeps the credential the person chose and the rule the role gained", () => {
+    const { reread } = renderEditor(role);
+    choose("Each person's own account", "Can use");
+    reread({ ...role, grants: [blockedAuth] });
+
+    const form = savedForm("direct");
+    expect(form.addGrants).toEqual([personalAuth]);
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(chosen("Each person's own account")).toEqual(["Can use"]);
+    expect(chosen("Service account")).toEqual(["Blocked"]);
+  });
+
+  it("takes away the stored rule the person switched off", () => {
+    // Turning a credential off is an explicit edit, and its removal has to
+    // name the selector the role stores so the server matches it.
+    renderEditor({ ...role, grants: [personalAuth] });
+    choose("Each person's own account", "Not set");
+    const form = savedForm("direct");
+    expect(form.removeGrants).toEqual([personalAuth]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("takes away the permission the person switched off, not the one the role gained", () => {
+    const github: Grant["selectors"] = [
+      { resourceKind: "mcp", resourceId: "server-a" },
+    ];
+    const { reread } = renderEditor({
+      ...role,
+      grants: [{ scope: "mcp:connect", selectors: github }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    reread({
+      ...role,
+      grants: [
+        { scope: "mcp:connect", selectors: github },
+        { scope: "mcp:read", selectors: linear },
+      ],
+    });
+
+    const form = savedForm("direct");
+    expect(form.removeGrants).toEqual([
+      { scope: "mcp:connect", selectors: github },
+    ]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("leaves the name being typed alone and offers nothing to save for the read itself", () => {
+    const { reread } = renderEditor(role);
+    rename();
+    reread({ ...role, grants: [personalAuth] });
+
+    expect(screen.getByDisplayValue("Renamed role")).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("Renamed role"), {
+      target: { value: "Test role" },
+    });
+    expect(
+      screen
+        .getByRole("button", { name: "Save Changes" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
   });
 });

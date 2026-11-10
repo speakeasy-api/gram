@@ -1,13 +1,18 @@
 import { isKnownEnumValue, requireKnownEnumValue } from "@/lib/enum";
 import {
-  RiskPolicyAction,
   RiskPolicyAudienceType,
   RiskPolicyPolicyType,
   RiskPolicyShadowMcpDisposition,
   type RiskPolicy,
 } from "@gram/client/models/components/riskpolicy.js";
-import type { RiskPreset } from "@gram/client/models/components/riskpreset.js";
-import type { SuggestRiskPolicyResult } from "@gram/client/models/components/suggestriskpolicyresult.js";
+import {
+  RiskPresetAction,
+  type RiskPreset,
+} from "@gram/client/models/components/riskpreset.js";
+import {
+  SuggestRiskPolicyResultAction,
+  type SuggestRiskPolicyResult,
+} from "@gram/client/models/components/suggestriskpolicyresult.js";
 import type { PolicyAction } from "./policy-data";
 import type { PolicyMCPScopeValue } from "./policy-mcp-scope";
 
@@ -94,7 +99,8 @@ export function supportsPolicyDraft(source: {
 }): boolean {
   return (
     isKnownEnumValue(RiskPolicyPolicyType, source.policyType) &&
-    isKnownEnumValue(RiskPolicyAction, source.action) &&
+    // A draft opens in a detection editor, so require_approval is not one.
+    ACTIONS.has(source.action) &&
     supportsSources(source.sources)
   );
 }
@@ -125,7 +131,7 @@ export function draftFromPreset(preset: RiskPreset): PolicyDraft {
     presetId: preset.id,
     policyType: requireKnownEnumValue(RiskPolicyPolicyType, preset.policyType),
     name: preset.label,
-    action: requireKnownEnumValue(RiskPolicyAction, preset.action),
+    action: requireKnownEnumValue(RiskPresetAction, preset.action),
     score: preset.score,
     sources: draftSources(preset.sources),
     presidioEntities: [...preset.presidioEntities],
@@ -146,7 +152,10 @@ export function draftFromSuggestion(
       suggestion.policyType,
     ),
     name: suggestion.name,
-    action: requireKnownEnumValue(RiskPolicyAction, suggestion.action),
+    action: requireKnownEnumValue(
+      SuggestRiskPolicyResultAction,
+      suggestion.action,
+    ),
     score: suggestion.score,
     sources: draftSources(suggestion.sources),
     presidioEntities: [...suggestion.presidioEntities],

@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	telemetryRepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcpRepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -172,15 +173,23 @@ func TestGetToolUsageSummary_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+	toolset, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Hosted Payments",
 		Slug:                   "hosted-payments",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
+	})
+	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-hosted-payments", uuid.NullUUID{})
+	// The canonical server, without endpoints, is what makes the aliased toolset hosted.
+	_, err = mcpserversRepo.New(ti.conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+		ID:         toolset.ID,
+		ProjectID:  toolset.ProjectID,
+		Name:       pgtype.Text{String: toolset.Name, Valid: true},
+		ToolsetID:  uuid.NullUUID{UUID: toolset.ID, Valid: true},
+		Visibility: "private",
 	})
 	require.NoError(t, err)
 	now := time.Now().UTC()
@@ -373,6 +382,55 @@ func TestGetToolUsageFilterOptions_ReturnsUncappedShadowServersAndUsers(t *testi
 	require.Len(t, summary.Targets, 30)
 }
 
+func TestGetToolUsageFilterOptions_NarrowsEachGroupByTheOtherFilters(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	for i, event := range []struct{ user, server string }{
+		{"alice@example.com", "shadow-a"},
+		{"alice@example.com", "shadow-a"},
+		{"bob@example.com", "shadow-b"},
+	} {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      now.Add(time.Duration(-i) * time.Minute),
+			traceID:        uuid.New().String(),
+			userEmail:      event.user,
+			hookSource:     "mcp",
+			toolSource:     event.server,
+			toolName:       "query",
+			result:         `"ok"`,
+			conversationID: fmt.Sprintf("conv-narrow-%d", i),
+		})
+	}
+
+	res, err := ti.service.GetToolUsageFilterOptions(ctx, &gen.GetToolUsageFilterOptionsPayload{
+		From:              now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:                now.Add(1 * time.Hour).Format(time.RFC3339),
+		ShadowServerNames: []string{"shadow-a"},
+	})
+	require.NoError(t, err)
+
+	// Users narrow to those with calls on the picked server, counted there.
+	require.Len(t, res.Users, 1)
+	require.Equal(t, "alice@example.com", res.Users[0].UserKey)
+	require.Equal(t, int64(2), res.Users[0].EventCount)
+
+	// The server group ignores its own selection, so the other server stays
+	// on offer with its full count.
+	servers := map[string]int64{}
+	for _, server := range res.ShadowServers {
+		servers[server.ServerName] = server.EventCount
+	}
+	require.Equal(t, map[string]int64{"shadow-a": 2, "shadow-b": 1}, servers)
+}
+
 func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T) {
 	t.Parallel()
 
@@ -381,17 +439,16 @@ func TestGetToolUsageFilterOptions_ClassifiesHookObservedHostedMCP(t *testing.T)
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	projectID := authCtx.ProjectID.String()
 	toolsets := toolsetsRepo.New(ti.conn)
-	_, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
+	toolset, err := toolsets.CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Hosted Payments",
 		Slug:                   "hosted-payments",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "acme-hosted-payments", Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, "acme-hosted-payments", uuid.NullUUID{})
 
 	now := time.Now().UTC()
 	insertHookEvent(t, ctx, hookEventParams{
@@ -1064,4 +1121,59 @@ func TestGetToolUsageUsers_ManagedAgentAttribution(t *testing.T) {
 			require.Equal(t, "human@example.com", row.UserKey)
 		}
 	}
+}
+
+// An agent identity page filters every tool-usage section by one agent id. The
+// identity filter is pushed into the trace_summaries scan (see
+// toolUsageScanIdentityFilter), so each section must answer for that agent
+// alone — the same rows an unfiltered read would have, minus everyone else's.
+func TestGetToolUsageSections_FilterByAgentIdentity(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	agentA := uuid.NewString()
+	agentB := uuid.NewString()
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-30 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, agentID: agentA,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-20 * time.Minute),
+		toolsetSlug: "payments", toolName: "charge", statusCode: 200, agentID: agentA,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-10 * time.Minute),
+		toolsetSlug: "crm", toolName: "lookup", statusCode: 200, agentID: agentB,
+	})
+	insertHostedToolEvent(t, ctx, ti, hostedToolEventParams{
+		projectID: projectID, timestamp: now.Add(-5 * time.Minute),
+		toolsetSlug: "crm", toolName: "lookup", statusCode: 200, userEmail: "human@example.com",
+	})
+
+	from := now.Add(-1 * time.Hour).Format(time.RFC3339)
+	to := now.Add(1 * time.Hour).Format(time.RFC3339)
+	agentFilter := []*gen.ToolUsageUserFilter{{Kind: "agent_id", Key: agentA}}
+
+	totals, err := ti.service.GetToolUsageTotals(ctx, &gen.GetToolUsageTotalsPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Equal(t, int64(2), totals.Totals.EventCount)
+
+	targets, err := ti.service.GetToolUsageTargets(ctx, &gen.GetToolUsageTargetsPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	require.Len(t, targets.Targets, 1)
+	require.Equal(t, "payments", targets.Targets[0].TargetID)
+	require.Equal(t, int64(2), targets.Targets[0].EventCount)
+
+	series, err := ti.service.GetToolUsageTargetTimeSeries(ctx, &gen.GetToolUsageTargetTimeSeriesPayload{From: from, To: to, UserFilters: agentFilter})
+	require.NoError(t, err, "cause: %v", errors.Unwrap(err))
+	var seriesCalls int64
+	for _, point := range series.TargetTimeSeries {
+		require.Equal(t, "payments", point.TargetID)
+		seriesCalls += point.EventCount
+	}
+	require.Equal(t, int64(2), seriesCalls)
 }

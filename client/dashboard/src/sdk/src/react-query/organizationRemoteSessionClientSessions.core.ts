@@ -15,6 +15,8 @@ import {
   ListOrganizationRemoteSessionClientSessionsRequest,
   ListOrganizationRemoteSessionClientSessionsResponse,
   ListOrganizationRemoteSessionClientSessionsSecurity,
+  QueryParamSort,
+  QueryParamStatus,
 } from "../models/operations/listorganizationremotesessionclientsessions.js";
 import { unwrapAsync } from "../types/fp.js";
 import { PageIterator, unwrapResultIterator } from "../types/operations.js";
@@ -86,6 +88,11 @@ export function buildOrganizationRemoteSessionClientSessionsQuery(
   return {
     queryKey: queryKeyOrganizationRemoteSessionClientSessions({
       clientId: request.clientId,
+      search: request.search,
+      status: request.status,
+      createdAfter: request.createdAfter,
+      createdBefore: request.createdBefore,
+      sort: request.sort,
       cursor: request.cursor,
       limit: request.limit,
       gramSession: request.gramSession,
@@ -132,6 +139,11 @@ export function buildOrganizationRemoteSessionClientSessionsInfiniteQuery(
   return {
     queryKey: queryKeyOrganizationRemoteSessionClientSessionsInfinite({
       clientId: request.clientId,
+      search: request.search,
+      status: request.status,
+      createdAfter: request.createdAfter,
+      createdBefore: request.createdBefore,
+      sort: request.sort,
       cursor: request.cursor,
       limit: request.limit,
       gramSession: request.gramSession,
@@ -176,6 +188,11 @@ export function buildOrganizationRemoteSessionClientSessionsInfiniteQuery(
 export function queryKeyOrganizationRemoteSessionClientSessions(
   parameters: {
     clientId: string;
+    search?: string | undefined;
+    status?: QueryParamStatus | undefined;
+    createdAfter?: Date | undefined;
+    createdBefore?: Date | undefined;
+    sort?: QueryParamSort | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;
@@ -188,6 +205,11 @@ export function queryKeyOrganizationRemoteSessionClientSessions(
 export function queryKeyOrganizationRemoteSessionClientSessionsInfinite(
   parameters: {
     clientId: string;
+    search?: string | undefined;
+    status?: QueryParamStatus | undefined;
+    createdAfter?: Date | undefined;
+    createdBefore?: Date | undefined;
+    sort?: QueryParamSort | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramSession?: string | undefined;

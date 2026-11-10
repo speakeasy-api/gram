@@ -26,6 +26,8 @@ type Client struct {
 	GetObservabilityOverviewEndpoint         goa.Endpoint
 	GetMcpNetworkTrafficEndpoint             goa.Endpoint
 	GetMetaMcpServerUsageEndpoint            goa.Endpoint
+	GetOrganizationGatewayOverviewEndpoint   goa.Endpoint
+	GetOrganizationGatewayUsageEndpoint      goa.Endpoint
 	GetProjectOverviewEndpoint               goa.Endpoint
 	GetUnproxiedMcpServerUsageEndpoint       goa.Endpoint
 	GetUnproxiedMcpServerToolUsageEndpoint   goa.Endpoint
@@ -50,11 +52,12 @@ type Client struct {
 	ListToolUsageTracesEndpoint              goa.Endpoint
 	GetToolUsageFilterOptionsEndpoint        goa.Endpoint
 	GetMcpServerActivityEndpoint             goa.Endpoint
+	GetOrgMcpServerActivityEndpoint          goa.Endpoint
 	ListHooksTracesEndpoint                  goa.Endpoint
 }
 
 // NewClient initializes a "telemetry" service client given the endpoints.
-func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
+func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEvent, getProjectMetricsSummary, getUserMetricsSummary, getEmployeeDataFlowGraph, getObservabilityOverview, getMcpNetworkTraffic, getMetaMcpServerUsage, getOrganizationGatewayOverview, getOrganizationGatewayUsage, getProjectOverview, getUnproxiedMcpServerUsage, getUnproxiedMcpServerToolUsage, getUnproxiedMcpServerUserUsage, getUnproxiedMcpServerClientUsage, query, queryTumDetails, listSessions, listFilterOptions, listAttributeKeys, getHooksSummary, getToolUsageSummary, getToolUsageTotals, getToolUsageTargets, getToolUsageUsers, getToolUsageClients, getToolUsageClientToolBreakdown, getToolUsageTargetTimeSeries, getToolUsageUserTimeSeries, getToolUsageUsersByTarget, getToolUsageTargetToolBreakdown, listToolUsageTraces, getToolUsageFilterOptions, getMcpServerActivity, getOrgMcpServerActivity, listHooksTraces goa.Endpoint) *Client {
 	return &Client{
 		SearchLogsEndpoint:                       searchLogs,
 		SearchToolCallsEndpoint:                  searchToolCalls,
@@ -67,6 +70,8 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		GetObservabilityOverviewEndpoint:         getObservabilityOverview,
 		GetMcpNetworkTrafficEndpoint:             getMcpNetworkTraffic,
 		GetMetaMcpServerUsageEndpoint:            getMetaMcpServerUsage,
+		GetOrganizationGatewayOverviewEndpoint:   getOrganizationGatewayOverview,
+		GetOrganizationGatewayUsageEndpoint:      getOrganizationGatewayUsage,
 		GetProjectOverviewEndpoint:               getProjectOverview,
 		GetUnproxiedMcpServerUsageEndpoint:       getUnproxiedMcpServerUsage,
 		GetUnproxiedMcpServerToolUsageEndpoint:   getUnproxiedMcpServerToolUsage,
@@ -91,6 +96,7 @@ func NewClient(searchLogs, searchToolCalls, searchChats, searchUsers, captureEve
 		ListToolUsageTracesEndpoint:              listToolUsageTraces,
 		GetToolUsageFilterOptionsEndpoint:        getToolUsageFilterOptions,
 		GetMcpServerActivityEndpoint:             getMcpServerActivity,
+		GetOrgMcpServerActivityEndpoint:          getOrgMcpServerActivity,
 		ListHooksTracesEndpoint:                  listHooksTraces,
 	}
 }
@@ -338,6 +344,52 @@ func (c *Client) GetMcpNetworkTraffic(ctx context.Context, p *GetMcpNetworkTraff
 func (c *Client) GetMetaMcpServerUsage(ctx context.Context, p *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error) {
 	var ires any
 	ires, err = c.GetMetaMcpServerUsageEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetMetaMcpServerUsageResult), nil
+}
+
+// GetOrganizationGatewayOverview calls the "getOrganizationGatewayOverview"
+// endpoint of the "telemetry" service.
+// GetOrganizationGatewayOverview may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationGatewayOverview(ctx context.Context, p *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error) {
+	var ires any
+	ires, err = c.GetOrganizationGatewayOverviewEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetObservabilityOverviewResult), nil
+}
+
+// GetOrganizationGatewayUsage calls the "getOrganizationGatewayUsage" endpoint
+// of the "telemetry" service.
+// GetOrganizationGatewayUsage may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrganizationGatewayUsage(ctx context.Context, p *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error) {
+	var ires any
+	ires, err = c.GetOrganizationGatewayUsageEndpoint(ctx, p)
 	if err != nil {
 		return
 	}
@@ -892,6 +944,29 @@ func (c *Client) GetMcpServerActivity(ctx context.Context, p *GetMcpServerActivi
 		return
 	}
 	return ires.(*GetMcpServerActivityResult), nil
+}
+
+// GetOrgMcpServerActivity calls the "getOrgMcpServerActivity" endpoint of the
+// "telemetry" service.
+// GetOrgMcpServerActivity may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetOrgMcpServerActivity(ctx context.Context, p *GetOrgMcpServerActivityPayload) (res *GetOrgMcpServerActivityResult, err error) {
+	var ires any
+	ires, err = c.GetOrgMcpServerActivityEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*GetOrgMcpServerActivityResult), nil
 }
 
 // ListHooksTraces calls the "listHooksTraces" endpoint of the "telemetry"

@@ -43,6 +43,16 @@ func AssistantCheck(scope Scope, resourceID, projectID string) Check {
 	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
 }
 
+// EnvironmentCheck builds a Check for an environment scope. resourceID is the
+// environment ID for operations on one environment, or the project ID for
+// project-level operations that have no concrete environment (create, or a
+// slug that did not resolve). projectID is always injected as a dimension, so a
+// project-wide grant ({"resource_id":"*","project_id":P}) covers every
+// environment in P, while a grant naming one environment covers only that one.
+func EnvironmentCheck(scope Scope, resourceID, projectID string) Check {
+	return Check{Scope: scope, ResourceKind: "", ResourceID: resourceID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
+}
+
 // HooksIngestCheck builds the org:hooks_ingest check for projectID. It always
 // carries the project, because matching skips grant keys a check omits, which
 // would let a project-bounded grant through for any project.
@@ -214,4 +224,10 @@ func RiskPolicyBypassCheck(policyID string, dims RiskPolicyDimensions) Check {
 		dimensions[SelectorKeyServerIdentity] = dims.ServerIdentity
 	}
 	return Check{Scope: ScopeRiskPolicyBypass, ResourceKind: "", ResourceID: policyID, Dimensions: dimensions, selectorMatch: selectorMatchStrict, representedUser: ""}
+}
+
+// InferenceExecuteCheck authorizes inference in one project, not chat mutation.
+// Always include project_id so project-bounded grants cannot match by omission.
+func InferenceExecuteCheck(projectID string) Check {
+	return Check{Scope: ScopeInferenceExecute, ResourceKind: "", ResourceID: projectID, Dimensions: map[string]string{SelectorKeyProjectID: projectID}, selectorMatch: selectorMatchNormal, representedUser: ""}
 }

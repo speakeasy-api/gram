@@ -1,11 +1,13 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -16,8 +18,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	accessgen "github.com/speakeasy-api/gram/server/gen/access"
+	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/access"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -185,6 +189,26 @@ type MCPRoleCoverage struct {
 	AssignmentEligible  bool                       `json:"assignment_eligible" jsonschema:"true only when the entire custom role is confined to this project and MCP; still requires explicit confirmation of all returned access rules"`
 }
 
+// MCPRoleSharedAuthClients reports one role's permission to use the shared
+// credentials a server offers. It is separate from entering the server, so it
+// is reported whatever the server's visibility.
+type MCPRoleSharedAuthClients struct {
+	Name              string                    `json:"name"`
+	Reference         string                    `json:"reference" jsonschema:"opaque role reference for set_mcp_role_auth_client_access"`
+	AuthClients       []MCPRoleAuthClientAccess `json:"auth_clients" jsonschema:"whether this role may use each shared credential the server offers in this project"`
+	UnevaluatedGrants bool                      `json:"unevaluated_grants" jsonschema:"true when some of the role's credential rules could not be evaluated, so auth_clients may be incomplete"`
+}
+
+// MCPRoleAuthClientAccess reports one role's permission to use one shared
+// auth client. Personal clients are omitted: each member uses only their own
+// connection, so a role-level answer would mislead.
+type MCPRoleAuthClientAccess struct {
+	AuthClientID string `json:"auth_client_id"`
+	Name         string `json:"name"`
+	ClientType   string `json:"client_type"`
+	Access       string `json:"access" jsonschema:"allowed, blocked (a block outranks the grant), or not_granted"`
+}
+
 type GetMCPAccessInput struct {
 	ProjectID string `json:"project_id" jsonschema:"project ID that owns the configured MCP"`
 	MCPID     string `json:"mcp_id" jsonschema:"configured MCP ID returned by find_mcp"`
@@ -194,7 +218,10 @@ type GetMCPAccessOutput struct {
 	ProjectID string            `json:"project_id"`
 	MCP       MCPAccessTarget   `json:"mcp"`
 	Roles     []MCPRoleCoverage `json:"roles"`
-	ExpiresAt string            `json:"expires_at"`
+	// SharedAuthClientRoles lists roles with a rule on a shared credential
+	// the server offers, whether or not they can enter the server.
+	SharedAuthClientRoles []MCPRoleSharedAuthClients `json:"shared_auth_client_roles"`
+	ExpiresAt             string                     `json:"expires_at"`
 }
 
 // AccessReadService projects the access service's local role/member authority
@@ -448,34 +475,57 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 	if err != nil {
 		return GetMemberMCPAccessOutput{}, fmt.Errorf("load platform mcp access member grants: %w", err)
 	}
-	roles, err := s.roles.ListRoles(ctx, principal.OrganizationID)
+	servers, truncated, err := grantedMCPAccess(ctx, s.db, s.roles, principal.OrganizationID, grants)
 	if err != nil {
-		return GetMemberMCPAccessOutput{}, fmt.Errorf("list member access role names: %w", err)
+		return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member mcp access: %w", err)
 	}
-	roleNames := make(map[string]string, len(roles.Roles))
-	for _, role := range roles.Roles {
+	output := GetMemberMCPAccessOutput{Servers: make([]MemberMCPAccessRow, 0, len(servers)), Truncated: truncated}
+	for _, server := range servers {
+		output.Servers = append(output.Servers, server.access)
+	}
+	return output, nil
+}
+
+// grantedMCPServer is one MCP server and what a set of grants allows on it.
+type grantedMCPServer struct {
+	server platformrepo.ListPlatformMCPInventoryRow
+	access MemberMCPAccessRow
+}
+
+// grantedMCPAccess evaluates grants against every MCP server in the
+// organization with the dashboard's access explanation, so blocks, roles and
+// grants to everyone count as the MCP endpoint counts them. Servers come back
+// by project name, then server name; truncated is true when the organization
+// holds more servers than one read evaluates.
+func grantedMCPAccess(ctx context.Context, db platformrepo.DBTX, roles *access.RoleManager, organizationID string, grants []authz.Grant) ([]grantedMCPServer, bool, error) {
+	listed, err := roles.ListRoles(ctx, organizationID)
+	if err != nil {
+		return nil, false, fmt.Errorf("list access role names: %w", err)
+	}
+	roleNames := make(map[string]string, len(listed.Roles))
+	for _, role := range listed.Roles {
 		roleNames[role.PrincipalUrn] = role.Name
 	}
 	//nolint:exhaustruct // Optional inventory filters intentionally stay unset.
-	rows, err := platformrepo.New(s.db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
-		OrganizationID: principal.OrganizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
+	rows, err := platformrepo.New(db).ListPlatformMCPInventory(ctx, platformrepo.ListPlatformMCPInventoryParams{
+		OrganizationID: organizationID, SkipAuthorizationFilter: true, LimitValue: maxMemberMCPAccessServers + 1,
 	})
 	if err != nil {
-		return GetMemberMCPAccessOutput{}, fmt.Errorf("list platform mcp access inventory: %w", err)
+		return nil, false, fmt.Errorf("list platform mcp access inventory: %w", err)
 	}
 	truncated := len(rows) > maxMemberMCPAccessServers
 	if truncated {
 		rows = rows[:maxMemberMCPAccessServers]
 	}
-	output := GetMemberMCPAccessOutput{Servers: make([]MemberMCPAccessRow, 0, len(rows)), Truncated: truncated}
+	servers := make([]grantedMCPServer, 0, len(rows))
 	for _, row := range rows {
 		name := conv.Default(row.McpName.String, row.McpSlug.String)
 		if name == "" {
 			name = row.McpServerID.String()
 		}
-		effective, rules, err := access.SummarizeMCPAccessRules(grants, row.McpServerID.String(), row.ProjectID.String(), roleNames)
+		effective, rules, err := access.SummarizeMCPAccessRules(serverConnectGrants(grants, row), row.McpServerID.String(), row.ProjectID.String(), roleNames)
 		if err != nil {
-			return GetMemberMCPAccessOutput{}, fmt.Errorf("explain member access to MCP %q: %w", name, err)
+			return nil, false, fmt.Errorf("explain access to MCP %q: %w", name, err)
 		}
 		//nolint:exhaustruct // Access mode helpers only consume endpoint-kind fields.
 		item := platformrepo.GetPlatformMCPInventoryItemRow{
@@ -496,23 +546,41 @@ func (s *AccessReadService) getMemberMCPAccess(ctx context.Context, principal Pr
 				toolAccess, connectionAccess = "none", "none"
 			}
 		}
-		output.Servers = append(output.Servers, MemberMCPAccessRow{
+		servers = append(servers, grantedMCPServer{server: row, access: MemberMCPAccessRow{
 			ProjectID: row.ProjectID.String(), ProjectName: row.ProjectName, MCPID: row.McpServerID.String(), MCPName: name,
 			Backend: accessBackend(item), Visibility: row.Visibility, AuthorizationMode: mode, ConnectionAccess: connectionAccess,
 			CanConnect: canConnect, ToolAccess: toolAccess, CanView: effective.CanView, CanManage: effective.CanManage, Rules: rules,
-		})
+		}})
 	}
-	sort.Slice(output.Servers, func(i, j int) bool {
-		left, right := output.Servers[i], output.Servers[j]
-		if left.ProjectName != right.ProjectName {
-			return left.ProjectName < right.ProjectName
-		}
-		if left.MCPName != right.MCPName {
-			return left.MCPName < right.MCPName
-		}
-		return left.MCPID < right.MCPID
+	slices.SortFunc(servers, func(a, b grantedMCPServer) int {
+		return cmp.Or(cmp.Compare(a.access.ProjectName, b.access.ProjectName), cmp.Compare(a.access.MCPName, b.access.MCPName), cmp.Compare(a.access.MCPID, b.access.MCPID))
 	})
-	return output, nil
+	return servers, truncated, nil
+}
+
+// serverConnectGrants returns grants as they reach server. The dashboard's
+// Access page names a toolset-backed server by its toolset ID, which the
+// organization gateway checks, while the server's own endpoint checks the
+// server's ID, so a grant naming either one reaches the server.
+func serverConnectGrants(grants []authz.Grant, server platformrepo.ListPlatformMCPInventoryRow) []authz.Grant {
+	if !server.ToolsetID.Valid || server.ToolsetID.UUID == server.McpServerID {
+		return grants
+	}
+	toolsetID := server.ToolsetID.UUID.String()
+	var aliases []authz.Grant
+	for _, grant := range grants {
+		if grant.Selector[authz.SelectorKeyResourceID] != toolsetID {
+			continue
+		}
+		alias := grant
+		alias.Selector = maps.Clone(grant.Selector)
+		alias.Selector[authz.SelectorKeyResourceID] = server.McpServerID.String()
+		aliases = append(aliases, alias)
+	}
+	if len(aliases) == 0 {
+		return grants
+	}
+	return slices.Concat(grants, aliases)
 }
 
 func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principal, input GetMCPAccessInput) (GetMCPAccessOutput, error) {
@@ -570,18 +638,46 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 		ToolsTruncated:       truncated,
 	}
 
-	if target.AuthorizationMode != "rbac" {
-		return GetMCPAccessOutput{
-			ProjectID: projectID.String(),
-			MCP:       target,
-			Roles:     []MCPRoleCoverage{},
-			ExpiresAt: "",
-		}, nil
-	}
-
 	roles, err := s.roles.ListRoles(ctx, principal.OrganizationID)
 	if err != nil {
 		return GetMCPAccessOutput{}, fmt.Errorf("list roles for platform mcp access: %w", err)
+	}
+	now := s.now().UTC()
+	upstream, err := authclients.ReadServerAuthentication(ctx, s.db, principal.OrganizationID, mcpID)
+	if err != nil {
+		return GetMCPAccessOutput{}, fmt.Errorf("read MCP upstream authentication: %w", err)
+	}
+	sharedRoles := make([]MCPRoleSharedAuthClients, 0)
+	for _, role := range roles.Roles {
+		grants, unevaluated := roleAuthzGrants(authClientRole(role))
+		sharedClients, err := roleSharedAuthClientAccess(grants, upstream, projectID.String())
+		if err != nil {
+			return GetMCPAccessOutput{}, fmt.Errorf("evaluate auth client access for role %q: %w", role.Name, err)
+		}
+		if !anyAuthClientRule(sharedClients) && !unevaluated {
+			continue
+		}
+		reference, err := s.references.Encode(principal, subjectKindAccessRole, role.ID, now)
+		if err != nil {
+			return GetMCPAccessOutput{}, fmt.Errorf("issue MCP access role reference: %w", err)
+		}
+		sharedRoles = append(sharedRoles, MCPRoleSharedAuthClients{Name: role.Name, Reference: reference, AuthClients: sharedClients, UnevaluatedGrants: unevaluated})
+	}
+
+	// Anyone enters a public server and nobody enters a disabled or unserved
+	// one, so no role decides entry or tools.
+	if target.AuthorizationMode != "rbac" {
+		expiresAt := ""
+		if len(sharedRoles) > 0 {
+			expiresAt = now.Add(SubjectReferenceTTL).Format(time.RFC3339)
+		}
+		return GetMCPAccessOutput{
+			ProjectID:             projectID.String(),
+			MCP:                   target,
+			Roles:                 []MCPRoleCoverage{},
+			SharedAuthClientRoles: sharedRoles,
+			ExpiresAt:             expiresAt,
+		}, nil
 	}
 	principals := make([]string, 0, len(roles.Roles))
 	for _, role := range roles.Roles {
@@ -600,12 +696,12 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	for _, match := range matches {
 		byRole[match.PrincipalUrn] = append(byRole[match.PrincipalUrn], MCPMatchingPlugin{PluginID: match.PluginID.String(), Name: match.Name, Slug: match.Slug})
 	}
-	now := s.now().UTC()
 	output := GetMCPAccessOutput{
-		ProjectID: projectID.String(),
-		MCP:       target,
-		Roles:     make([]MCPRoleCoverage, 0, len(roles.Roles)),
-		ExpiresAt: now.Add(SubjectReferenceTTL).Format(time.RFC3339),
+		ProjectID:             projectID.String(),
+		MCP:                   target,
+		Roles:                 make([]MCPRoleCoverage, 0, len(roles.Roles)),
+		SharedAuthClientRoles: sharedRoles,
+		ExpiresAt:             now.Add(SubjectReferenceTTL).Format(time.RFC3339),
 	}
 	for _, role := range roles.Roles {
 		grants, unevaluated := roleAuthzGrants(role)
@@ -823,6 +919,15 @@ func roleAuthzGrants(role *accessgen.Role) ([]authz.Grant, bool) {
 			if selector.Disposition != nil {
 				converted[authz.SelectorKeyDisposition] = *selector.Disposition
 			}
+			if selector.ClientType != nil {
+				converted[authz.SelectorKeyClientType] = *selector.ClientType
+			}
+			if selector.ConnectionOwner != nil {
+				converted[authz.SelectorKeyConnectionOwner] = *selector.ConnectionOwner
+			}
+			if selector.UpstreamClient != nil {
+				converted[authz.SelectorKeyUpstreamClient] = *selector.UpstreamClient
+			}
 			if err := authz.ValidateSelector(scope, converted); err != nil {
 				unevaluated = true
 				continue
@@ -968,4 +1073,45 @@ func knownToolAccess(allowed, total int, catalog string, truncated bool) string 
 
 func normalizeAccessQuery(value string) string {
 	return strings.ToLower(strings.Join(strings.Fields(value), " "))
+}
+
+func roleSharedAuthClientAccess(grants []authz.Grant, upstream *types.McpServerAuthentication, projectID string) ([]MCPRoleAuthClientAccess, error) {
+	var access []MCPRoleAuthClientAccess
+	for _, client := range upstream.Clients {
+		if client.Personal {
+			continue
+		}
+		check := authz.MCPAuthClientCheck(client.ID, authz.MCPAuthClientDimensions{ClientType: client.ClientType, ProjectID: projectID, ConnectionOwner: "", UpstreamClient: ""})
+		allowed, err := authz.GrantsAuthorize(grants, check)
+		if err != nil {
+			return nil, fmt.Errorf("evaluate auth client %s: %w", client.ID, err)
+		}
+		blockCheck := check
+		blockCheck.Scope = authz.ScopeMCPBlockedAuth
+		state := "not_granted"
+		switch {
+		case allowed:
+			state = "allowed"
+		case slices.ContainsFunc(grants, func(grant authz.Grant) bool { return authz.GrantAllows(grant, blockCheck) }):
+			state = "blocked"
+		}
+		access = append(access, MCPRoleAuthClientAccess{AuthClientID: client.ID, Name: client.Name, ClientType: client.ClientType, Access: state})
+	}
+	return access, nil
+}
+
+// authClientRole keeps only the role's credential rules.
+func authClientRole(role *accessgen.Role) *accessgen.Role {
+	if role == nil {
+		return nil
+	}
+	scoped := *role
+	scoped.Grants = slices.DeleteFunc(slices.Clone(role.Grants), func(grant *accessgen.RoleGrant) bool {
+		return grant == nil || (authz.Scope(grant.Scope) != authz.ScopeMCPAuth && authz.Scope(grant.Scope) != authz.ScopeMCPBlockedAuth)
+	})
+	return &scoped
+}
+
+func anyAuthClientRule(access []MCPRoleAuthClientAccess) bool {
+	return slices.ContainsFunc(access, func(a MCPRoleAuthClientAccess) bool { return a.Access != "not_granted" })
 }

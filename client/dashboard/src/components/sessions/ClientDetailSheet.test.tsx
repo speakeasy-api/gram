@@ -342,4 +342,12 @@ describe("ClientDetailSheet", () => {
       0,
     );
   });
+  it("shows the loaded registration when its detail request fails", () => {
+    useUserSessionClient.mockReturnValue({ data: undefined, isError: true });
+    renderSheet(dcrClient({ clientName: "Loaded registration" }));
+    expect(screen.getByText("Loaded registration")).toBeTruthy();
+    expect(
+      screen.queryByText("This registration could not be loaded."),
+    ).toBeNull();
+  });
 });

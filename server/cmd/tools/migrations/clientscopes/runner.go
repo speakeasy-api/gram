@@ -271,7 +271,8 @@ func loginsAfterClear(ctx context.Context, db remotesessionsrepo.DBTX, row ListC
 			if err != nil {
 				return nil, fmt.Errorf("list sibling clients: %w", err)
 			}
-			if owns, err = remotesessions.ResourceAppliesAtUpstream(ctx, db, row.OrganizationID, row.ID, siblings, server.Url); err != nil {
+			// The backfill has no flag provider, so it reads binding-derived attachments.
+			if owns, err = remotesessions.ResourceAppliesAtUpstream(ctx, db, row.OrganizationID, row.ID, siblings, server.Url, false); err != nil {
 				return nil, fmt.Errorf("decide resource ownership: %w", err)
 			}
 		}

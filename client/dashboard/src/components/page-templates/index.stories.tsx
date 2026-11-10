@@ -9,7 +9,8 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/Sidebar";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import {
   DangerSettingsSection,
   DetailPage,

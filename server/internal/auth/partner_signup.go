@@ -100,8 +100,8 @@ func (s *Service) signupDestination(ctx context.Context, payload *gen.CallbackPa
 	return s.callbackRedirectURL(ctx, payload)
 }
 
-func (s *Service) redirectPartnerSignupError(ctx context.Context, payload *gen.CallbackPayload, err error, intent *signupIntent) (*gen.CallbackResult, error) {
-	result, resultErr := s.redirectSignupError(ctx, payload, err)
+func (s *Service) redirectPartnerSignupError(ctx context.Context, payload *gen.CallbackPayload, code authErr, err error, intent *signupIntent) (*gen.CallbackResult, error) {
+	result, resultErr := s.redirectSignupError(ctx, payload, code, err)
 	if resultErr != nil || result == nil || intent == nil || intent.PartnerCode == "" {
 		return result, resultErr
 	}

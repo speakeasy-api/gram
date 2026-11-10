@@ -30,6 +30,7 @@ const ACTION_LABELS: Record<RiskPolicy["action"], string> = {
   warn: "Warn & confirm",
   block: "Deny",
   quarantine: "Quarantine",
+  require_approval: "Require approval",
 };
 
 /** Guardrails for one MCP server: the policies scoped to it (plus the ones it

@@ -88,7 +88,7 @@ const createDeviceIssuer = `-- name: CreateDeviceIssuer :one
 INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, allow_wildcard_admission, key_source)
 VALUES ($1, NULL, $2, $3, $4, false, 'device_keys')
 ON CONFLICT (organization_id, name) WHERE deleted IS FALSE AND project_id IS NULL DO NOTHING
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDeviceIssuerParams struct {
@@ -119,6 +119,7 @@ func (q *Queries) CreateDeviceIssuer(ctx context.Context, arg CreateDeviceIssuer
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -127,6 +128,48 @@ func (q *Queries) CreateDeviceIssuer(ctx context.Context, arg CreateDeviceIssuer
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const createNamedWorkloadAdmissionFixture = `-- name: CreateNamedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, workload_issuer_id, subject, name)
+VALUES ($1, $2, $3, $4)
+RETURNING id
+`
+
+type CreateNamedWorkloadAdmissionFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+}
+
+func (q *Queries) CreateNamedWorkloadAdmissionFixture(ctx context.Context, arg CreateNamedWorkloadAdmissionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, createNamedWorkloadAdmissionFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const createOrganizationFixture = `-- name: CreateOrganizationFixture :exec
+INSERT INTO organization_metadata (id, name, slug) VALUES ($1, $2, $3)
+`
+
+type CreateOrganizationFixtureParams struct {
+	ID   string
+	Name string
+	Slug string
+}
+
+// Test fixture: another organization's rows are not reachable through the
+// caller's API.
+func (q *Queries) CreateOrganizationFixture(ctx context.Context, arg CreateOrganizationFixtureParams) error {
+	_, err := q.db.Exec(ctx, createOrganizationFixture, arg.ID, arg.Name, arg.Slug)
+	return err
 }
 
 const createWorkloadAdmission = `-- name: CreateWorkloadAdmission :one
@@ -258,9 +301,9 @@ func (q *Queries) CreateWorkloadDeviceKey(ctx context.Context, arg CreateWorkloa
 }
 
 const createWorkloadIssuer = `-- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateWorkloadIssuerParams struct {
@@ -272,6 +315,7 @@ type CreateWorkloadIssuerParams struct {
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
+	AllowAssertionReuse    pgtype.Bool
 }
 
 func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIssuerParams) (WorkloadIssuer, error) {
@@ -284,6 +328,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,
+		arg.AllowAssertionReuse,
 	)
 	var i WorkloadIssuer
 	err := row.Scan(
@@ -296,6 +341,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -307,7 +353,7 @@ func (q *Queries) CreateWorkloadIssuer(ctx context.Context, arg CreateWorkloadIs
 }
 
 const findDeviceIssuer = `-- name: FindDeviceIssuer :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND project_id IS NULL
@@ -338,6 +384,7 @@ func (q *Queries) FindDeviceIssuer(ctx context.Context, organizationID string) (
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -356,7 +403,7 @@ func (q *Queries) FindDeviceIssuer(ctx context.Context, organizationID string) (
 }
 
 const findWorkloadIssuersByIssuer = `-- name: FindWorkloadIssuersByIssuer :many
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -399,6 +446,7 @@ func (q *Queries) FindWorkloadIssuersByIssuer(ctx context.Context, arg FindWorkl
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -577,6 +625,17 @@ func (q *Queries) GetWorkloadAdmission(ctx context.Context, arg GetWorkloadAdmis
 	return i, err
 }
 
+const getWorkloadAdmissionNameFixture = `-- name: GetWorkloadAdmissionNameFixture :one
+SELECT name FROM workload_identity_admissions WHERE id = $1
+`
+
+func (q *Queries) GetWorkloadAdmissionNameFixture(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getWorkloadAdmissionNameFixture, id)
+	var name pgtype.Text
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getWorkloadAgentAssignmentForSubject = `-- name: GetWorkloadAgentAssignmentForSubject :many
 SELECT id, organization_id, workload_issuer_id, subject, match_kind, agent_id, created_at, updated_at, deleted_at, deleted
 FROM workload_agent_assignments
@@ -636,7 +695,7 @@ func (q *Queries) GetWorkloadAgentAssignmentForSubject(ctx context.Context, arg 
 }
 
 const getWorkloadIssuer = `-- name: GetWorkloadIssuer :one
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -667,6 +726,7 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -675,6 +735,28 @@ func (q *Queries) GetWorkloadIssuer(ctx context.Context, arg GetWorkloadIssuerPa
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getWorkloadIssuerDeletedFixture = `-- name: GetWorkloadIssuerDeletedFixture :one
+SELECT deleted FROM workload_issuers WHERE id = $1
+`
+
+func (q *Queries) GetWorkloadIssuerDeletedFixture(ctx context.Context, id uuid.UUID) (bool, error) {
+	row := q.db.QueryRow(ctx, getWorkloadIssuerDeletedFixture, id)
+	var deleted bool
+	err := row.Scan(&deleted)
+	return deleted, err
+}
+
+const getWorkloadIssuerNameFixture = `-- name: GetWorkloadIssuerNameFixture :one
+SELECT name FROM workload_issuers WHERE id = $1
+`
+
+func (q *Queries) GetWorkloadIssuerNameFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getWorkloadIssuerNameFixture, id)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const listWorkloadAdmissions = `-- name: ListWorkloadAdmissions :many
@@ -779,7 +861,7 @@ func (q *Queries) ListWorkloadAdmissions(ctx context.Context, arg ListWorkloadAd
 
 const listWorkloadIssuers = `-- name: ListWorkloadIssuers :many
 
-SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 FROM workload_issuers
 WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
@@ -818,6 +900,7 @@ func (q *Queries) ListWorkloadIssuers(ctx context.Context, arg ListWorkloadIssue
 			&i.Issuer,
 			&i.JwksUri,
 			&i.AllowWildcardAdmission,
+			&i.AllowAssertionReuse,
 			&i.KeySource,
 			&i.Metadata,
 			&i.CreatedAt,
@@ -1114,7 +1197,7 @@ WHERE organization_id = $1
   AND (project_id IS NULL OR project_id = $2)
   AND id = $3
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type SoftDeleteWorkloadIssuerParams struct {
@@ -1139,6 +1222,7 @@ func (q *Queries) SoftDeleteWorkloadIssuer(ctx context.Context, arg SoftDeleteWo
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -1205,22 +1289,24 @@ SET name = $1,
     description = $2,
     tags = $3,
     jwks_uri = $4,
+    allow_assertion_reuse = $5,
     updated_at = clock_timestamp()
-WHERE organization_id = $5
-  AND (project_id IS NULL OR project_id = $6)
-  AND id = $7
+WHERE organization_id = $6
+  AND (project_id IS NULL OR project_id = $7)
+  AND id = $8
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, key_source, metadata, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse, key_source, metadata, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateWorkloadIssuerParams struct {
-	Name           string
-	Description    pgtype.Text
-	Tags           []string
-	JwksUri        string
-	OrganizationID string
-	ProjectID      uuid.NullUUID
-	ID             uuid.UUID
+	Name                string
+	Description         pgtype.Text
+	Tags                []string
+	JwksUri             string
+	AllowAssertionReuse pgtype.Bool
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	ID                  uuid.UUID
 }
 
 // Writes every editable field, so the caller merges an edit into the row it
@@ -1233,6 +1319,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		arg.Description,
 		arg.Tags,
 		arg.JwksUri,
+		arg.AllowAssertionReuse,
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.ID,
@@ -1248,6 +1335,7 @@ func (q *Queries) UpdateWorkloadIssuer(ctx context.Context, arg UpdateWorkloadIs
 		&i.Issuer,
 		&i.JwksUri,
 		&i.AllowWildcardAdmission,
+		&i.AllowAssertionReuse,
 		&i.KeySource,
 		&i.Metadata,
 		&i.CreatedAt,
@@ -1300,4 +1388,32 @@ func (q *Queries) UpsertWorkloadAgentAssignment(ctx context.Context, arg UpsertW
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const workloadSubjectWasExactlyAdmitted = `-- name: WorkloadSubjectWasExactlyAdmitted :one
+SELECT EXISTS (
+  SELECT 1
+  FROM workload_identity_admissions a
+  JOIN workload_issuers i ON i.id = a.workload_issuer_id
+  WHERE a.organization_id = $1
+    AND i.organization_id = $1
+    AND i.issuer = ANY($2::text[])
+    AND a.subject = $3
+    AND a.match_kind = 'exact'
+)
+`
+
+type WorkloadSubjectWasExactlyAdmittedParams struct {
+	OrganizationID string
+	Issuers        []string
+	Subject        string
+}
+
+// Whether any historical issuer row for these issuer URLs ever admitted the
+// exact subject, including withdrawn admissions and recreated issuers.
+func (q *Queries) WorkloadSubjectWasExactlyAdmitted(ctx context.Context, arg WorkloadSubjectWasExactlyAdmittedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, workloadSubjectWasExactlyAdmitted, arg.OrganizationID, arg.Issuers, arg.Subject)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }

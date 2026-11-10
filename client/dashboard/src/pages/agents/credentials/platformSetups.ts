@@ -1,4 +1,7 @@
 import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
+import { GITHUB_ACTIONS_KEY } from "./githubActions";
+import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
+import { gkeSetupInstructions } from "./GkeSetupInstructions";
 import type { PlatformSetup } from "./setupInstructions";
 import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
 
@@ -14,7 +17,11 @@ import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
  * `Object.prototype` and offered as a tile with nothing behind it.
  */
 const PLATFORM_SETUPS = new Map<string, (entry: CatalogEntry) => PlatformSetup>(
-  [["claude-tag", claudeTagSetupInstructions]],
+  [
+    ["claude-tag", claudeTagSetupInstructions],
+    [GITHUB_ACTIONS_KEY, githubActionsSetupInstructions],
+    ["gke", gkeSetupInstructions],
+  ],
 );
 
 /** Whether this catalog entry can use the guided setup this wizard ships. */

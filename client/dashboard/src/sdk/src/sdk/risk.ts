@@ -3,6 +3,7 @@
  */
 
 import { ClientSDK } from "../lib/sdks.js";
+import { Approvals } from "./approvals.js";
 import { Blocks } from "./blocks.js";
 import { Categories } from "./categories.js";
 import { CustomRules } from "./customrules.js";
@@ -50,6 +51,11 @@ export class Risk extends ClientSDK {
   private _policies?: Policies;
   get policies(): Policies {
     return (this._policies ??= new Policies(this._options));
+  }
+
+  private _approvals?: Approvals;
+  get approvals(): Approvals {
+    return (this._approvals ??= new Approvals(this._options));
   }
 
   private _signals?: Signals;

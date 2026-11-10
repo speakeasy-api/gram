@@ -45,6 +45,10 @@ type Client struct {
 	// listPolicyGrants endpoint.
 	ListPolicyGrantsDoer goahttp.Doer
 
+	// CheckPolicyGrants Doer is the HTTP client used to make requests to the
+	// checkPolicyGrants endpoint.
+	CheckPolicyGrantsDoer goahttp.Doer
+
 	// CreatePolicyGrant Doer is the HTTP client used to make requests to the
 	// createPolicyGrant endpoint.
 	CreatePolicyGrantDoer goahttp.Doer
@@ -118,6 +122,7 @@ func NewClient(
 		RenameDoer:                 doer,
 		ListDelegableGrantsDoer:    doer,
 		ListPolicyGrantsDoer:       doer,
+		CheckPolicyGrantsDoer:      doer,
 		CreatePolicyGrantDoer:      doer,
 		UpdatePolicyGrantDoer:      doer,
 		DeletePolicyGrantDoer:      doer,
@@ -325,6 +330,30 @@ func (c *Client) ListPolicyGrants() goa.Endpoint {
 		resp, err := c.ListPolicyGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("agents", "listPolicyGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// CheckPolicyGrants returns an endpoint that makes HTTP requests to the agents
+// service checkPolicyGrants server.
+func (c *Client) CheckPolicyGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeCheckPolicyGrantsRequest(c.encoder)
+		decodeResponse = DecodeCheckPolicyGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildCheckPolicyGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.CheckPolicyGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agents", "checkPolicyGrants", err)
 		}
 		return decodeResponse(resp)
 	}

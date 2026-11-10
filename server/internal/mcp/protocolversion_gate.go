@@ -268,6 +268,8 @@ func unsupportedProtocolVersionError(id mcpjsonrpc.ID, requested string, support
 			Supported:            slices.Clone(supported),
 			Requested:            requested,
 			RequiredCapabilities: nil,
+			Reason:               "",
+			Retryable:            nil,
 		},
 	}
 }

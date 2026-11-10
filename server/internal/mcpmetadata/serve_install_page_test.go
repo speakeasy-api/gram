@@ -2,8 +2,8 @@ package mcpmetadata_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -24,12 +24,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomains_repo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	deployments_repo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
-	externalmcp_repo "github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	mcpendpoints_repo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcp_repo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/visibility"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
@@ -40,6 +37,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tools_repo "github.com/speakeasy-api/gram/server/internal/tools/repo"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -71,25 +70,9 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a public toolset using the same organization from auth context
-				toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID:         authCtx.ActiveOrganizationID,
-					ProjectID:              *authCtx.ProjectID,
-					Name:                   "Public Test MCP Server",
-					Slug:                   "public-test-toolset",
-					McpSlug:                conv.ToPGText("public-test-toolset"),
-					Description:            conv.ToPGText("A public test MCP server"),
-					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
+				createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+					name: "Public Test MCP Server", slug: "public-test-toolset", mcpSlug: "public-test-toolset", description: "A public test MCP server", visibility: mcpservers.VisibilityPublic,
 				})
-				require.NoError(t, err)
-
-				// Update to make it public (since CreateToolset doesn't have McpIsPublic field)
-				err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-					McpIsPublic: true,
-					ID:          toolset.ID,
-					ProjectID:   toolset.ProjectID,
-				})
-				require.NoError(t, err)
 
 				return authCtx.ActiveOrganizationID
 			},
@@ -106,18 +89,10 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID:         authCtx.ActiveOrganizationID,
-					ProjectID:              *authCtx.ProjectID,
-					Name:                   "Private Test MCP Server",
-					Slug:                   "private-test-toolset",
-					McpSlug:                conv.ToPGText("private-test-toolset"),
-					Description:            conv.ToPGText("A private test MCP server"),
-					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
+				createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+					name: "Private Test MCP Server", slug: "private-test-toolset", mcpSlug: "private-test-toolset", description: "A private test MCP server",
 				})
-				require.NoError(t, err)
-				// Toolset is private by default (mcp_is_public = false)
+				// The canonical server is private by default.
 
 				return authCtx.ActiveOrganizationID
 			},
@@ -136,18 +111,10 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID:         authCtx.ActiveOrganizationID,
-					ProjectID:              *authCtx.ProjectID,
-					Name:                   "Private Org Test MCP Server",
-					Slug:                   "private-org-toolset",
-					McpSlug:                conv.ToPGText("private-org-toolset"),
-					Description:            conv.ToPGText("A private org test MCP server"),
-					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
+				createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+					name: "Private Org Test MCP Server", slug: "private-org-toolset", mcpSlug: "private-org-toolset", description: "A private org test MCP server",
 				})
-				require.NoError(t, err)
-				// Toolset is private by default (mcp_is_public = false)
+				// The canonical server is private by default.
 
 				return authCtx.ActiveOrganizationID
 			},
@@ -175,18 +142,10 @@ func TestServeInstallPage_Authentication(t *testing.T) {
 			setupToolset: func(t *testing.T, ctx context.Context) (toolsetOrgID string) {
 				t.Helper()
 				// Create a private toolset using the same organization from auth context
-				_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-					OrganizationID:         authCtx.ActiveOrganizationID,
-					ProjectID:              *authCtx.ProjectID,
-					Name:                   "Wrong Org Test MCP Server",
-					Slug:                   "wrong-org-toolset",
-					McpSlug:                conv.ToPGText("wrong-org-toolset"),
-					Description:            conv.ToPGText("A wrong org test MCP server"),
-					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-					McpEnabled:             true,
+				createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+					name: "Wrong Org Test MCP Server", slug: "wrong-org-toolset", mcpSlug: "wrong-org-toolset", description: "A wrong org test MCP server",
 				})
-				require.NoError(t, err)
-				// Toolset is private by default (mcp_is_public = false)
+				// The canonical server is private by default.
 
 				return authCtx.ActiveOrganizationID
 			},
@@ -279,31 +238,13 @@ func TestServeInstallPage_Instructions(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
 
 	// Create a public toolset
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Test MCP Server with Instructions",
-		Slug:                   "test-instructions-toolset",
-		McpSlug:                conv.ToPGText("test-instructions-toolset"),
-		Description:            conv.ToPGText("A test MCP server with instructions"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Test MCP Server with Instructions", slug: "test-instructions-toolset", mcpSlug: "test-instructions-toolset", description: "A test MCP server with instructions", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-	toolset.McpIsPublic = true
-	createCanonicalWrapper(t, ctx, testInstance, toolset)
 
 	// Set metadata with instructions
 	instructions := "Test Hub - Search and analyze test data\n\n## Key Capabilities\n\n- Search test records\n- Filter by status\n\n## Usage Patterns\n\nUse search before filtering"
-	_, err = testInstance.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+	_, err := testInstance.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:      conv.PtrEmpty(types.Slug(toolset.Slug)),
 		Instructions:     &instructions,
 		SessionToken:     nil,
@@ -347,25 +288,9 @@ func TestServeInstallPage_ToolDetails(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID, "Project ID should be available from test setup")
 
 	// Create a public toolset
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Tool Details Test Server",
-		Slug:                   "tool-details-test",
-		McpSlug:                conv.ToPGText("tool-details-test"),
-		Description:            conv.ToPGText("A test MCP server with tools"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Tool Details Test Server", slug: "tool-details-test", mcpSlug: "tool-details-test", description: "A test MCP server with tools", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	// Make it public
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	deploymentID, err := deployments_repo.New(testInstance.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
 		ProjectID:      *authCtx.ProjectID,
@@ -484,40 +409,9 @@ func TestServeInstallPage_CustomDomain_WrongDomainReturnsNotFound(t *testing.T) 
 	require.NoError(t, err)
 
 	mcpSlug := "cd-install-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Custom Domain Install Test",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("toolset linked to a custom domain"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Custom Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	// Make it public so auth isn't the reason for rejection.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	// Link the toolset to the custom domain.
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Create a different domain belonging to another organization.
 	otherDomain, err := domainsRepo.CreateCustomDomain(ctx, customdomains_repo.CreateCustomDomainParams{
@@ -591,39 +485,9 @@ func TestServeInstallPage_CustomDomain_CorrectDomainRendersPage(t *testing.T) {
 	require.NoError(t, err)
 
 	mcpSlug := "cd-correct-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Correct Domain Install Test",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("toolset linked to a custom domain"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Correct Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Request through the correct custom domain context.
 	correctCtx := customdomains.WithContext(context.Background(), &customdomains.Context{
@@ -683,39 +547,9 @@ func TestServeInstallPage_CustomDomain_PlatformDomainStillWorks(t *testing.T) {
 	require.NoError(t, err)
 
 	mcpSlug := "cd-platform-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Platform Domain Install Test",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("toolset linked to a custom domain"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Platform Domain Install Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset linked to a custom domain", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	// Make it public and link it to the custom domain.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domain.ID, Valid: true},
-		ToolSelectionMode:      toolset.ToolSelectionMode,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Request via the platform domain — no custom domain in context. The stored
 	// custom-domain binding remains lookup compatibility, not URL authority.
@@ -774,38 +608,9 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 
 	sharedMCPSlug := "shared-slug-" + uuid.New().String()[:8]
 
-	toolsetA, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Org A Toolset",
-		Slug:                   "org-a-" + sharedMCPSlug,
-		McpSlug:                conv.ToPGText(sharedMCPSlug),
-		Description:            conv.ToPGText("toolset on org A, will be deleted"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	toolsetA := createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Org A Toolset", slug: "org-a-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org A, will be deleted", visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainA.ID, Valid: true}, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolsetA.ID,
-		ProjectID:   toolsetA.ProjectID,
-	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolsetA.Name,
-		Description:            toolsetA.Description,
-		DefaultEnvironmentSlug: toolsetA.DefaultEnvironmentSlug,
-		McpSlug:                toolsetA.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolsetA.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domainA.ID, Valid: true},
-		ToolSelectionMode:      toolsetA.ToolSelectionMode,
-		Slug:                   toolsetA.Slug,
-		ProjectID:              toolsetA.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// --- Org B: the active toolset's org ---
 
@@ -843,38 +648,9 @@ func TestServeInstallPage_CustomDomain_DeletedToolsetReturnsNotFound(t *testing.
 	})
 	require.NoError(t, err)
 
-	toolsetB, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         orgBID,
-		ProjectID:              projectBID,
-		Name:                   "Org B Toolset",
-		Slug:                   "org-b-" + sharedMCPSlug,
-		McpSlug:                conv.ToPGText(sharedMCPSlug),
-		Description:            conv.ToPGText("toolset on org B, stays active"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Org B Toolset", slug: "org-b-" + sharedMCPSlug, mcpSlug: sharedMCPSlug, description: "toolset on org B, stays active", organizationID: orgBID, projectID: projectBID, visibility: mcpservers.VisibilityPublic, customDomainID: uuid.NullUUID{UUID: domainB.ID, Valid: true}, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolsetB.ID,
-		ProjectID:   toolsetB.ProjectID,
-	})
-	require.NoError(t, err)
-
-	_, err = testInstance.toolsetRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolsetB.Name,
-		Description:            toolsetB.Description,
-		DefaultEnvironmentSlug: toolsetB.DefaultEnvironmentSlug,
-		McpSlug:                toolsetB.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolsetB.McpEnabled,
-		CustomDomainID:         uuid.NullUUID{UUID: domainB.ID, Valid: true},
-		ToolSelectionMode:      toolsetB.ToolSelectionMode,
-		Slug:                   toolsetB.Slug,
-		ProjectID:              toolsetB.ProjectID,
-	})
-	require.NoError(t, err)
 
 	// Soft-delete toolset A.
 	_, err = testInstance.toolsetRepo.DeleteToolset(ctx, toolsets_repo.DeleteToolsetParams{
@@ -918,24 +694,9 @@ func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "claude-desktop-public-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Public Claude Desktop Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("public toolset with no security inputs"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Public Claude Desktop Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset with no security inputs", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -943,7 +704,7 @@ func TestServeInstallPage_ClaudeDesktop_NoSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -968,17 +729,9 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "claude-desktop-private-" + uuid.New().String()[:8]
-	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private Claude Desktop Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Private Claude Desktop Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "private toolset producing security inputs via gram security mode",
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -986,7 +739,7 @@ func TestServeInstallPage_ClaudeDesktop_WithSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -1012,24 +765,9 @@ func TestServeInstallPage_AntigravityClients_NoSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "antigravity-public-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Public Antigravity Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("public toolset with no security inputs"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Public Antigravity Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset with no security inputs", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1037,7 +775,7 @@ func TestServeInstallPage_AntigravityClients_NoSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -1067,17 +805,9 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "antigravity-private-" + uuid.New().String()[:8]
-	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private Antigravity Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Private Antigravity Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "private toolset producing security inputs via gram security mode",
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1085,7 +815,7 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -1098,11 +828,6 @@ func TestServeInstallPage_AntigravityClients_WithSecurityInputs(t *testing.T) {
 	assert.Contains(t, body, "${VAR}", "should mention Antigravity env-var expansion")
 }
 
-// TestServeInstallPage_PrivateWithGramOAuth_NoAuthorizationHeader regression-tests
-// AGE-1962: a private MCP server with a Speakeasy OAuth proxy attached must not render
-// the SPEAKEASY_AI_API_KEY Authorization header (or speakeasy-ai-environment) in the install snippets.
-// OAuth handles identity auth at the HTTP layer, so the install command must not
-// instruct users to set those headers manually.
 // TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey covers the new
 // OAuth scheme: a private toolset gated by a user_session_issuer (rather than
 // the legacy oauth_proxy/external_oauth fields) delegates identity to OAuth, so
@@ -1116,26 +841,10 @@ func TestServeInstallPage_PrivateWithUserSessionIssuer_NoGramKey(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "private-usi-mcp-" + uuid.NewString()[:8]
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private USI Toolset",
-		Slug:                   "private-usi-ts-" + uuid.NewString()[:8],
-		Description:            conv.ToPGText("Private toolset gated by a user_session_issuer"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
 	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
-
-	_, err = ti.toolsetRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
+	createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Private USI Toolset", slug: "private-usi-ts-" + uuid.NewString()[:8], mcpSlug: mcpSlug, description: "Private toolset gated by a user_session_issuer", issuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -1165,17 +874,9 @@ func TestServeInstallPage_McpServer_UserSessionIssuer_NoGramKey(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Bridged USI Toolset",
-		Slug:                   "bridged-usi-ts-" + uuid.NewString()[:8],
-		Description:            conv.ToPGText("Private toolset bridged by an issuer-gated mcp_server"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("bridged-usi-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Bridged USI Toolset", slug: "bridged-usi-ts-" + uuid.NewString()[:8], mcpSlug: "bridged-usi-mcp-" + uuid.NewString()[:8], description: "Private toolset bridged by an issuer-gated mcp_server",
 	})
-	require.NoError(t, err)
 
 	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
 
@@ -1240,24 +941,10 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 
 	// Create a toolset WITHOUT linking it to any custom domain.
 	mcpSlug := "no-domain-" + uuid.New().String()[:8]
-	_, err = testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "No Domain Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("toolset with no custom domain"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "No Domain Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "toolset with no custom domain",
+		visibility: mcpservers.VisibilityPublic, legacyAlias: true,
 	})
-	require.NoError(t, err)
-
-	// Make the toolset public.
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicBySlug(ctx, toolsets_repo.SetToolsetMCPPublicBySlugParams{
-		McpIsPublic: true,
-		McpSlug:     pgtype.Text{String: mcpSlug, Valid: true},
-	})
-	require.NoError(t, err)
 
 	// Build a request through the platform domain (no custom domain context)
 	// but with a valid session token so that auth context is populated.
@@ -1276,7 +963,84 @@ func TestServeInstallPage_NoDomain_AuthedUserWithOrgDomain(t *testing.T) {
 	require.Equal(t, "text/html", rr.Header().Get("Content-Type"))
 }
 
-func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T) {
+// seedToolWithHeaderSecurity deploys an HTTP tool on the toolset with one apiKey
+// security scheme per environment variable, so the install page has header
+// inputs to filter.
+func seedToolWithHeaderSecurity(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, envVars ...string) {
+	t.Helper()
+
+	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
+		ProjectID:      toolset.ProjectID,
+		OrganizationID: toolset.OrganizationID,
+		UserID:         "test-user",
+		IdempotencyKey: uuid.New().String(),
+	})
+	require.NoError(t, err)
+	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
+		DeploymentID: deploymentID,
+		Status:       "completed",
+	})
+	require.NoError(t, err)
+
+	requirements := make([]map[string][]string, 0, len(envVars))
+	for _, envVar := range envVars {
+		requirements = append(requirements, map[string][]string{envVar: {}})
+		_, err = deployments_repo.New(ti.conn).CreateHTTPSecurity(ctx, deployments_repo.CreateHTTPSecurityParams{
+			Key:                 envVar,
+			DeploymentID:        deploymentID,
+			ProjectID:           uuid.NullUUID{UUID: toolset.ProjectID, Valid: true},
+			Openapiv3DocumentID: uuid.NullUUID{},
+			Type:                pgtype.Text{String: "apiKey", Valid: true},
+			Name:                pgtype.Text{String: envVar, Valid: true},
+			InPlacement:         pgtype.Text{String: "header", Valid: true},
+			Scheme:              pgtype.Text{},
+			BearerFormat:        pgtype.Text{},
+			EnvVariables:        []string{envVar},
+			OauthTypes:          nil,
+			OauthFlows:          nil,
+		})
+		require.NoError(t, err)
+	}
+	security, err := json.Marshal(requirements)
+	require.NoError(t, err)
+
+	toolURN := urn.NewTool(urn.ToolKindHTTP, "test-api", uuid.New().String()[:8])
+	err = tools_repo.New(ti.conn).CreateHTTPToolDefinition(ctx, tools_repo.CreateHTTPToolDefinitionParams{
+		ProjectID:       toolset.ProjectID,
+		DeploymentID:    deploymentID,
+		ToolUrn:         toolURN,
+		Name:            "search_records",
+		UntruncatedName: pgtype.Text{},
+		Summary:         "Search records",
+		Description:     "Search records",
+		Tags:            []string{},
+		HttpMethod:      "GET",
+		Path:            "/api/records",
+		SchemaVersion:   "3.0.0",
+		Schema:          []byte(`{}`),
+		ServerEnvVar:    "TEST_SERVER_URL",
+		Security:        security,
+		HeaderSettings:  []byte(`{}`),
+		QuerySettings:   []byte(`{}`),
+		PathSettings:    []byte(`{}`),
+		ReadOnlyHint:    pgtype.Bool{},
+		DestructiveHint: pgtype.Bool{},
+		IdempotentHint:  pgtype.Bool{},
+		OpenWorldHint:   pgtype.Bool{},
+	})
+	require.NoError(t, err)
+
+	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
+		ToolsetID:     toolset.ID,
+		Version:       1,
+		ToolUrns:      []urn.Tool{toolURN},
+		ResourceUrns:  []urn.Resource{},
+		PredecessorID: uuid.NullUUID{},
+	})
+	require.NoError(t, err)
+}
+
+func TestServeInstallPage_FiltersNonUserProvidedHeaders(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
 
@@ -1285,101 +1049,14 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.NotNil(t, authCtx.ProjectID)
 
 	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
 
-	mcpSlug := "external-mcp-filter-" + uuid.New().String()[:8]
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         orgID,
-		ProjectID:              projectID,
-		Name:                   "External MCP Filter Test",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("public toolset proxying an external MCP server with header configs"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	mcpSlug := "header-filter-" + uuid.New().String()[:8]
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Header Filter Test", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset with header configs", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         "test-user",
-		IdempotencyKey: uuid.New().String(),
-	})
-	require.NoError(t, err)
-
-	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
-		DeploymentID: deploymentID,
-		Status:       "completed",
-	})
-	require.NoError(t, err)
-
-	externalmcpRepo := externalmcp_repo.New(ti.conn)
-	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
-		Name: "test-registry-" + mcpSlug,
-		Url:  "https://mcp.example.com/glyphic",
-	})
-	require.NoError(t, err)
-	attachmentSlug := "glyphic"
-	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
-		DeploymentID:            deploymentID,
-		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
-		Name:                    "Glyphic MCP Server",
-		Slug:                    attachmentSlug,
-		RegistryServerSpecifier: "test-server",
-	})
-	require.NoError(t, err)
-
-	// header_definitions JSON shape matches the unexported externalMCPHeaderDefinition
-	// struct in server/internal/mv/toolset.go. extractExternalMCPHeaderDefinitions
-	// produces variable names by snake-casing "<attachmentSlug>_<headerName>", so the
-	// resulting names here are GLYPHIC_X_API_KEY, GLYPHIC_AUTHORIZATION, GLYPHIC_TRACE_ID.
-	headerDefsJSON := []byte(`[
-		{"name":"X-Api-Key","isRequired":true,"isSecret":true},
-		{"name":"Authorization","isRequired":true,"isSecret":true},
-		{"name":"Trace-Id","isRequired":true,"isSecret":false}
-	]`)
-
-	toolURNString := "tools:externalmcp:" + attachmentSlug + ":proxy"
-	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURNString,
-		Type:                       "proxy",
-		RemoteUrl:                  "https://mcp.example.com/glyphic",
-		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
-		RequiresOauth:              false,
-		OauthVersion:               "none",
-		OauthAuthorizationEndpoint: pgtype.Text{},
-		OauthTokenEndpoint:         pgtype.Text{},
-		OauthRegistrationEndpoint:  pgtype.Text{},
-		OauthScopesSupported:       []string{},
-		HeaderDefinitions:          headerDefsJSON,
-	})
-	require.NoError(t, err)
-
-	toolURN, err := urn.ParseTool(toolURNString)
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
-		ToolsetID:     toolset.ID,
-		Version:       1,
-		ToolUrns:      []urn.Tool{toolURN},
-		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{Valid: false},
-	})
-	require.NoError(t, err)
+	seedToolWithHeaderSecurity(t, ctx, ti, toolset, "ACME_X_API_KEY", "ACME_AUTHORIZATION", "ACME_TRACE_ID")
 
 	mcpRepo := mcpmetadata_repo.New(ti.conn)
-	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{
-		ID: toolset.ID, ProjectID: projectID, ToolsetID: uuid.NullUUID{UUID: toolset.ID, Valid: true}, Visibility: mcpservers.VisibilityPublic,
-	})
-	require.NoError(t, err)
 	metadata, err := mcpRepo.UpsertMetadataByMcpServerID(ctx, mcpmetadata_repo.UpsertMetadataByMcpServerIDParams{
 		McpServerID: toolset.ID,
 		ProjectID:   projectID,
@@ -1391,14 +1068,14 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
 		ProjectID:     projectID,
 		McpMetadataID: metadata.ID,
-		VariableName:  "GLYPHIC_X_API_KEY",
+		VariableName:  "ACME_X_API_KEY",
 		ProvidedBy:    "system",
 	})
 	require.NoError(t, err)
 	_, err = mcpRepo.UpsertEnvironmentConfig(ctx, mcpmetadata_repo.UpsertEnvironmentConfigParams{
 		ProjectID:     projectID,
 		McpMetadataID: metadata.ID,
-		VariableName:  "GLYPHIC_AUTHORIZATION",
+		VariableName:  "ACME_AUTHORIZATION",
 		ProvidedBy:    "none",
 	})
 	require.NoError(t, err)
@@ -1414,12 +1091,12 @@ func TestServeInstallPage_ExternalMCP_FiltersNonUserProvidedHeaders(t *testing.T
 	require.Equal(t, http.StatusOK, installRR.Code)
 
 	body := installRR.Body.String()
-	assert.NotContains(t, body, "GLYPHIC_X_API_KEY",
-		"system-provided external MCP header must not appear in the install snippet")
-	assert.NotContains(t, body, "GLYPHIC_AUTHORIZATION",
-		"omitted external MCP header must not appear in the install snippet")
-	assert.Contains(t, body, "GLYPHIC_TRACE_ID",
-		"user-provided external MCP header (no env config) must still appear in the install snippet")
+	assert.NotContains(t, body, "ACME_X_API_KEY",
+		"system-provided header must not appear in the install snippet")
+	assert.NotContains(t, body, "ACME_AUTHORIZATION",
+		"omitted header must not appear in the install snippet")
+	assert.Contains(t, body, "ACME_TRACE_ID",
+		"user-provided header (no env config) must still appear in the install snippet")
 }
 
 // TestServeInstallPage_McpServer_RemoteBacked_PublicRenders confirms the
@@ -1679,19 +1356,11 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Toolset Bridge",
-		Slug:                   "toolset-bridge-" + uuid.NewString()[:8],
-		Description:            conv.ToPGText("Toolset behind an mcp_server bridge"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("toolset-bridge-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Toolset Bridge", slug: "toolset-bridge-" + uuid.NewString()[:8], mcpSlug: "toolset-bridge-mcp-" + uuid.NewString()[:8], description: "Toolset behind an mcp_server bridge",
 	})
-	require.NoError(t, err)
 
-	// The toolset's own flag stays false: the wrapper's visibility is what
+	// The toolset's canonical server stays private: the bridging server's visibility is what
 	// must open the page.
 	endpointSlug := "bridge-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1708,8 +1377,8 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
-	// The wrapper is public, so the install page renders even though the
-	// toolset's own McpIsPublic flag is false.
+	// The bridging server is public, so the install page renders even though the
+	// toolset's canonical server is private.
 	require.Equal(t, http.StatusOK, rr.Code,
 		"wrapper visibility should drive the gate when the mcp_server bridges to a toolset")
 	body := rr.Body.String()
@@ -1718,7 +1387,7 @@ func TestServeInstallPage_McpServer_ToolsetBacked_BridgesToToolsetRendering(t *t
 
 // TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates is the
 // private counterpart of the bridge test: a private wrapper over a toolset
-// whose legacy McpIsPublic flag is true must NOT serve anonymously — the
+// whose canonical server is public must NOT serve anonymously — the
 // wrapper's visibility is authoritative for wrapper-resolved installs.
 func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *testing.T) {
 	t.Parallel()
@@ -1728,24 +1397,9 @@ func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *test
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Toolset Gate",
-		Slug:                   "toolset-gate-" + uuid.NewString()[:8],
-		Description:            conv.ToPGText("Toolset behind a private mcp_server wrapper"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("toolset-gate-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Toolset Gate", slug: "toolset-gate-" + uuid.NewString()[:8], mcpSlug: "toolset-gate-mcp-" + uuid.NewString()[:8], description: "Toolset behind a private mcp_server wrapper", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	endpointSlug := "gate-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1763,7 +1417,7 @@ func TestServeInstallPage_McpServer_ToolsetBacked_WrapperVisibilityGates(t *test
 	rr := httptest.NewRecorder()
 	require.NoError(t, ti.service.ServeInstallPage(rr, req))
 	require.Equal(t, http.StatusFound, rr.Code,
-		"a private wrapper must gate the install page even when the toolset's legacy public flag is set")
+		"a private wrapper must gate the install page even when the toolset's canonical server is public")
 	assert.Contains(t, rr.Header().Get("Location"), "/login")
 }
 
@@ -1779,25 +1433,9 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Prefer MCP-Server Metadata",
-		Slug:                   "prefer-mcp-" + uuid.NewString()[:8],
-		Description:            pgtype.Text{String: "", Valid: false},
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("prefer-mcp-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Prefer MCP-Server Metadata", slug: "prefer-mcp-" + uuid.NewString()[:8], mcpSlug: "prefer-mcp-" + uuid.NewString()[:8], description: "", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-	toolset.McpIsPublic = true
-	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "prefer-endpoint-" + uuid.NewString()[:8]
 	server, _ := createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1808,7 +1446,7 @@ func TestServeInstallPage_McpServer_PrefersMcpServerKeyedMetadata(t *testing.T) 
 
 	// The toolset's metadata, stored under its canonical wrapper.
 	toolsetDocs := "https://toolset-docs.example.com"
-	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: &toolsetDocs,
 	})
@@ -1848,25 +1486,9 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Toolset Metadata Fallback",
-		Slug:                   "fallback-" + uuid.NewString()[:8],
-		Description:            pgtype.Text{String: "", Valid: false},
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("fallback-" + uuid.NewString()[:8]),
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Toolset Metadata Fallback", slug: "fallback-" + uuid.NewString()[:8], mcpSlug: "fallback-" + uuid.NewString()[:8], description: "", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-	toolset.McpIsPublic = true
-	createCanonicalWrapper(t, ctx, ti, toolset)
 
 	endpointSlug := "fallback-endpoint-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
@@ -1877,7 +1499,7 @@ func TestServeInstallPage_McpServer_FallsBackToToolsetMetadata(t *testing.T) {
 
 	// Only the toolset's metadata exists, under its canonical wrapper.
 	toolsetDocs := "https://toolset.example.com"
-	_, err = ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
+	_, err := ti.service.SetMcpMetadata(ctx, &gen.SetMcpMetadataPayload{
 		ToolsetSlug:              conv.PtrEmpty(types.Slug(toolset.Slug)),
 		ExternalDocumentationURL: &toolsetDocs,
 	})
@@ -2145,23 +1767,15 @@ func TestServeInstallPage_PrivateNetworkUsesControlPlanePage(t *testing.T) {
 func TestServeInstallPage_PrivateOnlyEndpointDoesNotFallBack(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPMetadataService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
 
 	mcpSlug := "private-only-install-" + uuid.NewString()[:8]
 	createMcpServerWithEndpoint(t, ctx, ti, mcpServerFixtureOptions{
 		name: "Private Only Install", visibility: mcpservers.VisibilityPublic,
 		endpointSlug: mcpSlug, networkAccessMode: networkaccess.ModePrivateOnly,
 	})
-	legacy, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Legacy Install Fallback", Slug: "legacy-" + mcpSlug, McpSlug: conv.ToPGText(mcpSlug),
-		Description: conv.ToPGText("must not render"), DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, McpEnabled: true,
+	createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Legacy Install Fallback", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "must not render", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
 	})
-	require.NoError(t, err)
-	require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true, ID: legacy.ID, ProjectID: legacy.ProjectID,
-	}))
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2215,22 +1829,9 @@ func seedMetaBackedEndpoint(t *testing.T, ctx context.Context, ti *testInstance,
 	})
 	require.NoError(t, err)
 
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Legacy Same-Slug Toolset",
-		Slug:                   "legacy-" + mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("legacy toolset that must not shadow the meta endpoint"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Legacy Same-Slug Toolset", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "legacy toolset that must not shadow the meta endpoint", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
 	})
-	require.NoError(t, err)
-	require.NoError(t, toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
 
 	return meta
 }
@@ -2667,22 +2268,9 @@ func TestServeInstallPage_DisabledServerBackend_ReturnsNotFound(t *testing.T) {
 
 	// A public legacy toolset shares the slug; a wrongly-falling-through
 	// legacy lookup would render it instead of the not-found page.
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Shadowing Legacy Toolset",
-		Slug:                   "legacy-" + mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("must not shadow the disabled wrapper"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Shadowing Legacy Toolset", slug: "legacy-" + mcpSlug, mcpSlug: mcpSlug, description: "must not shadow the disabled wrapper", visibility: mcpservers.VisibilityPublic, legacyAlias: true,
 	})
-	require.NoError(t, err)
-	require.NoError(t, toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	}))
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2708,24 +2296,9 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "chatgpt-desktop-public-" + uuid.New().String()[:8]
-	toolset, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Public ChatGPT Desktop Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("public toolset with no security inputs"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Public ChatGPT Desktop Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset with no security inputs", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(testInstance.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2733,7 +2306,7 @@ func TestServeInstallPage_ChatGPTDesktop_NoSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -2763,17 +2336,9 @@ func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "chatgpt-desktop-private-" + uuid.New().String()[:8]
-	_, err := testInstance.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "Private ChatGPT Desktop Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("private toolset producing security inputs via gram security mode"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	createServedToolset(t, ctx, testInstance, servedToolsetOptions{
+		name: "Private ChatGPT Desktop Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "private toolset producing security inputs via gram security mode",
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2781,7 +2346,7 @@ func TestServeInstallPage_ChatGPTDesktop_WithSecurityInputs(t *testing.T) {
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = testInstance.service.ServeInstallPage(rr, req)
+	err := testInstance.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -2816,26 +2381,10 @@ func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	mcpSlug := "chatgpt-desktop-oauth-" + uuid.NewString()[:8]
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         authCtx.ActiveOrganizationID,
-		ProjectID:              *authCtx.ProjectID,
-		Name:                   "OAuth ChatGPT Desktop Toolset",
-		Slug:                   "chatgpt-desktop-oauth-ts-" + uuid.NewString()[:8],
-		Description:            conv.ToPGText("OAuth-gated toolset for ChatGPT Desktop install instructions"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText(mcpSlug),
-		McpEnabled:             true,
-	})
-	require.NoError(t, err)
-
 	usi := createUserSessionIssuer(t, ctx, ti, *authCtx.ProjectID)
-
-	_, err = ti.toolsetRepo.UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
+	createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "OAuth ChatGPT Desktop Toolset", slug: "chatgpt-desktop-oauth-ts-" + uuid.NewString()[:8], mcpSlug: mcpSlug, description: "OAuth-gated toolset for ChatGPT Desktop install instructions", issuerID: uuid.NullUUID{UUID: usi.ID, Valid: true},
 	})
-	require.NoError(t, err)
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2843,7 +2392,7 @@ func TestServeInstallPage_ChatGPTDesktop_OAuth(t *testing.T) {
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = ti.service.ServeInstallPage(rr, req)
+	err := ti.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -2868,84 +2417,11 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	projectID := *authCtx.ProjectID
-	orgID := authCtx.ActiveOrganizationID
-
 	mcpSlug := "chatgpt-desktop-headers-" + uuid.New().String()[:8]
-	toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-		OrganizationID:         orgID,
-		ProjectID:              projectID,
-		Name:                   "Public ChatGPT Desktop Headers Toolset",
-		Slug:                   mcpSlug,
-		McpSlug:                conv.ToPGText(mcpSlug),
-		Description:            conv.ToPGText("public toolset that needs a user-provided header"),
-		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
+	toolset := createServedToolset(t, ctx, ti, servedToolsetOptions{
+		name: "Public ChatGPT Desktop Headers Toolset", slug: mcpSlug, mcpSlug: mcpSlug, description: "public toolset that needs a user-provided header", visibility: mcpservers.VisibilityPublic,
 	})
-	require.NoError(t, err)
-
-	err = toolsets_repo.New(ti.conn).SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-		McpIsPublic: true,
-		ID:          toolset.ID,
-		ProjectID:   toolset.ProjectID,
-	})
-	require.NoError(t, err)
-
-	deploymentID, err := deployments_repo.New(ti.conn).InsertDeployment(ctx, deployments_repo.InsertDeploymentParams{
-		ProjectID:      projectID,
-		OrganizationID: orgID,
-		UserID:         "test-user",
-		IdempotencyKey: uuid.New().String(),
-	})
-	require.NoError(t, err)
-	err = deployments_repo.New(ti.conn).CreateDeploymentStatus(ctx, deployments_repo.CreateDeploymentStatusParams{
-		DeploymentID: deploymentID,
-		Status:       "completed",
-	})
-	require.NoError(t, err)
-
-	externalmcpRepo := externalmcp_repo.New(ti.conn)
-	registryID, err := externalmcpRepo.CreateMCPRegistry(ctx, externalmcp_repo.CreateMCPRegistryParams{
-		Name: "test-registry-" + mcpSlug,
-		Url:  "https://mcp.example.com/acme",
-	})
-	require.NoError(t, err)
-	attachment, err := externalmcpRepo.CreateExternalMCPAttachment(ctx, externalmcp_repo.CreateExternalMCPAttachmentParams{
-		DeploymentID:            deploymentID,
-		RegistryID:              uuid.NullUUID{UUID: registryID, Valid: true},
-		Name:                    "Acme MCP Server",
-		Slug:                    "acme",
-		RegistryServerSpecifier: "test-server",
-	})
-	require.NoError(t, err)
-
-	toolURNString := "tools:externalmcp:acme:proxy"
-	_, err = externalmcpRepo.CreateExternalMCPToolDefinition(ctx, externalmcp_repo.CreateExternalMCPToolDefinitionParams{
-		ExternalMcpAttachmentID:    attachment.ID,
-		ToolUrn:                    toolURNString,
-		Type:                       "proxy",
-		RemoteUrl:                  "https://mcp.example.com/acme",
-		TransportType:              externalmcp_types.TransportTypeStreamableHTTP,
-		RequiresOauth:              false,
-		OauthVersion:               "none",
-		OauthAuthorizationEndpoint: pgtype.Text{},
-		OauthTokenEndpoint:         pgtype.Text{},
-		OauthRegistrationEndpoint:  pgtype.Text{},
-		OauthScopesSupported:       []string{},
-		HeaderDefinitions:          []byte(`[{"name":"X-Api-Key","isRequired":true,"isSecret":true}]`),
-	})
-	require.NoError(t, err)
-
-	toolURN, err := urn.ParseTool(toolURNString)
-	require.NoError(t, err)
-	_, err = toolsets_repo.New(ti.conn).CreateToolsetVersion(ctx, toolsets_repo.CreateToolsetVersionParams{
-		ToolsetID:     toolset.ID,
-		Version:       1,
-		ToolUrns:      []urn.Tool{toolURN},
-		ResourceUrns:  []urn.Resource{},
-		PredecessorID: uuid.NullUUID{Valid: false},
-	})
-	require.NoError(t, err)
+	seedToolWithHeaderSecurity(t, ctx, ti, toolset, "ACME_X_API_KEY")
 
 	req := httptest.NewRequest("GET", "/mcp/"+mcpSlug+"/install", nil)
 	rctx := chi.NewRouteContext()
@@ -2953,7 +2429,7 @@ func TestServeInstallPage_ChatGPTDesktop_PublicWithHeaders(t *testing.T) {
 	req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 
 	rr := httptest.NewRecorder()
-	err = ti.service.ServeInstallPage(rr, req)
+	err := ti.service.ServeInstallPage(rr, req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, rr.Code)
 
@@ -2990,7 +2466,8 @@ func installTargetTemplateHTML(t *testing.T, body, target string) string {
 // Legacy install pages must enforce the same canonical-wrapper gate as serving.
 func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 	t.Parallel()
-	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled} {
+	const wrapperless = "no-wrapper"
+	for _, visibility := range []string{mcpservers.VisibilityPublic, mcpservers.VisibilityPrivate, mcpservers.VisibilityDisabled, wrapperless} {
 		t.Run(visibility, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPMetadataService(t)
@@ -2998,40 +2475,36 @@ func TestServeInstallPage_LegacyCanonicalWrapper(t *testing.T) {
 			require.True(t, ok)
 			require.NotNil(t, authCtx.ProjectID)
 			slug := "legacy-install-" + uuid.NewString()
-			toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
-				OrganizationID: authCtx.ActiveOrganizationID,
-				ProjectID:      *authCtx.ProjectID,
-				Name:           "Legacy Install Fixture",
-				Slug:           slug,
-				McpSlug:        conv.ToPGText(slug),
-				McpEnabled:     true,
-			})
-			require.NoError(t, err)
-			require.NoError(t, ti.toolsetRepo.SetToolsetMCPPublicByID(ctx, toolsets_repo.SetToolsetMCPPublicByIDParams{
-				ID: toolset.ID, ProjectID: toolset.ProjectID, McpIsPublic: true,
-			}))
-			// No endpoint row: force lookup through the legacy slug, with the
-			// canonical wrapper ID equal to the toolset ID.
-			_, err = mcpservers_repo.New(ti.conn).CreateMCPServer(ctx, mcpservers_repo.CreateMCPServerParams{
-				ID:                toolset.ID,
-				ProjectID:         toolset.ProjectID,
-				Name:              conv.ToPGText("Canonical Wrapper"),
-				Slug:              conv.ToPGText("wrapper-" + slug),
-				ToolsetID:         uuid.NullUUID{UUID: toolset.ID, Valid: true},
-				Visibility:        visibility,
-				NetworkAccessMode: networkaccess.Storage(networkaccess.ModePublicOnly),
-			})
-			require.NoError(t, err)
+			if visibility == wrapperless {
+				toolset, err := ti.toolsetRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+					OrganizationID:         authCtx.ActiveOrganizationID,
+					ProjectID:              *authCtx.ProjectID,
+					Name:                   "Legacy Install Fixture",
+					Slug:                   slug,
+					Description:            pgtype.Text{String: "", Valid: false},
+					DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+				})
+				require.NoError(t, err)
+				testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, slug, uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+			} else {
+				// No endpoint row: force lookup through the legacy slug.
+				createServedToolset(t, ctx, ti, servedToolsetOptions{
+					name: "Legacy Install Fixture", slug: slug, mcpSlug: slug, visibility: visibility, legacyAlias: true,
+				})
+			}
 			req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/install", nil)
 			rctx := chi.NewRouteContext()
 			rctx.URLParams.Add("mcpSlug", slug)
 			req = req.WithContext(context.WithValue(context.Background(), chi.RouteCtxKey, rctx))
 			rr := httptest.NewRecorder()
 			require.NoError(t, ti.service.ServeInstallPage(rr, req))
-			if visibility == mcpservers.VisibilityPublic {
+			switch visibility {
+			case mcpservers.VisibilityPublic:
 				require.Equal(t, http.StatusOK, rr.Code)
-			} else {
-				require.Equal(t, http.StatusNotFound, rr.Code)
+			case mcpservers.VisibilityPrivate:
+				require.Equal(t, http.StatusFound, rr.Code, "a private wrapper sends the visitor to sign in")
+			default:
+				require.Equal(t, http.StatusNotFound, rr.Code, "a toolset without an enabled canonical server is not hosted")
 			}
 		})
 	}

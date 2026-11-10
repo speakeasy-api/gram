@@ -15,7 +15,7 @@ func TestInMemoryGitHubPublisherCreatesEmptyMainBranch(t *testing.T) {
 	publisher := NewInMemoryGitHubPublisher()
 	require.NoError(t, publisher.CreateRepo(t.Context(), 1, "local", "fixture", true))
 
-	files, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main")
+	files, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main", nil)
 	require.NoError(t, err)
 	require.Empty(t, files)
 }
@@ -29,7 +29,7 @@ func TestInMemoryGitHubPublisherStoresDefensiveCopies(t *testing.T) {
 	require.NoError(t, err)
 
 	files["platform-mcp/.mcp.json"][0] = 'x'
-	stored, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main")
+	stored, err := publisher.GetRepoFiles(t.Context(), 1, "local", "fixture", "main", nil)
 	require.NoError(t, err)
 	require.JSONEq(t, `{"mcpServers":{}}`, string(stored["platform-mcp/.mcp.json"]))
 

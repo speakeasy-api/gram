@@ -51,6 +51,7 @@ function initialContext(input: Input): Context {
     error: null,
     autoRegistering: false,
     result: null,
+    toolsetId: input.toolsetId,
     toolsetSlug: input.toolsetSlug,
     toolsetName: input.toolsetName,
     activeOrganizationId: input.activeOrganizationId,
@@ -578,6 +579,7 @@ export const oauthWizardMachine = setup({
           invoke: {
             src: "provisionUserSession",
             input: ({ context }): ProvisionUserSessionInput => ({
+              toolsetId: context.toolsetId,
               toolsetSlug: context.toolsetSlug,
               authorizationEndpoint: context.proxy.authorizationEndpoint,
               tokenEndpoint: context.proxy.tokenEndpoint,

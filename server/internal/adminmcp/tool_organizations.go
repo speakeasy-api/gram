@@ -83,8 +83,11 @@ type OrganizationSummary struct {
 	AccountType string  `json:"account_type"`
 	MemberCount int     `json:"member_count"`
 	DisabledAt  *string `json:"disabled_at,omitempty"`
-	CreatedAt   string  `json:"created_at"`
-	UpdatedAt   string  `json:"updated_at"`
+	// Staff-entered link to the organization's adoption dashboard, set on the
+	// admin overview. Read-only here.
+	AdoptionDashboardURL *string `json:"adoption_dashboard_url,omitempty"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
 }
 
 type OrganizationTrial struct {
@@ -149,7 +152,7 @@ func registerOrganizationTools(server *mcp.Server, reads OrganizationReader) {
 	mcp.AddTool(server, &mcp.Tool{
 		Name:        "get_organization_summary",
 		Title:       "Get Organization Summary",
-		Description: "Read a bounded organization account summary for an exact canonical organization ID. Does not return provider identifiers or credentials.",
+		Description: "Read a bounded organization account summary for an exact canonical organization ID, including the staff-entered adoption dashboard link when one is set. Does not return provider identifiers or credentials.",
 		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true},
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, input OrganizationIDInput) (*mcp.CallToolResult, OrganizationSummary, error) {
 		org, err := readExactOrganization(ctx, reads, input.OrganizationID)
@@ -159,7 +162,8 @@ func registerOrganizationTools(server *mcp.Server, reads OrganizationReader) {
 		return nil, OrganizationSummary{
 			ID: org.ID, Name: org.Name, Slug: org.Slug, AccountType: org.AccountType,
 			MemberCount: org.MemberCount, DisabledAt: org.DisabledAt,
-			CreatedAt: org.CreatedAt, UpdatedAt: org.UpdatedAt,
+			AdoptionDashboardURL: org.AdoptionDashboardURL,
+			CreatedAt:            org.CreatedAt, UpdatedAt: org.UpdatedAt,
 		}, nil
 	})
 

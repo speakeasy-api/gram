@@ -86,6 +86,10 @@ type Service interface {
 	UpdateDirectoryReviewSettings(context.Context, *UpdateDirectoryReviewSettingsPayload) (res *DirectoryReviewSettings, err error)
 	// List all available scopes and their resource types.
 	ListScopes(context.Context, *ListScopesPayload) (res *ListScopesResult, err error)
+	// List the scopes an agent policy may hold, as the catalogue describes them.
+	// Needs a session and no organization grant: an owner configuring their own
+	// agent holds no RBAC grant, and the list is product configuration.
+	ListAgentPolicyScopes(context.Context, *ListAgentPolicyScopesPayload) (res *ListAgentPolicyScopesResult, err error)
 	// List all team members with their role assignments.
 	ListMembers(context.Context, *ListMembersPayload) (res *ListMembersResult, err error)
 	// List the current user's effective grants, including inherited role grants.
@@ -183,6 +187,32 @@ type Service interface {
 	// a resource is distributed through, not who may use it, so it does not widen
 	// this list.
 	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
+	// Give one principal (a member, role, agent, or everyone) a scope on a
+	// resource or activity boundary until a deadline, without changing role
+	// assignments. Once the deadline passes the grant stops authorizing new
+	// requests, with no role change or sign-out. Fails with a conflict when the
+	// principal already holds the same grant permanently, or temporarily (renew
+	// that one instead). An expired grant for the same boundary is restarted.
+	// Requires org:admin. An administrator may give themselves temporary access;
+	// the audit event records that it was self-granted. Session only: the grant is
+	// attributed to the person who gave it.
+	CreateTemporaryGrant(context.Context, *CreateTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// List the temporary grants given to one principal, with their boundary,
+	// deadline and remaining time, soonest deadline first. Organization
+	// administrators may list any principal's grants; anyone else may list only
+	// grants given to themselves (their own user:<id>). Each active grant says
+	// which other grants would still give the principal the same access once it
+	// ends. Revoked grants are removed and appear only in the audit log.
+	ListTemporaryGrants(context.Context, *ListTemporaryGrantsPayload) (res *ListTemporaryGrantsResult, err error)
+	// Move an active temporary grant's deadline, earlier or later. The boundary
+	// cannot change: to widen access, give a new grant. An expired grant cannot be
+	// renewed; give it again instead. Requires org:admin.
+	RenewTemporaryGrant(context.Context, *RenewTemporaryGrantPayload) (res *TemporaryGrant, err error)
+	// End an active temporary grant before its deadline. Only this grant ends: a
+	// permanent grant is never removed this way, and the principal's roles and
+	// other grants giving the same access are left alone. Requires org:admin,
+	// except that a member may end a grant given directly to themselves.
+	RevokeTemporaryGrant(context.Context, *RevokeTemporaryGrantPayload) (res *TemporaryGrant, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -205,7 +235,7 @@ const ServiceName = "access"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [40]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess"}
+var MethodNames = [45]string{"listRoles", "getRole", "createRole", "updateRole", "deleteRole", "listDirectoryRoleMappings", "listDirectoryPeople", "syncDirectoryGroups", "setDirectoryRoleMapping", "setDirectoryRoleMappings", "deleteDirectoryRoleMapping", "previewDirectoryRoleSetup", "applyDirectoryRoleSetup", "listDirectoryReviewItems", "resolveDirectoryReviewItem", "getDirectoryReviewSettings", "updateDirectoryReviewSettings", "listScopes", "listAgentPolicyScopes", "listMembers", "listGrants", "updateMemberRoles", "listShadowMCPInventory", "getShadowMCPInventoryServer", "updateShadowMCPInventoryServerName", "listShadowMCPInventoryUsers", "listShadowMCPInventoryServersForUser", "resolveShadowMCPInventoryRequest", "listAIDetections", "listEmployeeAIDetections", "listAIDetectionUsers", "setAIToolDecision", "listResourceAudience", "setResourceAudience", "listAudienceOptions", "explainResourceAccess", "requestAccess", "listChallenges", "listChallengeBuckets", "resolveChallenge", "listIdentityAccess", "createTemporaryGrant", "listTemporaryGrants", "renewTemporaryGrant", "revokeTemporaryGrant"}
 
 // One AI detection target aggregated across an organization's device-agent
 // scan reports.
@@ -534,6 +564,28 @@ type CreateRolePayload struct {
 	// Optional agent IDs to assign to this role on creation. Scopes an agent
 	// cannot hold at runtime are simply not granted to it.
 	AgentIds []string
+}
+
+// CreateTemporaryGrantPayload is the payload type of the access service
+// createTemporaryGrant method.
+type CreateTemporaryGrantPayload struct {
+	SessionToken *string
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn string
+	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
+	// to read, use or manage resources can be given temporarily; org:admin,
+	// blocklist, auth client, risk policy and machine scopes cannot.
+	Scope string
+	// The resource or activity boundary. Omit to cover every resource of the
+	// scope's kind.
+	Selector *Selector
+	// When the grant stops authorizing new requests. At least five minutes and at
+	// most 24 hours from now.
+	ExpiresAt string
+	// Why the access is needed, recorded in the audit log.
+	Reason *string
 }
 
 // DeleteDirectoryRoleMappingPayload is the payload type of the access service
@@ -881,6 +933,19 @@ type ListAIDetectionsResult struct {
 	Detections []*AIDetection
 }
 
+// ListAgentPolicyScopesPayload is the payload type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesPayload struct {
+	SessionToken *string
+}
+
+// ListAgentPolicyScopesResult is the result type of the access service
+// listAgentPolicyScopes method.
+type ListAgentPolicyScopesResult struct {
+	// The scopes an agent policy may hold, in catalogue order.
+	Scopes []*ScopeDefinition
+}
+
 // ListAudienceOptionsPayload is the payload type of the access service
 // listAudienceOptions method.
 type ListAudienceOptionsPayload struct {
@@ -934,6 +999,8 @@ type ListChallengesPayload struct {
 	PrincipalUrn *string
 	// Filter by scope.
 	Scope *string
+	// Leave out checks of these scopes, from the rows and from the total.
+	ExcludeScopes []string
 	// Filter to a specific project.
 	ProjectID *string
 	// Filter by resolution state. True = only resolved, false = only unresolved.
@@ -1113,6 +1180,9 @@ type ListScopesPayload struct {
 type ListScopesResult struct {
 	// The scopes available in access control.
 	Scopes []*ScopeDefinition
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Tasks []*ScopeTask
 }
 
 // ListShadowMCPInventoryPayload is the payload type of the access service
@@ -1170,6 +1240,25 @@ type ListShadowMCPInventoryUsersResult struct {
 	NextCursor *string
 }
 
+// ListTemporaryGrantsPayload is the payload type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsPayload struct {
+	// The principal whose grants to list, e.g. user:<id>, role:organization:<id>
+	// or agent:<id>. Members who are not organization administrators may only pass
+	// their own user URN.
+	PrincipalUrn string
+	// Include grants whose deadline has passed.
+	IncludeExpired bool
+	SessionToken   *string
+}
+
+// ListTemporaryGrantsResult is the result type of the access service
+// listTemporaryGrants method.
+type ListTemporaryGrantsResult struct {
+	// Temporary grants, soonest deadline first. At most 500 are returned.
+	Grants []*TemporaryGrant
+}
+
 // ListUserGrantsResult is the result type of the access service listGrants
 // method.
 type ListUserGrantsResult struct {
@@ -1182,6 +1271,16 @@ type ListUserGrantsResult struct {
 type PreviewDirectoryRoleSetupPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
+}
+
+// RenewTemporaryGrantPayload is the payload type of the access service
+// renewTemporaryGrant method.
+type RenewTemporaryGrantPayload struct {
+	SessionToken *string
+	// The temporary grant to renew.
+	ID string
+	// The new deadline. At least five minutes and at most 24 hours from now.
+	ExpiresAt string
 }
 
 // RequestAccessPayload is the payload type of the access service requestAccess
@@ -1333,6 +1432,14 @@ type ResourceAudienceRolePlugin struct {
 	Slug string
 }
 
+// RevokeTemporaryGrantPayload is the payload type of the access service
+// revokeTemporaryGrant method.
+type RevokeTemporaryGrantPayload struct {
+	// The temporary grant to end.
+	ID           string
+	SessionToken *string
+}
+
 // Role is the result type of the access service getRole method.
 type Role struct {
 	// Unique role identifier.
@@ -1367,10 +1474,25 @@ type RoleGrant struct {
 type ScopeDefinition struct {
 	// Unique scope identifier.
 	Slug string
-	// What this scope protects.
+	// Short name for the permission as people see it, e.g. "View tool logs".
+	Label string
+	// What a holder of this scope can do and, where it matters, what the scope
+	// does not include.
 	Description string
 	// The type of resource this scope applies to.
 	ResourceType string
+	// How the dashboard groups the permission. Differs from resource_type where
+	// one resource type carries several permission families: plugins and tool logs
+	// are checked against a project but are not project permissions.
+	Category string
+	// Whether granting this scope exposes other members' private activity or
+	// allows destructive administration. Clients warn before granting it.
+	Sensitive bool
+	// Why the scope is sensitive. Absent when sensitive is false.
+	Sensitivity *string
+	// User-visible scopes a grant of this scope also satisfies, one step down:
+	// org:admin also satisfies org:read. Empty when the scope implies nothing else.
+	SubScopes []string
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string
@@ -1380,6 +1502,15 @@ type ScopeDefinition struct {
 	AgentEligible bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
+}
+
+type ScopeTask struct {
+	// Stable identifier of the task.
+	Slug string
+	// What a person is trying to do.
+	Label string
+	// Every scope the task needs end to end.
+	Scopes []string
 }
 
 // A constraint that narrows which resources a grant applies to.
@@ -1402,10 +1533,10 @@ type Selector struct {
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).
 	Tool *string
-	// Project filter (MCP, environment, assistant, mcp:auth, and mcp:blocked_auth
-	// scopes). When set with resource_id='*', grants access to every resource of
-	// the kind in the project. For mcp:auth and mcp:blocked_auth it is the project
-	// of the server using the client.
+	// Project filter (MCP, environment, assistant, inference, mcp:auth, and
+	// mcp:blocked_auth scopes). When set with resource_id='*', grants access to
+	// every resource of the kind in the project. For mcp:auth and mcp:blocked_auth
+	// it is the project of the server using the client.
 	ProjectID *string
 	// Server URL filter (risk policy scopes only). Include the URI scheme, for
 	// example https://api.example.com.
@@ -1659,6 +1790,36 @@ type SyncDirectoryGroupsPayload struct {
 type SyncDirectoryGroupsResult struct {
 	// Number of groups WorkOS returned across the organization's directories.
 	GroupCount int
+}
+
+// TemporaryGrant is the result type of the access service createTemporaryGrant
+// method.
+type TemporaryGrant struct {
+	// Temporary grant ID.
+	ID string
+	// Canonical principal URN holding the access.
+	PrincipalUrn string
+	// The scope given.
+	Scope string
+	// The resource or activity boundary.
+	Selector *Selector
+	// When the grant stops, or stopped, authorizing new requests.
+	ExpiresAt string
+	// active: authorizing requests. expired: its deadline passed. revoked: ended
+	// early by this request.
+	Status string
+	// Seconds until the deadline while active; 0 once ended.
+	RemainingSeconds int64
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
+	OtherAccess []string
+	// When the grant was given, or restarted after expiring.
+	CreatedAt string
+	UpdatedAt string
 }
 
 // UpdateDirectoryReviewSettingsPayload is the payload type of the access

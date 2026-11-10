@@ -23,6 +23,7 @@ type Client struct {
 	RenameEndpoint                 goa.Endpoint
 	ListDelegableGrantsEndpoint    goa.Endpoint
 	ListPolicyGrantsEndpoint       goa.Endpoint
+	CheckPolicyGrantsEndpoint      goa.Endpoint
 	CreatePolicyGrantEndpoint      goa.Endpoint
 	UpdatePolicyGrantEndpoint      goa.Endpoint
 	DeletePolicyGrantEndpoint      goa.Endpoint
@@ -38,7 +39,7 @@ type Client struct {
 }
 
 // NewClient initializes a "agents" service client given the endpoints.
-func NewClient(listSessions, revokeSession, list, create, get, rename, listDelegableGrants, listPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, listConnectionBlocks, blockAgentOnConnection, removeConnectionBlock, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
+func NewClient(listSessions, revokeSession, list, create, get, rename, listDelegableGrants, listPolicyGrants, checkPolicyGrants, createPolicyGrant, updatePolicyGrant, deletePolicyGrant, listConnectionBlocks, blockAgentOnConnection, removeConnectionBlock, transfer, reassign, suspend, resume, revoke, delete_ goa.Endpoint) *Client {
 	return &Client{
 		ListSessionsEndpoint:           listSessions,
 		RevokeSessionEndpoint:          revokeSession,
@@ -48,6 +49,7 @@ func NewClient(listSessions, revokeSession, list, create, get, rename, listDeleg
 		RenameEndpoint:                 rename,
 		ListDelegableGrantsEndpoint:    listDelegableGrants,
 		ListPolicyGrantsEndpoint:       listPolicyGrants,
+		CheckPolicyGrantsEndpoint:      checkPolicyGrants,
 		CreatePolicyGrantEndpoint:      createPolicyGrant,
 		UpdatePolicyGrantEndpoint:      updatePolicyGrant,
 		DeletePolicyGrantEndpoint:      deletePolicyGrant,
@@ -235,6 +237,29 @@ func (c *Client) ListPolicyGrants(ctx context.Context, p *ListPolicyGrantsPayloa
 		return
 	}
 	return ires.([]*AgentPolicyGrant), nil
+}
+
+// CheckPolicyGrants calls the "checkPolicyGrants" endpoint of the "agents"
+// service.
+// CheckPolicyGrants may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) CheckPolicyGrants(ctx context.Context, p *CheckPolicyGrantsPayload) (res *CheckAgentPolicyGrantsResult, err error) {
+	var ires any
+	ires, err = c.CheckPolicyGrantsEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*CheckAgentPolicyGrantsResult), nil
 }
 
 // CreatePolicyGrant calls the "createPolicyGrant" endpoint of the "agents"

@@ -51,6 +51,7 @@ func (l *Logger) LogMCPMetadataUpdate(ctx context.Context, dbtx repo.DBTX, event
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -108,6 +109,7 @@ func (l *Logger) LogMCPMetadataUpdateForMcpServer(ctx context.Context, dbtx repo
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

@@ -50,7 +50,7 @@ type RecommendedSet struct {
 
 // CompileRecommended compiles the centrally maintained category scope registry.
 func CompileRecommended(eng *celenv.Engine) (RecommendedSet, error) {
-	out := RecommendedSet{scopes: map[categories.Category]CompiledScope{}}
+	out := RecommendedSet{scopes: make(map[categories.Category]CompiledScope)}
 	for _, rec := range recommendedscopes.All() {
 		if !rec.Applicable || (rec.ScopeInclude == "" && rec.ScopeExempt == "") {
 			continue
@@ -107,7 +107,6 @@ func effectiveScope(rec RecommendedSet, specified map[categories.Category]Compil
 type CategoryScopes struct {
 	rec       RecommendedSet
 	specified map[categories.Category]CompiledScope
-	metrics   *riskMetrics
 }
 
 // CategoryScopeMasks contains the per-message category scope exclusions.
@@ -115,11 +114,10 @@ type CategoryScopeMasks struct {
 	categoryOut map[categories.Category][]bool
 }
 
-func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope, metrics *riskMetrics) CategoryScopes {
+func NewCategoryScopes(rec RecommendedSet, specified map[categories.Category]CompiledScope) CategoryScopes {
 	return CategoryScopes{
 		rec:       rec,
 		specified: specified,
-		metrics:   metrics,
 	}
 }
 
@@ -183,7 +181,7 @@ func (s CategoryScope) FilterFindings(view MessageView, findings []scanners.Find
 // for the batch. Identical CEL programs are evaluated once per message and
 // shared by every category using that program.
 func (s CategoryScopes) Masks(_ context.Context, messages []batchMessage) CategoryScopeMasks {
-	masks := CategoryScopeMasks{categoryOut: map[categories.Category][]bool{}}
+	masks := CategoryScopeMasks{categoryOut: make(map[categories.Category][]bool)}
 	if len(s.rec.scopes) == 0 && len(s.specified) == 0 {
 		return masks
 	}
@@ -232,30 +230,18 @@ func (m CategoryScopeMasks) AdmitsAny(i int, cats []categories.Category) bool {
 	return false
 }
 
-func (m CategoryScopeMasks) Subset(messages []batchMessage, contents []string, cats []categories.Category) ([]batchMessage, []string, []int) {
-	if len(messages) == 0 {
-		return nil, nil, nil
-	}
-	// Without category masks the prefilter is a no-op; policy-scope drops stay post-scan.
+// Admitted keeps the messages whose detection scope admits any of cats.
+func (m CategoryScopeMasks) Admitted(messages []batchMessage, cats []categories.Category) []batchMessage {
 	if len(m.categoryOut) == 0 {
-		indices := make([]int, len(messages))
-		for i := range indices {
-			indices[i] = i
-		}
-		return messages, contents, indices
+		return messages
 	}
-	subMessages := make([]batchMessage, 0, len(messages))
-	subContents := make([]string, 0, len(contents))
-	indices := make([]int, 0, len(messages))
+	admitted := make([]batchMessage, 0, len(messages))
 	for i, msg := range messages {
-		if !m.AdmitsAny(i, cats) {
-			continue
+		if m.AdmitsAny(i, cats) {
+			admitted = append(admitted, msg)
 		}
-		subMessages = append(subMessages, msg)
-		subContents = append(subContents, contents[i])
-		indices = append(indices, i)
 	}
-	return subMessages, subContents, indices
+	return admitted
 }
 
 func (m CategoryScopeMasks) RecommendedPrefilteredCount(cats []categories.Category) int {
@@ -277,16 +263,6 @@ func (m CategoryScopeMasks) RecommendedPrefilteredCount(cats []categories.Catego
 		skipped++
 	}
 	return skipped
-}
-
-func scatterFindings(n int, indices []int, subset [][]scanners.Finding) [][]scanners.Finding {
-	out := make([][]scanners.Finding, n)
-	for i, idx := range indices {
-		if i < len(subset) {
-			out[idx] = subset[i]
-		}
-	}
-	return out
 }
 
 func categoryForFinding(f scanners.Finding) categories.Category {

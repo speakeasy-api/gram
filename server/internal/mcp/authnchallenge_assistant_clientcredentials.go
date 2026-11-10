@@ -53,8 +53,8 @@ type AssistantWorkloadToken struct {
 // minutes, carry exactly these scopes and resource, and have no refresh token.
 //
 // Do not implement this through mintSession: agent sessions there deliberately
-// require a human authorizer and delegated grants. The native implementation is
-// composed by NewService and admits only explicitly bound registrations.
+// require a human authorizer and delegated grants. Without an explicitly
+// composed issuer, discovery and dispatch do not enable this grant.
 // Reuse assistantidentity.Resolve/Validate for assistant/trigger bindings,
 // workloadidentity admission/assignment and existing workload session issuance
 // and bearer validation; do not create another identity registry. OAuth scopes

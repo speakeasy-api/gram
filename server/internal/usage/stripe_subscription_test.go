@@ -2,6 +2,7 @@ package usage
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
 	"github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -412,4 +414,39 @@ func TestStripeSubscriptionDiscountView(t *testing.T) {
 	require.Nil(t, empty.DiscountDescription)
 	require.Nil(t, empty.DiscountEndsAt)
 	require.False(t, *empty.GatewayPromotionApplied)
+}
+
+func TestGetStripeSubscriptionByIDMapsReadErrorsCatalogEligibility(t *testing.T) {
+	t.Parallel()
+	testGetStripeSubscriptionByIDMapsReadErrors(t, subscriptionReadErrorCase{options: []stripeclient.GetSubscriptionOption{stripeclient.RequireAdoptionEligibility}, upstream: fmt.Errorf("validation: %w", &stripeclient.SubscriptionEligibilityError{Reason: "stripe subscription item coverage is incomplete"}), code: oops.CodeConflict, message: "Stripe subscription cannot be linked: stripe subscription item coverage is incomplete"})
+}
+
+func TestGetStripeSubscriptionByIDMapsReadErrorsMissingSubscription(t *testing.T) {
+	t.Parallel()
+	testGetStripeSubscriptionByIDMapsReadErrors(t, subscriptionReadErrorCase{upstream: stripeclient.ErrSubscriptionNotFound, code: oops.CodeNotFound, message: "Stripe subscription not found"})
+}
+
+func TestGetStripeSubscriptionByIDMapsReadErrorsUpstreamOutage(t *testing.T) {
+	t.Parallel()
+	testGetStripeSubscriptionByIDMapsReadErrors(t, subscriptionReadErrorCase{upstream: errors.New("private upstream details"), code: oops.CodeGatewayError, message: "could not retrieve Stripe subscription"})
+}
+
+func testGetStripeSubscriptionByIDMapsReadErrors(t *testing.T, tt subscriptionReadErrorCase) {
+	t.Helper()
+	client := &checkoutStripeClient{subscriptionReadError: tt.upstream}
+	s := &Service{stripeClient: client, logger: testenv.NewLogger(t)}
+	state, err := s.GetStripeSubscriptionByID(t.Context(), "sub_test", tt.options...)
+	require.Equal(t, tt.options, client.subscriptionReadOptions)
+	require.Nil(t, state)
+	requireOopsCode(t, err, tt.code)
+	var publicError *oops.ShareableError
+	require.ErrorAs(t, err, &publicError)
+	require.EqualError(t, publicError, tt.message)
+}
+
+type subscriptionReadErrorCase struct {
+	options  []stripeclient.GetSubscriptionOption
+	upstream error
+	code     oops.Code
+	message  string
 }

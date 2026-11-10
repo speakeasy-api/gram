@@ -24,6 +24,7 @@ type Endpoints struct {
 	Rename                 goa.Endpoint
 	ListDelegableGrants    goa.Endpoint
 	ListPolicyGrants       goa.Endpoint
+	CheckPolicyGrants      goa.Endpoint
 	CreatePolicyGrant      goa.Endpoint
 	UpdatePolicyGrant      goa.Endpoint
 	DeletePolicyGrant      goa.Endpoint
@@ -51,6 +52,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Rename:                 NewRenameEndpoint(s, a.APIKeyAuth),
 		ListDelegableGrants:    NewListDelegableGrantsEndpoint(s, a.APIKeyAuth),
 		ListPolicyGrants:       NewListPolicyGrantsEndpoint(s, a.APIKeyAuth),
+		CheckPolicyGrants:      NewCheckPolicyGrantsEndpoint(s, a.APIKeyAuth),
 		CreatePolicyGrant:      NewCreatePolicyGrantEndpoint(s, a.APIKeyAuth),
 		UpdatePolicyGrant:      NewUpdatePolicyGrantEndpoint(s, a.APIKeyAuth),
 		DeletePolicyGrant:      NewDeletePolicyGrantEndpoint(s, a.APIKeyAuth),
@@ -76,6 +78,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Rename = m(e.Rename)
 	e.ListDelegableGrants = m(e.ListDelegableGrants)
 	e.ListPolicyGrants = m(e.ListPolicyGrants)
+	e.CheckPolicyGrants = m(e.CheckPolicyGrants)
 	e.CreatePolicyGrant = m(e.CreatePolicyGrant)
 	e.UpdatePolicyGrant = m(e.UpdatePolicyGrant)
 	e.DeletePolicyGrant = m(e.DeletePolicyGrant)
@@ -271,6 +274,29 @@ func NewListPolicyGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc
 			return nil, err
 		}
 		return s.ListPolicyGrants(ctx, p)
+	}
+}
+
+// NewCheckPolicyGrantsEndpoint returns an endpoint function that calls the
+// method "checkPolicyGrants" of service "agents".
+func NewCheckPolicyGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*CheckPolicyGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.CheckPolicyGrants(ctx, p)
 	}
 }
 

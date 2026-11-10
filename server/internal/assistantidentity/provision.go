@@ -70,6 +70,24 @@ func (s *Service) Provision(ctx context.Context, tx pgx.Tx, p ProvisionParams) e
 			return err
 		}
 		grants = initialGrants(p.ProjectID, p.AssistantID)
+		// A dedicated agent may inherit inference only within this project and
+		// only when both the provisioning actor and its owner already have it.
+		// Existing agents keep their explicitly managed policy unchanged.
+		for _, user := range []string{p.ActorUserID, agent.OwnerUserID} {
+			allowed, err := canDelegateInference(ctx, tx, p.OrganizationID, p.ProjectID, user)
+			if err != nil {
+				return err
+			}
+			if !allowed {
+				break
+			}
+			if user == agent.OwnerUserID {
+				grant := authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource)
+				grant.Selector[authz.SelectorKeyProjectID] = p.ProjectID.String()
+				grants = append(grants, grant)
+				break
+			}
+		}
 	}
 	agentURN := urn.NewAgentIdentity(agent.ID.String())
 	agents := agentrepo.New(tx)

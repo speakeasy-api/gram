@@ -2,10 +2,11 @@ package mcp
 
 import (
 	"encoding/json"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"maps"
 	"slices"
 	"testing"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -63,7 +64,7 @@ func TestServerDiscoverPreservesZeroAndEmptyStringIDs(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			body, err := handleServerDiscover(t.Context(), testenv.NewLogger(t), tc.id,
-				describePlatformServer(), mcpversions.SupportedPlatformToolset())
+				describePlatformServer(false), mcpversions.SupportedPlatformToolset())
 			require.NoError(t, err)
 			var response struct {
 				ID json.RawMessage `json:"id"`
@@ -122,12 +123,6 @@ func TestHostedServerDiscoverStoredInstructionsAndCachePrivacy(t *testing.T) {
 			toolsets := toolsetsrepo.New(conn)
 			toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 				Name: "Discovery", Slug: "discovery", OrganizationID: project.OrganizationID, ProjectID: project.ID,
-				McpSlug: conv.ToPGText("discovery"), McpEnabled: true,
-			})
-			require.NoError(t, err)
-			_, err = toolsets.UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{
-				Name: toolset.Name, Slug: toolset.Slug, ProjectID: project.ID,
-				McpSlug: toolset.McpSlug, McpEnabled: true, McpIsPublic: tc.public,
 			})
 			require.NoError(t, err)
 			metadata := metadatarepo.New(conn)

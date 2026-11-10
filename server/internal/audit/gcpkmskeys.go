@@ -42,6 +42,7 @@ type LogGcpKmsKeyCreateEvent struct {
 
 func (l *Logger) LogGcpKmsKeyCreate(ctx context.Context, dbtx repo.DBTX, event LogGcpKmsKeyCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -94,6 +95,7 @@ func (l *Logger) LogGcpKmsKeyUpdate(ctx context.Context, dbtx repo.DBTX, event L
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -131,6 +133,7 @@ type LogGcpKmsKeyDeleteEvent struct {
 
 func (l *Logger) LogGcpKmsKeyDelete(ctx context.Context, dbtx repo.DBTX, event LogGcpKmsKeyDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

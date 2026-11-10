@@ -1,5 +1,5 @@
 import { useRef, useState, type JSX, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Link,
   Navigate,
@@ -14,15 +14,19 @@ import {
   CopyIcon,
   ExternalLinkIcon,
 } from "lucide-react";
+import { toast } from "sonner";
 import type { AdminMcpServerHealth } from "@gram/admin-client/models/components/adminmcpserverhealth";
+import type { AdminMcpServerResourceScopes } from "@gram/admin-client/models/components/adminmcpserverresourcescopes";
 import type { AdminMcpServerHealthRemoteSessionClient } from "@gram/admin-client/models/components/adminmcpserverhealthremotesessionclient";
 import type { AdminMcpServerToolCallBucket } from "@gram/admin-client/models/components/adminmcpservertoolcallbucket";
 import type { AdminMcpServerToolCalls } from "@gram/admin-client/models/components/adminmcpservertoolcalls";
 import type { AdminMcpServerHealthUserSessionIssuer } from "@gram/admin-client/models/components/adminmcpserverhealthusersessionissuer";
 
+import { RegistryPromotionButton } from "@/pages/registry/RegistryPromotionSheet";
 import { CopyValue } from "@/components/CopyValue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -36,9 +40,11 @@ import {
   organizationQuery,
 } from "@/lib/adminQueries";
 import { badgeTone } from "@/lib/badgeTone";
-import type { AdminOrganization } from "@/lib/gramAdminApi";
+import { errorMessage, type AdminOrganization } from "@/lib/gramAdminApi";
 import {
+  adminSetMcpServerScopePin,
   mcpServerHealthQuery,
+  mcpServerHealthProjectKey,
   mcpServerToolCallsQuery,
 } from "@/lib/gramAdminClient";
 import { LEAVES_THE_APP } from "@/lib/impersonation";
@@ -61,7 +67,9 @@ import {
   linkedAccounts,
   loginChallengeQuery,
   loginChallengeUrl,
+  parseScopes,
   SCOPE_LABELS,
+  SCOPE_SOURCE_LABELS,
   toolCallTailQuery,
   toolCallTailUrl,
   toolCallTotals,
@@ -170,6 +178,7 @@ export function McpServerHealth({
 
   return (
     <HealthReport
+      organizationId={org.id}
       health={health.data}
       toolCalls={toolCallsState}
       idOrSlug={idOrSlug}
@@ -197,6 +206,7 @@ type ToolCallsState =
   | { status: "ready"; toolCalls: AdminMcpServerToolCalls };
 
 function HealthReport({
+  organizationId,
   health,
   toolCalls,
   idOrSlug,
@@ -206,6 +216,7 @@ function HealthReport({
   asOf,
   onWindowChange,
 }: {
+  organizationId: string;
   health: AdminMcpServerHealth;
   toolCalls: ToolCallsState;
   idOrSlug: string;
@@ -249,7 +260,18 @@ function HealthReport({
             <CopyValue label={`${server.name} server id`} value={server.id} />
           </p>
         </div>
-        <WindowPicker value={window} onChange={onWindowChange} />
+        <div className="flex flex-wrap items-center gap-2">
+          {server.source === "remote" && (
+            <RegistryPromotionButton
+              target={{
+                organizationId,
+                projectId: project,
+                mcpServerId: server.id,
+              }}
+            />
+          )}
+          <WindowPicker value={window} onChange={onWindowChange} />
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -290,6 +312,19 @@ function HealthReport({
           className={cn(!issuer && "lg:col-span-2")}
         />
       </div>
+
+      {health.resourceScopes && (
+        <ResourceScopesCard
+          // A fresh read, or another server, resets an unsaved edit to what
+          // that server now holds.
+          key={`${server.id}:${health.resourceScopes.pinnedScopes.join(" ")}`}
+          scopes={health.resourceScopes}
+          organizationId={organizationId}
+          idOrSlug={idOrSlug}
+          project={project}
+          serverId={server.id}
+        />
+      )}
 
       {clients.length > 0 && <RemoteClients clients={clients} />}
     </div>
@@ -1112,6 +1147,153 @@ function ErrorAt({ at }: { at: Date | undefined }): JSX.Element {
     <Badge variant="outline" className={badgeTone.warning}>
       {fmtDateTime(at)}
     </Badge>
+  );
+}
+
+function ScopeList({ scopes }: { scopes: string[] }): JSX.Element {
+  return scopes.length > 0 ? (
+    <span className={cn(MONO, "break-words")}>{scopes.join(" ")}</span>
+  ) : (
+    <None />
+  );
+}
+
+function ResourceScopesCard({
+  scopes,
+  organizationId,
+  idOrSlug,
+  project,
+  serverId,
+}: {
+  scopes: AdminMcpServerResourceScopes;
+  organizationId: string;
+  idOrSlug: string;
+  project: string;
+  serverId: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const saved = scopes.pinnedScopes;
+  const [draft, setDraft] = useState(saved.join(" "));
+  const next = parseScopes(draft);
+  const dirty = next.join(" ") !== saved.join(" ");
+  const save = useMutation({
+    mutationFn: (pin: string[]) =>
+      adminSetMcpServerScopePin({
+        organizationId,
+        projectId: project,
+        mcpServerId: serverId,
+        scopes: pin,
+      }),
+    onSuccess: async (_, pin) => {
+      toast.success(pin.length > 0 ? "Pinned scopes saved" : "Pin cleared");
+      await queryClient.invalidateQueries({
+        queryKey: mcpServerHealthProjectKey(idOrSlug, project),
+      });
+    },
+    onError: (error) => {
+      toast.error(errorMessage(error));
+    },
+  });
+  const shared = scopes.sharedServerCount;
+
+  return (
+    <section className={CARD} aria-labelledby="login-scopes">
+      <div className={CARD_HEAD}>
+        <h2 id="login-scopes" className={CARD_TITLE}>
+          Login scopes
+        </h2>
+        <span className={cn(MONO, MUTED, "truncate")}>
+          {scopes.resourceUrl}
+        </span>
+      </div>
+      <p className={cn(MUTED, "border-b px-5 py-3 text-xs")}>
+        When a server dynamically resolves scopes, it defaults to the values in
+        its protected resource metadata. If those values are incorrect, you can
+        override them here with more accurate ones.
+      </p>
+      <KeyValues className="px-5 py-4">
+        <KeyValue label="Pinned scopes">
+          <form
+            className="flex flex-wrap items-center gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (dirty) save.mutate(next);
+            }}
+          >
+            <Input
+              aria-label="Pinned scopes"
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder="No pin"
+              className="h-8 max-w-md min-w-48 flex-1 font-mono text-xs"
+            />
+            <Button type="submit" size="sm" disabled={!dirty || save.isPending}>
+              Save
+            </Button>
+            {saved.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={save.isPending}
+                onClick={() => save.mutate([])}
+              >
+                Clear
+              </Button>
+            )}
+          </form>
+        </KeyValue>
+        <KeyValue label="Advertised">
+          {scopes.advertisedScopesKnown ? (
+            <ScopeList scopes={scopes.advertisedScopes ?? []} />
+          ) : (
+            <None>Unknown</None>
+          )}
+        </KeyValue>
+        <KeyValue label="Last challenge">
+          <ScopeList scopes={scopes.challengeScopes} />
+        </KeyValue>
+        <KeyValue label="Shared with">
+          {shared > 0 ? (
+            `${shared} other ${shared === 1 ? "server" : "servers"} on this URL`
+          ) : (
+            <None />
+          )}
+        </KeyValue>
+      </KeyValues>
+      {scopes.clients.length > 0 && (
+        <ul className="border-t">
+          {scopes.clients.map((client) => (
+            <li
+              key={client.clientId}
+              className="grid gap-x-4 gap-y-1 border-b px-5 py-3 text-[0.8125rem] last:border-b-0 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]"
+            >
+              <span className={cn(MONO, "truncate")}>{client.clientId}</span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span>
+                  {SCOPE_SOURCE_LABELS[client.scopeSource]}
+                  {!client.pinWouldDecide && (
+                    <span className={MUTED}> · a pin would not apply</span>
+                  )}
+                </span>
+                <ScopeList scopes={client.requestedScopes} />
+                {client.unadvertisedPinnedScopes.length > 0 && (
+                  <span className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className={badgeTone.warning}>
+                      Not advertised
+                    </Badge>
+                    <ScopeList scopes={client.unadvertisedPinnedScopes} />
+                  </span>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className={cn(MUTED, "border-t px-5 py-3 text-xs")}>
+        A pin applies to every server on this URL in the project.
+      </p>
+    </section>
   );
 }
 

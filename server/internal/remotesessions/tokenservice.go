@@ -49,8 +49,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -161,6 +163,10 @@ var (
 	// Re-linking goes through the same configuration, so only an
 	// administrator can repair it.
 	ErrRemoteSessionMisconfigured = fmt.Errorf("%w: remote session client misconfigured", ErrNoValidToken)
+
+	// ErrStoredSignInUnreadable means no stored token of the grant can be
+	// decrypted and no refresh replaced them. Only a new sign-in recreates it.
+	ErrStoredSignInUnreadable = fmt.Errorf("%w: stored sign-in unreadable", ErrNoValidToken)
 )
 
 // ResolvedAuthorization is the ephemeral result of resolving one reviewed
@@ -192,7 +198,7 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 //
 // Returns ("", nil) when there is no usable token for this binding —
 // no row, expired with no refresh path, refresh failed past the
-// deadline, decryption failed. The empty string is the "no token"
+// deadline, nothing stored can be decrypted. The empty string is the "no token"
 // signal; the caller decides whether absence is a challenge or a no-op.
 //
 // Returns errors for unexpected failures and ErrInvalidAuthorizationRequest
@@ -204,11 +210,12 @@ const remoteSessionLastUsedCutoff = 5 * time.Minute
 // the lookup is exact.
 func (m *ChallengeManager) ResolveAccessToken(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
 	resource string,
 ) (string, error) {
-	resolved, err := m.resolveUpstreamToken(ctx, clientID, subject, resource)
+	resolved, err := m.resolveUpstreamToken(ctx, attribution, clientID, subject, resource)
 	if errors.Is(err, ErrNoValidToken) {
 		return "", nil
 	}
@@ -224,6 +231,7 @@ func (m *ChallengeManager) ResolveAccessToken(
 // token", exactly as ResolveAccessToken's empty string does.
 func (m *ChallengeManager) resolveUpstreamToken(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	clientID uuid.UUID,
 	subject urn.SessionSubject,
 	resource string,
@@ -260,7 +268,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 		return zero, fmt.Errorf("get active remote_session: %w", err)
 	}
 
-	resolved, err := m.resolveCredentialToken(ctx, sess, resource)
+	resolved, err := m.resolveCredentialToken(ctx, attribution, sess, resource)
 	if err == nil && resolved.Token != "" {
 		m.touchResolvedCredential(ctx, sess)
 	}
@@ -269,20 +277,34 @@ func (m *ChallengeManager) resolveUpstreamToken(
 
 // resolveCredentialToken operates only on the selected credential source.
 // The authenticated caller in ctx is deliberately not rewritten to its owner.
-func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remotesessions_repo.RemoteSession, resource string) (resolvedUpstreamToken, error) {
+func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	selectedID := sess.ID
+	selectedResource := conv.FromPGTextOrEmpty[string](sess.Resource)
 	clientID := sess.RemoteSessionClientID
 	// Rebinds sess to the row the token came from, so a refresh that backfilled
 	// a legacy NULL resource routes on this same request. resolvedFromUpdatedAt
 	// remains the original snapshot only when this resolution won the refresh.
-	tok, sess, resolvedFromUpdatedAt, err := m.validateAndRefresh(ctx, sess, resource)
+	tok, sess, resolvedFromUpdatedAt, err := m.validateAndRefresh(ctx, attribution, sess, resource)
 	if err != nil {
+		// Reconnect routing stays an empty token; only the already-recorded fact travels.
+		zero.refreshFailureRecorded = RefreshFailureRecorded(err)
+		zero.refreshStepRecorded = RefreshStepRecorded(err)
+		// Nothing stored can be read, so only a new sign-in recreates the grant.
+		// The entry keeps a gateway from calling the member without it.
+		if errors.Is(err, errStoredTokenUnreadable) {
+			unreadable := withRecordedRefresh(&storedSignInUnreadableError{remoteSessionID: selectedID, err: err}, zero)
+			return failedSessionCredential(selectedID, clientID, selectedResource, unreadable, zero.refreshFailureRecorded, zero.refreshStepRecorded), unreadable
+		}
 		// A known-expired access token with no usable refresh grant is the
 		// ordinary reconnect path. The downstream 401 carries the challenge;
 		// logging every retry here would turn one stale session into noise.
 		if errors.Is(err, ErrNoValidToken) {
 			return zero, nil
+		}
+		// The caller left, which says nothing about the session; the outcome metric counts it.
+		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
+			return zero, fmt.Errorf("refresh canceled: %w", err)
 		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its deadline) and could not be
@@ -292,11 +314,21 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		// pgx.ErrNoRows case above), while one that clears on its own or
 		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
+		// A broken query is ours to fix: neither an outage nor a reconnect.
+		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
+			return failedSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}, false, false), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
+		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
-			return zero, ErrRemoteSessionUnavailable
+			outage := &SessionOutageError{err: err}
+			return failedSessionCredential(selectedID, clientID, selectedResource, outage, false, false), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
-			return zero, ErrRemoteSessionMisconfigured
+			// Keep the bare remedy; only the already-recorded facts travel.
+			misconfigured := withRecordedRefresh(ErrRemoteSessionMisconfigured, zero)
+			if errors.Is(err, errStoredTokenHeldForAdministrator) {
+				return failedSessionCredential(selectedID, clientID, selectedResource, misconfigured, zero.refreshFailureRecorded, zero.refreshStepRecorded), misconfigured
+			}
+			return zero, misconfigured
 		}
 		return zero, nil
 	}
@@ -316,6 +348,8 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		RemoteSessionResolvedFromUpdatedAt: resolvedFromUpdatedAt,
 		ClientCredentialErr:                nil,
 		renewal:                            nil,
+		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}, nil
 }
 
@@ -330,6 +364,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 // refinements, ErrRemoteSessionUnavailable or ErrRemoteSessionMisconfigured.
 func (m *ChallengeManager) ResolveAuthorization(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
@@ -373,7 +408,7 @@ func (m *ChallengeManager) ResolveAuthorization(
 			Resource:       clientCredentialRequestResource(*bound, resource),
 		})
 	} else {
-		resolved, err = m.resolveCallerUpstreamToken(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
+		resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, clientID, subject, resource)
 	}
 	if err != nil {
 		return ResolvedAuthorization{}, fmt.Errorf("resolve remote-session access token: %w", err)
@@ -415,6 +450,8 @@ type UpstreamToken struct {
 	// empty Token it marks a self client whose credential could not be
 	// obtained, which only ResolveAvailableAccessTokens returns, and
 	// ClientCredentialErr says why.
+	//
+	// A CredentialOwnerSubject entry with ClientCredentialErr set is HeldWithoutToken.
 	CredentialOwner CredentialOwner
 
 	// RemoteSessionClientID is the remote_session_client the credential
@@ -441,6 +478,27 @@ type UpstreamToken struct {
 	// renewal is how RenewClientCredential replaces the self credential Token
 	// came from; nil for any other token.
 	renewal *clientCredentialRenewal
+
+	// refreshFailureRecorded marks an empty entry whose failed refresh already wrote its row.
+	refreshFailureRecorded bool
+
+	// refreshStepRecorded marks an empty entry whose failed refresh already wrote its step on a carried attempt.
+	refreshStepRecorded bool
+}
+
+// withRecordedRefresh is remedy, keeping whether the empty entry's failed refresh already wrote its row or step.
+func withRecordedRefresh(remedy error, entry UpstreamToken) error {
+	errs := []error{remedy}
+	if entry.refreshFailureRecorded {
+		errs = append(errs, errRefreshFailureRecorded)
+	}
+	if entry.refreshStepRecorded {
+		errs = append(errs, errRefreshStepRecorded)
+	}
+	if len(errs) == 1 {
+		return remedy
+	}
+	return errors.Join(errs...)
 }
 
 // clientCredentialRenewal is what replacing a self credential needs: the
@@ -493,12 +551,13 @@ type clientCredentialRenewal struct {
 // attach-time guard in clienthandlers.go and keeps the map keys unambiguous.
 func (m *ChallengeManager) ResolveAccessTokens(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, false)
+	return m.resolveBoundAccessTokens(ctx, attribution, projectID, organizationID, userSessionIssuerID, subject, false)
 }
 
 type availabilityCheckKey struct{}
@@ -511,9 +570,143 @@ type availabilityCheckKey struct{}
 // subject may proceed, and obtaining it here would wait on an upstream token
 // endpoint while callers hold admission locks. A broken self credential is
 // reported when a request needs it.
-func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject) error {
-	_, err := m.ResolveAccessTokens(context.WithValue(ctx, availabilityCheckKey{}, true), projectID, organizationID, issuerID, subject)
+//
+// When mcpServerID is valid the check covers that proxied server's own clients,
+// as ResolveServerAccessTokens does; otherwise it covers every client the
+// issuer binds.
+func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution RefreshAttribution, projectID uuid.UUID, organizationID string, issuerID uuid.UUID, subject urn.SessionSubject, mcpServerID uuid.NullUUID) error {
+	checkCtx := context.WithValue(ctx, availabilityCheckKey{}, true)
+	if mcpServerID.Valid {
+		_, err := m.ResolveServerAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject, mcpServerID.UUID, false)
+		return err
+	}
+	_, err := m.ResolveAccessTokens(checkCtx, attribution, projectID, organizationID, issuerID, subject)
 	return err
+}
+
+// requiredServerClients decides which of the clients bound to the issuer an MCP
+// server's callers need. It is the one rule for this: the runtime enforces it and
+// the management API reports it, so settings cannot disagree with what callers
+// are asked for.
+//
+// A server with no associated client bound to the issuer needs the clients no
+// other server claims, so a client nothing explains stays fail-closed. When every
+// client belongs to another server, or the server explicitly detached the rest,
+// it has no upstream credential to require, which is what a session records as a
+// no-auth choice for it.
+func requiredServerClients(ctx context.Context, q *remotesessions_repo.Queries, organizationID string, userSessionIssuerID, mcpServerID uuid.UUID, clientIDs []uuid.UUID) ([]uuid.UUID, ServerAssociationIssuer, error) {
+	var association ServerAssociationIssuer
+	if len(clientIDs) == 0 {
+		return nil, association, nil
+	}
+	uses, err := q.DescribeBoundClientUse(ctx, remotesessions_repo.DescribeBoundClientUseParams{
+		McpServerID:            mcpServerID,
+		OrganizationID:         organizationID,
+		UserSessionIssuerID:    userSessionIssuerID,
+		RemoteSessionClientIds: clientIDs,
+	})
+	if err != nil {
+		return nil, association, fmt.Errorf("describe bound client use: %w", err)
+	}
+	var own, unclaimed []uuid.UUID
+	for _, use := range uses {
+		association = AssociationIssuerFromProviders(use.AssociationProviderIds)
+		switch {
+		case use.AssociatedWithMcpServer:
+			own = append(own, use.RemoteSessionClientID)
+		case clientUnclaimed(use):
+			unclaimed = append(unclaimed, use.RemoteSessionClientID)
+		}
+	}
+	if len(own) == 0 {
+		return unclaimed, association, nil
+	}
+	return own, association, nil
+}
+
+// clientUnclaimed reports that nothing says whether a bound client is the
+// configured server's: it has no association, no other server has one, and the
+// server has not explicitly detached it.
+func clientUnclaimed(use remotesessions_repo.DescribeBoundClientUseRow) bool {
+	return !use.AssociatedWithMcpServer && len(use.OtherMcpServerIds) == 0 && !use.DetachedFromMcpServer
+}
+
+// ServerAssociationIssuer is the upstream issuer an MCP server's live client
+// associations give, read alongside the clients its callers need.
+type ServerAssociationIssuer struct {
+	// Known reports that the associations were read. They are read with the
+	// issuer's bound clients, so this is false when the issuer binds none.
+	Known bool
+
+	// Providers is how many distinct live providers the associations name.
+	Providers int64
+
+	// Provider is that provider when Providers is 1.
+	Provider uuid.NullUUID
+}
+
+// AssociationIssuerFromProviders is the upstream issuer a server's live client
+// associations give, from the distinct providers they name: the provider when
+// there is exactly one, and none when there are several or none. It is the one
+// place that rule is applied to providers read from the database.
+func AssociationIssuerFromProviders(providerIDs []uuid.UUID) ServerAssociationIssuer {
+	association := ServerAssociationIssuer{Known: true, Providers: int64(len(providerIDs)), Provider: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
+	if len(providerIDs) == 1 {
+		association.Provider = uuid.NullUUID{UUID: providerIDs[0], Valid: true}
+	}
+	return association
+}
+
+// ServerAccessTokens is a caller's credentials for one proxied MCP server and
+// the upstream issuer its associations give.
+type ServerAccessTokens struct {
+	// Tokens are the credentials keyed by remote session issuer.
+	Tokens map[uuid.UUID]UpstreamToken
+
+	// Association is the server's upstream issuer as its associations give it.
+	Association ServerAssociationIssuer
+}
+
+// ResolveServerAccessTokens resolves the caller's credentials for one proxied
+// MCP server that shares a user session issuer with other servers: only the
+// clients requiredServerClients names are required, so a client another server
+// on the issuer signs in through cannot refuse this server's callers. Each
+// credential still routes to the backend by its recorded resource.
+func (m *ChallengeManager) ResolveServerAccessTokens(
+	ctx context.Context,
+	attribution RefreshAttribution,
+	projectID uuid.UUID,
+	organizationID string,
+	userSessionIssuerID uuid.UUID,
+	subject urn.SessionSubject,
+	mcpServerID uuid.UUID,
+	skipUnusable bool,
+) (ServerAccessTokens, error) {
+	var resolved ServerAccessTokens
+	clients, err := m.listRemoteSessionClientRowsForUserSessionIssuer(ctx, projectID, organizationID, userSessionIssuerID, false)
+	if err != nil {
+		return resolved, fmt.Errorf("list remote_session_clients: %w", err)
+	}
+	if len(clients) == 0 {
+		return resolved, nil
+	}
+	ids := make([]uuid.UUID, 0, len(clients))
+	for _, client := range clients {
+		ids = append(ids, client.ClientID)
+	}
+	required, association, err := requiredServerClients(ctx, remotesessions_repo.New(m.db), organizationID, userSessionIssuerID, mcpServerID, ids)
+	if err != nil {
+		return resolved, err
+	}
+	resolved.Association = association
+	if len(required) == 0 {
+		return resolved, nil
+	}
+	clients = slices.DeleteFunc(clients, func(client remotesessions_repo.ListRemoteSessionClientsForUserSessionIssuerRow) bool {
+		return !slices.Contains(required, client.ClientID)
+	})
+	resolved.Tokens, err = m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	return resolved, err
 }
 
 // ResolveAvailableAccessTokens is the partial-resolution variant the meta MCP
@@ -524,17 +717,19 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, projectID uuid
 // connected degrades member-scoped while every other member keeps serving.
 // Returns the resolvable subset — possibly empty — and errors only on
 // infrastructure failures, never on missing or expired grants. A self client
-// whose credential cannot be obtained keeps an entry with an empty Token
-// and UpstreamToken.ClientCredentialErr set, so routing to it names the
-// remedy instead of calling anonymously.
+// whose credential cannot be obtained, and a connection whose refresh failed in
+// an outage, keep an entry with an empty Token and
+// UpstreamToken.ClientCredentialErr set, so routing to it names the remedy
+// instead of calling anonymously.
 func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
 	subject urn.SessionSubject,
 ) (map[uuid.UUID]UpstreamToken, error) {
-	return m.resolveBoundAccessTokens(ctx, projectID, organizationID, userSessionIssuerID, subject, true)
+	return m.resolveBoundAccessTokens(ctx, attribution, projectID, organizationID, userSessionIssuerID, subject, true)
 }
 
 // ResolveClientAccessTokens resolves the caller's credential for one chosen
@@ -547,6 +742,7 @@ func (m *ChallengeManager) ResolveAvailableAccessTokens(
 // skipUnusable is set, and never another client's credential.
 func (m *ChallengeManager) ResolveClientAccessTokens(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
@@ -564,11 +760,12 @@ func (m *ChallengeManager) ResolveClientAccessTokens(
 	if len(chosen) == 0 {
 		return nil, ErrChosenClientUnbound
 	}
-	return m.resolveClientTokens(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, chosen, skipUnusable)
 }
 
 func (m *ChallengeManager) resolveBoundAccessTokens(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	projectID uuid.UUID,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
@@ -582,13 +779,14 @@ func (m *ChallengeManager) resolveBoundAccessTokens(
 	if len(clients) == 0 {
 		return nil, nil
 	}
-	return m.resolveClientTokens(ctx, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
+	return m.resolveClientTokens(ctx, attribution, lookupSignIn, projectID, organizationID, userSessionIssuerID, subject, clients, skipUnusable)
 }
 
 // resolveClientTokens resolves the caller's credential for each of clients,
 // keyed by remote session issuer.
 func (m *ChallengeManager) resolveClientTokens(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	lookup tokenLookup,
 	projectID uuid.UUID,
 	organizationID string,
@@ -642,14 +840,18 @@ func (m *ChallengeManager) resolveClientTokens(
 			// token with a new row's resource.
 			// No endpoint-level fallback: a refresh of a legacy NULL-resource
 			// row derives the client's own resource in RefreshNow.
-			resolved, err = m.resolveCallerUpstreamToken(ctx, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
+			resolved, err = m.resolveCallerUpstreamToken(ctx, attribution, lookup, projectID, organizationID, userSessionIssuerID, c.ClientID, subject, "")
 		}
 		switch {
 		case errors.Is(err, ErrNoValidToken):
 			if skipUnusable {
-				if self {
+				switch {
+				case self:
 					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
+				case resolved.HeldWithoutToken():
+					tokens[c.RemoteSessionIssuerID] = resolved
 				}
+				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
 				continue
 			}
 			// A refined failure can still be outranked by a later client that
@@ -660,16 +862,22 @@ func (m *ChallengeManager) resolveClientTokens(
 				return nil, rerr
 			}
 			if reconnect {
+				// The re-link is about a different client, so its gate row is not a duplicate.
 				return nil, ErrNoValidToken
 			}
 			return nil, err
+		case errors.Is(err, errRefreshStoreFault) && skipUnusable:
+			m.logger.ErrorContext(ctx, "gateway member refresh hit a store fault", attr.SlogRemoteSessionClientID(c.ClientID.String()), attr.SlogError(err))
+			tokens[c.RemoteSessionIssuerID] = resolved
+			continue
 		case err != nil:
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
 			if skipUnusable {
+				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, withRecordedRefresh(ErrNoValidToken, resolved))
 				continue
 			}
-			return nil, ErrNoValidToken
+			return nil, withRecordedRefresh(ErrNoValidToken, resolved)
 		default:
 			tokens[c.RemoteSessionIssuerID] = resolved
 		}
@@ -696,7 +904,7 @@ func (m *ChallengeManager) selfClientResources(ctx context.Context, organization
 		return nil, nil
 	}
 
-	attachments, err := attachmentsForClients(ctx, m.db, organizationID, ids)
+	attachments, err := attachmentsForClients(ctx, m.db, organizationID, ids, m.refresher.attachmentsFromAssociations(ctx, organizationID))
 	if err != nil {
 		return nil, err
 	}
@@ -723,7 +931,94 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		RemoteSessionResolvedFromUpdatedAt: time.Time{},
 		ClientCredentialErr:                err,
 		renewal:                            nil,
+		refreshFailureRecorded:             false,
+		refreshStepRecorded:                false,
 	}
+}
+
+// failedSessionCredential keeps the identity of a grant that could not be used, so its failure routes and pins as its token would.
+func failedSessionCredential(sessionID, clientID uuid.UUID, resource string, failure error, refreshFailureRecorded, refreshStepRecorded bool) UpstreamToken {
+	return UpstreamToken{
+		Token:                              "",
+		Resource:                           resource,
+		CredentialOwner:                    CredentialOwnerSubject,
+		RemoteSessionClientID:              clientID,
+		RemoteSessionID:                    sessionID,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                failure,
+		renewal:                            nil,
+		refreshFailureRecorded:             refreshFailureRecorded,
+		refreshStepRecorded:                refreshStepRecorded,
+	}
+}
+
+// SessionOutageError is a subject's connection whose refresh failed in an outage.
+type SessionOutageError struct{ err error }
+
+func (e *SessionOutageError) Error() string { return e.err.Error() }
+
+func (e *SessionOutageError) Unwrap() []error { return []error{ErrRemoteSessionUnavailable, e.err} }
+
+// RetryAfter is how long to wait before retrying err, zero when unknown.
+func RetryAfter(err error) time.Duration {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.retryAfter
+	}
+	return 0
+}
+
+// OutageKindOf is the outage the connect page shows for err's refresh, none when unknown.
+func OutageKindOf(err error) RefreshOutageKind {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.visibleOutage
+	}
+	return RefreshOutageNone
+}
+
+// errRefreshStoreFault marks a broken query or write: a retry can't help, and it fails only this member on a gateway.
+var errRefreshStoreFault = errors.New("refresh store fault")
+
+// TokenEndpointCausedOutage reports a client credential outage the token endpoint caused, not signing or our own stores.
+func TokenEndpointCausedOutage(err error) bool {
+	endpoint, ok := errors.AsType[*TokenEndpointError](err)
+	return ok && !endpoint.Signing
+}
+
+// OutageProviderHost is the issuer host behind a provider outage; a tunneled provider's stays off the page.
+func OutageProviderHost(err error) string {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	if !ok || refreshErr.visibleOutage != RefreshOutageProvider {
+		return ""
+	}
+	parsed, perr := url.Parse(refreshErr.IssuerURL)
+	if perr != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// RefreshBusy reports a deferred refresh with no outage the connect page can see. It keeps
+// that page's meaning on purpose: a cooldown whose record can't be read, or our own slow
+// setup, also reads as busy here, though ConnectionOutageHappened records them differently.
+func RefreshBusy(err error) bool {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.visibleOutage == RefreshOutageNone
+}
+
+// HeldWithoutToken reports a subject's connection kept without a token so routing never calls its server without it.
+func (t UpstreamToken) HeldWithoutToken() bool {
+	return t.CredentialOwner == CredentialOwnerSubject && t.Token == "" && t.ClientCredentialErr != nil
+}
+
+// SignInUnreadable reports a subject's connection with nothing stored that can be read; only a new sign-in replaces it.
+func (t UpstreamToken) SignInUnreadable() bool {
+	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrStoredSignInUnreadable)
+}
+
+// SessionUnavailable reports a subject's connection that an outage stopped refreshing.
+func (t UpstreamToken) SessionUnavailable() bool {
+	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrRemoteSessionUnavailable)
 }
 
 // RemoteSessionsNeedReconnect reports whether any remote session subject must
@@ -795,6 +1090,8 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 	var authorizer *string
 	if credential, ok := principalcredential.FromContext(ctx); ok && lookup == lookupAuthClient {
 		authorizer = &credential.Credential.AuthorizerUserID
+	} else if keyAuthorizer, ok := principalAPIKeyAuthorizer(ctx, subject); ok && lookup == lookupAuthClient {
+		authorizer = &keyAuthorizer
 	}
 	var principalID uuid.UUID
 	var attached bool
@@ -851,28 +1148,11 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 		if attached && sess.SubjectUrn.Kind != urn.SessionSubjectKindUser {
 			return true, nil
 		}
-		if accessTokenUsable(sess, now) {
-			// Resolution forwards this token without attempting a refresh, so
-			// an unreadable value needs reconnecting even with a refresh grant.
-			plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
-			if err != nil || plain == "" {
-				return true, nil
-			}
-			continue
+		// The rule resolution uses: a live readable access token serves, even
+		// inside the expiry skew, and a readable usable refresh token renews.
+		if !readStoredTokens(m.enc, sess, now).usable {
+			return true, nil
 		}
-		if hasRefreshToken(sess) && refreshTokenUsable(sess, now) {
-			if plain, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err == nil && plain != "" {
-				continue
-			}
-		}
-		// A failed early refresh still forwards the access token until its
-		// actual deadline. Do not force reconnect during that grace window.
-		if accessTokenLive(sess, now) {
-			if plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted); err == nil && plain != "" {
-				continue
-			}
-		}
-		return true, nil
 	}
 	return false, nil
 }
@@ -901,6 +1181,7 @@ func (m *ChallengeManager) storedGrantsNeedReconnect(
 // failure must not turn an access token with no known expiry into a reconnect.
 func (m *ChallengeManager) validateAndRefresh(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
 ) (string, remotesessions_repo.RemoteSession, time.Time, error) {
@@ -909,24 +1190,45 @@ func (m *ChallengeManager) validateAndRefresh(
 		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
+	stored := readStoredTokens(m.enc, sess, now)
+	if stored.unreadable {
+		m.reportUnreadable(ctx, sess, stored)
+		return "", sess, sess.UpdatedAt.Time, stored.err()
+	}
+	// Nothing stored can serve or renew it, so no refresh is sent.
+	if !stored.usable {
+		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
+	}
+	if stored.accessErr != nil {
+		// A refresh (RFC 6749 section 6) stores a new pair under the current key.
+		m.logger.ErrorContext(ctx, "remote session stored access token could not be decrypted; renewing it", storedTokenAttrs(m.enc, sess, stored.accessErr)...)
+	}
+
 	hasRefresh := hasRefreshToken(sess)
 
 	// The skew and its refresh-grant condition are pinned by
 	// accessTokenUsable's unit tests; they cover this path only while the
 	// deadline check stays on the shared predicate rather than inlined.
-	if accessTokenUsable(sess, now) {
-		plain, err := m.enc.Decrypt(sess.AccessTokenEncrypted)
-		if err != nil {
-			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token: %w", err)
-		}
-		return plain, sess, sess.UpdatedAt.Time, nil
+	if stored.access != "" && accessTokenUsable(sess, now) {
+		return stored.access, sess, sess.UpdatedAt.Time, nil
 	}
 
 	if !hasRefresh {
 		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
-	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
+	if stored.access != "" && accessTokenLive(sess, now) {
+		// An unreadable refresh token is never sent; the stored access token serves until its deadline.
+		if _, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String); err != nil {
+			m.refresher.refreshTokenUnreadable(ctx, sess, err)
+			return stored.access, sess, sess.UpdatedAt.Time, nil
+		}
+	}
+
+	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest, attribution)
+	if stored.accessErr != nil {
+		return m.renewedUnreadableAccess(ctx, sess, res, err)
+	}
 	if err != nil {
 		// Inside the skew window the stored token is still within its stated
 		// lifetime, so a refresh that fails there — an upstream 5xx or 429, a
@@ -934,15 +1236,11 @@ func (m *ChallengeManager) validateAndRefresh(
 		// attempt. Forwarding it keeps the early refresh a pure optimization:
 		// nobody is sent to reconnect while holding a token that still works.
 		// Past the deadline there is nothing to fall back to.
-		if !accessTokenLive(sess, time.Now()) {
+		if stored.access == "" || !accessTokenLive(sess, time.Now()) {
 			return "", sess, sess.UpdatedAt.Time, err
 		}
-		plain, derr := m.enc.Decrypt(sess.AccessTokenEncrypted)
-		if derr != nil {
-			return "", sess, sess.UpdatedAt.Time, fmt.Errorf("decrypt access token after failed refresh: %w", derr)
-		}
 		m.logger.WarnContext(ctx, "remote session refresh failed inside the expiry skew; forwarding the stored access token until its deadline", refreshFailureAttrs(sess, err)...)
-		return plain, sess, sess.UpdatedAt.Time, nil
+		return stored.access, sess, sess.UpdatedAt.Time, nil
 	}
 	// SourceUpdatedAt comes from the post-lock snapshot actually refreshed. An
 	// adopted concurrent winner instead identifies its final snapshot.
@@ -1005,6 +1303,7 @@ func (s *RefreshService) refreshSessionTokens(
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
+	postDeadline time.Time,
 ) (remotesessions_repo.RemoteSession, tokenResponse, error) {
 	var zero remotesessions_repo.RemoteSession
 	var noToken tokenResponse
@@ -1016,9 +1315,9 @@ func (s *RefreshService) refreshSessionTokens(
 		return zero, noToken, newTokenRefreshError("the identity provider's token endpoint is not an https URL; check the issuer's configuration", nil, refreshRemedyAdministrator)
 	}
 
-	refreshToken, err := s.enc.Decrypt(sess.RefreshTokenEncrypted.String)
+	refreshToken, err := s.readRefreshToken(ctx, sess)
 	if err != nil {
-		return zero, noToken, newTokenRefreshError("the session's stored refresh token could not be read; revoke and re-link the session", err, refreshRemedyReconnect)
+		return zero, noToken, err
 	}
 
 	var clientSecret string
@@ -1057,7 +1356,7 @@ func (s *RefreshService) refreshSessionTokens(
 
 	// One deadline bounds both POSTs so an unresponsive upstream cannot
 	// outlive the single-flight lease; the persist below still runs on ctx.
-	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
+	postCtx, cancel := context.WithDeadline(ctx, postDeadline)
 	defer cancel()
 
 	clientAuth := TokenEndpointClientAuth{
@@ -1110,14 +1409,12 @@ func (s *RefreshService) refreshSessionTokens(
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
 
-	// authorization_expires_in is an absolute property of the grant. Preserve
-	// the known deadline when a later response omits it; replace it when the
-	// provider reports the remaining authorization lifetime again.
+	// Keep the grant's known deadline unless this response reports a usable lifetime.
 	authorizationExpires := sess.AuthorizationExpiresAt
 	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(client.IssuerUrl)
 	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.
@@ -1144,7 +1441,13 @@ func (s *RefreshService) refreshSessionTokens(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied, refreshRemedyRetry)
 		}
-		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
+		s.logger.ErrorContext(ctx, "provider issued tokens that could not be stored; the connection may need reconnecting",
+			attr.SlogRemoteSessionID(sess.ID.String()),
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogOAuthIssuer(client.IssuerUrl),
+			attr.SlogError(err),
+		)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w: %w", errRefreshOutcomeNotStored, err)
 	}
 
 	// Whether the provider rotates refresh tokens, and how long it says they
@@ -1300,10 +1603,13 @@ func (s *RefreshService) postRefreshGrant(
 
 	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
 	if err != nil {
-		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", err, refreshRemedyRetry)
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", fmt.Errorf("%w: %w", errRefreshTunnelTransport, err), refreshRemedyRetry)
 	}
 
 	resp, err := doer.Do(req)
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) || errors.Is(err, tunnelrouting.ErrTransportConfiguration) {
+		return zero, fmt.Errorf("post refresh: %w", err)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
@@ -1311,21 +1617,24 @@ func (s *RefreshService) postRefreshGrant(
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, fmt.Errorf("read refresh response: %w", err)
+		return zero, fmt.Errorf("read refresh response: %w: %w: %w", errRefreshUpstreamUnreachable, errRefreshUnusableAnswer, err)
 	}
 	if resp.StatusCode/100 != 2 {
-		return zero, newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
+		refreshErr := newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
+		refreshErr.tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		refreshErr.retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
+		return zero, refreshErr
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, fmt.Errorf("decode refresh response: %w", err)
+		return zero, fmt.Errorf("decode refresh response: %w: %w", errRefreshUnusableAnswer, err)
 	}
 	tok.raw = body
 	if tok.AccessToken == "" {
 		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
 			return zero, refreshErr
 		}
-		return zero, newTokenRefreshError("the identity provider returned no access token", nil, refreshRemedyAdministrator)
+		return zero, newTokenRefreshError("the identity provider returned no access token", errRefreshUnusableAnswer, refreshRemedyAdministrator)
 	}
 	return tok, nil
 }

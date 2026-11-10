@@ -21,6 +21,9 @@ type ProductFeatures struct {
 
 // ProductFeaturesView is a type that runs validations on a projected type.
 type ProductFeaturesView struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled *bool
 	// Whether tool I/O logging is enabled
@@ -72,10 +75,16 @@ type ProductFeaturesView struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled *bool
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 var (
@@ -83,6 +92,7 @@ var (
 	// by view name.
 	ProductFeaturesMap = map[string][]string{
 		"default": {
+			"provider_setup_enabled",
 			"logs_enabled",
 			"tool_io_logs_enabled",
 			"session_capture_enabled",
@@ -103,7 +113,9 @@ var (
 			"network_ingress_enabled",
 			"signals_intelligence_enabled",
 			"organization_gateway_disabled",
+			"code_mode_enabled",
 			"device_agent",
+			"upstream_auth_enforced",
 		},
 	}
 )
@@ -182,6 +194,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.OrganizationGatewayDisabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_gateway_disabled", "result"))
+	}
+	if result.CodeModeEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("code_mode_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

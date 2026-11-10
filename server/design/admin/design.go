@@ -101,6 +101,10 @@ var AdminOrganization = Type("AdminOrganization", func() {
 		Description("The time at which the organization was demoted after its trial, if any.")
 		Format(FormatDateTime)
 	})
+	Attribute("adoption_dashboard_url", String, func() {
+		Description("Staff-entered link to the organization's adoption dashboard. Absent when none has been set.")
+		Format(FormatURI)
+	})
 	Attribute("member_count", Int, "Number of active members in the organization.")
 	// Deliberately not an Enum. The value is whatever the creating flow
 	// recorded, so a new flow added on the server would otherwise fail response
@@ -159,6 +163,7 @@ var AdminProjectDetail = Type("AdminProjectDetail", func() {
 	Attribute("functions_runner_version", String, "Functions runner version pin, if set.")
 	Attribute("toolset_count", Int, "Number of active toolsets in the project.")
 	Attribute("deployment_count", Int, "Total number of deployments in the project.")
+	Attribute("active_deployment_id", String, "The deployment the project currently serves. Absent when no deployment has completed.")
 	Attribute("http_tool_count", Int, "Number of active HTTP tool definitions in the project.")
 	Attribute("environment_count", Int, "Number of active environments in the project.")
 	Attribute("api_key_count", Int, "Number of active API keys in the project.")
@@ -224,10 +229,15 @@ var AdminListOrganizationsResult = Type("AdminListOrganizationsResult", func() {
 	Attribute("total", Int64, "Number of organizations matching the filters, before paging.")
 })
 
+var AdminAuditLog = Type("AdminAuditLog", func() {
+	Extend(auditlogs.AuditLog)
+	Attribute("is_internal", Boolean, "Internal staff-only audit activity; persisted but never published to the outbox. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.")
+})
+
 var AdminListOrganizationActivityResult = Type("AdminListOrganizationActivityResult", func() {
 	Required("logs")
 
-	Attribute("logs", ArrayOf(auditlogs.AuditLog), "List of organization activity.")
+	Attribute("logs", ArrayOf(AdminAuditLog), "List of organization activity.")
 	Attribute("next_cursor", String, "Cursor for the next page of results.")
 })
 
@@ -558,6 +568,21 @@ var _ = Service("admin", func() {
 		HTTP(func() { GET("/admin/organization.features"); Param("organization_id"); Response(StatusOK) })
 		Meta("openapi:operationId", "adminGetOrganizationFeatures")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
+	})
+
+	Method("setOrganizationProviderSetup", func() {
+		Description("Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.")
+		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationProviderSetupRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.providerSetup"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationProviderSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationProviderSetup"}`)
 	})
 
 	Method("setOrganizationFeature", func() {
@@ -999,8 +1024,17 @@ var _ = Service("admin", func() {
 			security.AdminAuthPayload()
 			Required("url", "ownership_confirmed")
 			Meta("openapi:typename", "CreateOrganizationRequestBody")
-			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.", func() {
+			Attribute("url", String, "Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.", func() {
 				MinLength(1)
+			})
+			Attribute("name", String, "Organization display name. When omitted, a name is derived from the registrable company domain.", func() {
+				MinLength(1)
+				MaxLength(100)
+			})
+			Attribute("slug", String, "Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.", func() {
+				MinLength(2)
+				MaxLength(100)
+				Pattern("^[a-z0-9]+(?:-[a-z0-9]+)*$")
 			})
 			Attribute("ownership_confirmed", Boolean, "The operator confirms that domain ownership was established outside this form.")
 		})
@@ -1180,6 +1214,27 @@ var _ = Service("admin", func() {
 			declareUnavailableResponse()
 		})
 		Meta("openapi:operationId", "adminSetStripeCustomer")
+	})
+
+	Method("setAdoptionDashboardUrl", func() {
+		Description("Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.")
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id")
+			Attribute("organization_id", String)
+			Attribute("adoption_dashboard_url", String, func() {
+				Description("An https URL, or empty to clear the link.")
+				MaxLength(2048)
+			})
+			Meta("openapi:typename", "SetAdoptionDashboardUrlRequestBody")
+		})
+		Result(AdminOrganization)
+		HTTP(func() {
+			POST("/admin/organization.setAdoptionDashboardUrl")
+			Response(StatusOK)
+		})
+		Meta("openapi:operationId", "adminSetAdoptionDashboardUrl")
+		Meta("openapi:extension:x-speakeasy-name-override", "setAdoptionDashboardUrl")
 	})
 
 	Method("getStripeSubscription", func() {
@@ -1366,14 +1421,15 @@ var _ = Service("admin", func() {
 	supportCoverageMethods()
 	mcpServerHealthMethods()
 	hookClientsMethods()
-	externalMcpMigrationMethods()
+	hookFleetMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()
+	platformMCPFeedbackMethods()
 
 	Method("getStripeSubscriptionCandidate", func() {
-		Description("Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.")
+		Description("Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")
@@ -1396,7 +1452,7 @@ var _ = Service("admin", func() {
 	})
 
 	Method("setStripeSubscription", func() {
-		Description("Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.")
+		Description("Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.")
 		Payload(func() {
 			security.AdminAuthPayload()
 			Required("organization_id", "stripe_subscription_id")
@@ -1440,4 +1496,8 @@ var _ = Service("admin", func() {
 	})
 
 	upstreamOAuthMigrationMethods()
+	mcpAuthBackfillMethods()
+	mcpConnectBackfillMethods()
+	projectRedeployMethods()
+	customDomainMethods()
 })

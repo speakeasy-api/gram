@@ -7,8 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
-	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,6 +14,9 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 
 	"github.com/go-chi/chi/v5"
 	redisCache "github.com/go-redis/cache/v9"
@@ -29,6 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -79,23 +82,17 @@ func TestHandleToken_ConcurrentRefreshReplayReturnsWinnerResponse(t *testing.T) 
 	require.NotEmpty(t, response["refresh_token"])
 
 	otherSlug := "refresh-replay-other-" + uuid.NewString()[:8]
-	otherToolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	otherToolsetRow, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         toolset.OrganizationID,
 		ProjectID:              toolset.ProjectID,
 		Name:                   "Refresh replay alternate endpoint",
 		Slug:                   otherSlug,
 		Description:            conv.ToPGText("Alternate OAuth endpoint surface"),
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                conv.ToPGText(otherSlug),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
-	otherToolset, err = toolsets_repo.New(ti.conn).UpdateToolsetUserSessionIssuer(ctx, toolsets_repo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuer.ID, Valid: true},
-		Slug:                otherToolset.Slug,
-		ProjectID:           otherToolset.ProjectID,
-	})
-	require.NoError(t, err)
+	otherToolset := hostLegacyToolset(t, ctx, ti, otherToolsetRow, otherSlug, "private", noIssuer())
+	otherToolset = setToolsetIssuer(t, ctx, ti.conn, otherToolset.ProjectID, otherToolset, issuer.ID)
 
 	otherEndpoint := performRefresh(otherSlug, client.ClientID, refreshToken)
 	require.NoError(t, otherEndpoint.err)
@@ -609,15 +606,15 @@ func TestHandleToken_RefreshReplayExpiresBackToInvalidGrant(t *testing.T) {
 	require.NoError(t, first.err)
 	require.Equal(t, http.StatusOK, first.code, first.body)
 
-	replayKey, lockKey := refreshReplayKeys(issuer.ID, refreshToken)
-	// Both keys expire at the grace boundary. Removing them models the state
-	// after that TTL without making the test wait for wall-clock expiration.
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
-	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
+	expireRefreshReplay(t, ctx, ti, issuer.ID, refreshToken)
+
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
 	expired := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken)
 	require.NoError(t, expired.err)
 	require.Equal(t, http.StatusBadRequest, expired.code)
 	require.JSONEq(t, `{"error":"invalid_grant","error_description":"refresh_token is unknown or already used"}`, expired.body)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
 }
 
 func TestHandleToken_RefreshRotationAdoptsCachedWinnerAfterLockLoss(t *testing.T) {
@@ -936,7 +933,7 @@ func seedRefreshReplaySession(
 	t *testing.T,
 	ctx context.Context,
 	ti *testInstance,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string) {
 	t.Helper()
 	toolset, issuer, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 	return toolset, issuer, client, refreshToken
@@ -947,7 +944,7 @@ func seedRefreshReplaySessionDetails(
 	ctx context.Context,
 	ti *testInstance,
 	refreshExpiresAt time.Time,
-) (toolsets_repo.Toolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
+) (hostedToolset, usersessions_repo.UserSessionIssuer, usersessions_repo.UserSessionClient, string, string) {
 	t.Helper()
 
 	toolset, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
@@ -990,4 +987,13 @@ func refreshReplayKeys(issuerID uuid.UUID, refreshToken string) (replayKey, lock
 	refreshHash := sha256.Sum256([]byte(refreshToken))
 	replayKey = "userSessionRefreshReplay:" + issuerID.String() + ":" + base64.RawURLEncoding.EncodeToString(refreshHash[:])
 	return replayKey, "lock:" + replayKey
+}
+
+// expireRefreshReplay removes the replay entry and lock a refresh left behind,
+// as the grace TTL would, without waiting for wall-clock expiration.
+func expireRefreshReplay(t *testing.T, ctx context.Context, ti *testInstance, issuerID uuid.UUID, refreshToken string) {
+	t.Helper()
+	replayKey, lockKey := refreshReplayKeys(issuerID, refreshToken)
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, lockKey))
+	require.NoError(t, ti.cacheAdapter.Delete(ctx, replayKey+":"))
 }

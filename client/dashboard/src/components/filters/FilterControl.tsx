@@ -1,3 +1,4 @@
+import { calendarDateRangeValue } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -12,6 +13,7 @@ import {
 import { Icon } from "@/components/ui/Icon";
 import {
   allLabelFor,
+  hidesAllOption,
   flattenOptions,
   isGroupedOptions,
   type DateRangeValue,
@@ -93,7 +95,11 @@ export function FilterControl({
             />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={SELECT_ALL_VALUE}>{allLabelFor(dim)}</SelectItem>
+            {!hidesAllOption(dim) && (
+              <SelectItem value={SELECT_ALL_VALUE}>
+                {allLabelFor(dim)}
+              </SelectItem>
+            )}
             {flattenOptions(options).map((o) => (
               <SelectItem
                 key={o.value}
@@ -176,6 +182,9 @@ function DateRangeControl({
       customRangeLabel={value.customLabel}
       onPresetChange={(preset) =>
         onChange({ preset, customRange: null, customLabel: null })
+      }
+      onCalendarRangeChange={(from, to) =>
+        onChange(calendarDateRangeValue(from, to))
       }
       onCustomRangeChange={(from, to, label) =>
         onChange({

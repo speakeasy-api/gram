@@ -35,10 +35,11 @@ export function isCredentialSafe(raw: string): boolean {
 }
 
 /**
- * Exchanges a live key for a single-use install code and returns the one-line
+ * Exchanges a live key for a short-lived install code and returns the one-line
  * setup command. The key never goes into the command that way: a one-liner
- * ends up in shell history and pasted into threads, and a code that dies on
- * first use is worthless there.
+ * ends up in shell history and pasted into threads. The code can be redeemed
+ * any number of times until it expires 15 minutes after it is minted, so a
+ * leaked command can retrieve the key until then.
  */
 export async function mintInstallCommand(
   gatewayURL: string,

@@ -2,19 +2,84 @@ package mcp
 
 import (
 	"context"
+	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"net/http"
+	"slices"
+	"strings"
+	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/toolconfig"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// ConnectionCatalogKey exposes where an approved catalog is stored.
+func ConnectionCatalogKey(organizationID string, id uuid.UUID) string {
+	return connectionCatalogKey(organizationID, id)
+}
+
+// InflateConsentInventory makes a completed capture too big to freeze into a catalog.
+func (s *Service) InflateConsentInventory(ctx context.Context, endpoint *ResolvedMcpEndpoint, stateID, attempt string) error {
+	inventory, found, err := s.getCompletedConsentInventory(ctx, endpoint, stateID, attempt)
+	if err != nil {
+		return err
+	}
+	if !found || len(inventory.Tools) == 0 || inventory.Tools[0].Definition == nil {
+		return fmt.Errorf("no completed capture for attempt %s", attempt)
+	}
+	inventory.Tools[0].Definition.Description = strings.Repeat("x", connectionCatalogMaxBytes)
+	inventory.Tools[0].DefinitionHash = consentEvidenceHash(inventory.Tools[0].Definition)
+	if err := s.consentToolInventoryCache.Store(ctx, inventory); err != nil {
+		return fmt.Errorf("store inflated capture: %w", err)
+	}
+	return nil
+}
+
+// DrainConnectionEndings waits for once-only endings in flight.
+func (s *Service) DrainConnectionEndings(ctx context.Context) error {
+	return s.attemptEndings.drain(ctx)
+}
+
+// SetConnectionRecorder replaces the connection attempt recorder.
+func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
+	s.connections = recorder
+	if s.remoteProxyManager != nil {
+		s.remoteProxyManager.Connections = recorder
+	}
+}
+
+// ConnectionAttempt exposes the state's connection attempt.
+func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
+	return a.connectionAttempt(endpoint)
+}
+
+// SetEnvironmentLoader replaces the environment loader.
+func (s *Service) SetEnvironmentLoader(loader toolconfig.EnvironmentLoader) {
+	s.env = loader
+}
+
+// SetCIMDResolver replaces the client metadata document resolver.
+func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
+	s.cimdResolver = resolver
+}
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
@@ -46,7 +111,7 @@ func AdmitWorkloadAssertion(
 
 // VerifyRemoteGrant exposes the grant hook to tests.
 func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
-	return s.verifyRemoteGrant(ctx, grant)
+	return s.verifyRemoteGrant(ctx, mcpconnectionattempts.FromRequest(nil), grant)
 }
 
 // VerifyRemoteGrantOn runs the probe step against an endpoint the test resolved itself.
@@ -57,7 +122,12 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return
 	}
-	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+	s.probeRemoteGrant(ctx, s.logger, mcpconnectionattempts.FromRequest(nil), endpoint, challengeState, grant)
+}
+
+// LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.
+func (s *Service) LoadResolvedMcpEndpointByRef(ctx context.Context, ref EndpointRef) (*ResolvedMcpEndpoint, error) {
+	return s.loadResolvedMcpEndpointByRef(ctx, ref)
 }
 
 // RemoteChallengeManager is the manager the service registered its grant hook on.
@@ -104,4 +174,188 @@ func (s *Service) SetPosthog(p *posthog.Posthog) {
 // count or delay admissions.
 func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.MandatoryAuthorization, error)) {
 	s.prepareMandatory = prepare
+}
+
+// ConnectionRecoveryLink names what a test connection link binds.
+type ConnectionRecoveryLink struct {
+	OrganizationID string
+	UserID         string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	RegistrationID uuid.UUID
+	// UserSessionIssuerID and UpstreamResource are the server's sign-in and
+	// upstream; a link that names no sign-in gets one that does not exist.
+	UserSessionIssuerID uuid.UUID
+	UpstreamResource    string
+}
+
+// IssueConnectionRecovery stores a connection link and returns its path.
+func (s *Service) IssueConnectionRecovery(ctx context.Context, link ConnectionRecoveryLink) (string, error) {
+	token, err := generateOpaqueToken()
+	if err != nil {
+		return "", err
+	}
+	signIn := link.UserSessionIssuerID
+	if signIn == uuid.Nil {
+		signIn = uuid.New()
+	}
+	err = s.connectionRecoveryCache.Store(ctx, connectionRecovery{
+		ID: token, OrganizationID: link.OrganizationID, UserID: link.UserID, ProjectID: link.ProjectID,
+		UserSessionIssuerID: signIn, McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server", UpstreamResource: link.UpstreamResource,
+		AuthClientID: link.AuthClientID, RegistrationID: link.RegistrationID, CreatedAt: time.Now(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("store connection link: %w", err)
+	}
+	return connectionRecoveryPath + token, nil
+}
+
+// SetBrowserSession replaces how a browser's session token authenticates.
+func (s *Service) SetBrowserSession(authenticate func(context.Context, string) (context.Context, error)) {
+	s.browserSession = authenticate
+}
+
+type fixedPermitter bool
+
+func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return bool(p), nil
+}
+
+// SetAuthClientPermitted answers every auth client permission check with allowed.
+func (s *Service) SetAuthClientPermitted(allowed bool) {
+	s.authClientPermitter = fixedPermitter(allowed)
+}
+
+// RemoteLoginState reads a started remote login by its state parameter.
+func (s *Service) RemoteLoginState(ctx context.Context, state string) (remotesessions.RemoteLoginState, error) {
+	remote, err := s.remoteLoginCache.Get(ctx, "remoteLogin:"+state)
+	if err != nil {
+		return remote, fmt.Errorf("load remote login: %w", err)
+	}
+	return remote, nil
+}
+
+// VerifyConnectionRecoveryCompletion runs the completion check of a
+// connection link's login.
+func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote remotesessions.RemoteLoginState) (bool, error) {
+	return s.verifyConnectionRecoveryCompletion(r, remote)
+}
+
+// TagTunnelOutage and ErrTunnelNoRoute expose the answer every tunneled path shares.
+var (
+	TagTunnelOutage  = tagTunnelOutage
+	ErrTunnelNoRoute = errTunnelNoRoute
+)
+
+// SetDB swaps only the pool the service reads endpoints through, to fail that first read.
+func (s *Service) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
+// ConnectionRouteFailureForOutage is what Code Mode reports for a connection in an outage.
+func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool) (string, string) {
+	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
+}
+
+// RemoteSessionUnavailableError exposes the answer for a required connection in an outage.
+var RemoteSessionUnavailableError = remoteSessionUnavailableError
+
+// SetAuthzEngine swaps the authorization engine, to make it fail.
+func (s *Service) SetAuthzEngine(engine *authz.Engine) {
+	s.authz = engine
+}
+
+// SetChatSessionsManager swaps the store revocation checks read, to take it down.
+func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
+	s.chatSessionsManager = manager
+}
+
+// ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.
+const (
+	ConnectionRecoveryRoute    = connectionRecoveryRoute
+	ConnectionRecoveryDonePath = connectionRecoveryDonePath
+	RemoteLoginBindPath        = remoteLoginBindPath
+)
+
+// ConnectionSubject exposes whose stored connection a typed auth client
+// serves for the caller in ctx.
+func ConnectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
+	return connectionSubject(ctx, subject)
+}
+
+// ConnectionRecoveryErrorFor runs the gate's connection answer for a direct
+// endpoint whose typed auth client resolved to clientID.
+func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, clientID, registrationID uuid.UUID, clientType string) (error, bool) {
+	res := gapResolution("")
+	res.outcome = authClientResolved
+	res.clientID = clientID
+	res.clientType = clientType
+	res.serverName = "Linear"
+	authentication := &issuerGateAuthentication{
+		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
+		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
+	}
+	return s.connectionRecoveryError(ctx, authentication, nil)
+}
+
+type callerRecordingPermitter struct {
+	mu    sync.Mutex
+	users []string
+}
+
+func (p *callerRecordingPermitter) Permitted(ctx context.Context, _ authClientPermitRequest) (bool, error) {
+	user := ""
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil {
+		user = authCtx.UserID
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.users = append(p.users, user)
+	return true, nil
+}
+
+// RecordAuthClientPermitCallers allows every auth client and returns the
+// users each permission check was judged for, empty for a check made with no
+// signed-in caller.
+func (s *Service) RecordAuthClientPermitCallers() func() []string {
+	permitter := &callerRecordingPermitter{mu: sync.Mutex{}, users: nil}
+	s.authClientPermitter = permitter
+	return func() []string {
+		permitter.mu.Lock()
+		defer permitter.mu.Unlock()
+		return slices.Clone(permitter.users)
+	}
+}
+
+// ReloadAuthEnforcement drops the cached enforcement state, as its expiry would
+// after staff change it.
+func (s *Service) ReloadAuthEnforcement() {
+	s.authEnforcement = authenforcement.NewGate(s.db)
+}
+
+// SetAuthClientPermission installs a mutable permit decision in the test binary.
+func (s *Service) SetAuthClientPermission(allowed func() bool) {
+	s.authClientPermitter = testAuthClientPermission(allowed)
+}
+
+type testAuthClientPermission func() bool
+
+func (f testAuthClientPermission) Permitted(context.Context, authClientPermitRequest) (bool, error) {
+	return f(), nil
+}
+
+// RecordConnectionPopupGrant exercises the callback's parent-state correlation.
+func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
+	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
+func (s *Service) SetIDJAGTrust(store idjag.Store) {
+	s.idJAGTrust = store
+}
+
+// StaleNoAuthWarned reports whether the stale choice warning already fired for this subject, server and reason.
+func (s *Service) StaleNoAuthWarned(subject string, serverID uuid.UUID, reason string) bool {
+	return s.staleNoAuthLog.seen.Contains(subject + "|" + serverID.String() + "|" + reason)
 }

@@ -5,7 +5,9 @@ INSERT INTO user_session_issuers (
     slug,
     authn_challenge_mode,
     session_duration,
-    client_id_metadata_admission_mode
+    client_id_metadata_admission_mode,
+    authorization_server_mode,
+    use_authentication_host
 )
 VALUES (
     @project_id::uuid,
@@ -18,7 +20,9 @@ VALUES (
     -- absence the application has to interpret. A literal, not a parameter:
     -- the create form carries no admission field, and an operator changes
     -- the mode afterwards through the update endpoint.
-    'open'
+    'open',
+    COALESCE(sqlc.narg('authorization_server_mode')::text, 'endpoint'),
+    COALESCE(sqlc.narg('use_authentication_host')::boolean, false)
 )
 RETURNING *;
 
@@ -84,22 +88,6 @@ SELECT EXISTS (
       AND server.visibility <> 'disabled'
       AND NOT (server.tunneled_mcp_server_id IS NOT NULL AND server.visibility = 'public')
       AND COALESCE(NULLIF(server.network_access_mode, ''), 'public_only') IN ('public_only', 'dual')
-    UNION ALL
-    SELECT 1
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = @user_session_issuer_id
-      AND project.organization_id = @organization_id::text
-      AND project.deleted IS FALSE
-      AND toolset.deleted IS FALSE
-      AND toolset.mcp_enabled IS TRUE
-      AND toolset.mcp_slug IS NOT NULL
-      AND NOT EXISTS (
-          SELECT 1 FROM mcp_servers AS server
-          WHERE server.toolset_id = toolset.id
-            AND server.project_id = toolset.project_id
-            AND server.deleted IS FALSE
-      )
 ) AS available;
 
 -- name: GetProjectUserSessionIssuerByID :one
@@ -307,13 +295,9 @@ WHERE issuer.id = @id
   );
 
 -- name: ListOrganizationManagedUserSessionIssuerMCPServers :many
--- The live MCP servers, toolsets, and meta MCP servers attached to an issuer,
--- each read through its own live project in the organization. A toolset
--- wrapped by a live MCP server is listed once, as that server, because clients
--- reach it through the server's endpoints. Pages by id across the three kinds.
--- A wrapper MCP server can share its toolset's id, so the cursor relies on that
--- exclusion: without it the two rows would share a cursor position and a page
--- boundary between them would skip one.
+-- The live MCP servers and meta MCP servers attached to an issuer, each read
+-- through its own live project in the organization. A hosted toolset is listed
+-- as its canonical MCP server. Pages by id across both kinds.
 SELECT
     attachment.kind,
     attachment.id,
@@ -335,27 +319,6 @@ FROM (
       AND server.deleted IS FALSE
       AND project.organization_id = @organization_id::text
       AND project.deleted IS FALSE
-    UNION ALL
-    SELECT
-        'toolset'::text,
-        toolset.id,
-        toolset.name,
-        toolset.slug,
-        project.id,
-        project.name
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = @user_session_issuer_id::uuid
-      AND toolset.deleted IS FALSE
-      AND project.organization_id = @organization_id::text
-      AND project.deleted IS FALSE
-      AND NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers AS server
-          WHERE server.toolset_id = toolset.id
-            AND server.project_id = toolset.project_id
-            AND server.deleted IS FALSE
-      )
     UNION ALL
     SELECT
         'meta_mcp_server'::text,
@@ -387,21 +350,6 @@ SELECT (
           AND server.deleted IS FALSE
           AND project.organization_id = @organization_id::text
           AND project.deleted IS FALSE
-    ) + (
-        SELECT COUNT(*)
-        FROM toolsets AS toolset
-        JOIN projects AS project ON project.id = toolset.project_id
-        WHERE toolset.user_session_issuer_id = @user_session_issuer_id::uuid
-          AND toolset.deleted IS FALSE
-          AND project.organization_id = @organization_id::text
-          AND project.deleted IS FALSE
-          AND NOT EXISTS (
-              SELECT 1
-              FROM mcp_servers AS server
-              WHERE server.toolset_id = toolset.id
-                AND server.project_id = toolset.project_id
-                AND server.deleted IS FALSE
-          )
     ) + (
         SELECT COUNT(*)
         FROM meta_mcp_servers AS meta_server
@@ -524,16 +472,6 @@ FROM (
     AND server.deleted IS FALSE
     AND project.organization_id = @organization_id::text
     AND server.project_id <> @target_project_id::uuid
-
-  UNION ALL
-
-  SELECT toolset.id
-  FROM toolsets AS toolset
-  JOIN projects AS project ON project.id = toolset.project_id
-  WHERE toolset.user_session_issuer_id = @user_session_issuer_id
-    AND toolset.deleted IS FALSE
-    AND project.organization_id = @organization_id::text
-    AND toolset.project_id <> @target_project_id::uuid
 
   UNION ALL
 
@@ -757,6 +695,10 @@ WHERE issuer.id = @user_session_issuer_id
   AND session.deleted IS FALSE;
 
 -- name: ListUserSessionIssuerClientIDConflicts :many
+-- A client_id on both issuers blocks migration unless both rows were resolved
+-- from the same Client ID Metadata Document: those describe one client and
+-- merge onto the target's row. A source CIMD row that an issuance selection
+-- profile pins to the source issuer cannot be merged and still blocks.
 SELECT source.client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
@@ -765,6 +707,17 @@ JOIN user_session_clients AS target
  AND target.deleted IS FALSE
 WHERE source.user_session_issuer_id = @source_issuer_id
   AND source.deleted IS FALSE
+  AND NOT (
+    source.client_id_metadata_uri IS NOT NULL
+    AND target.client_id_metadata_uri IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM issuance_selection_profiles AS profile
+      WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+        AND profile.user_session_client_id = source.id
+        AND profile.deleted IS FALSE
+    )
+  )
   AND 2 = (
     SELECT COUNT(*)
     FROM user_session_issuers AS issuer
@@ -777,6 +730,134 @@ WHERE source.user_session_issuer_id = @source_issuer_id
       )
   )
 ORDER BY source.client_id;
+
+-- Merging a source CIMD client into the target issuer's client for the same
+-- metadata document URL. ListMergeableCimdClientPairs decides which clients
+-- merge; the steps after it each take one pair and run in order, each seeing
+-- the previous step's writes.
+
+-- name: ListMergeableCimdClientPairs :many
+-- Pairs each live source client resolved from a Client ID Metadata Document
+-- with the target issuer's live client for the same document URL. A source
+-- client an issuance selection profile pins to the source issuer is left out:
+-- the profile's foreign key keeps it on that issuer.
+SELECT source.id AS source_client_id, target.id AS target_client_id
+FROM user_session_clients AS source
+JOIN user_session_clients AS target
+  ON target.user_session_issuer_id = @target_issuer_id
+ AND target.client_id = source.client_id
+ AND target.client_id_metadata_uri IS NOT NULL
+ AND target.deleted IS FALSE
+WHERE source.user_session_issuer_id = @source_issuer_id
+  AND source.client_id_metadata_uri IS NOT NULL
+  AND source.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM issuance_selection_profiles AS profile
+    WHERE profile.user_session_issuer_id = source.user_session_issuer_id
+      AND profile.user_session_client_id = source.id
+      AND profile.deleted IS FALSE
+  )
+  AND 2 = (
+    SELECT COUNT(*)
+    FROM user_session_issuers AS issuer
+    LEFT JOIN projects AS project ON project.id = issuer.project_id
+    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
+      AND issuer.deleted IS FALSE
+      AND (
+        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
+        OR (issuer.project_id IS NOT NULL AND project.organization_id = @organization_id::text AND project.deleted IS FALSE)
+      )
+  )
+ORDER BY source.id;
+
+-- name: MoveDuplicateConsentResourcesToClient :execrows
+-- Where the same subject approved the same upstream set through both clients,
+-- approval evidence for resources only the source consent covers moves onto
+-- the target consent.
+UPDATE user_session_consent_resources AS resource
+SET user_session_consent_id = target_consent.id,
+    updated_at = clock_timestamp()
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
+  AND resource.deleted IS FALSE
+  AND NOT EXISTS (
+    SELECT 1
+    FROM user_session_consent_resources AS existing
+    WHERE existing.user_session_consent_id = target_consent.id
+      AND existing.resource = resource.resource
+      AND existing.deleted IS FALSE
+  );
+
+-- name: RetireDuplicateConsentResources :execrows
+-- Evidence still on a source consent the target duplicates covers resources
+-- the target consent already holds, so it is retired with the consent.
+UPDATE user_session_consent_resources AS resource
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
+  AND resource.deleted IS FALSE;
+
+-- name: RetireDuplicateConsents :execrows
+-- The target consent is authoritative for a subject and upstream set it
+-- already covers.
+UPDATE user_session_consents AS source_consent
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND EXISTS (
+    SELECT 1
+    FROM user_session_consents AS target_consent
+    WHERE target_consent.user_session_client_id = @target_client_id
+      AND target_consent.subject_urn = source_consent.subject_urn
+      AND target_consent.remote_set_hash = source_consent.remote_set_hash
+      AND target_consent.deleted IS FALSE
+  );
+
+-- name: RepointConsentsToClient :execrows
+-- Remaining source consents move to the target client with its tenancy.
+UPDATE user_session_consents AS consent
+SET user_session_client_id = target.id,
+    project_id = target.project_id,
+    organization_id = target.organization_id,
+    updated_at = clock_timestamp()
+FROM user_session_clients AS target
+WHERE target.id = @target_client_id
+  AND target.deleted IS FALSE
+  AND consent.user_session_client_id = @source_client_id
+  AND consent.deleted IS FALSE;
+
+-- name: RepointSessionsToClient :execrows
+-- Sessions keep their refresh tokens; only the client they belong to changes.
+-- Their issuer and tenancy move with the rest of the source sessions.
+UPDATE user_sessions AS session
+SET user_session_client_id = @target_client_id::uuid,
+    updated_at = clock_timestamp()
+WHERE session.user_session_client_id = @source_client_id::uuid
+  AND session.deleted IS FALSE;
+
+-- name: RetireMergedUserSessionClient :execrows
+UPDATE user_session_clients AS client
+SET deleted_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE client.id = @source_client_id
+  AND client.deleted IS FALSE;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
 SELECT COUNT(*)::int
@@ -1000,12 +1081,15 @@ WHERE binding.user_session_issuer_id = @source_issuer_id
       )
   );
 
--- name: UpdateMCPServersToUserSessionIssuer :execrows
+-- name: UpdateMCPServersToUserSessionIssuer :many
+-- Returns each moved server, with its updated_at before the move, so live hosted ones can be audited as their own update.
 UPDATE mcp_servers AS server
 SET user_session_issuer_id = @target_issuer_id,
     updated_at = clock_timestamp()
-FROM projects AS project
+FROM projects AS project, mcp_servers AS previous
 WHERE server.user_session_issuer_id = @source_issuer_id
+  AND previous.id = server.id
+  AND previous.project_id = server.project_id
   AND project.id = server.project_id
   AND project.organization_id = @organization_id::text
   AND 2 = (
@@ -1018,7 +1102,8 @@ WHERE server.user_session_issuer_id = @source_issuer_id
         (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
         OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
       )
-  );
+  )
+RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at;
 
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer
@@ -1031,26 +1116,6 @@ WHERE server.user_session_issuer_id IN (@source_issuer_id, @target_issuer_id)
   AND project.organization_id = @organization_id::text
   AND project.deleted IS FALSE
 ORDER BY server.project_id;
-
--- name: UpdateToolsetsToUserSessionIssuer :execrows
-UPDATE toolsets AS toolset
-SET user_session_issuer_id = @target_issuer_id,
-    updated_at = clock_timestamp()
-FROM projects AS project
-WHERE toolset.user_session_issuer_id = @source_issuer_id
-  AND project.id = toolset.project_id
-  AND project.organization_id = @organization_id::text
-  AND 2 = (
-    SELECT COUNT(*)
-    FROM user_session_issuers AS issuer
-    LEFT JOIN projects AS issuer_project ON issuer_project.id = issuer.project_id
-    WHERE issuer.id IN (@source_issuer_id, @target_issuer_id)
-      AND issuer.deleted IS FALSE
-      AND (
-        (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text)
-        OR (issuer.project_id IS NOT NULL AND issuer_project.organization_id = @organization_id::text AND issuer_project.deleted IS FALSE)
-      )
-  );
 
 -- name: UpdateMetaMCPServersToUserSessionIssuer :execrows
 UPDATE meta_mcp_servers AS server
@@ -1130,14 +1195,6 @@ WHERE issuer.id = @id
     UNION ALL
 
     SELECT 1
-    FROM toolsets AS toolset
-    WHERE toolset.user_session_issuer_id = issuer.id
-      AND toolset.deleted IS FALSE
-      AND toolset.project_id = issuer.project_id
-
-    UNION ALL
-
-    SELECT 1
     FROM meta_mcp_servers AS meta_mcp_server
     WHERE meta_mcp_server.project_id = issuer.project_id
       AND meta_mcp_server.user_session_issuer_id = issuer.id
@@ -1153,7 +1210,7 @@ RETURNING issuer.*
 SELECT * FROM deleted_parent;
 
 -- name: UserSessionIssuerHasActiveOwner :one
--- An issuer can be referenced by an MCP server, toolset, or meta MCP server.
+-- An issuer can be referenced by an MCP server or meta MCP server.
 -- Only delete it once no active owner remains.
 --
 -- This project mutation helper deliberately ignores organization-owned rows.
@@ -1169,14 +1226,6 @@ SELECT EXISTS (
         WHERE server.user_session_issuer_id = issuer.id
           AND server.deleted IS FALSE
           AND server.project_id = issuer.project_id
-
-        UNION ALL
-
-        SELECT 1
-        FROM toolsets AS toolset
-        WHERE toolset.user_session_issuer_id = issuer.id
-          AND toolset.deleted IS FALSE
-          AND toolset.project_id = issuer.project_id
 
         UNION ALL
 
@@ -1206,21 +1255,23 @@ WHERE issuer.id = @user_session_issuer_id
 ORDER BY project.name, COALESCE(server.name, server.slug, server.id::text), server.id;
 
 -- name: ListOrganizationUserSessionIssuerToolsets :many
-SELECT toolset.id,
-       toolset.name,
-       project.id AS project_id,
-       project.name AS project_name
-FROM user_session_issuers AS issuer
-JOIN toolsets AS toolset ON toolset.user_session_issuer_id = issuer.id
-JOIN projects AS project ON project.id = toolset.project_id
-WHERE issuer.id = @user_session_issuer_id
-  AND issuer.project_id IS NULL
-  AND issuer.organization_id = @organization_id::text
-  AND issuer.deleted IS FALSE
-  AND toolset.deleted IS FALSE
-  AND project.deleted IS FALSE
-  AND project.organization_id = issuer.organization_id
-ORDER BY project.name, toolset.name, toolset.id;
+-- Toolsets on the issuer through their canonical wrapper's issuer.
+SELECT listed.id, listed.name, listed.project_id, listed.project_name
+FROM (
+  SELECT toolset.id, toolset.name, project.id AS project_id, project.name AS project_name
+  FROM user_session_issuers AS issuer
+  JOIN mcp_servers AS wrapper ON wrapper.user_session_issuer_id = issuer.id AND wrapper.deleted IS FALSE
+  JOIN toolsets AS toolset ON toolset.id = wrapper.id AND toolset.id = wrapper.toolset_id AND toolset.project_id = wrapper.project_id
+  JOIN projects AS project ON project.id = toolset.project_id
+  WHERE issuer.id = @user_session_issuer_id
+    AND issuer.project_id IS NULL
+    AND issuer.organization_id = @organization_id::text
+    AND issuer.deleted IS FALSE
+    AND toolset.deleted IS FALSE
+    AND project.deleted IS FALSE
+    AND project.organization_id = issuer.organization_id
+) AS listed
+ORDER BY listed.project_name, listed.name, listed.id;
 
 -- name: CountOrganizationUserSessionIssuerClients :one
 SELECT COUNT(*)::int
@@ -1260,15 +1311,6 @@ WHERE issuer.id = @id
       AND project.deleted IS FALSE
       AND project.organization_id = issuer.organization_id
 
-    UNION ALL
-
-    SELECT 1
-    FROM toolsets AS toolset
-    JOIN projects AS project ON project.id = toolset.project_id
-    WHERE toolset.user_session_issuer_id = issuer.id
-      AND toolset.deleted IS FALSE
-      AND project.deleted IS FALSE
-      AND project.organization_id = issuer.organization_id
   )
 RETURNING issuer.*
 ), tombstones AS (
@@ -1661,6 +1703,23 @@ WHERE user_session_issuer_id = @user_session_issuer_id
   AND refresh_token_hash = @refresh_token_hash::text
   AND deleted IS FALSE
 RETURNING *;
+
+-- name: GetExpiredUserSessionByRefreshTokenHash :one
+-- Finds a session retired by reaching its deadline, by refresh-token hash for
+-- the issuer and client that presented it, so a refusal can say the token
+-- expired. Rows retired earlier (rotated or revoked) do not match: their reuse
+-- stays "unknown or already used". Project scoping is intentionally NOT
+-- applied here -- the OAuth surface is public and the issuer_id is the
+-- authoritative scope.
+SELECT subject_urn
+FROM user_sessions
+WHERE user_session_issuer_id = @user_session_issuer_id
+  AND user_session_client_id = @user_session_client_id::uuid
+  AND refresh_token_hash = @refresh_token_hash::text
+  AND refresh_token_hash IS NOT NULL
+  AND deleted IS TRUE
+  AND deleted_at >= refresh_expires_at
+LIMIT 1;
 
 -- name: GetUserSessionPolicyByJTI :one
 -- Serve-path lookup for immutable session policy, keyed the same way
@@ -2211,7 +2270,6 @@ JOIN (
       JOIN remote_sessions AS s ON s.id = b.remote_session_id
         AND s.subject_urn = 'user:' || a.owner_user_id
         AND b.attached_by_subject_id = s.subject_urn
-        AND s.grant_generation = b.grant_generation
         AND s.remote_session_client_id = b.remote_session_client_id
       JOIN remote_session_clients AS c ON c.id = s.remote_session_client_id
       JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
@@ -2219,7 +2277,7 @@ JOIN (
       JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
       JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
       JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
-      WHERE b.project_id = @project_id::uuid
+      WHERE b.project_id = ANY(@project_ids::uuid[])
         AND b.organization_id = @organization_id::text
         AND 'agent:' || b.principal_id::text = pair.subject_urn
         AND b.user_session_issuer_id = pair.issuer_id
@@ -2231,17 +2289,17 @@ JOIN (
         AND provenance.deleted IS FALSE
         AND issuer.deleted IS FALSE
         AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
-        AND (provenance.project_id = @project_id::uuid OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
-        AND (target.project_id = @project_id::uuid OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
-        AND (c.project_id = @project_id::uuid OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
         AND s.id = rs.id
     )
   )
 JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
 JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
 JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
-WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
-  AND (rc.project_id = @project_id::uuid OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
+WHERE (usi.project_id = ANY(@project_ids::uuid[]) OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (rc.project_id = ANY(@project_ids::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
   AND (
     EXISTS (
       SELECT 1
@@ -2254,6 +2312,7 @@ WHERE (usi.project_id = @project_id::uuid OR (usi.project_id IS NULL AND usi.org
   AND rs.deleted IS FALSE
   AND rc.deleted IS FALSE
   AND ri.deleted IS FALSE
+  AND (ri.project_id = ANY(@project_ids::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = @organization_id)))
 ORDER BY ri.slug ASC, rs.id ASC;
 
 -- name: ClearUserSessionClientAuthMethod :one
@@ -2304,7 +2363,7 @@ FROM (
 LEFT JOIN workload_issuers AS wi
   ON wi.id = w.workload_issuer_id
   AND wi.organization_id = @organization_id::text
-  AND (wi.project_id = @project_id::uuid OR wi.project_id IS NULL)
+  AND (wi.project_id = ANY(@project_ids::uuid[]) OR wi.project_id IS NULL)
   AND wi.deleted IS FALSE
 LEFT JOIN workload_issuers AS live
   ON live.id = w.workload_issuer_id
@@ -2346,7 +2405,7 @@ JOIN (
   ON w.workload_issuer_id = wia.workload_issuer_id
   AND w.subject = wia.subject
 WHERE wia.organization_id = @organization_id::text
-  AND (wia.project_id = @project_id::uuid OR wia.project_id IS NULL)
+  AND (wia.project_id = ANY(@project_ids::uuid[]) OR wia.project_id IS NULL)
   AND wia.deleted IS FALSE
 ORDER BY wia.project_id NULLS LAST, wia.created_at ASC, wia.id ASC;
 
@@ -2369,61 +2428,6 @@ WHERE si.id = @id
   AND si.organization_id = @organization_id
 FOR SHARE OF si;
 
--- name: BindAssistantWorkloadClient :one
--- Pin a newly registered client to the current root binding, never infer it
--- from client metadata or accept a subject supplied at the token endpoint.
-UPDATE user_session_clients c
-SET assistant_trigger_workload_binding_id = tb.id, assistant_runtime_id = r.id, updated_at = clock_timestamp()
-FROM trigger_workload_bindings tb
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.deleted IS FALSE
-  AND c.assistant_trigger_workload_binding_id IS NULL AND c.assistant_runtime_id IS NULL
-  AND r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND c.organization_id = @organization_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND ab.original_assistant_id = @assistant_id AND tb.original_trigger_id = @trigger_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text
-RETURNING c.id;
-
--- name: GetAssistantWorkloadClientBinding :one
-SELECT tb.id AS binding_id, r.id AS runtime_id, ab.original_assistant_id AS assistant_id,
-  tb.original_trigger_id AS trigger_id, tb.original_workload_issuer_id AS workload_issuer_id,
-  tb.subject
-FROM user_session_clients c
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id
-  AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id
-  AND ab.generation = tb.assistant_binding_generation
-JOIN assistants a ON a.id = ab.assistant_id AND a.project_id = ab.project_id AND a.organization_id = ab.organization_id
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.assistant_id = a.id AND r.project_id = a.project_id
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id
-WHERE c.id = @client_id AND c.user_session_issuer_id = @user_session_issuer_id
-  AND c.organization_id = @organization_id AND c.deleted IS FALSE
-  AND (c.project_id = @project_id OR c.project_id IS NULL)
-  AND tb.organization_id = @organization_id AND tb.project_id = @project_id
-  AND tb.deleted IS FALSE AND ab.deleted IS FALSE AND a.deleted IS FALSE AND a.status = 'active'
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND t.deleted IS FALSE AND t.status = 'active' AND t.definition_slug <> 'wake'
-  AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
-
--- name: GetAssistantWorkloadRuntime :one
--- Trusted worker bootstrap resolves tenancy from the persisted incarnation.
-SELECT r.id, r.assistant_id, r.project_id, a.organization_id
-FROM assistant_runtimes r
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE r.id = @runtime_id AND r.runtime_version = 3 AND a.runtime_version = 3
-  AND r.deleted IS FALSE AND r.ended IS FALSE AND r.state IN ('starting', 'active')
-  AND a.deleted IS FALSE AND a.status = 'active';
-
 -- name: ListAssistantWorkloadRuntimeRoots :many
 SELECT tb.original_trigger_id AS trigger_id
 FROM trigger_workload_bindings tb
@@ -2437,37 +2441,11 @@ WHERE tb.project_id = @project_id AND tb.organization_id = @organization_id
   AND t.target_kind = 'assistant' AND t.target_ref = ab.original_assistant_id::text
 ORDER BY tb.original_trigger_id;
 
--- name: RevokeAssistantRuntimeWorkloadClients :many
-UPDATE user_session_clients c
-SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
-FROM assistant_runtimes r
-WHERE c.assistant_runtime_id = @runtime_id AND r.id = c.assistant_runtime_id
-  AND c.organization_id = @organization_id AND r.project_id = @project_id
-  AND (c.project_id = @project_id OR c.project_id IS NULL) AND c.deleted IS FALSE
-RETURNING c.id;
-
--- name: GetAssistantRuntimeForWorkloadSession :one
--- Input comes only from the already authenticated workload context. The caller
--- locks/rechecks the returned runtime in its wake-creation transaction.
-SELECT r.id AS runtime_id, r.assistant_id, c.id AS client_registration_id
-FROM user_sessions s
-JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = s.user_session_issuer_id
-JOIN trigger_workload_bindings tb ON tb.id = c.assistant_trigger_workload_binding_id AND tb.organization_id = c.organization_id AND tb.deleted IS FALSE
-JOIN assistant_agent_bindings ab ON ab.id = tb.assistant_binding_id AND ab.organization_id = tb.organization_id AND ab.project_id = tb.project_id AND ab.deleted IS FALSE AND ab.generation = tb.assistant_binding_generation
-JOIN trigger_instances t ON t.id = tb.trigger_id AND t.project_id = tb.project_id AND t.organization_id = tb.organization_id AND t.deleted IS FALSE AND t.status = 'active'
-JOIN assistant_runtimes r ON r.id = c.assistant_runtime_id AND r.project_id = tb.project_id AND r.assistant_id = ab.assistant_id
-JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
-WHERE s.jti = @jti AND s.subject_urn = @subject_urn
-  AND s.organization_id = @organization_id AND r.project_id = @project_id
-  AND s.deleted IS FALSE AND s.expires_at > clock_timestamp() AND c.deleted IS FALSE
-  AND r.state IN ('starting', 'active')
-  AND r.runtime_version = 3 AND a.runtime_version = 3 AND r.deleted IS FALSE AND r.ended IS FALSE
-  AND a.deleted IS FALSE AND a.status = 'active' AND a.organization_id = @organization_id
-  AND t.definition_slug <> 'wake' AND t.target_kind = 'assistant' AND t.target_ref = a.id::text;
-
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. An existing
+-- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+-- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2487,7 +2465,10 @@ WHERE s.jti = @jti AND s.subject_urn = @subject_urn
 -- serves today. When the issuer binds several of the server's clients, the
 -- one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
 -- parallel arrays) is chosen if it is still one of them; without a pick the
--- choice is left to a reconnection. No-auth is chosen when the server has no
+-- choice is left to a reconnection. A pick naming a typed auth client
+-- (picked_auth_client_ids) records that client and its own registration when
+-- the client is still enabled and offered by the server, whether or not the
+-- issuer binds the registration: the consent page validated it. No-auth is chosen when the server has no
 -- associated client: a server uses exactly the clients associated with it.
 -- A server given a client later makes the no-auth choice unusable, so the
 -- credential reconnects and records the client. A server whose associated
@@ -2522,6 +2503,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+           OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -2564,6 +2547,22 @@ decided AS (
            CASE WHEN pick.auth_client_id IS NOT NULL
                      AND pick.remote_session_client_id = '00000000-0000-0000-0000-000000000000'::uuid
                 THEN NULL
+                -- A picked typed client names its own registration, whether
+                -- or not the issuer binds it for the server.
+                WHEN pick.auth_client_id IS NOT NULL THEN (
+                  SELECT ac.remote_session_client_id
+                  FROM mcp_auth_clients AS ac
+                  JOIN mcp_server_auth_clients AS link
+                    ON link.auth_client_id = ac.id
+                   AND link.mcp_server_id = r.id
+                   AND link.organization_id = ac.organization_id
+                   AND link.deleted IS FALSE
+                  WHERE ac.id = pick.auth_client_id
+                    AND ac.remote_session_client_id = pick.remote_session_client_id
+                    AND ac.organization_id = (SELECT organization_id FROM session_issuer)
+                    AND ac.deleted IS FALSE
+                    AND ac.enabled
+                )
                 ELSE COALESCE(
              (
                SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
@@ -2595,7 +2594,8 @@ decided AS (
 -- remote_session or service_account auth client of its registration linked
 -- to the server, and a no-auth choice the server's linked, enabled
 -- static_credential or pass_through client that carries exactly the server
--- source's current credential headers, while the server links no enabled
+-- source's current credential headers or, when the source has none, that an
+-- administrator created or linked, while the server links no enabled
 -- OAuth-backed client. A header client whose headers no longer match was
 -- derived from a configuration since changed, so it is not the server's
 -- headers: the choice is recorded unmapped, and the backfill maps it once it
@@ -2625,36 +2625,57 @@ mapped AS (
            -- compared as stored. authclientbackfill.ListSelectionMappings
            -- repeats this comparison; the two must stay identical.
            AND (
-             SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-             FROM mcp_auth_client_headers AS h
-             WHERE h.auth_client_id = ac.id
-               AND h.deleted IS FALSE
-           ) = (
-             SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+             SELECT COALESCE(
+                      cmp.client_headers = cmp.source_headers,
+                      -- A source with no credential headers has none to carry. A
+                      -- client or association an administrator created there is
+                      -- the server's own configuration and mirrors nothing, as
+                      -- GetAuthClientSelection reads it.
+                      cmp.source_headers IS NULL
+                      AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                        SELECT 1
+                        FROM mcp_server_auth_clients AS admin_link
+                        WHERE admin_link.mcp_server_id = d.mcp_server_id
+                          AND admin_link.auth_client_id = ac.id
+                          AND admin_link.organization_id = ac.organization_id
+                          AND admin_link.deleted IS FALSE
+                          AND admin_link.source <> 'backfill'
+                      ))
+                    )
              FROM (
-               SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-               FROM mcp_servers AS s
-               JOIN remote_mcp_servers AS r
-                 ON r.id = s.remote_mcp_server_id
-                AND r.project_id = s.project_id
-                AND r.deleted IS FALSE
-               JOIN remote_mcp_server_headers AS rh
-                 ON rh.remote_mcp_server_id = r.id
-                AND rh.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-               UNION ALL
-               SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-               FROM mcp_servers AS s
-               JOIN tunneled_mcp_servers AS t
-                 ON t.id = s.tunneled_mcp_server_id
-                AND t.project_id = s.project_id
-                AND t.deleted IS FALSE
-               JOIN tunneled_mcp_server_headers AS th
-                 ON th.tunneled_mcp_server_id = t.id
-                AND th.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-             ) AS src
-             WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               SELECT (
+                 SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                 FROM mcp_auth_client_headers AS h
+                 WHERE h.auth_client_id = ac.id
+                   AND h.deleted IS FALSE
+               ) AS client_headers, (
+                 SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                 FROM (
+                   SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                   FROM mcp_servers AS s
+                   JOIN remote_mcp_servers AS r
+                     ON r.id = s.remote_mcp_server_id
+                    AND r.project_id = s.project_id
+                    AND r.deleted IS FALSE
+                   JOIN remote_mcp_server_headers AS rh
+                     ON rh.remote_mcp_server_id = r.id
+                    AND rh.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                   UNION ALL
+                   SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                   FROM mcp_servers AS s
+                   JOIN tunneled_mcp_servers AS t
+                     ON t.id = s.tunneled_mcp_server_id
+                    AND t.project_id = s.project_id
+                    AND t.deleted IS FALSE
+                   JOIN tunneled_mcp_server_headers AS th
+                     ON th.tunneled_mcp_server_id = t.id
+                    AND th.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                 ) AS src
+                 WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               ) AS source_headers
+             ) AS cmp
            )
            AND NOT EXISTS (
              SELECT 1
@@ -2942,8 +2963,247 @@ WHERE issuer.id = @id AND issuer.deleted IS FALSE
   AND ((issuer.project_id = @project_id::uuid AND project.organization_id = @organization_id::text)
     OR (issuer.project_id IS NULL AND issuer.organization_id = @organization_id::text));
 
--- name: ClearAssistantWorkloadClientMarkersForTest :exec
--- Test fixture: simulate ON DELETE SET NULL cleanup of both binding references.
-UPDATE user_session_clients
-SET assistant_runtime_id = NULL, assistant_trigger_workload_binding_id = NULL
-WHERE id = @client_id AND organization_id = @organization_id;
+-- name: GetGatewaySessionScope :one
+SELECT g.project_id, g.user_session_issuer_id
+FROM meta_mcp_servers g
+JOIN projects p ON p.id = g.project_id AND p.organization_id = g.organization_id AND p.deleted IS FALSE
+WHERE g.id = @gateway_id AND g.organization_id = @organization_id AND g.deleted IS FALSE;
+
+-- name: ListGatewaySessionEndpoints :many
+SELECT e.slug, e.is_domain_root, d.domain
+FROM mcp_endpoints e
+JOIN meta_mcp_servers g ON g.id = e.meta_mcp_server_id AND g.project_id = e.project_id
+LEFT JOIN custom_domains d ON d.id = e.custom_domain_id AND d.organization_id = g.organization_id AND d.deleted IS FALSE
+WHERE e.meta_mcp_server_id = @gateway_id AND e.project_id = @project_id
+AND g.organization_id = @organization_id AND e.deleted IS FALSE AND g.deleted IS FALSE;
+
+-- name: ListGatewaySessionProjects :many
+SELECT id FROM projects WHERE organization_id = @organization_id AND deleted IS FALSE;
+
+-- name: ListGatewaySessions :many
+-- Only authorized tenant/project identifiers reach this query. Issuer-scoped
+-- sessions authorize all endpoints using that issuer; resource-bound sessions
+-- authorize only the selected gateway's endpoint URLs.
+WITH members AS (
+SELECT ms.id, ms.name, a.remote_session_client_id
+ FROM mcp_servers ms
+ JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+ JOIN mcp_server_remote_session_clients a ON a.mcp_server_id = ms.id AND a.deleted IS FALSE
+ WHERE ms.deleted IS FALSE AND ms.project_id = ANY(@project_ids::uuid[])
+ AND (sqlc.narg('gateway_id')::uuid IS NULL OR EXISTS (
+   SELECT 1 FROM meta_mcp_server_members m WHERE m.meta_mcp_server_id = sqlc.narg('gateway_id')
+   AND m.project_id = ms.project_id AND m.mcp_server_id = ms.id AND m.deleted IS FALSE
+ ))
+)
+SELECT s.id, s.user_session_issuer_id, s.user_session_client_id, s.subject_urn, s.jti,
+       s.refresh_expires_at, s.expires_at, s.last_used_at,
+       s.created_at, s.updated_at, s.deleted_at, s.deleted,
+       iss.slug AS issuer_slug,
+       c.client_name AS client_name,
+       -- A dashboard mint stores no user_session_clients row. The refresh-token
+       -- sentinel (sessiontokens.DashboardMintRefreshTokenHashPrefix) is the
+       -- only mark, and the view turns it into FirstPartyClientName. Real
+       -- refresh hashes are base64url and cannot contain ':', so the prefix
+       -- cannot match one of those.
+       COALESCE(s.refresh_token_hash LIKE 'dashboard-mint:%', false)::boolean AS dashboard_mint,
+       c.client_id_metadata_uri AS client_id_metadata_uri,
+       c.token_endpoint_auth_method AS client_token_endpoint_auth_method,
+       -- Whether the client stores a secret, never the hash itself: the
+       -- credential kind cannot be derived from the declared method alone (a
+       -- method predating the column resolves by whether a secret is on the
+       -- row), and the management API must not carry the hash.
+       (c.client_secret_hash IS NOT NULL)::boolean AS client_has_secret,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       u.photo_url AS user_photo_url,
+       k.name AS api_key_name
+FROM user_sessions AS s
+JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
+LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.organization_id = s.organization_id
+LEFT JOIN users AS u
+  ON s.subject_urn::text LIKE 'user:%'
+  AND u.id = split_part(s.subject_urn::text, ':', 2)
+  AND u.deleted_at IS NULL
+LEFT JOIN api_keys AS k
+  ON k.id = CASE
+             WHEN s.subject_urn::text LIKE 'apikey:%'
+             THEN split_part(s.subject_urn::text, ':', 2)::uuid
+           END
+  AND k.organization_id = s.organization_id
+LEFT JOIN agents agent ON s.subject_urn::text = 'agent:' || agent.id::text AND agent.organization_id = @organization_id AND agent.deleted IS FALSE
+WHERE s.organization_id = @organization_id
+ AND iss.organization_id = @organization_id AND iss.deleted IS FALSE
+ AND s.user_session_issuer_id = ANY(@issuer_ids::uuid[])
+ AND (s.resource IS NULL OR s.resource = ANY(@resources::text[]))
+ AND CASE @status::text
+   WHEN 'active' THEN s.deleted IS FALSE AND s.refresh_expires_at > now()
+   WHEN 'expired' THEN s.deleted IS FALSE AND s.refresh_expires_at <= now()
+   WHEN 'revoked' THEN s.deleted IS TRUE
+   ELSE TRUE END
+ AND (@search::text = '' OR strpos(lower(s.subject_urn::text || ' ' || COALESCE(u.display_name, '') || ' ' || COALESCE(u.email, '') || ' ' || COALESCE(k.name, '') || ' ' || COALESCE(agent.name, '')), lower(@search)) > 0)
+ AND (sqlc.narg('created_after')::timestamptz IS NULL OR s.created_at >= sqlc.narg('created_after'))
+ AND (sqlc.narg('created_before')::timestamptz IS NULL OR s.created_at < sqlc.narg('created_before'))
+ AND ((sqlc.narg('server_id')::uuid IS NULL AND sqlc.narg('provider_id')::uuid IS NULL) OR EXISTS (
+ SELECT 1
+FROM remote_sessions AS rs
+JOIN LATERAL (SELECT s.subject_urn::text AS subject_urn, s.user_session_issuer_id AS issuer_id) AS pair
+  ON (
+    (pair.subject_urn NOT LIKE 'agent:%' AND rs.subject_urn = pair.subject_urn)
+    OR EXISTS (
+      SELECT 1
+      FROM principal_remote_session_bindings AS b
+      JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+        AND a.deleted IS FALSE AND a.revoked_at IS NULL AND a.suspended_at IS NULL
+        AND a.owner_reassignment_required_at IS NULL
+      JOIN users AS owner ON owner.id = a.owner_user_id AND owner.deleted_at IS NULL
+      JOIN organization_user_relationships AS membership ON membership.organization_id = a.organization_id
+        AND membership.user_id = a.owner_user_id AND membership.deleted_at IS NULL
+      JOIN remote_sessions AS attached ON attached.id = b.remote_session_id
+        AND attached.subject_urn = 'user:' || a.owner_user_id
+        AND b.attached_by_subject_id = attached.subject_urn
+        AND attached.remote_session_client_id = b.remote_session_client_id
+      JOIN remote_session_clients AS c ON c.id = attached.remote_session_client_id
+      JOIN user_session_issuers AS target ON target.id = b.user_session_issuer_id
+      JOIN user_session_issuers AS provenance ON provenance.id = attached.user_session_issuer_id
+      JOIN projects AS p ON p.id = b.project_id AND p.organization_id = b.organization_id AND p.deleted IS FALSE
+      JOIN remote_session_client_user_session_issuers AS link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = target.id
+      JOIN remote_session_issuers AS issuer ON issuer.id = c.remote_session_issuer_id
+      WHERE b.project_id = ANY(@project_ids::uuid[])
+        AND b.organization_id = @organization_id::text
+        AND 'agent:' || b.principal_id::text = pair.subject_urn
+        AND b.user_session_issuer_id = pair.issuer_id
+        AND b.remote_session_client_id = rs.remote_session_client_id
+        AND b.revoked_at IS NULL
+        AND attached.deleted IS FALSE
+        AND c.deleted IS FALSE
+        AND target.deleted IS FALSE
+        AND provenance.deleted IS FALSE
+        AND issuer.deleted IS FALSE
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = @organization_id::text))
+        AND (target.project_id = p.id OR (target.project_id IS NULL AND target.organization_id = @organization_id::text))
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = @organization_id::text)))
+        AND attached.id = rs.id
+    )
+  )
+JOIN user_session_issuers AS usi ON usi.id = pair.issuer_id
+JOIN remote_session_clients AS rc ON rc.id = rs.remote_session_client_id
+JOIN remote_session_issuers AS ri ON ri.id = rc.remote_session_issuer_id
+WHERE (usi.project_id = ANY(@project_ids::uuid[]) OR (usi.project_id IS NULL AND usi.organization_id = @organization_id::text))
+  AND (rc.project_id = ANY(@project_ids::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
+  AND (
+    EXISTS (
+      SELECT 1
+      FROM remote_session_client_user_session_issuers AS blink
+      WHERE blink.remote_session_client_id = rs.remote_session_client_id
+        AND blink.user_session_issuer_id = pair.issuer_id
+    )
+    OR rs.user_session_issuer_id = pair.issuer_id
+  )
+  AND rs.deleted IS FALSE
+  AND rc.deleted IS FALSE
+  AND ri.deleted IS FALSE
+  AND (ri.project_id = ANY(@project_ids::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = @organization_id)))
+
+ AND (sqlc.narg('provider_id')::uuid IS NULL OR rc.remote_session_issuer_id = sqlc.narg('provider_id'))
+ AND (sqlc.narg('server_id')::uuid IS NULL OR EXISTS (
+ SELECT 1 FROM members WHERE members.id = sqlc.narg('server_id') AND members.remote_session_client_id = rc.id
+ ))
+ ))
+ AND (sqlc.narg('cursor_id')::uuid IS NULL OR
+ CASE WHEN @sort::text IN ('oldest', 'expiry') THEN
+ (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END, s.id) > (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid)
+ ELSE (CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END, s.id) < (sqlc.narg('cursor_time')::timestamptz, sqlc.narg('cursor_id')::uuid) END)
+ ORDER BY
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry') THEN CASE @sort::text WHEN 'last_used' THEN COALESCE(s.last_used_at, '0001-01-01'::timestamptz) WHEN 'expiry' THEN s.refresh_expires_at ELSE s.created_at END END DESC,
+ CASE WHEN @sort::text IN ('oldest','expiry') THEN s.id END ASC,
+ CASE WHEN @sort::text NOT IN ('oldest','expiry') THEN s.id END DESC
+ LIMIT @limit_value;
+
+-- name: ListGatewaySessionFacets :many
+-- Configuration facets are complete, independent of session pages and filters.
+WITH members AS (
+SELECT ms.id, ms.name, a.remote_session_client_id
+ FROM mcp_servers ms
+ JOIN projects p ON p.id = ms.project_id AND p.organization_id = @organization_id AND p.deleted IS FALSE
+ JOIN mcp_server_remote_session_clients a ON a.mcp_server_id = ms.id AND a.deleted IS FALSE
+ WHERE ms.deleted IS FALSE AND ms.project_id = ANY(@project_ids::uuid[])
+ AND (sqlc.narg('gateway_id')::uuid IS NULL OR EXISTS (
+   SELECT 1 FROM meta_mcp_server_members m WHERE m.meta_mcp_server_id = sqlc.narg('gateway_id')
+   AND m.project_id = ms.project_id AND m.mcp_server_id = ms.id AND m.deleted IS FALSE
+ ))
+)
+SELECT DISTINCT members.id AS server_id, members.name AS server_name,
+ ri.id AS provider_id, ri.slug AS provider_name
+FROM members
+JOIN remote_session_clients rc ON rc.id = members.remote_session_client_id AND rc.deleted IS FALSE
+JOIN remote_session_issuers ri ON ri.id = rc.remote_session_issuer_id AND ri.deleted IS FALSE
+WHERE (rc.project_id = ANY(@project_ids::uuid[]) OR (rc.project_id IS NULL AND (rc.organization_id IS NULL OR rc.organization_id = @organization_id)))
+ AND (ri.project_id = ANY(@project_ids::uuid[]) OR (ri.project_id IS NULL AND (ri.organization_id IS NULL OR ri.organization_id = @organization_id)))
+ORDER BY members.name, members.id, ri.slug, ri.id;
+
+-- name: ListGatewaySessionIssuers :many
+-- Keep existing organization authorizations visible even when several issuers
+-- temporarily make the gateway unavailable for new connections.
+SELECT id FROM user_session_issuers
+WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE;
+
+-- name: GetReconnectSessionPolicy :one
+-- Resolve the original credential across refresh rotation, without reviving
+-- revoked/expired connections or borrowing another client's catalogue.
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = @subject_urn
+  AND c.client_id = @client_id::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us;
+
+-- name: SoftDeleteReconnectUpstreamChoices :exec
+-- Retire only active choices in the reviewed scope; preserve prior history.
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = @credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND deleted IS FALSE;
+
+-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND us.subject_urn = @subject_urn
+  AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = @client_id::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti;
+
+-- name: SeedWorkloadAgentAssignmentFixture :exec
+-- Test fixture: workload identity writes belong to the workload identity
+-- management API.
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @agent_id);
+
+-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @name)
+RETURNING id;
+
+-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;

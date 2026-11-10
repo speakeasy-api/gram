@@ -140,9 +140,13 @@ export function useMcpServerCandidates({
         kind: "mcp_server",
         title: mcpServerDisplayName(server),
         detail: detailFor(server),
-        keywords: ["mcp", server.slug, server.toolset?.slug, server.id].filter(
-          (keyword): keyword is string => !!keyword,
-        ),
+        keywords: [
+          "mcp",
+          server.slug,
+          server.platformEndpointSlug,
+          server.toolset?.slug,
+          server.id,
+        ].filter((keyword): keyword is string => !!keyword),
         verbs: verbsFor(server, canWrite(server)),
         icon: "network",
         group: GROUP,
@@ -153,7 +157,7 @@ export function useMcpServerCandidates({
           if (!opensServerPage && (verb === "enable" || verb === "disable")) {
             return setVisibility(server, verb);
           }
-          routes.mcp.x.overview.goTo(mcpServerRouteParam(server));
+          routes.mcp.details.overview.goTo(mcpServerRouteParam(server));
         },
       };
     });

@@ -9,7 +9,7 @@ description: Manage Speakeasy's local development services (server, worker, dash
 
 ## How to interact with pitchfork (in order of preference)
 
-1. **MCP server** — if the `pitchfork` MCP tools are available (`pitchfork_status`, `pitchfork_logs`, `pitchfork_start`, `pitchfork_stop`, `pitchfork_restart`), use them. They return structured output and skip pager/formatting concerns entirely.
+1. **MCP server** — if the `pitchfork` MCP tools are available (`pitchfork_status`, `pitchfork_logs`, `pitchfork_start`, `pitchfork_stop`, `pitchfork_restart`), use them. They return structured output and skip pager/formatting concerns entirely. The repo runs the server with `--local`, so the tools only see and act on this worktree's daemons; use the CLI to reach another project.
 2. **CLI** — otherwise use the `pitchfork` CLI directly (commands below).
 3. **Mise tasks** — `mise run start` / `mise run stop` bring the whole stack up/down. Use these for whole-stack operations even when the MCP/CLI are available, because `mise run start` also starts the supervisor and cleans up stale daemon entries. If the `pitchfork` binary itself is missing, run `mise install` first (mise provides it).
 
@@ -62,7 +62,7 @@ pitchfork status server            # detail for one daemon, includes error/exit 
 
 `available` means defined in config but not started. `errored` includes the exit reason — follow up with logs.
 
-The MCP `pitchfork_status` tool returns a JSON array covering all daemons (equivalent to `pitchfork list --json`); there is no per-daemon MCP detail call, so use `pitchfork status <name>` on the CLI when you need one daemon's full detail.
+The MCP `pitchfork_status` tool returns a JSON array covering this project's daemons (equivalent to `pitchfork list --project --json`); there is no per-daemon MCP detail call, so use `pitchfork status <name>` on the CLI when you need one daemon's full detail.
 
 ## Logs
 

@@ -179,6 +179,60 @@ var AdminMcpServerToolCalls = Type("AdminMcpServerToolCalls", func() {
 	Attribute("daily", ArrayOf(AdminMcpServerToolCallBucket), "Tool calls per bucket, oldest first.")
 })
 
+var AdminMcpServerResourceScopeClient = Type("AdminMcpServerResourceScopeClient", func() {
+	Description("What a login through one remote session client bound to the server would request now.")
+	Required("client_id", "scope_source", "requested_scopes", "unadvertised_pinned_scopes", "pin_would_decide")
+
+	Attribute("client_id", String, "The remote session client ID.")
+	Attribute("scope_source", String, "Which source decides the client's requested scopes.", func() {
+		Enum("client_scope", "challenge_scope", "resource_pin", "live_resource", "cached_resource", "issuer_override", "issuer_omitted", "issuer_catalogue", "none")
+	})
+	Attribute("requested_scopes", ArrayOf(String), "The scopes a login would request.")
+	Attribute("unadvertised_pinned_scopes", ArrayOf(String), "Pinned scopes the MCP server does not advertise. They are still requested.")
+	Attribute("pin_would_decide", Boolean, "Whether a pin, if set, decides this client's request: the client owns the resource and neither its own scopes nor a challenge outranks the pin.")
+})
+
+var AdminMcpServerResourceScopes = Type("AdminMcpServerResourceScopes", func() {
+	Description("The scopes logins through a remote-backed MCP server request, read from the cached protected resource without probing.")
+	Required("resource_url", "pinned_scopes", "advertised_scopes_known", "challenge_scopes", "shared_server_count", "clients")
+
+	Attribute("resource_url", String, "The upstream URL the protected resource is keyed by.", func() { Format(FormatURI) })
+	Attribute("pinned_scopes", ArrayOf(String), "Scopes pinned on the resource. Empty when there is no pin.")
+	Attribute("advertised_scopes_known", Boolean, "Whether the resource's advertised scopes are known from a fresh RFC 9728 read.")
+	Attribute("advertised_scopes", ArrayOf(String), "The RFC 9728 scopes_supported the resource advertises. Absent when unknown.")
+	Attribute("challenge_scopes", ArrayOf(String), "Scopes named by the resource's last WWW-Authenticate challenge.")
+	Attribute("shared_server_count", Int, "Other live MCP servers in the project with the same upstream URL. A pin applies to all of them.")
+	Attribute("clients", ArrayOf(AdminMcpServerResourceScopeClient), "Remote session clients bound to the server's user session issuer.")
+})
+
+var AdminMcpServerHealthAuthClient = Type("AdminMcpServerHealthAuthClient", func() {
+	Description("One auth client the server offers for reaching its upstream. Never carries its name or header values.")
+	Required("id", "client_type", "source", "enabled", "server_count", "header_count")
+
+	Attribute("id", String, "Auth client id.", func() { Format(FormatUUID) })
+	Attribute("client_type", String, "How the client authenticates upstream.", func() {
+		Enum("remote_session", "service_account", "static_credential", "pass_through", "ema")
+	})
+	Attribute("source", String, "backfill when created from existing configuration, admin when an administrator created it.", func() {
+		Enum("backfill", "admin")
+	})
+	Attribute("enabled", Boolean, "Whether the client can be used.")
+	Attribute("remote_session_client_id", String, "The OAuth registration behind an OAuth-backed client.", func() { Format(FormatUUID) })
+	Attribute("server_count", Int, "Servers offering the client, this one included.")
+	Attribute("header_count", Int, "Headers the client sends upstream.")
+})
+
+var AdminMcpServerHealthUpstreamAuth = Type("AdminMcpServerHealthUpstreamAuth", func() {
+	Description("Whether the server's upstream needs authentication and the auth clients it offers.")
+	Required("status", "requires_upstream_auth", "auth_clients")
+
+	Attribute("status", String, "configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.", func() {
+		Enum("configured", "setup_incomplete", "no_auth_required")
+	})
+	Attribute("requires_upstream_auth", Boolean, "Whether the upstream needs authentication: true when the server offers at least one enabled auth client.")
+	Attribute("auth_clients", ArrayOf(AdminMcpServerHealthAuthClient))
+})
+
 var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Description("Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.")
 	Required("server", "correlation")
@@ -186,9 +240,11 @@ var AdminMcpServerHealth = Type("AdminMcpServerHealth", func() {
 	Attribute("server", AdminMcpServerHealthServer)
 	Attribute("correlation", AdminMcpServerHealthCorrelation)
 	Attribute("legacy_auth", String, "Legacy authentication in force. Set only when the server has no user session issuer.", func() {
-		Enum("external_oauth", "oauth_proxy", "gram_private")
+		Enum("external_oauth", "gram_private")
 	})
 	Attribute("user_session_issuer", AdminMcpServerHealthUserSessionIssuer)
+	Attribute("resource_scopes", AdminMcpServerResourceScopes, "Set only when a remote MCP server backs the server.")
+	Attribute("upstream_auth", AdminMcpServerHealthUpstreamAuth, "How the server reaches its upstream. Omitted for toolset-only servers.")
 })
 
 // MCP parity: both methods are exposed through Staff Admin MCP (S-1121), the
@@ -228,6 +284,33 @@ func mcpServerHealthMethods() {
 		Meta("openapi:operationId", "adminDescribeMcpServerHealth")
 		Meta("openapi:extension:x-speakeasy-name-override", "describeMcpServerHealth")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminDescribeMcpServerHealth"}`)
+	})
+
+	// MCP parity: describe_mcp_server_health returns resource_scopes. Setting a
+	// pin stays dashboard-only.
+	Method("setMcpServerScopePin", func() {
+		Description("Sets or clears the scopes pinned on the protected resource behind a remote-backed MCP server (admin view, no auth scoping). The pin applies to every live server in the project with the same upstream URL. Audited as the staff member.")
+
+		Payload(func() {
+			security.AdminAuthPayload()
+			Required("organization_id", "project_id", "mcp_server_id", "scopes")
+
+			Attribute("organization_id", String, "Organization the project must belong to. A project outside it is reported as not found.")
+			Attribute("project_id", String, "Project ID.", func() { Format(FormatUUID) })
+			Attribute("mcp_server_id", String, "The mcp_servers row ID.", func() { Format(FormatUUID) })
+			Attribute("scopes", ArrayOf(String), "The new pin. Trimmed and de-duplicated; an empty list clears the pin.")
+		})
+
+		Result(AdminMcpServerResourceScopes)
+
+		HTTP(func() {
+			POST("/admin/project.setMcpServerScopePin")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "adminSetMcpServerScopePin")
+		Meta("openapi:extension:x-speakeasy-name-override", "setMcpServerScopePin")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminSetMcpServerScopePin"}`)
 	})
 
 	Method("getMcpServerToolCalls", func() {

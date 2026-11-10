@@ -1830,6 +1830,11 @@ func marshalDomainsCustomDomainToCustomDomainResponseBody(v *domains.CustomDomai
 		RootMcpEndpointID:        v.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: v.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      v.SuggestedRecordType,
+		DNSTargetToken:           v.DNSTargetToken,
+		DNSTarget:                v.DNSTarget,
+		DNSRoutingMethod:         v.DNSRoutingMethod,
+		DNSConfigurationStatus:   v.DNSConfigurationStatus,
+		DNSCheckedAt:             v.DNSCheckedAt,
 	}
 	if v.IPAllowlist != nil {
 		res.IPAllowlist = make([]string, len(v.IPAllowlist))

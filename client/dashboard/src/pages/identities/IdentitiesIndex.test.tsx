@@ -1,10 +1,11 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import IdentitiesIndex from "./IdentitiesIndex";
+import { saveState } from "@/pages/platform-admin/rbac-override-state";
 
 const mocks = vi.hoisted(() => ({
   orgRead: true,
@@ -18,34 +19,17 @@ const mocks = vi.hoisted(() => ({
   },
 }));
 vi.mock("@/contexts/Auth", () => ({
+  useIsPlatformAdmin: () => true,
   useOrganization: () => ({ id: "org_example", slug: "example" }),
   useSession: () => mocks.session,
-  useIsPlatformAdmin: () => false,
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
   useProjectSlugForRequests: () => "example",
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "example" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead }),
-}));
-vi.mock("@/components/dev-toolbar-utils", () => ({
-  getRBACScopeOverrideHeader: () => null,
-}));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({
-    agents: { href: () => "/agents" },
-    identities: {
-      agents: {
-        href: () => "/identities/agents",
-        new: { href: () => "/identities/agents/new" },
-      },
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}/overview` },
-      },
-    },
-  }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -130,6 +114,7 @@ vi.mock("@/components/ui/Table", () => ({
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
   mocks.orgRead = true;
   mocks.session = {
     user: { id: "user_example" },
@@ -229,6 +214,30 @@ it.each(["unknown", "unknown,agent"])(
   },
 );
 
+it("keeps agents visible and refetches their permissions when the RBAC override changes", async () => {
+  setup("", "agent");
+  await screen.findByText("Registered agent");
+  expect(mocks.agents).toHaveBeenCalledTimes(1);
+  act(() => {
+    saveState({
+      enabled: true,
+      scopes: { "agent:read": { enabled: false, resources: null } },
+    });
+    window.dispatchEvent(new Event("rbac-override-change"));
+  });
+  await waitFor(() => expect(mocks.agents).toHaveBeenCalledTimes(2));
+  expect(await screen.findByText("Registered agent")).toBeTruthy();
+  expect(screen.getByText("New agent identity")).toBeTruthy();
+});
+
+it("does not read the people roster on the agents roster", async () => {
+  mocks.agents.mockResolvedValue({ items: [] });
+  setup("", "agent");
+  await waitFor(() => expect(mocks.agents).toHaveBeenCalled());
+  expect(mocks.roster).not.toHaveBeenCalled();
+  expect(mocks.coverage).not.toHaveBeenCalled();
+});
+
 // Ported from the agent-management page's tests when that page was retired.
 // A support session is reading on someone else's behalf, and an agent's
 // management API answers to the owner — so the roster does not read it at all
@@ -240,7 +249,7 @@ it("does not read agents in an organization override session", async () => {
     impersonatorEmail: undefined,
   };
   setup("", "agent");
-  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  await screen.findByTestId("filters");
   expect(mocks.agents).not.toHaveBeenCalled();
   expect(screen.queryByText("New agent identity")).toBeNull();
 });
@@ -252,7 +261,7 @@ it("does not read agents while impersonating", async () => {
     impersonatorEmail: "support@example.test",
   };
   setup("", "agent");
-  await waitFor(() => expect(mocks.roster).toHaveBeenCalled());
+  await screen.findByTestId("filters");
   expect(mocks.agents).not.toHaveBeenCalled();
   expect(screen.queryByText("New agent identity")).toBeNull();
 });

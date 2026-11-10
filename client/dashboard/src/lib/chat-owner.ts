@@ -65,6 +65,34 @@ export function chatOwnerLabel(
   return chatOwnerDisplay(members, chat, currentUser, accountEmail).label;
 }
 
+/** The principals a session header names. */
+export type ChatActor = {
+  /** The hosted assistant or agent identity that ran the session. */
+  agent: boolean;
+  /** The person the session belongs to, or the agent acted for. */
+  person: boolean;
+};
+
+/**
+ * Who a session header names. A hosted assistant names itself and the person
+ * it acted for. An agent identity (an agent API key) names itself, and the
+ * person behind it only when the session reports one: the server drops
+ * self-reported human identity from agent-key events, so there is often
+ * nobody, and "anonymous" would claim a person who is not there. Any other
+ * session is a person's own.
+ */
+export function chatActor(
+  chat: ChatIdentity & { assistantName?: string; agentId?: string },
+  accountEmail?: string,
+): ChatActor {
+  if (chat.assistantName) return { agent: true, person: true };
+  if (!chat.agentId) return { agent: false, person: true };
+  return {
+    agent: true,
+    person: Boolean(accountEmail || chat.userId || chat.externalUserId),
+  };
+}
+
 export function unresolvedChatOwnerTooltip(chat: ChatIdentity): string {
   if (chat.externalUserId) {
     return "This session's user couldn't be matched to a member of your organization, so the user ID reported by the AI provider is shown instead. The user may not be provisioned in Speakeasy or may have been removed from the organization.";

@@ -156,7 +156,8 @@ func (s *MCPToolExposureService) createMCPFromFunctions(ctx context.Context, pri
 	// and writes nothing. The slugs are never described in prose anywhere, so
 	// what the user confirms is what gets created.
 	if !input.Confirmed {
-		// The same count the toolset core uses to decide the auto-enable.
+		// The same count the toolset core uses to decide the Default plugin
+		// attachment.
 		enabled, err := usagerepo.New(s.db).GetEnabledServerCount(ctx, principal.OrganizationID)
 		if err != nil {
 			return CreateMCPFromFunctionsOutput{}, mcpFromFunctionsUnavailable(err)
@@ -241,7 +242,7 @@ func (s *MCPToolExposureService) createMCPFromFunctionsInTransaction(ctx context
 	// audit entry; the platform principal carries no display email.
 	var email *string
 	created, err := toolsets.CreateToolsetInTransaction(ctx, tx, s.logger, s.audit, toolsets.ToolsetCreateInput{
-		OrganizationID: principal.OrganizationID, OrganizationSlug: organizationSlug, ProjectID: project.ID,
+		OrganizationID: principal.OrganizationID, OrganizationSlug: organizationSlug, ProjectID: project.ID, Authz: s.engine,
 		ActorUserID: principal.UserID, ActorEmail: email, Name: name, Description: nil,
 		DefaultEnvironmentSlug: nil, OriginRegistrySpecifier: nil,
 		ToolURNs: values, ResourceURNs: nil,

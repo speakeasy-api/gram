@@ -31,7 +31,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -109,14 +108,14 @@ func withMetadataProbeHeldUntilToolCall() recordingUpstreamOption {
 func newRecordingUpstream(t *testing.T, toolName string, opts ...recordingUpstreamOption) *recordingUpstream {
 	t.Helper()
 
-	mock := newMockExternalMCPServer(t, externalmcp_types.TransportTypeStreamableHTTP, []testmcp.Tool{{
+	mock := testmcp.NewStreamableHTTPServer(t, &testmcp.Server{Tools: []testmcp.Tool{{
 		Name:        toolName,
 		Description: "returns pong",
 		InputSchema: map[string]any{"type": "object", "properties": map[string]any{}},
 		Response: testmcp.ToolResponse{
 			Content: []map[string]any{{"type": "text", "text": "pong from " + toolName}},
 		},
-	}})
+	}}})
 	t.Cleanup(mock.Close)
 
 	target, err := url.Parse(mock.URL)
@@ -694,7 +693,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-legacy", "")
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "holds no credential that routes to it")
+	require.Contains(t, text, "has no credential for this caller")
 
 	// A grant qualified to the member ties the client to it, and migrating
 	// again replaces the credential's no-auth choice with that client. The
@@ -742,4 +741,46 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnconnectedMemberLinksItsConnectPa
 	require.True(t, isError)
 	require.Contains(t, text, "rejected the user's credential")
 	require.Contains(t, text, "/mcp/"+metaSlug+"/connect/first-party?server=member")
+}
+
+// A proxied member call that fails before it reaches the upstream, on a
+// missing or refused credential, leaves one failed tool_call row stamped with
+// the gateway, since no upstream interceptor ever saw it.
+func TestServePublic_MetaEndpoint_ExecuteTool_UnreachedProxiedMemberLogsFailedRow(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	sharedIssuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-unreached-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, sharedIssuerID)
+
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-unreached", "", []uuid.UUID{sharedIssuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-unreached-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, sharedIssuerID, subject)
+
+	failedRows := `gram_project_id = ?
+		   AND event_source = 'tool_call'
+		   AND tool_name = 'ping'
+		   AND meta_mcp_server_id = ?
+		   AND toInt32OrZero(toString(attributes.http.response.status_code)) >= 400`
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	requireTelemetryRowCount(t, failedRows, 1, projectID.String(), meta.ID.String())
+
+	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-refused", deny.URL)
+	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	requireTelemetryRowCount(t, failedRows, 2, projectID.String(), meta.ID.String())
 }

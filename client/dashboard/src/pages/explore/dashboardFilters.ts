@@ -1,4 +1,7 @@
-import type { DateRangeValue } from "@/components/filters/filter-schema";
+import {
+  customDateRangeBounds,
+  type DateRangeValue,
+} from "@/components/filters/filter-schema";
 import type { DashboardFilters } from "@gram/client/models/components/dashboardfilters.js";
 import {
   MAX_FILTER_VALUES,
@@ -50,12 +53,12 @@ export function savedFromContext(
   fields: readonly PageFilterField[],
 ): DashboardFilters {
   const window = page.window;
+  const customRange = customDateRangeBounds(window);
   let range: DashboardFilters["range"];
-  if (window?.customRange) {
+  if (customRange) {
     range = {
-      from: window.customRange.from,
-      to: window.customRange.to,
-      ...(window.customLabel ? { label: window.customLabel } : {}),
+      ...customRange,
+      ...(window?.customLabel ? { label: window.customLabel } : {}),
     };
   } else if (window?.preset) {
     range = { preset: window.preset };

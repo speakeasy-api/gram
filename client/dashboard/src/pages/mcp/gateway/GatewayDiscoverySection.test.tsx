@@ -5,6 +5,7 @@ import {
   render,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { MetaMcpServer } from "@gram/client/models/components/metamcpserver.js";
@@ -12,6 +13,8 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { GatewayDiscoverySection } from "./GatewayDiscoverySection";
 
 const state = vi.hoisted(() => ({
+  codeEnabled: false,
+  entitled: true as boolean | undefined,
   canWrite: true,
   pending: false,
   mutate: vi.fn(),
@@ -31,6 +34,18 @@ vi.mock("@/components/require-scope", () => ({
     state.scope(props);
     return props.children;
   },
+}));
+vi.mock("@/contexts/Auth", () => ({
+  useOrganization: () => ({ id: "org-test" }),
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  // An undefined entitlement models a loading or failed feature read.
+  useProductFeatures: () => ({
+    data:
+      state.entitled === undefined
+        ? undefined
+        : { codeModeEnabled: state.entitled },
+  }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: state.invalidate }),
@@ -57,16 +72,24 @@ const gateway = {
   projectId: "project-test",
   name: "Gateway",
   discoveryMode: "progressive",
+  userSessionIssuerId: "issuer-test",
 } as MetaMcpServer;
 const show = () =>
   render(
     <TooltipProvider>
-      <GatewayDiscoverySection metaMcpServer={gateway} />
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          codeModeEnabled: state.codeEnabled,
+        }}
+      />
     </TooltipProvider>,
   );
 afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
+  state.codeEnabled = false;
+  state.entitled = true;
   state.canWrite = true;
   state.pending = false;
 });
@@ -202,4 +225,162 @@ it("allows changing a direct gateway to progressive", async () => {
       },
     }),
   );
+});
+
+it("only lets Code Mode be chosen when it is available", async () => {
+  const view = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(
+    screen
+      .getByRole("option", { name: "Code Mode (unavailable)" })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
+  view.unmount();
+  state.codeEnabled = true;
+  show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  expect(state.mutate).toHaveBeenCalledWith({
+    request: {
+      updateMetaMcpServerForm: {
+        id: gateway.id,
+        name: gateway.name,
+        discoveryMode: "code_mode",
+      },
+    },
+  });
+});
+
+it("explains Progressive fallback for a saved Code gateway", () => {
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: "code_mode",
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/connections currently use Progressive discovery/i),
+  ).toBeTruthy();
+});
+
+it("disables Code Mode for a gateway that allows anonymous callers", () => {
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          userSessionIssuerId: undefined,
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  fireEvent.click(screen.getByRole("combobox"));
+  const option = screen.getByRole("option", {
+    name: "Code Mode (requires sign-in)",
+  });
+  expect(option.getAttribute("aria-disabled")).toBe("true");
+});
+
+it("shows Code Mode disabled to an organization without it", async () => {
+  state.entitled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByText(/Contact\s+Speakeasy to turn it on/i)).toBeNull();
+  fireEvent.click(screen.getByRole("combobox"));
+  const option = screen.getByRole("option", {
+    name: "Code Mode (not enabled)",
+  });
+  expect(option.getAttribute("aria-disabled")).toBe("true");
+  await userEvent.hover(option.parentElement!);
+  expect(
+    (await screen.findAllByText(/Contact\s+Speakeasy to turn it on/i)).length,
+  ).toBeGreaterThan(0);
+});
+
+it("explains a saved Code gateway in an organization without Code Mode", () => {
+  state.entitled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: "code_mode",
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/Code Mode is not enabled for your organization/i),
+  ).toBeTruthy();
+});
+
+it("does not claim the organization is not enabled while the feature read is unknown", async () => {
+  state.entitled = undefined;
+  state.codeEnabled = true;
+  const view = show();
+  expect(screen.queryByText(/not enabled for your organization/i)).toBeNull();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  fireEvent.click(screen.getByRole("button", { name: /save/i }));
+  expect(state.mutate).toHaveBeenCalledTimes(1);
+  view.unmount();
+  state.codeEnabled = false;
+  render(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{
+          ...gateway,
+          discoveryMode: "code_mode",
+          codeModeEnabled: false,
+        }}
+      />
+    </TooltipProvider>,
+  );
+  expect(screen.queryByText(/not enabled for your organization/i)).toBeNull();
+  expect(
+    screen.getByText(/Code Mode is unavailable for this gateway/i),
+  ).toBeTruthy();
+});
+
+it("blocks a Code Mode draft when the organization's entitlement turns off", async () => {
+  state.codeEnabled = true;
+  const view = show();
+  fireEvent.click(screen.getByRole("combobox"));
+  fireEvent.click(await screen.findByRole("option", { name: "Code Mode" }));
+  state.entitled = false;
+  view.rerender(
+    <TooltipProvider>
+      <GatewayDiscoverySection
+        metaMcpServer={{ ...gateway, codeModeEnabled: true }}
+      />
+    </TooltipProvider>,
+  );
+  const save = screen.getByRole("button", {
+    name: /save/i,
+  }) as HTMLButtonElement;
+  expect(save.disabled).toBe(true);
+  fireEvent.click(save);
+  expect(state.mutate).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("combobox"));
+  expect(
+    screen
+      .getByRole("option", { name: "Code Mode (not enabled)" })
+      .getAttribute("aria-disabled"),
+  ).toBe("true");
 });

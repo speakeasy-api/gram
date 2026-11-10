@@ -23,10 +23,10 @@ import {
 } from "@/contexts/Telemetry";
 import { useLatestDeployment, useToolset } from "@/hooks/toolTypes";
 import { DEFAULT_MODEL } from "@/lib/models";
-import { Tool } from "@/lib/toolTypes";
+import type { Tool } from "@/lib/toolTypes";
 import { useRoutes } from "@/routes";
 import { useHideInsightsDock } from "@/components/insights-context";
-import { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
+import type { Confirm } from "@gram/client/models/components/upsertglobaltoolvariationform.js";
 import { queryKeyInstance } from "@gram/client/react-query/instance.js";
 import {
   queryKeyListToolsets,
@@ -43,7 +43,8 @@ import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ChatProvider } from "./ChatContext";
 import { useChatContext } from "./useChatContext";
-import { EditToolDialog, ToolUpdatePayload } from "./EditToolDialog";
+import type { ToolUpdatePayload } from "./EditToolDialog";
+import { EditToolDialog } from "./EditToolDialog";
 import { ManageToolsDialog } from "./ManageToolsDialog";
 import { PlaygroundAuth } from "./PlaygroundAuth";
 import { PlaygroundConfigPanel } from "./PlaygroundConfigPanel";

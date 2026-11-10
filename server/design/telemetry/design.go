@@ -336,6 +336,61 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMetaMcpServerUsage", "type": "query"}`)
 	})
 
+	Method("getOrganizationGatewayOverview", func() {
+		Description("Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.")
+
+		// Org-scoped: the Organization Gateway spans every project in the
+		// caller's organization, so it is read without a project scope.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetOrganizationGatewayActivityPayload)
+			security.SessionPayload()
+			// Named explicitly: structurally it matches other time-range
+			// payloads and would otherwise be hoisted under one of their names.
+			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+		})
+
+		Result(GetObservabilityOverviewResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrganizationGatewayOverview")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayOverview")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayOverview", "type": "query"}`)
+	})
+
+	Method("getOrganizationGatewayUsage", func() {
+		Description("Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.")
+
+		// Org-scoped, like getOrganizationGatewayOverview.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetOrganizationGatewayActivityPayload)
+			security.SessionPayload()
+			// Named explicitly: structurally it matches other time-range
+			// payloads and would otherwise be hoisted under one of their names.
+			Meta("openapi:typename", "GetOrganizationGatewayActivityPayload")
+		})
+
+		Result(GetMetaMcpServerUsageResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrganizationGatewayUsage")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrganizationGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrganizationGatewayUsage")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrganizationGatewayUsage", "type": "query"}`)
+	})
+
 	Method("getProjectOverview", func() {
 		Description("Get project-level overview including total chats, tool calls, active servers/users, and top lists")
 		Security(security.ByKey, security.ProjectSlug, func() {
@@ -1032,6 +1087,31 @@ var _ = Service("telemetry", func() {
 		Meta("openapi:operationId", "getMcpServerActivity")
 		Meta("openapi:extension:x-speakeasy-name-override", "getMcpServerActivity")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetMcpServerActivity", "type": "query"}`)
+	})
+
+	Method("getOrgMcpServerActivity", func() {
+		Description("Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.")
+
+		// Session-only, like mcpServers.listForOrg: an org-wide read has no
+		// project selector, and API-key auth is not RBAC-enforced.
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(GetMcpServerActivityPayload)
+			security.SessionPayload()
+		})
+
+		Result(GetOrgMcpServerActivityResult)
+
+		HTTP(func() {
+			POST("/rpc/telemetry.getOrgMcpServerActivity")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getOrgMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-name-override", "getOrgMcpServerActivity")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "GetOrgMcpServerActivity", "type": "query"}`)
 	})
 
 	Method("listHooksTraces", func() {
@@ -2226,6 +2306,9 @@ var GetProjectOverviewPayload = Type("GetProjectOverviewPayload", func() {
 		Format(FormatDateTime)
 		Example("2025-12-19T11:00:00Z")
 	})
+	Attribute("include_usage", Boolean, "Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response", func() {
+		Default(false)
+	})
 
 	Required("from", "to")
 })
@@ -2234,12 +2317,41 @@ var GetProjectOverviewResult = Type("GetProjectOverviewResult", func() {
 	Description("Result of project overview query")
 
 	Attribute("summary", ProjectOverviewSummaryType, "Current period summary metrics")
-	Attribute("comparison", ProjectOverviewSummaryType, "Previous period summary metrics for trend calculation")
-	Attribute("metrics_mode", String, "Indicates whether metrics are session-based or tool-call-based", func() {
-		Enum("session", "tool_call")
-	})
+	Attribute("usage_by_user", QueryResult, "Agent usage grouped by user email, ranked by LLM tokens (top 100, no time series). Only set when include_usage is true and the caller has org:read.")
+	Attribute("usage_by_agent", QueryResult, "Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time series). Only set when include_usage is true and usage_by_user has agent usage.")
+	Attribute("mcp_usage", ProjectMcpUsageType, "External end user and tool usage summary. Only set when include_usage is true and usage_by_user shows no agent usage, which includes when that read fails or the caller lacks org:read. Do not treat its presence as proof the project has no agent usage.")
 
-	Required("summary", "comparison", "metrics_mode")
+	Required("summary")
+})
+
+var ProjectMcpUsageType = Type("ProjectMcpUsage", func() {
+	Description("External end user and MCP tool usage for a project in a time period")
+
+	Attribute("end_users_count", Int64, "Number of distinct external end users with activity in the period")
+	Attribute("top_end_users", ArrayOf(ProjectMcpEndUserType), "Top 5 external end users by tool calls")
+	Attribute("top_tools", ArrayOf(ProjectMcpToolUsageType), "Top 5 tools by calls")
+	Attribute("top_failing_tools", ArrayOf(ProjectMcpToolUsageType), "Top 5 tools with at least one failure, ranked by failure rate, then by failures")
+
+	Required("end_users_count", "top_end_users", "top_tools", "top_failing_tools")
+})
+
+var ProjectMcpEndUserType = Type("ProjectMcpEndUser", func() {
+	Description("Tool calls made by one external end user")
+
+	Attribute("user_id", String, "External end user ID")
+	Attribute("tool_calls", Int64, "Number of tool calls")
+
+	Required("user_id", "tool_calls")
+})
+
+var ProjectMcpToolUsageType = Type("ProjectMcpToolUsage", func() {
+	Description("Calls and failures for one tool made by external end users")
+
+	Attribute("urn", String, "Tool URN, or the tool name for agent hook events")
+	Attribute("calls", Int64, "Number of calls")
+	Attribute("failures", Int64, "Number of failed calls")
+
+	Required("urn", "calls", "failures")
 })
 
 var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
@@ -2288,35 +2400,18 @@ var ObservabilitySummaryType = Type("ObservabilitySummary", func() {
 var ProjectOverviewSummaryType = Type("ProjectOverviewSummary", func() {
 	Description("Aggregated project-level summary metrics for a time period")
 
-	// Chat metrics
 	Attribute("total_chats", Int64, "Total number of chat sessions")
-	Attribute("resolved_chats", Int64, "Number of resolved chat sessions")
-	Attribute("failed_chats", Int64, "Number of failed chat sessions")
-
-	// Tool metrics
 	Attribute("total_tool_calls", Int64, "Total number of tool calls")
 	Attribute("failed_tool_calls", Int64, "Number of failed tool calls")
-
-	// Activity counts
 	Attribute("active_servers_count", Int64, "Number of MCP servers with at least one tool call in the time period")
-	Attribute("active_users_count", Int64, "Number of unique users with activity in the time period")
-
-	// Top lists
-	Attribute("top_users", ArrayOf(TopUserType), "Top 10 users by activity (# of messages or tool calls depending on metrics_mode)")
 	Attribute("top_servers", ArrayOf(TopServerType), "Top 10 MCP servers by tool call count")
-	Attribute("llm_client_breakdown", ArrayOf(LLMClientUsageType), "Breakdown of messages/activity by LLM client/agent")
 
 	Required(
 		"total_chats",
-		"resolved_chats",
-		"failed_chats",
 		"total_tool_calls",
 		"failed_tool_calls",
 		"active_servers_count",
-		"active_users_count",
-		"top_users",
 		"top_servers",
-		"llm_client_breakdown",
 	)
 })
 
@@ -2718,6 +2813,10 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("user_kind", ToolUsageUserKind, "Type of user identity represented by the row")
 	Attribute("authorizer_user_id", String, "Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves")
 	Attribute("authorizer_label", String, "Email of the authorizer when they resolve to a known user")
+	Attribute("auth_client_type", String, "Type of the auth client that signed an agent's gateway call in to its upstream server, such as remote_session for a person's connection or service_account for a shared credential; absent for calls recorded before it was tracked")
+	Attribute("auth_client_id", String, "Auth client that signed an agent's gateway call in to its upstream server")
+	Attribute("connection_owner_user_id", String, "Person whose own connection signed an agent's gateway call in; absent for a shared credential")
+	Attribute("connection_owner_label", String, "Display name, or email, of the connection owner when they resolve to a known user")
 	Attribute("hook_source", String, "Hook plugin source when the row came from hook telemetry")
 	Attribute("event_source", String, "Telemetry event source")
 	Attribute("http_status_code", Int32, "HTTP status code when available")
@@ -2728,6 +2827,16 @@ var ToolUsageTraceSummary = Type("ToolUsageTraceSummary", func() {
 	Attribute("account_type", String, "AI account classification ('team' or 'personal'); empty/absent when unclassified")
 	Attribute("via_meta_mcp_server_id", String, "Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself")
 	Attribute("via_meta_mcp_server_name", String, "Display name of the dispatching gateway; a deleted gateway keeps its last name")
+	Attribute("via_meta_mcp_server_kind", String, "Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization", func() {
+		Enum("project", "organization", "agent")
+	})
+	Attribute("via_meta_mcp_server_project_slug", String, "Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization")
+	Attribute("via_meta_mcp_server_agent_id", String, "Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted")
+	Attribute("target_meta_mcp_server_kind", String, "Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent for other targets and when the gateway id resolves to no gateway of the organization", func() {
+		Enum("project", "organization", "agent")
+	})
+	Attribute("target_meta_mcp_server_project_slug", String, "Slug of the project whose page shows the gateway the call reached: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization")
+	Attribute("target_meta_mcp_server_agent_id", String, "Agent whose gateway the call reached; absent for other gateway kinds and when the agent is deleted")
 	Attribute("client_key", String, "Stable MCP client identity used by filters; 'unattributed' when the caller never reported one")
 	Attribute("client_label", String, "User-facing MCP client label as the client reported it")
 	Attribute("client_version", String, "MCP client version when the client reported one alongside its name")
@@ -2761,6 +2870,24 @@ var GetToolUsageFilterOptionsPayload = Type("GetToolUsageFilterOptionsPayload", 
 		Example("2025-12-19T11:00:00Z")
 	})
 	Attribute("option_types", ArrayOf(ToolUsageFilterOptionType), "Filter option types to include. Empty means all option types.")
+	// The filters the listing applies. Each option group is counted under every
+	// filter except its own, so picking an agent narrows the users and servers
+	// on offer while the other agents stay selectable alongside it.
+	Attribute("target_types", ArrayOf(ToolUsageTargetType), "Target types to include. Empty means all target types.")
+	Attribute("hosted_toolset_slugs", ArrayOf(String), "Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not applied to the server options.")
+	Attribute("mcp_server_ids", ArrayOf(String, func() { Format(FormatUUID) }), "MCP server ids to narrow by. Not applied to the server options.", func() {
+		MaxLength(100)
+	})
+	Attribute("shadow_server_names", ArrayOf(String), "Shadow MCP server names to narrow by. Not applied to the server options.")
+	Attribute("meta_mcp_server_ids", ArrayOf(String), "Gateway (meta MCP server) ids to narrow by. Not applied to the server options.")
+	Attribute("user_filters", ArrayOf(ToolUsageUserFilter), "Typed user identities to narrow by. Not applied to the email user options.")
+	Attribute("agent_ids", ArrayOf(String), "Agent identities to narrow by. Not applied to the agent user options.")
+	Attribute("hook_sources", ArrayOf(String), "Hook plugin sources to narrow by.")
+	Attribute("client_keys", ArrayOf(String), "MCP client keys to narrow by. Not applied to the client options.")
+	Attribute("account_type", String, "Optional account type filter ('team' or 'personal').")
+	Attribute("statuses", ArrayOf(ToolUsageStatus), "Trace outcomes to narrow by. Empty means all.")
+	Attribute("query", String, "Free-text attribute search string from the q URL param.")
+	Attribute("filters", ArrayOf(LogFilter), "Arbitrary attribute filter conditions from the af URL param")
 
 	Required("from", "to")
 })
@@ -2988,6 +3115,26 @@ var GetMcpServerActivityResult = Type("GetMcpServerActivityResult", func() {
 	Required("activity", "recent_window_days", "lookback_days")
 })
 
+var ProjectMcpServerActivity = Type("ProjectMcpServerActivity", func() {
+	Description("Recent MCP server activity for one project")
+
+	Attribute("project_id", String, "The project the activity belongs to", func() {
+		Format(FormatUUID)
+	})
+	Attribute("activity", ArrayOf(McpServerActivity), "One entry per MCP server in the project with at least one tool call inside the recent window")
+
+	Required("project_id", "activity")
+})
+
+var GetOrgMcpServerActivityResult = Type("GetOrgMcpServerActivityResult", func() {
+	Description("Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.")
+
+	Attribute("projects", ArrayOf(ProjectMcpServerActivity), "One entry per readable project whose activity was read")
+	Attribute("recent_window_days", Int, "The recent-activity window size in days that was applied")
+
+	Required("projects", "recent_window_days")
+})
+
 var GetMcpNetworkTrafficPayload = Type("GetMcpNetworkTrafficPayload", func() {
 	Description("Provide exactly one of mcp_server_id or meta_mcp_server_id, and a recent window.")
 	Attribute("mcp_server_id", String, "MCP server ID (mutually exclusive with meta_mcp_server_id)", func() {
@@ -3044,6 +3191,20 @@ var GetMetaMcpServerUsagePayload = Type("GetMetaMcpServerUsagePayload", func() {
 	Required("meta_mcp_server_id", "from", "to")
 })
 
+var GetOrganizationGatewayActivityPayload = Type("GetOrganizationGatewayActivityPayload", func() {
+	Description("Time range for the caller's Organization Gateway activity")
+
+	Attribute("from", String, "Start time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T10:00:00Z")
+	})
+	Attribute("to", String, "End time in ISO 8601 format", func() {
+		Format(FormatDateTime)
+		Example("2025-12-19T11:00:00Z")
+	})
+	Required("from", "to")
+})
+
 var MetaMcpDiscoveryFunnel = Type("MetaMcpDiscoveryFunnel", func() {
 	Description("Counts of each gateway drill-down stage in the window. Discovery stages come from meta_discovery events; executions from gateway-attributed tool calls.")
 
@@ -3066,6 +3227,7 @@ var MetaMcpMemberUsage = Type("MetaMcpMemberUsage", func() {
 	Attribute("last_called_at", String, "ISO 8601 timestamp of the most recent call", func() {
 		Format(FormatDateTime)
 	})
+	Attribute("mcp_server_name", String, "Display name of the server. Set for Organization Gateway usage, whose servers span projects the caller may not have loaded.")
 
 	Required("mcp_server_id", "tool_calls", "error_count")
 })

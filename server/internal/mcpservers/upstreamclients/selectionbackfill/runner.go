@@ -144,7 +144,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 		CredentialKind: upstreamclients.CredentialKindUserSession,
 		Credentials:    0,
 		FullyCovered:   0,
-		Pairs:          map[Outcome]int{},
+		Pairs:          make(map[Outcome]int),
 		Written:        0,
 		Gaps:           []Gap{},
 	}
@@ -194,6 +194,7 @@ func Run(ctx context.Context, db DBTX, opts Options) (Report, error) {
 					PickedMcpServerIds:  []uuid.UUID{},
 					PickedClientIds:     []uuid.UUID{},
 					PickedAuthClientIds: nil,
+					ScopeMcpServerIds:   nil,
 				})
 				if err != nil {
 					return report, fmt.Errorf("record selections for credential %s: %w", credential.CredentialID, err)

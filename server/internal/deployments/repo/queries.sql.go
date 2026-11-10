@@ -66,66 +66,6 @@ func (q *Queries) CloneDeployment(ctx context.Context, arg CloneDeploymentParams
 	return id, err
 }
 
-const cloneDeploymentExternalMCPs = `-- name: CloneDeploymentExternalMCPs :many
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-SELECT
-  $1
-  , current.registry_id
-  , current.name
-  , current.slug
-  , current.registry_server_specifier
-  , current.selected_remotes
-FROM external_mcp_attachments as current
-WHERE current.deployment_id = $2
-  AND current.deleted IS FALSE
-  AND current.slug <> ALL ($3::text[])
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes
-`
-
-type CloneDeploymentExternalMCPsParams struct {
-	CloneDeploymentID    uuid.UUID
-	OriginalDeploymentID uuid.UUID
-	ExcludedSlugs        []string
-}
-
-type CloneDeploymentExternalMCPsRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-}
-
-func (q *Queries) CloneDeploymentExternalMCPs(ctx context.Context, arg CloneDeploymentExternalMCPsParams) ([]CloneDeploymentExternalMCPsRow, error) {
-	rows, err := q.db.Query(ctx, cloneDeploymentExternalMCPs, arg.CloneDeploymentID, arg.OriginalDeploymentID, arg.ExcludedSlugs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []CloneDeploymentExternalMCPsRow
-	for rows.Next() {
-		var i CloneDeploymentExternalMCPsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.RegistryID,
-			&i.Name,
-			&i.Slug,
-			&i.RegistryServerSpecifier,
-			&i.SelectedRemotes,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const cloneDeploymentFunctionsAssets = `-- name: CloneDeploymentFunctionsAssets :many
 INSERT INTO deployments_functions (
   deployment_id
@@ -1588,6 +1528,38 @@ func (q *Queries) GetFunctionCredentialsBatch(ctx context.Context, arg GetFuncti
 	return items, nil
 }
 
+const getInFlightDeploymentAfter = `-- name: GetInFlightDeploymentAfter :one
+SELECT d.id
+FROM deployments d
+INNER JOIN LATERAL (
+  SELECT ds.status
+  FROM deployment_statuses ds
+  WHERE ds.deployment_id = d.id
+  ORDER BY ds.seq DESC
+  LIMIT 1
+) latest ON TRUE
+WHERE d.project_id = $1
+  AND d.seq > (SELECT a.seq FROM deployments a WHERE a.id = $2)
+  AND d.created_at > $3::timestamptz
+  AND latest.status IN ('created', 'pending')
+ORDER BY d.seq DESC
+LIMIT 1
+`
+
+type GetInFlightDeploymentAfterParams struct {
+	ProjectID         uuid.UUID
+	AfterDeploymentID uuid.UUID
+	CreatedAfter      pgtype.Timestamptz
+}
+
+// A newer deployment of the project that has not finished processing.
+func (q *Queries) GetInFlightDeploymentAfter(ctx context.Context, arg GetInFlightDeploymentAfterParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getInFlightDeploymentAfter, arg.ProjectID, arg.AfterDeploymentID, arg.CreatedAfter)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getLatestDeploymentID = `-- name: GetLatestDeploymentID :one
 SELECT id
 FROM deployments
@@ -1628,55 +1600,6 @@ func (q *Queries) InsertDeployment(ctx context.Context, arg InsertDeploymentPara
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
-}
-
-const listDeploymentExternalMCPs = `-- name: ListDeploymentExternalMCPs :many
-SELECT id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
-FROM external_mcp_attachments
-WHERE deployment_id = $1 AND deleted IS FALSE
-ORDER BY created_at ASC
-`
-
-type ListDeploymentExternalMCPsRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-}
-
-func (q *Queries) ListDeploymentExternalMCPs(ctx context.Context, deploymentID uuid.UUID) ([]ListDeploymentExternalMCPsRow, error) {
-	rows, err := q.db.Query(ctx, listDeploymentExternalMCPs, deploymentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListDeploymentExternalMCPsRow
-	for rows.Next() {
-		var i ListDeploymentExternalMCPsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.RegistryID,
-			&i.Name,
-			&i.Slug,
-			&i.RegistryServerSpecifier,
-			&i.SelectedRemotes,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listDeployments = `-- name: ListDeployments :many
@@ -1841,14 +1764,27 @@ SELECT
     t.id
   , t.name
   , t.slug
-  , t.mcp_slug
-  , t.mcp_enabled
-  , (t.external_oauth_server_id IS NOT NULL OR t.oauth_proxy_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
+  , COALESCE(addr.slug, '')::text AS mcp_slug
+  -- legacyalias: a hosted toolset without a servable endpoint takes its legacy alias as its address; drop with AIM-670.
+  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
+  , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
+  , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
       SELECT u FROM unnest(tv.tool_urns) AS u
       WHERE starts_with(u, $1::TEXT)
     )::TEXT[] AS source_tool_urns
 FROM toolsets t
+LEFT JOIN mcp_servers cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = t.organization_id
+    AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = cw.id AND e.project_id = t.project_id AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NOT NULL), e.created_at, e.id
+  LIMIT 1
+) addr ON TRUE
 JOIN LATERAL (
   SELECT tool_urns
   FROM toolset_versions
@@ -1874,7 +1810,8 @@ type ListToolsetsUsingOpenAPIv3SourceRow struct {
 	ID              uuid.UUID
 	Name            string
 	Slug            string
-	McpSlug         pgtype.Text
+	McpSlug         string
+	Hosted          bool
 	McpEnabled      bool
 	OauthConfigured bool
 	SourceToolUrns  []string
@@ -1894,6 +1831,7 @@ func (q *Queries) ListToolsetsUsingOpenAPIv3Source(ctx context.Context, arg List
 			&i.Name,
 			&i.Slug,
 			&i.McpSlug,
+			&i.Hosted,
 			&i.McpEnabled,
 			&i.OauthConfigured,
 			&i.SourceToolUrns,
@@ -2004,64 +1942,6 @@ func (q *Queries) TransitionDeployment(ctx context.Context, arg TransitionDeploy
 	)
 	var i TransitionDeploymentRow
 	err := row.Scan(&i.StatusID, &i.Status, &i.Moved)
-	return i, err
-}
-
-const upsertDeploymentExternalMCP = `-- name: UpsertDeploymentExternalMCP :one
-INSERT INTO external_mcp_attachments (deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes)
-VALUES ($1, $2, $3, $4, $5, $6)
-ON CONFLICT (deployment_id, slug) WHERE deleted IS FALSE
-DO UPDATE SET
-  registry_id = EXCLUDED.registry_id,
-  name = EXCLUDED.name,
-  registry_server_specifier = EXCLUDED.registry_server_specifier,
-  selected_remotes = EXCLUDED.selected_remotes,
-  updated_at = clock_timestamp()
-RETURNING id, deployment_id, registry_id, name, slug, registry_server_specifier, selected_remotes, created_at, updated_at
-`
-
-type UpsertDeploymentExternalMCPParams struct {
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-}
-
-type UpsertDeploymentExternalMCPRow struct {
-	ID                      uuid.UUID
-	DeploymentID            uuid.UUID
-	RegistryID              uuid.NullUUID
-	Name                    string
-	Slug                    string
-	RegistryServerSpecifier string
-	SelectedRemotes         []string
-	CreatedAt               pgtype.Timestamptz
-	UpdatedAt               pgtype.Timestamptz
-}
-
-func (q *Queries) UpsertDeploymentExternalMCP(ctx context.Context, arg UpsertDeploymentExternalMCPParams) (UpsertDeploymentExternalMCPRow, error) {
-	row := q.db.QueryRow(ctx, upsertDeploymentExternalMCP,
-		arg.DeploymentID,
-		arg.RegistryID,
-		arg.Name,
-		arg.Slug,
-		arg.RegistryServerSpecifier,
-		arg.SelectedRemotes,
-	)
-	var i UpsertDeploymentExternalMCPRow
-	err := row.Scan(
-		&i.ID,
-		&i.DeploymentID,
-		&i.RegistryID,
-		&i.Name,
-		&i.Slug,
-		&i.RegistryServerSpecifier,
-		&i.SelectedRemotes,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
 	return i, err
 }
 

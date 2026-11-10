@@ -15,7 +15,17 @@ export function getActorLabel(log: AuditLog): string {
       : log.actorId;
     return `Agent ${id.slice(0, 8)}`;
   }
-  return log.actorDisplayName || log.actorSlug || "Someone";
+  const stored = log.actorDisplayName || log.actorSlug;
+  if (stored) return stored;
+  // A system actor is a Speakeasy component working with no person behind
+  // it. It is never anonymous, so it must not read as "Someone".
+  if (
+    log.actorType === "system" ||
+    ["system", "user:system"].includes(log.actorId)
+  ) {
+    return "Speakeasy";
+  }
+  return "Someone";
 }
 
 export function formatAuditAction(action: string): string {
@@ -163,6 +173,20 @@ function recordString(value: unknown, key: string): string | undefined {
   return typeof field === "string" && field !== "" ? field : undefined;
 }
 
+/**
+ * The sensitive scopes a role or membership change gave, as the server
+ * recorded them (`sensitive_scopes_added` in the row's metadata). Empty for
+ * every other row.
+ */
+export function sensitiveScopesAdded(log: AuditLog): string[] {
+  if (log.metadata == null || typeof log.metadata !== "object") return [];
+  const added = (log.metadata as Record<string, unknown>)[
+    "sensitive_scopes_added"
+  ];
+  if (!Array.isArray(added)) return [];
+  return added.filter((scope): scope is string => typeof scope === "string");
+}
+
 function humanizeSlug(slug: string): string {
   return slug.replace(/[-_]/g, " ");
 }
@@ -297,7 +321,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 

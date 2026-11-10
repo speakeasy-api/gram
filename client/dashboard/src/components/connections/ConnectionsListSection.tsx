@@ -59,6 +59,8 @@ export function ConnectionsListSection({
   emptyDescription = "Connections agents establish will appear here.",
   clients,
   killswitchContext,
+  revocable = true,
+  canViewRegistrations,
 }: {
   sessions: UserSession[];
   /** Registrations for this scope; surfaced by the client grouping. */
@@ -86,6 +88,13 @@ export function ConnectionsListSection({
   bordered?: boolean;
   emptyHeading?: string;
   emptyDescription?: string;
+  /**
+   * Whether revoke actions may be offered at all. Off for a listing that spans
+   * projects, where the working project is not the one a session belongs to.
+   */
+  revocable?: boolean;
+  /** Passed through to the list; see `ConnectionsList`. */
+  canViewRegistrations?: boolean;
 }): JSX.Element {
   const [grouping, setGrouping] = useState<ConnectionGrouping>(defaultGrouping);
   const project = useProject();
@@ -93,8 +102,9 @@ export function ConnectionsListSection({
   // Scoped to the project these connections belong to, not the bare scope: a
   // user with project:write somewhere in the org must not be offered revoke
   // affordances here, where they would only fail at mutation time. Every
-  // surface embedding this section is scoped to the working project.
-  const canRevoke = hasScope("project:write", project.id);
+  // surface embedding this section is scoped to the working project, except
+  // one that spans projects, which opts out through `revocable`.
+  const canRevoke = revocable && hasScope("project:write", project.id);
 
   if (isPending) {
     return (
@@ -155,6 +165,7 @@ export function ConnectionsListSection({
         bordered={bordered}
         grouping={grouping}
         canRevoke={canRevoke}
+        canViewRegistrations={canViewRegistrations}
         onRevoked={onRevoked}
         clients={clients}
         killswitchContext={killswitchContext}

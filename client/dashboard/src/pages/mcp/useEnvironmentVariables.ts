@@ -1,6 +1,9 @@
-import { Toolset } from "@/lib/toolTypes";
+import type { Toolset } from "@/lib/toolTypes";
 import { useMemo } from "react";
-import { EnvironmentVariable, EnvVarState } from "./environmentVariableUtils";
+import type {
+  EnvironmentVariable,
+  EnvVarState,
+} from "./environmentVariableUtils";
 
 interface Environment {
   id: string;

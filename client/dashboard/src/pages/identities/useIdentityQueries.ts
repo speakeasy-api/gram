@@ -1,8 +1,12 @@
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
+import {
+  minuteAlignedRange,
+  useDateRangeFilter,
+} from "@/components/observe/useDateRangeFilter";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { useGramContext } from "@gram/client/react-query/_context.js";
 import { useQueries, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import type { UserSummary } from "@gram/client/models/components/usersummary.js";
 import {
   fetchIdentityPeers,
@@ -14,15 +18,14 @@ import {
 import { fetchIdentityRoster, identityRosterQueryKey } from "./identityRoster";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import { useAuditLogs } from "@gram/client/react-query/auditLogs.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useChallenges } from "@gram/client/react-query/challenges.js";
 import { useListChats } from "@gram/client/react-query/listChats.js";
 import { useManagedDevices } from "@gram/client/react-query/managedDevices.js";
-import {
-  buildGetUserMetricsSummaryQuery,
-  useGetUserMetricsSummary,
-} from "@gram/client/react-query/getUserMetricsSummary.js";
+import type { useGetUserMetricsSummary } from "@gram/client/react-query/getUserMetricsSummary.js";
+import { buildGetUserMetricsSummaryQuery } from "@gram/client/react-query/getUserMetricsSummary.js";
 import { buildRiskUserBreakdownQuery } from "@gram/client/react-query/riskUserBreakdown.js";
 import type { RiskOverviewCategory } from "@gram/client/models/components/riskoverviewcategory.js";
 import type { RiskRuleBreakdownEntry } from "@gram/client/models/components/riskrulebreakdownentry.js";
@@ -61,8 +64,14 @@ export function retryFailed(...queries: RetryableQuery[]): () => void {
  * sub-page carries the range the sender was looking at.
  */
 export function useIdentityWindow(): { from: Date; to: Date } {
-  const { from, to } = useDateRangeFilter();
-  return { from, to };
+  const { from, to, customRange } = useDateRangeFilter();
+  // Aligned the way the embedded Tool logs aligns its window, so the
+  // overview's usage reads and the logs below it ask the same question and
+  // share one request rather than sending it twice.
+  return useMemo(
+    () => customRange ?? minuteAlignedRange({ from, to }),
+    [customRange, from, to],
+  );
 }
 
 /**
@@ -285,6 +294,33 @@ export function useIdentityChats(
       ...OFF,
       enabled: canReadOthersChats && (!!userId || !!externalUserId),
     },
+  );
+}
+
+/**
+ * Whether this viewer may list an agent's sessions: chat:read, or being able
+ * to edit the agent. The server reports edit rights per agent: its owner holds
+ * them (until the agent is waiting to be reassigned), and so does anyone
+ * granted agent:write on it. Both read the agent's sessions.
+ */
+export function useCanReadAgentChats(agent: ManagedAgent): boolean {
+  const hasChatRead = useCanReadOthersChats();
+  return hasChatRead || agent.permissions.write;
+}
+
+/** The sessions an agent produced, read only by a viewer who may list them. */
+export function useAgentChats(
+  agent: ManagedAgent,
+  from: Date,
+  to: Date,
+  limit = 5,
+): ReturnType<typeof useListChats> {
+  const { slug: gramProject } = useIdentityProject();
+  const canRead = useCanReadAgentChats(agent);
+  return useListChats(
+    { agentId: agent.id, from, to, limit, gramProject },
+    undefined,
+    { ...OFF, enabled: canRead },
   );
 }
 

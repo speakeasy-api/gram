@@ -2,9 +2,11 @@
 package platformmcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"net/url"
 	"sort"
 	"strings"
@@ -41,8 +43,20 @@ type CatalogCandidate struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Version     string `json:"version"`
-	ToolCount   int    `json:"tool_count"`
+	// ToolCount is left out when the catalogue does not know the tool count, so
+	// it never reads as a server with no tools.
+	ToolCount   *int   `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	SetupIntent string `json:"setup_intent"`
+	// SupportsDCR is advertised dynamic client registration support.
+	SupportsDCR bool `json:"supports_dcr"`
+	// SupportsCIMD is advertised compatible client metadata document support.
+	SupportsCIMD bool `json:"supports_cimd"`
+	// AuthSetup distinguishes unknown capability evidence from required manual setup.
+	AuthSetup string `json:"auth_setup" jsonschema:"how the server signs users in: none means no sign-in; dcr or cimd means OAuth whose client is set up automatically, so only the user signs in; manual means an administrator registers an OAuth client or adds a credential by hand; unknown means not yet determined, so check the setup guide with search_speakeasy_docs before saying how it signs in"`
+
+	// iconURL is the registry's icon for the server. It is fetched only to
+	// draw a result card and is never part of the tool output.
+	iconURL string
 }
 
 type CatalogConfigurationField struct {
@@ -59,7 +73,7 @@ type CatalogConfigurationField struct {
 type CatalogDetails struct {
 	CatalogCandidate
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names"`
+	ToolNames              []string                    `json:"tool_names,omitempty"`
 	Configuration          []CatalogConfigurationField `json:"configuration"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 
@@ -277,26 +291,18 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
-	toolNames := make([]string, 0, len(details.Tools))
-	for _, tool := range details.Tools {
-		if tool.Name != "" {
-			toolNames = append(toolNames, tool.Name)
-		}
-	}
-	sort.Strings(toolNames)
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
 			ProviderKey: descriptor.ProviderKey,
 			CatalogRef:  catalogRef,
-			Name:        details.Name,
+			Name:        cmp.Or(strings.TrimSpace(details.Title), details.Name),
 			Description: details.Description,
 			Version:     details.Version,
-			ToolCount:   len(toolNames),
+			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
-		ToolNames:              toolNames,
 		Configuration:          configuration,
 		RequiresDashboardSetup: catalogRequiresDashboardSetup(configuration),
 		remoteURLTemplate:      details.RemoteURL,
@@ -411,18 +417,16 @@ func stringValue(value *string) string {
 }
 
 func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.ExternalMCPServerEntry) CatalogCandidate {
-	name := entry.RegistrySpecifier
-	if entry.Title != nil && *entry.Title != "" {
-		name = *entry.Title
-	}
+	name := cmp.Or(strings.TrimSpace(conv.PtrValOr(entry.Title, "")), entry.RegistrySpecifier)
 	return CatalogCandidate{
 		ProviderKey: descriptor.ProviderKey,
 		CatalogRef:  entry.RegistrySpecifier,
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,
-		ToolCount:   entry.ToolCount,
+		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
+		iconURL:     strings.TrimSpace(conv.PtrValOr(entry.IconURL, "")),
 	}
 }
 

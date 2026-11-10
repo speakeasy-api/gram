@@ -30,7 +30,7 @@ func runAppIn(t *testing.T, dir string, args ...string) (string, error) {
 
 const legacyNote = "Note: gram.deploy.json is deprecated and still works. Rename it to speakeasy.deploy.json.\n"
 
-func TestResolveDeployFile(t *testing.T) { //nolint:paralleltest // changes the working directory
+func TestResolveDeployFile(t *testing.T) {
 	tests := []struct {
 		name     string
 		explicit string
@@ -44,7 +44,7 @@ func TestResolveDeployFile(t *testing.T) { //nolint:paralleltest // changes the 
 		{name: "only the legacy file", explicit: "", existing: []string{"gram.deploy.json"}, want: "gram.deploy.json", wantNote: true},
 		{name: "both files", explicit: "", existing: []string{"speakeasy.deploy.json", "gram.deploy.json"}, want: "speakeasy.deploy.json", wantNote: false},
 	}
-	for _, tc := range tests { //nolint:paralleltest // changes the working directory
+	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := t.TempDir()
 			for _, name := range tc.existing {
@@ -95,7 +95,7 @@ func TestStage_KeepsUsingLegacyDeployFile(t *testing.T) { //nolint:paralleltest 
 	}
 }
 
-func TestDoStageFunction_DefaultsToSpeakeasyDeployFile(t *testing.T) { //nolint:paralleltest // changes the working directory
+func TestDoStageFunction_DefaultsToSpeakeasyDeployFile(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
 
@@ -111,7 +111,7 @@ func TestPush_ConfigDefaultsToTheDeployFile(t *testing.T) { //nolint:paralleltes
 	require.ErrorContains(t, err, "speakeasy.deploy.json")
 }
 
-func TestResolveDeployFile_UncheckableLegacyFileIsChosen(t *testing.T) { //nolint:paralleltest // changes the working directory
+func TestResolveDeployFile_UncheckableLegacyFileIsChosen(t *testing.T) {
 	dir := t.TempDir()
 	// A symlink loop makes stat fail with an error other than "not exist".
 	if err := os.Symlink("gram.deploy.json", filepath.Join(dir, "gram.deploy.json")); err != nil {

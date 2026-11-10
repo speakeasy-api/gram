@@ -116,7 +116,7 @@ func BuildAgentPluginsView(rows []repo.GetAgentPluginSetRow, marketplaceURL func
 			// caller's dashboard access do not, so each server is hashed.
 			writeAgentPluginsETag(etag, "plugin\x00%s\x00%s\x00%d\x00%s\n", name, row.PluginSlug.String, row.PluginUpdatedAt.Time.UnixNano(), mode)
 			for _, server := range pluginServers {
-				writeAgentPluginsETag(etag, "server\x00%s\x00%s\n", server.Name, conv.PtrValOr(server.DashboardURL, ""))
+				writeAgentPluginsETag(etag, "server\x00%s\x00%s\x00%s\n", conv.PtrValOr(server.ID, ""), server.Name, conv.PtrValOr(server.DashboardURL, ""))
 			}
 		}
 	})
@@ -149,6 +149,21 @@ func DeliveredAgentPluginRows(rows []repo.GetAgentPluginSetRow) []repo.GetAgentP
 		}
 	})
 	return delivered
+}
+
+// ObservabilityPluginRow returns the row whose observability plugin
+// BuildAgentPluginsView delivers first: the first row to claim its marketplace
+// name, among published rows, that has not disabled observability. Nil when the
+// view would deliver none. Callers that hand out the same plugin through
+// another channel use this so they never serve one devices don't receive.
+func ObservabilityPluginRow(rows []repo.GetAgentPluginSetRow) *repo.GetAgentPluginSetRow {
+	var found *repo.GetAgentPluginSetRow
+	walkAgentPluginRows(rows, func(row repo.GetAgentPluginSetRow, _ string, firstForName, _ bool) {
+		if found == nil && firstForName && row.ObservabilityEnabled {
+			found = &row
+		}
+	})
+	return found
 }
 
 // walkAgentPluginRows visits each row with a published marketplace. Same-named

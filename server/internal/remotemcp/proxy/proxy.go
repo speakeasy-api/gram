@@ -18,6 +18,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
@@ -26,9 +27,12 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/shutdowndrain"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -41,8 +45,9 @@ const (
 	//
 	// For streaming responses (text/event-stream), this only bounds the
 	// connect+headers phase — once headers are received, per-event idle
-	// bounds via [DefaultStreamingTimeout] take over and the stream itself
-	// is unbounded so long as upstream stays active.
+	// bounds via [DefaultStreamingTimeout] take over and the stream runs
+	// until upstream ends it, it goes idle, or it reaches the proxy's
+	// MaxStreamAge.
 	DefaultNonStreamingTimeout = 60 * time.Second
 
 	// DefaultStreamingTimeout is the per-event idle bound applied to
@@ -214,6 +219,16 @@ type Proxy struct {
 	// value; use [DefaultNonStreamingTimeout] for the package default.
 	NonStreamingTimeout time.Duration
 
+	// Drain ends streams that only carry server-initiated messages when the
+	// server starts shutting down: the standalone GET stream and the
+	// 2026-07-28 subscriptions/listen stream. POST streams end as soon as
+	// their response has been relayed. A request still waiting on the remote
+	// MCP server at the interrupt deadline is answered with a JSON-RPC error,
+	// unless it is a subscriptions/listen request (never interrupted) or a
+	// notification (answered with HTTP 503). Nil leaves streams open until
+	// they end on their own.
+	Drain *shutdowndrain.Drain
+
 	// StreamingTimeout is the per-event idle bound applied to streaming
 	// response bodies. The clock resets on every successful Read from
 	// upstream, so an actively producing stream stays alive indefinitely
@@ -221,6 +236,17 @@ type Proxy struct {
 	// Callers must set an explicit value; use [DefaultStreamingTimeout]
 	// for the package default.
 	StreamingTimeout time.Duration
+
+	// MaxStreamAge bounds how long a relayed stream stays open, measured from
+	// the proxy's receipt of the request, so it ends before the load
+	// balancer's response deadline cuts it. At this age a standalone GET
+	// stream closes with an SSE retry field for the client to reopen it, a
+	// subscriptions/listen stream closes after its completion result, and any
+	// other POST stream whose response was already relayed simply ends. A POST
+	// stream still waiting on its response is left open: closing it would
+	// cancel the request. Zero or negative leaves streams open until they end
+	// on their own.
+	MaxStreamAge time.Duration
 
 	// Metrics records per-request counters and histograms. Nil is safe and
 	// disables metrics recording; tests that do not care about metrics pass
@@ -303,6 +329,13 @@ type Proxy struct {
 	// converting them would break WWW-Authenticate challenge relay.
 	StrictToolSelection bool
 
+	// AnonymousCaller reports that the caller reached a public server without
+	// a Speakeasy credential, which lets cacheable results keep the upstream's own
+	// cache hints when nothing else Speakeasy forwards varies by caller. The zero
+	// value labels them private, so a handler that does not establish
+	// anonymity fails safe.
+	AnonymousCaller bool
+
 	// WWWAuthenticate is the challenge relayed to the client when the
 	// upstream rejects a request (401/403), replacing the upstream's own
 	// WWW-Authenticate — the upstream challenge names the upstream's
@@ -357,6 +390,10 @@ type Proxy struct {
 	// whose reply never reached ToolsCallResponseInterceptors. See
 	// [ToolsCallFailureInterceptor].
 	ToolsCallFailureInterceptors []ToolsCallFailureInterceptor
+
+	// ToolsCallRefusalInterceptors run once for a "tools/call" a request or
+	// response interceptor refused. See [ToolsCallRefusalInterceptor].
+	ToolsCallRefusalInterceptors []ToolsCallRefusalInterceptor
 
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
@@ -479,7 +516,6 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 		p.Metrics.Record(ctx, p.Identity, http.MethodGet, upstreamStatus, responseBytes, time.Since(start))
 	}()
 
-	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
 	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, func() io.Reader { return http.NoBody }, nil)
 	if err != nil {
 		return err
@@ -503,19 +539,61 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 	// the user's MCP runtime sees upstream's actual response instead of
 	// silently misparsing it as an SSE stream.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, nil, nil, nil, nil, nil)
-		responseBytes = n
-		if streamErr != nil {
+		// A resumed stream can replay a reply to a cacheable request, and
+		// nothing on it says which request a reply answers, so assume any
+		// attached filter shaped it.
+		label := p.resolveCacheLabel(r, len(p.ToolsListResponseInterceptors) > 0 || len(p.ResourcesListResponseInterceptors) > 0)
+		stopDrain := p.Drain.AfterStart(func() { drainStream(upstreamResp.Body) })
+		defer stopDrain()
+		age := p.streamAge(start)
+		stopAge := age.afterDeadline(func() { rotateStream(upstreamResp.Body) })
+		defer stopAge()
+
+		streamStart := time.Now()
+		relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: age}
+		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, jsonrpc.ID{}, relay, nil, nil, nil, nil, nil, label)
+		responseBytes = relay.bytes
+		reason := streamEndReason(r, upstreamResp.Body, streamErr)
+		defer func() {
+			p.Metrics.RecordStreamEnd(ctx, p.Identity, StreamEnd{
+				HTTPMethod:      http.MethodGet,
+				JSONRPCMethod:   "",
+				Reason:          reason,
+				ResponseRelayed: false,
+				Resumable:       relay.resumable,
+				ResumeRequested: r.Header.Get(lastEventIDHeader) != "",
+				Duration:        time.Since(streamStart),
+			})
+			p.Metrics.RecordHTTPStreamEnd(ctx, r, reason, start, time.Now())
+		}()
+
+		switch reason {
+		case StreamEndShutdown, StreamEndMaxAge:
+			// The server MAY close this stream at any time; the retry field
+			// asks the client to reconnect, which reaches a replica that is
+			// still serving, or opens a fresh stream whose deadline is further
+			// away.
+			n, writeErr := writeSSERetry(w)
+			responseBytes += n
+			if writeErr != nil {
+				p.Logger.DebugContext(ctx, "write retry to closed remote mcp listen stream",
+					attr.SlogComponent("remotemcp.proxy"), attr.SlogRemoteMCPProxyStreamEndReason(string(reason)), attr.SlogError(writeErr))
+			}
+			return nil
+		case StreamEndIdleTimeout:
 			// The standalone GET stream is idle by nature — most upstreams
 			// never send unsolicited server-initiated messages, so the
 			// per-event idle bound firing is the stream's expected end, not
 			// a fault. End the response cleanly; the client re-opens the
 			// stream per spec § Listening for Messages from the Server.
-			if streamIdledOut(upstreamResp.Body) {
-				p.Logger.DebugContext(ctx, "closing idle remote mcp listen stream",
-					attr.SlogComponent("remotemcp.proxy"))
-				return nil
-			}
+			p.Logger.DebugContext(ctx, "closing idle remote mcp listen stream",
+				attr.SlogComponent("remotemcp.proxy"))
+			return nil
+		case StreamEndUpstreamClosed, StreamEndShutdownInterrupted:
+			// A GET stream is never interrupted: it closes when the drain
+			// starts.
+			return nil
+		case StreamEndRequestCanceled, StreamEndError:
 			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp listen stream").LogError(ctx, p.Logger)
 		}
 		return nil
@@ -535,6 +613,8 @@ func (p *Proxy) Get(w http.ResponseWriter, r *http.Request) (err error) {
 // is a POST to the MCP endpoint (see spec § Sending Messages to the Server).
 func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	start := time.Now()
+	// A row from earlier in the request is about something else, not this forward's failure.
+	r = r.WithContext(contextvalues.WithConnectionReferenceSlot(r.Context()))
 	ctx, span := p.Tracer.Start(r.Context(), "remotemcp.proxy.Post", trace.WithAttributes(p.requestSpanAttributes(r, http.MethodPost)...))
 	defer span.End()
 	defer func() {
@@ -546,6 +626,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 
 	var (
 		upstreamStatus int
+		upstreamHeader http.Header
 		responseBytes  int64
 	)
 	defer func() {
@@ -729,13 +810,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 	}
 
+	label := p.requestCacheLabel(r, userReq)
+
 	// Materialize any typed-setter mutations (e.g. ToolsCallRequest.SetArguments)
 	// into the cached body bytes so the forwarder sends the mutated payload
 	// upstream. A no-op when no interceptor mutated the request.
 	if mutated, err := userReq.refreshBody(); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "refresh mutated request body").LogError(ctx, p.Logger)
 	} else if mutated {
-		p.infoContextWithIdentity(ctx, "forwarding mutated request body upstream",
+		p.logWithIdentity(ctx, slog.LevelInfo, "forwarding mutated request body upstream",
 			attr.SlogComponent("remotemcp.proxy"))
 	}
 
@@ -743,13 +826,48 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// chain below still failed: the remote server was unreachable, answered
 	// with something other than a tools/call reply, or ended its stream
 	// first. A notification is owed no reply, and a call the user canceled
-	// did not fail.
+	// did not fail. failure, when set, is the cause recorded instead of err,
+	// for endings answered without returning an error.
+	var failure error
 	toolsCallForwarded := toolsCallReq != nil && userReqID.IsValid()
 	defer func() {
 		if toolsCallForwarded && !toolsCallReq.responded && r.Context().Err() == nil {
-			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Err: err})
+			cause := err
+			if failure != nil {
+				cause = failure
+			}
+			p.runToolsCallFailureInterceptors(ctx, &ToolsCallFailure{Request: toolsCallReq, StatusCode: upstreamStatus, Header: upstreamHeader, Err: cause})
 		}
 	}()
+
+	jsonrpcMethod := userRequestMethod(userReq)
+	listen := jsonrpcMethod == mcpversions.MethodSubscriptionsListen && userReqID.IsValid()
+
+	// The upstream call runs under forwardCtx so the shutdown interrupt can
+	// abandon it, with shutdowndrain.ErrInterrupted as the cause, while ctx stays live
+	// for answering the client and running interceptors. A subscriptions/listen
+	// stream is not interrupted: it already ends when the drain starts.
+	relay := &sseRelay{bytes: 0, responseRelayed: atomic.Bool{}, resumable: false, age: p.streamAge(start)}
+	forwardCtx, cancelForward := context.WithCancelCause(ctx)
+	defer cancelForward(nil)
+	if !listen {
+		stopInterrupt := p.Drain.AfterInterrupt(func() {
+			if !relay.responseRelayed.Load() {
+				cancelForward(shutdowndrain.ErrInterrupted)
+			}
+		})
+		defer stopInterrupt()
+	}
+	// answerInterrupted ends a request the drain interrupted before any
+	// response header was written.
+	answerInterrupted := func(upstreamResp *http.Response) error {
+		failure = oops.E(oops.CodeUnavailable, shutdowndrain.ErrInterrupted, "interrupted by server shutdown")
+		observation.finish("incomplete")
+		p.logInterrupted(ctx, jsonrpcMethod, false)
+		responseBytes = p.writeInterruptedResponse(ctx, w, span, userReqID, jsonrpcMethod)
+		p.cancelUpstreamRequest(ctx, r, userReqID, answeredBy(upstreamResp))
+		return nil
+	}
 
 	validateUpstreamRequest := func(upstreamReq *http.Request) error {
 		if rejection := validateMirroredHeaders(upstreamReq, userReq); rejection != nil {
@@ -757,8 +875,7 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 		}
 		return nil
 	}
-	//nolint:bodyclose // Body is closed via the defer below; linter can't trace the close across the forwardRequest helper.
-	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(ctx, r, userReq.BodyReader, validateUpstreamRequest)
+	upstreamReq, upstreamResp, err := p.forwardRequestWithRetry(forwardCtx, r, userReq.BodyReader, validateUpstreamRequest)
 	if err != nil {
 		if rejection, ok := errors.AsType[*RejectError](err); ok {
 			// Refused before it was sent, like a request interceptor
@@ -767,11 +884,15 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			responseBytes = p.writeRejection(ctx, w, span, userReqID, rejection)
 			return nil
 		}
+		if shutdowndrain.Interrupted(forwardCtx) {
+			return answerInterrupted(nil)
+		}
 		return err
 	}
 	defer o11y.NoLogDefer(upstreamResp.Body.Close)
 
 	upstreamStatus = upstreamResp.StatusCode
+	upstreamHeader = upstreamResp.Header
 	if upstreamStatus < 200 || upstreamStatus >= 300 {
 		observation.finish("error")
 	}
@@ -804,25 +925,130 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 	// below is bypassed entirely for SSE responses because the body is
 	// not a single message to hand off — it's a stream of them.
 	if isEventStream(upstreamResp.Header) {
-		n, streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq)
-		responseBytes = n
-		if streamErr != nil {
+		// A listen stream ends as soon as the drain starts; any other stream
+		// ends then only if its response was already relayed.
+		stopDrain := p.Drain.AfterStart(func() {
+			if listen || relay.responseRelayed.Load() {
+				drainStream(upstreamResp.Body)
+			}
+		})
+		defer stopDrain()
+		// A listen stream is rotated at its maximum age; any other stream is
+		// rotated then only if its response was already relayed, because
+		// closing a POST stream cancels a request still in flight.
+		stopAge := relay.age.afterDeadline(func() {
+			if listen || relay.responseRelayed.Load() {
+				rotateStream(upstreamResp.Body)
+			}
+		})
+		defer stopAge()
+
+		streamStart := time.Now()
+		streamErr := p.relaySSEStream(ctx, w, r, upstreamReq, upstreamResp, userReqID, relay, initializeReq, toolsCallReq, toolsListReq, resourcesReadReq, resourcesListReq, label)
+		responseBytes = relay.bytes
+		responseRelayed := relay.responseRelayed.Load()
+		reason := streamEndReason(r, upstreamResp.Body, streamErr)
+		if shutdowndrain.Interrupted(forwardCtx) {
+			// The interrupt only fires before the response is relayed, but the
+			// response may still have been relayed while it was firing; the
+			// client has its answer then, so the stream simply closed.
+			reason = StreamEndShutdownInterrupted
+			if responseRelayed {
+				reason = StreamEndShutdown
+			}
+		}
+		defer func() {
+			p.Metrics.RecordStreamEnd(ctx, p.Identity, StreamEnd{
+				HTTPMethod:      http.MethodPost,
+				JSONRPCMethod:   jsonrpcMethod,
+				Reason:          reason,
+				ResponseRelayed: responseRelayed,
+				Resumable:       relay.resumable,
+				ResumeRequested: false,
+				Duration:        time.Since(streamStart),
+			})
+			p.Metrics.RecordHTTPStreamEnd(ctx, r, reason, start, time.Now())
+		}()
+
+		// Headers are already on the wire, so every ending that still owes
+		// the client a response writes it as an SSE event and returns nil:
+		// an error returned from here would reach the client as a bare line
+		// SSE parsers drop.
+		switch reason {
+		case StreamEndShutdown, StreamEndMaxAge:
+			// Ending the subscription with its completion result, rather than
+			// dropping the stream, tells the client the server ended it on
+			// purpose. Any other drained or rotated stream already relayed its
+			// response.
+			if listen && !responseRelayed {
+				n, writeErr := p.writeListenCompletion(w, userReqID)
+				responseBytes += n
+				if writeErr != nil {
+					p.Logger.DebugContext(ctx, "write completion to closed subscriptions/listen stream",
+						attr.SlogComponent("remotemcp.proxy"), attr.SlogRemoteMCPProxyStreamEndReason(string(reason)), attr.SlogError(writeErr))
+				}
+			}
+			return nil
+		case StreamEndShutdownInterrupted:
+			failure = oops.E(oops.CodeUnavailable, shutdowndrain.ErrInterrupted, "interrupted by server shutdown")
+			observation.finish("incomplete")
+			p.logInterrupted(ctx, jsonrpcMethod, relay.resumable)
+			n, writeErr := writeInterruptedEvent(w, userReqID, jsonrpcMethod)
+			responseBytes += n
+			if writeErr != nil {
+				p.Logger.DebugContext(ctx, "write shutdown error to remote mcp response stream",
+					attr.SlogComponent("remotemcp.proxy"), attr.SlogError(writeErr))
+			}
+			p.cancelUpstreamRequest(ctx, r, userReqID, answeredBy(upstreamResp))
+			return nil
+		case StreamEndUpstreamClosed:
+			// An upstream that closes a request's stream without responding
+			// leaves the client waiting out its own timeout, so answer for
+			// it. Two clean closes are left alone: a stream that carried
+			// event ids may be closed on purpose for the client to resume
+			// with Last-Event-ID (MCP 2025-11-25 polling), and a
+			// subscriptions/listen stream that drops is the client's signal
+			// to reconnect, which an error response would turn into a
+			// failed subscription.
+			if !responseRelayed && userReqID.IsValid() && !relay.resumable && !listen {
+				observation.finish("incomplete")
+				failure = oops.E(oops.CodeGatewayError, nil, "remote MCP server closed its response stream before responding").
+					LogWarn(ctx, p.Logger)
+				responseBytes += p.writeStreamFailure(ctx, w, userReqID, "The MCP server closed its response stream before responding.")
+			}
+			return nil
+		case StreamEndIdleTimeout:
 			// Unlike the standalone GET stream, a POST response stream going
 			// idle means the upstream stalled mid-reply — the client is still
-			// owed a terminal response event. Surface it as an upstream
-			// fault with the idle bound named, not a bare context error.
-			if streamIdledOut(upstreamResp.Body) {
-				observation.finish("incomplete")
-				return oops.E(oops.CodeGatewayError, streamErr,
-					"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
-				).LogWarn(ctx, p.Logger)
+			// owed a terminal response event. Surface it as an upstream fault
+			// with the idle bound named, not a bare context error.
+			observation.finish("incomplete")
+			failure = oops.E(oops.CodeGatewayError, streamErr,
+				"remote MCP server went idle mid-response (no data for %s)", p.StreamingTimeout,
+			).LogWarn(ctx, p.Logger, attr.SlogRemoteMCPProxyStreamResponseRelayed(responseRelayed))
+			if !responseRelayed {
+				responseBytes += p.writeStreamFailure(ctx, w, userReqID, fmt.Sprintf("The MCP server sent nothing for %s before responding.", p.StreamingTimeout))
 			}
-			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp response stream").LogError(ctx, p.Logger)
+			return nil
+		case StreamEndRequestCanceled:
+			// The client is gone; there is no one to answer.
+			return oops.E(oops.CodeUnexpected, streamErr, "relay mcp response stream").
+				LogError(ctx, p.Logger, attr.SlogRemoteMCPProxyStreamResponseRelayed(responseRelayed))
+		case StreamEndError:
+			failure = oops.E(oops.CodeUnexpected, streamErr, "relay mcp response stream").
+				LogError(ctx, p.Logger, attr.SlogRemoteMCPProxyStreamResponseRelayed(responseRelayed))
+			if !responseRelayed {
+				responseBytes += p.writeStreamFailure(ctx, w, userReqID, "Relaying the MCP server's response failed.")
+			}
+			return nil
 		}
 		return nil
 	}
 
 	bodyBytes, msg, err := readJSONRPCBody(upstreamResp.Body, p.MaxBufferedBodyBytes)
+	if err != nil && shutdowndrain.Interrupted(forwardCtx) {
+		return answerInterrupted(upstreamResp)
+	}
 	switch {
 	case errors.Is(err, ErrUndecodableJSONRPCBody):
 		// The remote returned a non-SSE body that isn't a single JSON-RPC
@@ -926,15 +1152,24 @@ func (p *Proxy) Post(w http.ResponseWriter, r *http.Request) (err error) {
 			}
 		}
 
+		// Label the result after every interceptor has run, covering
+		// results that never decoded into a typed view. A strict proxy
+		// still rejects an undecodable tools/list result below; labelling
+		// it first wastes a splice but never relays it.
+		interceptorMutated := remoteMsg.dirty
+		if err := applyCacheLabel(remoteMsg, label); err != nil {
+			return p.dispatchInterceptorError(ctx, w, span, userReqID, err, &responseBytes)
+		}
+
 		// Materialize any typed-setter mutations (e.g.
-		// ToolsListResponse.SetTools) into fresh wire bytes that replace
-		// the upstream's original payload. A no-op when no interceptor
-		// mutated the response.
+		// ToolsListResponse.SetTools) and the cache label into fresh wire
+		// bytes that replace the upstream's original payload. A no-op when
+		// nothing mutated the response.
 		if mutated, ok, err := remoteMsg.materializedBytes(); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "encode mutated response body").LogError(ctx, p.Logger)
 		} else if ok {
 			bodyBytes = mutated
-			p.infoContextWithIdentity(ctx, "relaying mutated response body to client",
+			p.logWithIdentity(ctx, mutatedRelayLogLevel(interceptorMutated), "relaying mutated response body to client",
 				attr.SlogComponent("remotemcp.proxy"))
 		}
 	}
@@ -1006,13 +1241,13 @@ func (p *Proxy) forwardRequest(
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
+		return nil, nil, &ForwardSetupError{Err: oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger), Kind: ForwardSetupInternal}
 	}
 	if p.Identity.RemoteMCPServerID != "" {
 		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
 			phaseTimer.Stop()
 			forwardCancel()
-			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+			return nil, nil, &ForwardSetupError{Err: p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false), Kind: ForwardSetupConfiguration}
 		}
 	}
 
@@ -1169,23 +1404,32 @@ func (p *Proxy) forwardRequestWithRetry(
 // Per-event size is capped by MaxBufferedBodyBytes; an oversized event
 // trips [ErrBodyTooLarge]. Stream duration is bounded by the request
 // context deadline.
+//
+// responseID is the id of the request that opened a POST stream; result
+// records whether its response was relayed. GET streams pass an invalid id.
+// Once the drain has started, a POST stream ends right after its response is
+// relayed instead of waiting for the upstream to close it, as MCP asks of a
+// server once the response has been sent.
 func (p *Proxy) relaySSEStream(
 	ctx context.Context,
 	w http.ResponseWriter,
 	userReq *http.Request,
 	remoteReq *http.Request,
 	upstreamResp *http.Response,
+	responseID jsonrpc.ID,
+	result *sseRelay,
 	initializeReq *InitializeRequest,
 	toolsCallReq *ToolsCallRequest,
 	toolsListReq *ToolsListRequest,
 	resourcesReadReq *ResourcesReadRequest,
 	resourcesListReq *ResourcesListRequest,
-) (int64, error) {
+	label cacheLabel,
+) error {
 	applyResponseHeaders(w, upstreamResp, p.WWWAuthenticate)
 	w.WriteHeader(upstreamResp.StatusCode)
 
 	if upstreamResp.Body == nil {
-		return 0, nil
+		return nil
 	}
 
 	flusher, _ := w.(http.Flusher)
@@ -1229,8 +1473,11 @@ func (p *Proxy) relaySSEStream(
 		}
 	}
 
-	var total int64
 	parseErr := forEachSSEEvent(upstreamResp.Body, p.MaxBufferedBodyBytes, func(rawEvent []byte, data []byte, nonData []byte) error {
+		if sseEventHasID(nonData) {
+			result.resumable = true
+		}
+
 		// 1. Try to decode the event's payload as a JSON-RPC message.
 		//    Events whose data is empty or doesn't decode (comments,
 		//    keepalives, non-JSON data) skip interception entirely and
@@ -1264,8 +1511,9 @@ func (p *Proxy) relaySSEStream(
 		//    A successful typed interceptor may also mutate the payload
 		//    via SetX setters; we materialize the swap below.
 		var (
-			rejectionErr error
-			remoteMsg    *RemoteMessage
+			rejectionErr       error
+			remoteMsg          *RemoteMessage
+			interceptorMutated bool
 		)
 		if msg != nil {
 			remoteMsg = &RemoteMessage{
@@ -1330,6 +1578,16 @@ func (p *Proxy) relaySSEStream(
 					}
 				}
 			}
+
+			// Label every response event, not only the terminal one: a request
+			// is owed one response, and neither undecodable requests nor GET
+			// streams have a terminal id to match. Rejection wins.
+			if rejectionErr == nil {
+				interceptorMutated = remoteMsg.dirty
+				if err := applyCacheLabel(remoteMsg, label); err != nil {
+					rejectionErr = err
+				}
+			}
 		}
 
 		// 3. If the message was rejected, write a substitute event in its
@@ -1352,7 +1610,10 @@ func (p *Proxy) relaySSEStream(
 			if _, writeErr := w.Write(substitute); writeErr != nil {
 				return fmt.Errorf("write substitute sse event: %w", writeErr)
 			}
-			total += int64(len(substitute))
+			result.bytes += int64(len(substitute))
+			if isResponseTo(msg, responseID) {
+				result.markResponseRelayed(p.Drain, upstreamResp.Body)
+			}
 			observeRejection(ctx)
 			if flusher != nil {
 				flusher.Flush()
@@ -1372,14 +1633,17 @@ func (p *Proxy) relaySSEStream(
 				return fmt.Errorf("encode mutated sse event: %w", err)
 			} else if ok {
 				emit = formatSSEEventWithData(nonData, mutated)
-				p.infoContextWithIdentity(ctx, "relaying mutated SSE event to client",
+				p.logWithIdentity(ctx, mutatedRelayLogLevel(interceptorMutated), "relaying mutated SSE event to client",
 					attr.SlogComponent("remotemcp.proxy"))
 			}
 		}
 		if _, writeErr := w.Write(emit); writeErr != nil {
 			return fmt.Errorf("stream sse event: %w", writeErr)
 		}
-		total += int64(len(emit))
+		result.bytes += int64(len(emit))
+		if isResponseTo(msg, responseID) {
+			result.markResponseRelayed(p.Drain, upstreamResp.Body)
+		}
 		observeResponse(ctx, msg)
 		if flusher != nil {
 			flusher.Flush()
@@ -1389,9 +1653,100 @@ func (p *Proxy) relaySSEStream(
 	})
 
 	if parseErr != nil {
-		return total, parseErr
+		return parseErr
 	}
-	return total, nil
+	return nil
+}
+
+// writeStreamFailure answers a request whose SSE response stream failed
+// before its response was relayed, with a JSON-RPC internal error carrying
+// message. A notification is owed no response. Write failures are logged at
+// debug level: the client is usually gone by then.
+func (p *Proxy) writeStreamFailure(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, message string) int64 {
+	if !id.IsValid() {
+		return 0
+	}
+	payload, err := marshalErrorResponse(id, &RejectError{Code: RejectCodeInternalError, Message: message, Data: nil})
+	if err == nil {
+		var n int64
+		n, err = writeSSEBytes(w, formatSSEDataEvent(payload))
+		if err == nil {
+			return n
+		}
+	}
+	p.Logger.DebugContext(ctx, "write failure to remote mcp response stream",
+		attr.SlogComponent("remotemcp.proxy"), attr.SlogError(err))
+	return 0
+}
+
+// writeListenCompletion ends a subscriptions/listen stream with its
+// completion result.
+func (p *Proxy) writeListenCompletion(w http.ResponseWriter, id jsonrpc.ID) (int64, error) {
+	event, err := listenCompletionEvent(id)
+	if err != nil {
+		return 0, err
+	}
+	return writeSSEBytes(w, event)
+}
+
+// streamEndReason classifies how a relayed SSE stream ended. A stream that
+// reached a clean EOF ended on its own even if the drain, the maximum age or
+// the idle bound fired as it did: each ends a stream by cancelling its read,
+// which fails rather than returning EOF.
+func streamEndReason(r *http.Request, body io.ReadCloser, streamErr error) StreamEndReason {
+	switch {
+	case streamErr == nil:
+		return StreamEndUpstreamClosed
+	case streamDrained(body):
+		return StreamEndShutdown
+	case streamRotated(body):
+		return StreamEndMaxAge
+	case streamIdledOut(body):
+		return StreamEndIdleTimeout
+	case r.Context().Err() != nil:
+		return StreamEndRequestCanceled
+	default:
+		return StreamEndError
+	}
+}
+
+// sseRelay records a relayed SSE stream. Only the relaying goroutine writes
+// bytes and resumable; responseRelayed is also read by drain callbacks.
+type sseRelay struct {
+	// bytes is the number of bytes written to the client.
+	bytes int64
+
+	// responseRelayed reports whether the response to the request that opened
+	// the stream was written to the client.
+	responseRelayed atomic.Bool
+
+	// resumable reports whether any upstream event carried an SSE id.
+	resumable bool
+
+	// age is the stream's maximum age.
+	age streamAge
+}
+
+// markResponseRelayed records that the response was written to the client
+// and, once the drain has started or the stream has passed its maximum age,
+// ends the upstream stream: the request is complete, so there is nothing
+// left to wait for.
+func (r *sseRelay) markResponseRelayed(drain *shutdowndrain.Drain, body io.ReadCloser) {
+	r.responseRelayed.Store(true)
+	if drain.Started() {
+		drainStream(body)
+		return
+	}
+	if r.age.reached(time.Now()) {
+		rotateStream(body)
+	}
+}
+
+// isResponseTo reports whether msg is the JSON-RPC response, result or error,
+// to the request identified by id.
+func isResponseTo(msg jsonrpc.Message, id jsonrpc.ID) bool {
+	resp, ok := msg.(*jsonrpc.Response)
+	return ok && id.IsValid() && jsonrpcIDsEqual(resp.ID, id)
 }
 
 // requestSpanAttributes returns the attribute set applied to every span the proxy
@@ -1407,13 +1762,19 @@ func (p *Proxy) requestSpanAttributes(r *http.Request, method string) []attribut
 	return p.Identity.AppendAttributes(attrs)
 }
 
-func (p *Proxy) infoContextWithIdentity(ctx context.Context, msg string, attrs ...slog.Attr) {
-	p.logWithIdentity(ctx, slog.LevelInfo, msg, attrs...)
-}
-
 func (p *Proxy) logWithIdentity(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr) {
 	attrs = append(attrs, p.Identity.SlogAttrs()...)
 	p.Logger.LogAttrs(ctx, level, msg, attrs...)
+}
+
+// mutatedRelayLogLevel logs interceptor mutations at info and a message
+// changed only by the cache label, which changes every labelled result, at
+// debug.
+func mutatedRelayLogLevel(interceptorMutated bool) slog.Level {
+	if interceptorMutated {
+		return slog.LevelInfo
+	}
+	return slog.LevelDebug
 }
 
 // wrapInterceptorRejection logs the rejection at error level and returns an
@@ -1490,6 +1851,7 @@ func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *T
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call request", interceptor.Name(), err)
 		}
 		span.End()
@@ -1509,11 +1871,23 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call response", interceptor.Name(), err)
 		}
 		span.End()
 	}
 	return nil
+}
+
+// runToolsCallRefusalInterceptors invokes each configured
+// ToolsCallRefusalInterceptor in order. They observe only.
+func (p *Proxy) runToolsCallRefusalInterceptors(ctx context.Context, refusal error) {
+	for _, interceptor := range p.ToolsCallRefusalInterceptors {
+		iterCtx, span := p.Tracer.Start(ctx, "remotemcp.proxy.ToolsCallRefusalInterceptor",
+			trace.WithAttributes(attr.RemoteMCPProxyInterceptor(interceptor.Name())))
+		interceptor.InterceptToolsCallRefusal(iterCtx, refusal)
+		span.End()
+	}
 }
 
 // runToolsCallFailureInterceptors invokes each configured
@@ -1681,7 +2055,10 @@ func (p *Proxy) runUserRequestInterceptors(ctx context.Context, req *UserRequest
 // one this helper already issued.
 func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span trace.Span, id jsonrpc.ID, cause error) int64 {
 	observeRejection(ctx)
-	rejectErr := RejectErrorFromCause(cause)
+	if toolResult, ok := errors.AsType[*ToolResultError](cause); ok && id.IsValid() {
+		return p.writeToolResultError(ctx, w, id, toolResult)
+	}
+	rejectErr := withConnectionReference(ctx, RejectErrorFromCause(cause))
 	payload, err := marshalErrorResponse(id, rejectErr)
 	if err != nil {
 		p.Logger.WarnContext(ctx, "failed to marshal jsonrpc rejection envelope; client will see no body",
@@ -1711,6 +2088,28 @@ func (p *Proxy) writeRejection(ctx context.Context, w http.ResponseWriter, span 
 	return int64(n)
 }
 
+// writeToolResultError answers a tools/call with a result marked isError. The
+// call did not fail at the protocol level, so the request span stays
+// unmarked. The interceptor's own span still records the error.
+func (p *Proxy) writeToolResultError(ctx context.Context, w http.ResponseWriter, id jsonrpc.ID, result *ToolResultError) int64 {
+	payload, err := marshalToolResultError(id, contextvalues.AppendConnectionReference(ctx, result.Message))
+	if err != nil {
+		p.Logger.WarnContext(ctx, "failed to marshal tool error result; client will see no body",
+			attr.SlogError(err),
+			attr.SlogComponent("remotemcp.proxy"))
+		return 0
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	n, writeErr := w.Write(payload)
+	if writeErr != nil {
+		p.Logger.WarnContext(ctx, "failed to write tool error result to client",
+			attr.SlogError(writeErr),
+			attr.SlogComponent("remotemcp.proxy"))
+	}
+	return int64(n)
+}
+
 // dispatchInterceptorError routes an interceptor error to the right handler.
 // A [*MutationError] anywhere in the error chain indicates the setter ran
 // into an internal anomaly (typically a marshal failure on a spec-defined
@@ -1736,7 +2135,38 @@ func (p *Proxy) dispatchInterceptorError(
 	if _, ok := errors.AsType[*MutationError](err); ok {
 		return oops.E(oops.CodeUnexpected, err, "proxy interceptor mutation failure").LogError(ctx, p.Logger)
 	}
+	if refusal, ok := errors.AsType[*UpstreamListingRefusalError](err); ok {
+		return p.answerUpstreamListingRefusal(ctx, w, span, id, refusal, responseBytes)
+	}
 	*responseBytes = p.writeRejection(ctx, w, span, id, err)
+	return nil
+}
+
+// answerUpstreamListingRefusal answers the way the POST path answers the same
+// failure on a forwarded request: a [RejectError] as a JSON-RPC error, any other
+// cause returned for the caller's error path, and an upstream refusal relayed
+// with its status and challenge.
+func (p *Proxy) answerUpstreamListingRefusal(
+	ctx context.Context,
+	w http.ResponseWriter,
+	span trace.Span,
+	id jsonrpc.ID,
+	refusal *UpstreamListingRefusalError,
+	responseBytes *int64,
+) error {
+	if refusal.Cause != nil {
+		if rejection, ok := errors.AsType[*RejectError](refusal.Cause); ok {
+			*responseBytes = p.writeRejection(ctx, w, span, id, rejection)
+			return nil
+		}
+		return fmt.Errorf("upstream listing: %w", refusal.Cause)
+	}
+
+	written, err := writeResponse(w, refusal.Response, http.NoBody, p.WWWAuthenticate)
+	*responseBytes = written
+	if err != nil {
+		return fmt.Errorf("relay upstream listing refusal: %w", err)
+	}
 	return nil
 }
 

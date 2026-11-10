@@ -26,6 +26,10 @@ export const Lifecycle = {
 export type Lifecycle = OpenEnum<typeof Lifecycle>;
 
 export type ManagedAgent = {
+  /**
+   * An assigned connection has expired or is no longer available; an authorized editor must reconnect their own account and assign it again
+   */
+  connectionNeedsRefresh?: boolean | undefined;
   createdAt: Date;
   id: string;
   lifecycle: Lifecycle;
@@ -56,6 +60,7 @@ export const Lifecycle$inboundSchema: z.ZodMiniType<Lifecycle, unknown> =
 export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
   z.pipe(
     z.object({
+      connection_needs_refresh: z.optional(z.boolean()),
       created_at: z.pipe(
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
@@ -78,6 +83,7 @@ export const ManagedAgent$inboundSchema: z.ZodMiniType<ManagedAgent, unknown> =
     }),
     z.transform((v) => {
       return remap$(v, {
+        "connection_needs_refresh": "connectionNeedsRefresh",
         "created_at": "createdAt",
         "owner_profile": "ownerProfile",
         "owner_reassignment_reason": "ownerReassignmentReason",

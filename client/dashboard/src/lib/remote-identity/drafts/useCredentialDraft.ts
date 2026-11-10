@@ -80,9 +80,12 @@ export type AgentCredentialFields = {
 export function useAgentCredentialFields(
   authorizationHeader?: RemoteMcpServerHeader,
 ): AgentCredentialFields {
+  // Keyed on content: a refetch rebuilds the header object even when nothing
+  // changed, and that must not reset what the operator typed.
+  const savedValues = JSON.stringify(valuesFromHeader(authorizationHeader));
   const defaultValues = useMemo(
-    () => valuesFromHeader(authorizationHeader),
-    [authorizationHeader],
+    () => JSON.parse(savedValues) as AgentCredentialValues,
+    [savedValues],
   );
   const form = useForm({ defaultValues });
   const values = useStore(form.store, (state) => state.values);
@@ -222,13 +225,13 @@ export function useAgentCredentialDraft({
         return true;
       }
       clear();
-      toast.success("Service Account updated");
+      toast.success("Shared credential updated");
       return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update Service Account",
+          : "Failed to update shared credential",
       );
       return false;
     }

@@ -22,9 +22,9 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  ListRiskPolicyBypassRequestsQueryParamStatus,
   ListRiskPolicyBypassRequestsRequest,
   ListRiskPolicyBypassRequestsSecurity,
-  Status,
 } from "../models/operations/listriskpolicybypassrequests.js";
 import { useGramContext } from "./_context.js";
 import {
@@ -119,7 +119,7 @@ export function setRiskListPolicyBypassRequestsData(
   queryKeyBase: [
     parameters: {
       policyId?: string | undefined;
-      status?: Status | undefined;
+      status?: ListRiskPolicyBypassRequestsQueryParamStatus | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;
@@ -137,7 +137,7 @@ export function invalidateRiskListPolicyBypassRequests(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       policyId?: string | undefined;
-      status?: Status | undefined;
+      status?: ListRiskPolicyBypassRequestsQueryParamStatus | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
       gramProject?: string | undefined;

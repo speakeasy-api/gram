@@ -12,9 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
 func mintInstallCode(t *testing.T, ti *testInstance, agentID, token string) (*httptest.ResponseRecorder, error) {
+	t.Helper()
+	return mintInstallCodeFrom(t, ti, "https://app.example.test", agentID, token)
+}
+
+func mintInstallCodeFrom(t *testing.T, ti *testInstance, origin, agentID, token string) (*httptest.ResponseRecorder, error) {
 	t.Helper()
 	r := httptest.NewRequest(http.MethodPost, "/agent-mcp/"+agentID+"/install-code", nil)
 	if token != "" {
@@ -23,6 +29,7 @@ func mintInstallCode(t *testing.T, ti *testInstance, agentID, token string) (*ht
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("agentID", agentID)
 	r = r.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	r = r.WithContext(requestorigin.WithContext(r.Context(), requestorigin.Origin{BaseURL: origin}))
 
 	w := httptest.NewRecorder()
 	err := ti.service.HandleAgentInstallCode(w, r)
@@ -57,8 +64,8 @@ func codeFrom(t *testing.T, w *httptest.ResponseRecorder) string {
 	return minted.Code
 }
 
-// The point of the code: the install command carries no credential, and the
-// script it fetches carries the real one.
+// The install command carries a short-lived credential redeemable for the
+// agent key, rather than placing the long-lived key directly in the command.
 func TestAgentInstall_CodeExchangesForAScriptCarryingTheKey(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
@@ -79,9 +86,9 @@ func TestAgentInstall_CodeExchangesForAScriptCarryingTheKey(t *testing.T) {
 	require.Equal(t, "no-store", script.Result().Header.Get("Cache-Control"))
 }
 
-// Single use is what makes a leaked command harmless: the second fetch gets
-// nothing, and an unknown code is indistinguishable from a spent one.
-func TestAgentInstall_CodeIsSingleUse(t *testing.T) {
+// Fetching the script does not spend the code, so a second fetch returns the
+// same key. An unknown code gets nothing. Expiry is the cache TTL.
+func TestAgentInstall_CodeIsReusable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	fx := seedAgentGateway(t, ctx, ti)
@@ -90,11 +97,13 @@ func TestAgentInstall_CodeIsSingleUse(t *testing.T) {
 	require.NoError(t, err)
 	code := codeFrom(t, minted)
 
-	_, err = fetchInstallScript(t, ti, code)
+	first, err := fetchInstallScript(t, ti, code)
 	require.NoError(t, err)
+	require.Contains(t, first.Body.String(), fx.token)
 
-	_, err = fetchInstallScript(t, ti, code)
-	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+	second, err := fetchInstallScript(t, ti, code)
+	require.NoError(t, err)
+	require.Contains(t, second.Body.String(), fx.token)
 
 	_, err = fetchInstallScript(t, ti, "never-minted")
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)
@@ -113,4 +122,16 @@ func TestAgentInstall_MintingRequiresThatAgentsKey(t *testing.T) {
 
 	_, err = mintInstallCode(t, ti, fx.agent.ID.String(), other.token)
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+}
+
+// The command fetches the script from the minting origin, so a plain-HTTP
+// origin would send the code, a bearer of the key, in cleartext.
+func TestAgentInstall_MintingRequiresAnHTTPSOrigin(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+
+	minted, err := mintInstallCodeFrom(t, ti, "http://app.example.test", fx.agent.ID.String(), fx.token)
+	requireAgentGatewayCode(t, err, oops.CodeBadRequest)
+	require.Empty(t, minted.Body.String(), "no code may be handed out")
 }

@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -57,7 +58,9 @@ import (
 	platformtoolsruntime "github.com/speakeasy-api/gram/server/internal/platformtools/runtime"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/rag"
+	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	tm "github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -72,6 +75,7 @@ import (
 func mcpServerFlags() []cli.Flag {
 	flags := mcpRuntimeFlags()
 	return append(flags,
+		riskFingerprintPepperFlag(),
 		&cli.StringFlag{Name: "address", Value: ":8080", Usage: "HTTP address to listen on", EnvVars: []string{"GRAM_SERVER_ADDRESS"}},
 		&cli.StringFlag{Name: "ssl-key-file", Usage: "The SSL key file path to use for the server", EnvVars: []string{"GRAM_SSL_KEY_FILE"}},
 		&cli.StringFlag{Name: "ssl-cert-file", Usage: "The SSL certificate file path to use for the server", EnvVars: []string{"GRAM_SSL_CERT_FILE"}},
@@ -267,6 +271,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 			AdmitPrincipalCredential:         runtimepolicy.AdmitPrincipalCredential,
 			AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 			AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
+			AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 			DevMode:                          serviceEnv == "local",
 		})
 
@@ -292,15 +297,19 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	// Shutdown funcs run concurrently, so everything publishing through
 	// psbroker stops in order inside its close.
 	var drainRisk func(context.Context) error
+	var shutdownConnections func(context.Context) error
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
+		// The recorder publishes its exports, so only the publishers wait for it.
+		waitConnections := startShutdown(ctx, shutdownConnections)
 		if drainRisk != nil {
 			errs = append(errs, drainRisk(ctx))
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
 		}
+		errs = append(errs, waitConnections())
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}
 
@@ -322,8 +331,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	memoryService := memory.NewMemoryService(logger, tracerProvider, meterProvider, db, completions, auditLogger)
 	ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completions)
 	shadowMCPClient := shadowmcp.NewClient(logger, db, cacheImpl, serverURL)
+	approvalService := approval.NewService(logger, db, serverURL, auditLogger)
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
+		approvalService,
 	)
 	if err != nil {
 		return err
@@ -358,7 +369,9 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeys(ctx, logger, c.String("risk-fingerprint-pepper-keyring")), newConnectionLogExport(publishers.OTELLogs))
+	shutdownConnections = connectionRecorderShutdown(connectionRecorder)
+	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
 		return err
 	}
@@ -368,6 +381,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return errors.Join(stopTunnelMetrics(ctx), stopClient(ctx))
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
+		Connections:      connectionRecorder,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -395,22 +409,35 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		remotesessions.WithRefreshIDTokenVerifier(remoteSessionDeps.Verifier),
 		remotesessions.WithRefreshIssuerMetadataRefresher(remoteSessionDeps.Refresher),
 		remotesessions.WithRefreshSessionEnricher(remoteSessionDeps.Enricher),
-		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner))
+		remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner),
+		remotesessions.WithRefreshConnectionRecorder(connectionRecorder),
+		remotesessions.WithRefreshFeatureFlags(featureFlags))
 	remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, enc, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remoteSessionsRefresher, productFeatures, protectedResources)
 	remoteSessionsService.SetCallbackOrigins(callbackOrigins)
 	remoteSessionsService.SetFeatureFlags(featureFlags)
 	remoteSessionsService.SetSpeakeasySigningAvailable(issuerSigner.Available())
-	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
+	remoteSessionsService.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil {
 			return oops.C(oops.CodeNotFound)
 		}
-		_, _, err := agentmanagement.NewAuthorizer(authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		authorizer := agentmanagement.NewAuthorizer(authzEngine)
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		if err != nil && !write {
+			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)
+		}
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
 		return nil
 	})
+	bindingRefreshAttempts := remotesessions.NewBindingRefreshAttempts(logger, cache.NewRedisCacheAdapter(redisClient))
+	remoteSessionsService.SetBindingRefreshAttempts(bindingRefreshAttempts)
+	mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 	mcpService.SetConsentBindingService(remoteSessionsService)
 	mcpService.StartRemoteSessionRecheck(ctx)
 
@@ -431,8 +458,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	internalsessionissuers.AttachDiscovery(mux, db, logger)
 	mcp.Attach(mux, runtime.MCP, runtime.Metadata)
 	mcp.AttachAuthenticationHost(authenticationHost, runtime.MCP)
+	attachApprovals(mux, logger, approvalService, runtime.MCP, ratelimit.NewRedisStore(redisClient))
 	usersessions.AttachRetiredProxy(mux, logger)
 
+	// Requests get their own base context so the shutdown deadline can cancel
+	// the ones still running without cancelling ctx, which the probe drain
+	// below still needs.
+	requestCtx, cancelRequests := context.WithCancelCause(ctx)
+	defer cancelRequests(nil)
 	srv := &http.Server{
 		Addr:              c.String("address"),
 		Handler:           mux,
@@ -441,7 +474,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		// backend connections at 600s, so the backend must outlast it. No
 		// WriteTimeout, since this mux serves long-lived MCP streams.
 		IdleTimeout: 620 * time.Second,
-		BaseContext: func(net.Listener) context.Context { return ctx },
+		BaseContext: func(net.Listener) context.Context { return requestCtx },
 	}
 
 	sigctx, sigcancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -450,14 +483,10 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	group.Go(func() {
 		<-sigctx.Done()
 		logger.InfoContext(ctx, "shutting down mcp server")
-		graceCtx, graceCancel := context.WithTimeoutCause(context.WithoutCancel(ctx), shutdownDrainTimeout, errors.New("graceful shutdown timed out"))
-		defer graceCancel()
-		if err := srv.Shutdown(graceCtx); err != nil {
-			if gerr := context.Cause(graceCtx); gerr != nil {
-				err = errors.Join(err, gerr)
-			}
-			logger.ErrorContext(ctx, "failed to shutdown mcp server", attr.SlogError(err))
-		}
+		// Listen streams never finish on their own, so end them first and
+		// let their clients reconnect to a replica that is still serving.
+		mcpService.StartDrain(requestInterruptAfter)
+		drainHTTPServer(ctx, logger, srv, cancelRequests, shutdownDrainTimeout, "failed to shutdown mcp server")
 		// Handlers are drained; the automatic remote-session probes they
 		// detached still write verdicts, so give them their own budget before
 		// the datastores close.

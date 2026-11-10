@@ -64,7 +64,7 @@ func newChainStoreFixture(t *testing.T) chainStoreFixture {
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	resourceIssuer, resourceClient := prepareResourceClient(t, db, enc, org, testResourceIssuer, testResourceIssuer+"/token", testResourceClient, "resource-secret")
-	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: "https://api.resource.example.test"}
+	req := Request{OrganizationID: org, ProjectID: project, UserSessionIssuerID: usi.ID, UserID: human, UpstreamResource: testResource}
 	binding, generation := bindResource(t, db, req, resourceIssuer, resourceClient, testResource, remotesessions.PreparationStateReady)
 	trusted, err := repo.New(db).GetTrustedRemoteSessionClientForOrganization(ctx, repo.GetTrustedRemoteSessionClientForOrganizationParams{OrganizationID: org, IssuerID: idpIssuer, ClientID: idpClient})
 	require.NoError(t, err)
@@ -165,11 +165,18 @@ func bindResourceScopes(t *testing.T, db *pgxpool.Pool, req Request, remoteIssue
 	return updated.ID, updated.Generation
 }
 
-// addSlashVariantBinding adds or updates a second binding for the same upstream
-// under its no-trailing-slash resource spelling.
+// addSlashVariantBinding adds a distinct resource without the trailing slash.
 func (f chainStoreFixture) addSlashVariantBinding(t *testing.T, state string) {
 	t.Helper()
 	bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://api.resource.example.test", state)
+}
+
+// addAmbiguousBinding names the same exact resource under another issuer.
+func (f chainStoreFixture) addAmbiguousBinding(t *testing.T) {
+	t.Helper()
+	issuerURL := "https://other-resource-issuer.example.test"
+	issuer, client := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, issuerURL, issuerURL+"/token", "other-client", "other-secret")
+	bindResource(t, f.db, f.req, issuer, client, f.sel.resource, remotesessions.PreparationStateReady)
 }
 
 func (f chainStoreFixture) credential(token string) credential {
@@ -397,7 +404,7 @@ func TestStore_SelectBinding(t *testing.T) {
 	t.Run("ambiguous bindings require configuration", func(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
-		f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
+		f.addAmbiguousBinding(t)
 		_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
 		require.Equal(t, ReasonConfigurationRequired, outcome.Reason)
 		require.True(t, outcome.Applicable())
@@ -427,7 +434,7 @@ func TestStore_GovernsOnlyBoundUpstreams(t *testing.T) {
 	require.True(t, f.chainer.Governs(t.Context(), f.req), "an unlinked leftover binding does not displace the ready one")
 
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
-	require.True(t, f.chainer.Governs(t.Context(), f.req), "ambiguous ready bindings still claim the upstream")
+	require.True(t, f.chainer.Governs(t.Context(), f.req), "another exact resource does not displace this binding")
 }
 
 func TestStore_BindingFailingReadinessDoesNotGovern(t *testing.T) {
@@ -603,7 +610,7 @@ func TestStore_SelectBindingCountsOnlyTheChosenClientsBindings(t *testing.T) {
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	otherIssuer, otherClient := prepareResourceClient(t, f.db, enc, f.req.OrganizationID, "https://as.other.example.test", "https://as.other.example.test/token", "other-client", "other-secret")
-	bindResource(t, f.db, f.req, otherIssuer, otherClient, "https://api.resource.example.test", remotesessions.PreparationStateReady)
+	bindResource(t, f.db, f.req, otherIssuer, otherClient, f.sel.resource, remotesessions.PreparationStateReady)
 
 	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
 	require.Equal(t, ReasonConfigurationRequired, outcome.Reason, "without a chosen client both bindings compete")
@@ -708,4 +715,26 @@ func TestStore_OIDCOnlyConnectionBoundsTheGrant(t *testing.T) {
 		}
 		require.Equal(t, ReasonMalformedAssertion, outcome.Reason, "scope %v exceeds the recorded set", tc.scope)
 	}
+}
+
+// A binding serves only requests signed in through its own user session
+// issuer in its own project: a server gated directly by another issuer, or a
+// gateway member in another project, never borrows it, however the auth
+// client backfill offers its EMA client.
+func TestStore_SelectBindingRestrictedToInboundIssuerAndProject(t *testing.T) {
+	t.Parallel()
+	f := newChainStoreFixture(t)
+	direct := f.req
+	direct.UserSessionIssuerID = uuid.New()
+	_, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), direct)
+	require.Equal(t, notApplicable, outcome, "a request through another inbound issuer selects nothing")
+
+	foreign := f.req
+	foreign.ProjectID = uuid.New()
+	_, outcome = f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), foreign)
+	require.Equal(t, notApplicable, outcome, "a request in another project selects nothing")
+
+	sel, outcome := f.chainer.selectBinding(t.Context(), testenv.NewLogger(t), f.req)
+	require.Equal(t, success, outcome, "the binding's own issuer and project select it")
+	require.Equal(t, f.sel.bindingID, sel.bindingID)
 }

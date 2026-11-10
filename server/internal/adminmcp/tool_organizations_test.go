@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 )
 
 type recordingOrganizationReader struct {
@@ -35,6 +36,7 @@ func (r *recordingOrganizationReader) GetOrganization(_ context.Context, input *
 func callStaffReadTool(t *testing.T, reads OrganizationReader, name, args string) (int, string, json.RawMessage) {
 	t.Helper()
 	auth := &testAuthenticator{principal: staffPrincipal()}
+	auth.principal.staff = &contextvalues.AdminAuthContext{SessionID: "test-staff-session", OIDCSubject: auth.principal.Subject, Email: auth.principal.Email}
 	handler := NewRuntime(auth, "", reads).Handler()
 	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"`+name+`","arguments":`+args+`}}`))
 	request.Header.Set("Authorization", "Bearer test-token")
@@ -128,6 +130,25 @@ func TestOrganizationSummaryAndTrialRequireExactID(t *testing.T) {
 	reads = &recordingOrganizationReader{err: errors.New("private database failure")}
 	_, body, _ = callStaffReadTool(t, reads, "get_organization_trial", `{"organization_id":"org-b"}`)
 	require.NotContains(t, body, "private database failure")
+}
+
+func TestOrganizationSummaryAdoptionDashboardURL(t *testing.T) {
+	t.Parallel()
+	link := "https://example.com/adoption"
+	summaryFields := func(url *string) map[string]json.RawMessage {
+		reads := &recordingOrganizationReader{org: &gen.AdminOrganization{
+			ID: "org-a", Name: "Example One", Slug: "example-one", AccountType: "payg",
+			AdoptionDashboardURL: url,
+		}}
+		status, _, data := callStaffReadTool(t, reads, "get_organization_summary", `{"organization_id":"org-a"}`)
+		require.Equal(t, http.StatusOK, status)
+		var fields map[string]json.RawMessage
+		require.NoError(t, json.Unmarshal(data, &fields))
+		return fields
+	}
+
+	require.JSONEq(t, `"`+link+`"`, string(summaryFields(&link)["adoption_dashboard_url"]))
+	require.NotContains(t, summaryFields(nil), "adoption_dashboard_url")
 }
 
 func TestConfiguredOrganizationReadsAppearInContext(t *testing.T) {

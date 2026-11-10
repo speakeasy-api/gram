@@ -1,4 +1,5 @@
 import { unixNanoToDate } from "@/components/chart/chartUtils";
+import { customDateRangeBounds } from "@/components/filters/filter-schema";
 import {
   defineFilters,
   useFilterState,
@@ -30,6 +31,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { EventDetailSheet } from "./EventDetailSheet";
 import { EventKindBadge, EventSourceIcon } from "./event-display";
 import { EventVolumeChart } from "./EventVolumeChart";
+import { Spinner } from "@/components/ui/Spinner";
 
 // Column tracks shared by the header row and every data row. Body gets the
 // widest track and a min-width-0 cell so it truncates responsively.
@@ -104,8 +106,7 @@ function EventFeedWorkbench(): JSX.Element {
   const { from, to } = useMemo(() => {
     void rangeEpoch;
     const d = values.date;
-    if (d.customRange) return d.customRange;
-    return getPresetRange(d.preset ?? "1d");
+    return customDateRangeBounds(d) ?? getPresetRange(d.preset ?? "1d");
   }, [values.date, rangeEpoch]);
   const fromIso = from.toISOString();
   const toIso = to.toISOString();
@@ -437,7 +438,7 @@ function EventFeedRows({
 
       {isFetchingNextPage && (
         <div className="text-muted-foreground flex items-center justify-center gap-2 border-t py-4">
-          <Icon name="loader-circle" className="size-4 animate-spin" />
+          <Spinner className="mr-0" />
           <span className="text-sm">Loading more events...</span>
         </div>
       )}

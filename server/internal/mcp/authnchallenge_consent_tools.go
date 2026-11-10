@@ -26,12 +26,6 @@ import (
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-// consentToolNameLimit caps how many explicit tool names one approve form
-// may submit. Matches consentInventoryMaxTools so any subset of a full
-// inventory — including all of it — is submittable; the approve POST's 1 MiB
-// body cap covers the worst case with URL-encoding inflation.
-const consentToolNameLimit = consentInventoryMaxTools
-
 // consentPrefillAttr serializes the subject's stored selection for the
 // island's server-rendered bootstrap: annotation grants with their modes
 // plus manually picked tool names. Snapshot expansions are omitted — the
@@ -129,25 +123,10 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 	return toolset, nil
 }
 
-func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
-	if endpoint.MetaMcpServerID.Valid {
-		return true, nil
-	}
-	if !endpoint.McpServerID.Valid {
-		return false, nil
-	}
-	if !endpoint.ToolsetID.Valid {
-		return true, nil
-	}
-
-	hasProxy, err := toolsets_repo.New(s.db).ToolsetHasExternalMCPProxy(ctx, toolsets_repo.ToolsetHasExternalMCPProxyParams{
-		ToolsetID: endpoint.ToolsetID.UUID,
-		ProjectID: endpoint.ProjectID,
-	})
-	if err != nil {
-		return false, fmt.Errorf("check toolset for external MCP proxy: %w", err)
-	}
-	return !hasProxy, nil
+// consentToolPickerEligible reports whether the endpoint fronts an MCP server
+// whose tools the consent screen can offer for selection.
+func consentToolPickerEligible(endpoint *ResolvedMcpEndpoint) bool {
+	return endpoint.MetaMcpServerID.Valid || endpoint.McpServerID.Valid
 }
 
 // trueAnnotationValues lists the vocabulary values whose raw hint is
@@ -323,8 +302,8 @@ func chosenToolSelection(form url.Values, inventory *consentToolInventory) (*too
 	// Manual picks: strict duplicates, per-name cap, unknown intersected
 	// away, grant-covered picks canonicalized away.
 	submitted := form["tools"]
-	if len(submitted) > consentToolNameLimit {
-		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), consentToolNameLimit)
+	if len(submitted) > toolfilter.MaxTools {
+		return nil, fmt.Errorf("too many tools submitted (%d; limit is %d)", len(submitted), toolfilter.MaxTools)
 	}
 	displayed := make(map[string]bool, len(inventory.Tools))
 	for _, tool := range inventory.Tools {

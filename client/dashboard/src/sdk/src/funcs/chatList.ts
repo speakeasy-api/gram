@@ -108,6 +108,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "account_type": payload?.account_type,
+    "agent_id": payload?.agent_id,
     "assistant_id": payload?.assistant_id,
     "exclude_source_kind": payload?.exclude_source_kind,
     "external_user_id": payload?.external_user_id,
@@ -117,6 +118,7 @@ async function $do(
     "min_risk_score": payload?.min_risk_score,
     "offset": payload?.offset,
     "pinned": payload?.pinned,
+    "pinned_first": payload?.pinned_first,
     "search": payload?.search,
     "sort_by": payload?.sort_by,
     "sort_order": payload?.sort_order,
