@@ -1105,6 +1105,86 @@ WHERE server.user_session_issuer_id = @source_issuer_id
   )
 RETURNING server.id, server.project_id, (server.toolset_id IS NOT DISTINCT FROM server.id AND server.deleted IS FALSE)::boolean AS canonical, previous.updated_at AS previous_updated_at;
 
+-- name: ListMCPServersForUserSessionIssuerMigration :many
+-- Include credential reach, not only direct issuer ownership: organization
+-- issuers reach every proxied server and gateways may cross project boundaries.
+-- Direct hosted consumers and recorded choices also need lifecycle locks.
+SELECT server.id, server.project_id
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+WHERE server.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = @organization_id::text
+  AND (EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = ANY(@issuer_ids::uuid[])
+      AND issuer.deleted IS FALSE
+      AND (
+        server.user_session_issuer_id = issuer.id
+        OR ((server.remote_mcp_server_id IS NOT NULL OR server.tunneled_mcp_server_id IS NOT NULL)
+          AND (issuer.project_id IS NULL OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_server_members AS member
+            JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+            WHERE member.mcp_server_id = server.id
+              AND member.deleted IS FALSE
+              AND gateway.deleted IS FALSE
+              AND gateway.user_session_issuer_id = issuer.id
+          )))
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM upstream_client_selections AS choice
+    JOIN user_sessions AS session ON COALESCE(session.credential_id, session.id) = choice.credential_id
+    WHERE choice.mcp_server_id = server.id
+      AND choice.organization_id = @organization_id::text
+      AND choice.credential_kind = 'user_session'
+      AND choice.deleted IS FALSE
+      AND choice.auth_client_id IS NULL
+      AND session.user_session_issuer_id = ANY(@issuer_ids::uuid[])
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+  ))
+ORDER BY server.id;
+
+-- name: ListOAuthRegistrationsForUserSessionIssuerMigration :many
+-- Gate existing server registrations and bindings that sole-consumer capture
+-- can add, in one ordered pass before locking issuer or registration rows.
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+WHERE link.user_session_issuer_id = ANY(@issuer_ids::uuid[])
+  AND COALESCE(client.organization_id, (SELECT organization_id FROM projects WHERE id = client.project_id)) = @organization_id::text
+UNION
+SELECT association.remote_session_client_id
+FROM mcp_server_remote_session_clients AS association
+WHERE association.organization_id = @organization_id::text
+  AND association.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+UNION
+SELECT client.remote_session_client_id
+FROM mcp_server_auth_clients AS link
+JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
+WHERE link.organization_id = @organization_id::text
+  AND link.mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND client.client_type IN ('remote_session', 'service_account')
+  AND client.source = 'backfill'
+  AND client.remote_session_client_id IS NOT NULL
+ORDER BY remote_session_client_id;
+
+-- name: ListLiveCredentialIDsForUserSessionIssuerMigration :many
+-- Match selectionbackfill's refreshable credential lineages, only on the
+-- surviving issuer after source sessions have moved in this transaction.
+SELECT DISTINCT COALESCE(session.credential_id, session.id)::uuid AS credential_id
+FROM user_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE session.user_session_issuer_id = @issuer_id
+  AND COALESCE(issuer.organization_id, project.organization_id) = @organization_id::text
+  AND session.deleted IS FALSE
+  AND session.refresh_expires_at > clock_timestamp()
+ORDER BY credential_id;
+
 -- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 -- Every affected project must recompute its denormalized remote-session issuer
 -- after client links and server ownership move to the target issuer.

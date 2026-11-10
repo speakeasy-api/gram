@@ -1757,7 +1757,8 @@ LIMIT @page_size::int;
 -- name: ListSelectionMappings :many
 -- Every live user session choice for a live server in the organization after
 -- the cursor, or the one named by only_id, with what mapping it onto a typed
--- auth client decides from.
+-- auth client decides from. A supplied scope_user_session_issuer_id restricts
+-- this to unmapped choices of that issuer's live credential lineages.
 --
 -- What the upstream client choice reads today (GetUpstreamClientSelection):
 -- whether the server has any upstream OAuth client association, whether the
@@ -2041,6 +2042,16 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = @organization_id::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND (sqlc.narg('scope_user_session_issuer_id')::uuid IS NULL OR (
+    sel.auth_client_id IS NULL
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS session
+      WHERE session.user_session_issuer_id = sqlc.narg('scope_user_session_issuer_id')::uuid
+        AND COALESCE(session.credential_id, session.id) = sel.credential_id
+        AND session.deleted IS FALSE
+        AND session.refresh_expires_at > clock_timestamp()
+    )
+  ))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
   AND EXISTS (

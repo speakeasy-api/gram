@@ -2,10 +2,12 @@ package authclientbackfill
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 )
 
 // CredentialClass is the kind of inbound credential a choice belongs to, as
@@ -320,4 +322,43 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 		return false, SelectionSkippedRace, nil
 	}
 	return true, SelectionMap, nil
+}
+
+// ReconcileUserSessionSelectionsInLockedTransaction names uniquely decided typed
+// clients on existing unmapped choices of one issuer's live credentials. It uses
+// the backfill's decision and guarded mapping writer, never replaces a named
+// client, and grants nothing. The caller must hold the EMA writer scope for
+// every reachable or recorded server and preflight its OAuth registration gates
+// before its first mutation. Newly missing choices are recorded separately by
+// the shared issuance writer.
+func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID string, issuerID uuid.UUID) error {
+	if tx == nil || organizationID == "" || issuerID == uuid.Nil {
+		return errors.New("reconcile user session selections: no transaction or tenant scope")
+	}
+	q := New(tx)
+	opts := Options{OrganizationID: organizationID}
+	credential := liveCredential{issuer: issuerID}
+	cursor := uuid.Nil
+	for {
+		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{
+			OrganizationID: organizationID, Cursor: cursor, PageSize: defaultPageSize,
+			ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("list issuer selection mappings: %w", err)
+		}
+		for _, row := range rows {
+			cursor = row.ID
+			outcome, clientID := decideSelection(row, issuerID)
+			if outcome != SelectionMap {
+				continue
+			}
+			if _, _, err := mapSelection(ctx, q, opts, credential, row, clientID); err != nil {
+				return err
+			}
+		}
+		if len(rows) < defaultPageSize {
+			return nil
+		}
+	}
 }

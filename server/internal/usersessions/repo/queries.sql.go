@@ -3094,6 +3094,45 @@ func (q *Queries) ListGatewaySessions(ctx context.Context, arg ListGatewaySessio
 	return items, nil
 }
 
+const listLiveCredentialIDsForUserSessionIssuerMigration = `-- name: ListLiveCredentialIDsForUserSessionIssuerMigration :many
+SELECT DISTINCT COALESCE(session.credential_id, session.id)::uuid AS credential_id
+FROM user_sessions AS session
+JOIN user_session_issuers AS issuer ON issuer.id = session.user_session_issuer_id
+LEFT JOIN projects AS project ON project.id = issuer.project_id
+WHERE session.user_session_issuer_id = $1
+  AND COALESCE(issuer.organization_id, project.organization_id) = $2::text
+  AND session.deleted IS FALSE
+  AND session.refresh_expires_at > clock_timestamp()
+ORDER BY credential_id
+`
+
+type ListLiveCredentialIDsForUserSessionIssuerMigrationParams struct {
+	IssuerID       uuid.UUID
+	OrganizationID string
+}
+
+// Match selectionbackfill's refreshable credential lineages, only on the
+// surviving issuer after source sessions have moved in this transaction.
+func (q *Queries) ListLiveCredentialIDsForUserSessionIssuerMigration(ctx context.Context, arg ListLiveCredentialIDsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listLiveCredentialIDsForUserSessionIssuerMigration, arg.IssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var credential_id uuid.UUID
+		if err := rows.Scan(&credential_id); err != nil {
+			return nil, err
+		}
+		items = append(items, credential_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMCPServerProjectIDsForUserSessionIssuerMigration = `-- name: ListMCPServerProjectIDsForUserSessionIssuerMigration :many
 SELECT DISTINCT server.project_id
 FROM mcp_servers AS server
@@ -3126,6 +3165,80 @@ func (q *Queries) ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx conte
 			return nil, err
 		}
 		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listMCPServersForUserSessionIssuerMigration = `-- name: ListMCPServersForUserSessionIssuerMigration :many
+SELECT server.id, server.project_id
+FROM mcp_servers AS server
+JOIN projects AS project ON project.id = server.project_id
+WHERE server.deleted IS FALSE
+  AND project.deleted IS FALSE
+  AND project.organization_id = $1::text
+  AND (EXISTS (
+    SELECT 1
+    FROM user_session_issuers AS issuer
+    WHERE issuer.id = ANY($2::uuid[])
+      AND issuer.deleted IS FALSE
+      AND (
+        server.user_session_issuer_id = issuer.id
+        OR ((server.remote_mcp_server_id IS NOT NULL OR server.tunneled_mcp_server_id IS NOT NULL)
+          AND (issuer.project_id IS NULL OR EXISTS (
+            SELECT 1
+            FROM meta_mcp_server_members AS member
+            JOIN meta_mcp_servers AS gateway ON gateway.id = member.meta_mcp_server_id
+            WHERE member.mcp_server_id = server.id
+              AND member.deleted IS FALSE
+              AND gateway.deleted IS FALSE
+              AND gateway.user_session_issuer_id = issuer.id
+          )))
+      )
+  ) OR EXISTS (
+    SELECT 1
+    FROM upstream_client_selections AS choice
+    JOIN user_sessions AS session ON COALESCE(session.credential_id, session.id) = choice.credential_id
+    WHERE choice.mcp_server_id = server.id
+      AND choice.organization_id = $1::text
+      AND choice.credential_kind = 'user_session'
+      AND choice.deleted IS FALSE
+      AND choice.auth_client_id IS NULL
+      AND session.user_session_issuer_id = ANY($2::uuid[])
+      AND session.deleted IS FALSE
+      AND session.refresh_expires_at > clock_timestamp()
+  ))
+ORDER BY server.id
+`
+
+type ListMCPServersForUserSessionIssuerMigrationParams struct {
+	OrganizationID string
+	IssuerIds      []uuid.UUID
+}
+
+type ListMCPServersForUserSessionIssuerMigrationRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Include credential reach, not only direct issuer ownership: organization
+// issuers reach every proxied server and gateways may cross project boundaries.
+// Direct hosted consumers and recorded choices also need lifecycle locks.
+func (q *Queries) ListMCPServersForUserSessionIssuerMigration(ctx context.Context, arg ListMCPServersForUserSessionIssuerMigrationParams) ([]ListMCPServersForUserSessionIssuerMigrationRow, error) {
+	rows, err := q.db.Query(ctx, listMCPServersForUserSessionIssuerMigration, arg.OrganizationID, arg.IssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMCPServersForUserSessionIssuerMigrationRow
+	for rows.Next() {
+		var i ListMCPServersForUserSessionIssuerMigrationRow
+		if err := rows.Scan(&i.ID, &i.ProjectID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3198,6 +3311,57 @@ func (q *Queries) ListMergeableCimdClientPairs(ctx context.Context, arg ListMerg
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOAuthRegistrationsForUserSessionIssuerMigration = `-- name: ListOAuthRegistrationsForUserSessionIssuerMigration :many
+SELECT link.remote_session_client_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN remote_session_clients AS client ON client.id = link.remote_session_client_id
+WHERE link.user_session_issuer_id = ANY($1::uuid[])
+  AND COALESCE(client.organization_id, (SELECT organization_id FROM projects WHERE id = client.project_id)) = $2::text
+UNION
+SELECT association.remote_session_client_id
+FROM mcp_server_remote_session_clients AS association
+WHERE association.organization_id = $2::text
+  AND association.mcp_server_id = ANY($3::uuid[])
+UNION
+SELECT client.remote_session_client_id
+FROM mcp_server_auth_clients AS link
+JOIN mcp_auth_clients AS client ON client.id = link.auth_client_id AND client.organization_id = link.organization_id
+WHERE link.organization_id = $2::text
+  AND link.mcp_server_id = ANY($3::uuid[])
+  AND client.client_type IN ('remote_session', 'service_account')
+  AND client.source = 'backfill'
+  AND client.remote_session_client_id IS NOT NULL
+ORDER BY remote_session_client_id
+`
+
+type ListOAuthRegistrationsForUserSessionIssuerMigrationParams struct {
+	IssuerIds      []uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Gate existing server registrations and bindings that sole-consumer capture
+// can add, in one ordered pass before locking issuer or registration rows.
+func (q *Queries) ListOAuthRegistrationsForUserSessionIssuerMigration(ctx context.Context, arg ListOAuthRegistrationsForUserSessionIssuerMigrationParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOAuthRegistrationsForUserSessionIssuerMigration, arg.IssuerIds, arg.OrganizationID, arg.McpServerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var remote_session_client_id uuid.UUID
+		if err := rows.Scan(&remote_session_client_id); err != nil {
+			return nil, err
+		}
+		items = append(items, remote_session_client_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

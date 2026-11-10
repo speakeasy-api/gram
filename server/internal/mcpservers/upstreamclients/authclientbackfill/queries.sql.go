@@ -3211,6 +3211,16 @@ FROM upstream_client_selections AS sel
 WHERE sel.organization_id = $1::text
   AND sel.credential_kind = 'user_session'
   AND sel.deleted IS FALSE
+  AND ($2::uuid IS NULL OR (
+    sel.auth_client_id IS NULL
+    AND EXISTS (
+      SELECT 1 FROM user_sessions AS session
+      WHERE session.user_session_issuer_id = $2::uuid
+        AND COALESCE(session.credential_id, session.id) = sel.credential_id
+        AND session.deleted IS FALSE
+        AND session.refresh_expires_at > clock_timestamp()
+    )
+  ))
   -- A choice for a deleted server is kept as history but is never served
   -- again, so it is not live coverage.
   AND EXISTS (
@@ -3219,17 +3229,18 @@ WHERE sel.organization_id = $1::text
     WHERE live_server.id = sel.mcp_server_id
       AND live_server.deleted IS FALSE
   )
-  AND sel.id > $2::uuid
-  AND ($3::uuid IS NULL OR sel.id = $3::uuid)
+  AND sel.id > $3::uuid
+  AND ($4::uuid IS NULL OR sel.id = $4::uuid)
 ORDER BY sel.id
-LIMIT $4::int
+LIMIT $5::int
 `
 
 type ListSelectionMappingsParams struct {
-	OrganizationID string
-	Cursor         uuid.UUID
-	OnlyID         uuid.NullUUID
-	PageSize       int32
+	OrganizationID           string
+	ScopeUserSessionIssuerID uuid.NullUUID
+	Cursor                   uuid.UUID
+	OnlyID                   uuid.NullUUID
+	PageSize                 int32
 }
 
 type ListSelectionMappingsRow struct {
@@ -3252,7 +3263,8 @@ type ListSelectionMappingsRow struct {
 
 // Every live user session choice for a live server in the organization after
 // the cursor, or the one named by only_id, with what mapping it onto a typed
-// auth client decides from.
+// auth client decides from. A supplied scope_user_session_issuer_id restricts
+// this to unmapped choices of that issuer's live credential lineages.
 //
 // What the upstream client choice reads today (GetUpstreamClientSelection):
 // whether the server has any upstream OAuth client association, whether the
@@ -3274,6 +3286,7 @@ type ListSelectionMappingsRow struct {
 func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMappingsParams) ([]ListSelectionMappingsRow, error) {
 	rows, err := q.db.Query(ctx, listSelectionMappings,
 		arg.OrganizationID,
+		arg.ScopeUserSessionIssuerID,
 		arg.Cursor,
 		arg.OnlyID,
 		arg.PageSize,
