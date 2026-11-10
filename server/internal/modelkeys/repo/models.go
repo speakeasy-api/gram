@@ -22,6 +22,8 @@ type ModelProviderKey struct {
 	Provider string
 	// @access: secret-restricted
 	ApiKeyEncrypted string
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential

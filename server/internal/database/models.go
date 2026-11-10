@@ -334,6 +334,8 @@ type AiIntegrationConfig struct {
 	ExternalOrganizationID pgtype.Text
 	// @access: secret-restricted
 	ApiKeyEncrypted string
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -3720,6 +3722,8 @@ type ModelProviderKey struct {
 	Provider string
 	// @access: secret-restricted
 	ApiKeyEncrypted string
+	// @access: secret-restricted
+	ApiKeyOrgEncrypted pgtype.Text
 	// @access: confidential
 	Enabled bool
 	// @access: confidential
@@ -4154,6 +4158,8 @@ type OpenrouterApiKey struct {
 	Key pgtype.Text
 	// @access: secret-restricted
 	KeyEncrypted pgtype.Text
+	// @access: secret-restricted
+	KeyOrgEncrypted pgtype.Text
 	// @access: secret-restricted
 	KeyHash string
 	// @access: restricted

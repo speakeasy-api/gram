@@ -130,7 +130,7 @@ UPDATE ai_integration_configs
 SET deleted_at = clock_timestamp(), enabled = false
 WHERE organization_id = $1 AND project_id = $2
   AND provider = 'anthropic_inference' AND deleted IS FALSE
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
 
 type DeleteAnthropicInferenceConfigParams struct {
@@ -150,6 +150,7 @@ func (q *Queries) DeleteAnthropicInferenceConfig(ctx context.Context, arg Delete
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -284,7 +285,7 @@ func (q *Queries) EnsureSync(ctx context.Context, arg EnsureSyncParams) (EnsureS
 }
 
 const getAnthropicInferenceConfig = `-- name: GetAnthropicInferenceConfig :one
-SELECT created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted FROM ai_integration_configs
+SELECT created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted FROM ai_integration_configs
 WHERE organization_id = $1
   AND provider = 'anthropic_inference'
   AND deleted IS FALSE
@@ -303,6 +304,7 @@ func (q *Queries) GetAnthropicInferenceConfig(ctx context.Context, organizationI
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -312,7 +314,7 @@ func (q *Queries) GetAnthropicInferenceConfig(ctx context.Context, organizationI
 }
 
 const getAnthropicInferenceConfigByID = `-- name: GetAnthropicInferenceConfigByID :one
-SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted FROM ai_integration_configs c
+SELECT c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted FROM ai_integration_configs c
 JOIN projects p ON p.id = c.project_id AND p.organization_id = c.organization_id
 WHERE c.id = $1 AND c.provider = 'anthropic_inference'
   AND c.deleted IS FALSE AND p.deleted IS FALSE
@@ -332,6 +334,7 @@ func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.U
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -343,7 +346,7 @@ func (q *Queries) GetAnthropicInferenceConfigByID(ctx context.Context, id uuid.U
 const getConfigByOrgAndProvider = `-- name: GetConfigByOrgAndProvider :one
 
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.poll_checkpoint
@@ -378,6 +381,7 @@ type GetConfigByOrgAndProviderRow struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 	ID                     uuid.UUID
@@ -410,6 +414,7 @@ func (q *Queries) GetConfigByOrgAndProvider(ctx context.Context, arg GetConfigBy
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -447,7 +452,7 @@ func (q *Queries) GetFirstProjectByOrganization(ctx context.Context, organizatio
 
 const getProviderUsagePollConfigByID = `-- name: GetProviderUsagePollConfigByID :one
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.schedule
   , s.kind
@@ -481,6 +486,7 @@ type GetProviderUsagePollConfigByIDRow struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 	ID                     uuid.UUID
@@ -512,6 +518,7 @@ func (q *Queries) GetProviderUsagePollConfigByID(ctx context.Context, aiIntegrat
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -535,7 +542,7 @@ func (q *Queries) GetProviderUsagePollConfigByID(ctx context.Context, aiIntegrat
 
 const getUsagePollConfigByID = `-- name: GetUsagePollConfigByID :one
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.poll_checkpoint
@@ -571,6 +578,7 @@ type GetUsagePollConfigByIDRow struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 	ID                     uuid.UUID
@@ -600,6 +608,7 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, arg GetUsagePollCo
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -621,7 +630,7 @@ func (q *Queries) GetUsagePollConfigByID(ctx context.Context, arg GetUsagePollCo
 
 const getUsagePollConfigBySyncID = `-- name: GetUsagePollConfigBySyncID :one
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.schedule
   , s.kind
@@ -652,6 +661,7 @@ type GetUsagePollConfigBySyncIDRow struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 	ID                     uuid.UUID
@@ -683,6 +693,7 @@ func (q *Queries) GetUsagePollConfigBySyncID(ctx context.Context, syncID uuid.UU
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -722,7 +733,7 @@ INSERT INTO ai_integration_configs (
   , $6
   , $7
 )
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
 
 type InsertConfigParams struct {
@@ -755,6 +766,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -765,7 +777,7 @@ func (q *Queries) InsertConfig(ctx context.Context, arg InsertConfigParams) (AiI
 
 const listEnabledConfigsByProvider = `-- name: ListEnabledConfigsByProvider :many
 SELECT
-    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
+    c.created_at, c.deleted_at, c.updated_at, c.organization_id, c.provider, c.project_id, c.external_organization_id, c.api_key_encrypted, c.api_key_org_encrypted, c.enabled, c.billing_mode, c.id, c.deleted
   , s.id AS sync_id
   , s.poll_watermark_at
   , s.poll_checkpoint
@@ -797,6 +809,7 @@ type ListEnabledConfigsByProviderRow struct {
 	ProjectID              uuid.UUID
 	ExternalOrganizationID pgtype.Text
 	ApiKeyEncrypted        string
+	ApiKeyOrgEncrypted     pgtype.Text
 	Enabled                bool
 	BillingMode            pgtype.Text
 	ID                     uuid.UUID
@@ -832,6 +845,7 @@ func (q *Queries) ListEnabledConfigsByProvider(ctx context.Context, provider str
 			&i.ProjectID,
 			&i.ExternalOrganizationID,
 			&i.ApiKeyEncrypted,
+			&i.ApiKeyOrgEncrypted,
 			&i.Enabled,
 			&i.BillingMode,
 			&i.ID,
@@ -1267,7 +1281,7 @@ SET api_key_encrypted = $1,
 WHERE id = $3 AND organization_id = $4
   AND project_id = $5 AND provider = 'anthropic_inference'
   AND deleted IS FALSE
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
 
 type UpdateAnthropicInferenceConfigParams struct {
@@ -1296,6 +1310,7 @@ func (q *Queries) UpdateAnthropicInferenceConfig(ctx context.Context, arg Update
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,
@@ -1314,7 +1329,7 @@ SET project_id = $1,
 WHERE organization_id = $5
   AND provider = $6
   AND deleted IS FALSE
-RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, enabled, billing_mode, id, deleted
+RETURNING created_at, deleted_at, updated_at, organization_id, provider, project_id, external_organization_id, api_key_encrypted, api_key_org_encrypted, enabled, billing_mode, id, deleted
 `
 
 type UpdateConfigSettingsParams struct {
@@ -1345,6 +1360,7 @@ func (q *Queries) UpdateConfigSettings(ctx context.Context, arg UpdateConfigSett
 		&i.ProjectID,
 		&i.ExternalOrganizationID,
 		&i.ApiKeyEncrypted,
+		&i.ApiKeyOrgEncrypted,
 		&i.Enabled,
 		&i.BillingMode,
 		&i.ID,

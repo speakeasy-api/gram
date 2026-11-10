@@ -70,7 +70,7 @@ WHERE organization_id = $2
   AND key_hash = $4
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type AddOpenRouterAPIKeyDisableCauseParams struct {
@@ -93,6 +93,7 @@ func (q *Queries) AddOpenRouterAPIKeyDisableCause(ctx context.Context, arg AddOp
 		&i.KeyType,
 		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -156,7 +157,7 @@ INSERT INTO openrouter_api_keys (
   , $5
   , '{}'::text[]
 )
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateOpenRouterAPIKeyParams struct {
@@ -181,6 +182,7 @@ func (q *Queries) CreateOpenRouterAPIKey(ctx context.Context, arg CreateOpenRout
 		&i.KeyType,
 		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -223,7 +225,7 @@ func (q *Queries) DisableOpenRouterAPIKey(ctx context.Context, arg DisableOpenRo
 }
 
 const getOpenRouterAPIKey = `-- name: GetOpenRouterAPIKey :one
-SELECT organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+SELECT organization_id, key_type, key, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 FROM openrouter_api_keys
 WHERE organization_id = $1
   AND key_type = $2
@@ -243,6 +245,7 @@ func (q *Queries) GetOpenRouterAPIKey(ctx context.Context, arg GetOpenRouterAPIK
 		&i.KeyType,
 		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -423,7 +426,7 @@ WHERE organization_id = $4
   AND key_hash = $6
   AND disable_causes IS NOT NULL
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type RemoveOpenRouterAPIKeyDisableCauseParams struct {
@@ -450,6 +453,7 @@ func (q *Queries) RemoveOpenRouterAPIKeyDisableCause(ctx context.Context, arg Re
 		&i.KeyType,
 		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
@@ -469,7 +473,7 @@ SET monthly_credits = $1, key_hash = $2,
 WHERE organization_id = $3
   AND key_type = $4
   AND deleted IS FALSE
-RETURNING organization_id, key_type, key, key_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
+RETURNING organization_id, key_type, key, key_encrypted, key_org_encrypted, key_hash, monthly_credits, disabled, disable_causes, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateOpenRouterKeyParams struct {
@@ -492,6 +496,7 @@ func (q *Queries) UpdateOpenRouterKey(ctx context.Context, arg UpdateOpenRouterK
 		&i.KeyType,
 		&i.Key,
 		&i.KeyEncrypted,
+		&i.KeyOrgEncrypted,
 		&i.KeyHash,
 		&i.MonthlyCredits,
 		&i.Disabled,
