@@ -1,12 +1,19 @@
 package hooks
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/hooks"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/scanners/shadowmcpscan"
+	telemetryrepo "github.com/speakeasy-api/gram/server/internal/telemetry/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // TestIngest_ShadowMCPBlockAllExemptsAgentBuiltinServers: a block_all Shadow
@@ -186,6 +193,126 @@ func TestClaude_PreToolUse_ShadowMCPBlockAllExemptsAgentBuiltinServers(t *testin
 			require.True(t, ok)
 			require.NotNil(t, output.PermissionDecision)
 			require.Equal(t, tc.want, *output.PermissionDecision)
+		})
+	}
+}
+
+// builtinScanValidator denies every call on the signature fallback, so only
+// recorded provenance can keep a scanned call clean.
+type builtinScanValidator struct{}
+
+func (builtinScanValidator) ValidateToolsetCall(context.Context, any, string, string) (string, bool) {
+	return "missing toolset signature", true
+}
+
+// builtinScanHosted trusts only the built-in Speakeasy hosts.
+type builtinScanHosted struct{}
+
+func (builtinScanHosted) TrustedMCPHostsForOrg(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+
+// builtinScanProvenance replays fixed provenance rows by tool call id.
+type builtinScanProvenance struct {
+	rows map[string]telemetryrepo.MCPProvenance
+}
+
+func (p builtinScanProvenance) LookupMCPProvenanceByToolCallID(context.Context, uuid.UUID, []string, time.Time) (map[string]telemetryrepo.MCPProvenance, error) {
+	return p.rows, nil
+}
+
+// TestCanonicalIngest_AgentBuiltinServerFindings: the findings scanner trusts a
+// built-in name only through the provenance row ingest records. A canonical
+// built-in call with a loaded session inventory records the bare server name as
+// gram.mcp.match and yields no finding; without an inventory it records no
+// match and the call is still reported, as is a stdio server borrowing the name.
+func TestCanonicalIngest_AgentBuiltinServerFindings(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		toolName    string
+		command     string
+		inventory   []MCPServerEntry
+		wantFinding bool
+	}{
+		{
+			name:        "built-in with a loaded inventory yields no finding",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			inventory:   []MCPServerEntry{{Source: "local", Name: "mise", Command: "mise mcp"}},
+			wantFinding: false,
+		},
+		{
+			name:        "desktop app built-in with a loaded inventory yields no finding",
+			toolName:    "mcp__ccd_turn__wrap_up",
+			inventory:   []MCPServerEntry{},
+			wantFinding: false,
+		},
+		{
+			name:        "built-in without a session inventory is reported",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			inventory:   nil,
+			wantFinding: true,
+		},
+		{
+			name:        "built-in name with a stdio command is reported",
+			toolName:    "mcp__claude-in-chrome__tabs_context_mcp",
+			command:     "npx some-mcp",
+			inventory:   []MCPServerEntry{},
+			wantFinding: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestHooksService(t)
+			authCtx, ok := contextvalues.GetAuthContext(ctx)
+			require.True(t, ok)
+
+			sessionID := uuid.NewString()
+			if tc.inventory != nil {
+				require.NoError(t, ti.service.cache.Set(ctx,
+					sessionMCPListCacheKey(testProjectID(t, ctx), sessionID), tc.inventory, sessionMCPListTTL))
+			}
+
+			serverName := mcpServerIdentityFromToolName(tc.toolName)
+			mcp := &gen.HookMCPData{ServerName: &serverName, ServerIdentity: &serverName}
+			if tc.command != "" {
+				mcp.Command = &tc.command
+				mcp.ServerIdentity = &tc.command
+			}
+			callID := "call-1"
+			payload := canonicalIngestPayload("claude", "tool.requested", sessionID)
+			payload.Data = &gen.HookIngestData{
+				ToolCall: &gen.HookToolCallData{ID: &callID, Name: &tc.toolName, Input: map[string]any{}},
+				Mcp:      mcp,
+			}
+
+			rows := ti.service.canonicalTelemetryRows(ctx, payload, authCtx, &SessionMetadata{}, "claude", time.Now(), "")
+			require.NotEmpty(t, rows)
+
+			// The provenance query admits a row only when it carries a match
+			// or a server URL, and reads the tool call source as identity.
+			attrs := rows[0].attrs
+			match, _ := attrs[attr.MCPMatchKey].(string)
+			serverURL, _ := attrs[attr.MCPServerURLKey].(string)
+			source, _ := attrs[attr.ToolCallSourceKey].(string)
+			recorded := map[string]telemetryrepo.MCPProvenance{}
+			if match != "" || serverURL != "" {
+				recorded[callID] = telemetryrepo.MCPProvenance{Match: match, ServerURL: serverURL, ServerIdentity: source, HookSource: "claude"}
+			}
+
+			scanner := shadowmcpscan.NewScanner(testenv.NewLogger(t), builtinScanValidator{}, builtinScanHosted{}, builtinScanProvenance{rows: recorded}, nil)
+			out := scanner.Scan(ctx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.Nil, []shadowmcpscan.Message{
+				{UserID: "", ToolCalls: []shadowmcpscan.ToolCall{{ID: callID, Name: tc.toolName, Arguments: `{}`, CreatedAt: time.Now(), Sender: "claude"}}},
+			})
+			require.Len(t, out, 1)
+			if tc.wantFinding {
+				require.Len(t, out[0], 1)
+				return
+			}
+			require.Empty(t, out[0])
 		})
 	}
 }

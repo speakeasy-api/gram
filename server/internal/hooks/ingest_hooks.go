@@ -1419,6 +1419,11 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.MCPMatchKey] = command
 		}
 	}
+	if _, matched := attrs[attr.MCPMatchKey]; !matched {
+		if server := s.canonicalAgentBuiltinMCPMatch(ctx, payload); server != "" {
+			attrs[attr.MCPMatchKey] = server
+		}
+	}
 	skill := canonicalSkillName(payload)
 	if skill != "" && isExplicitSkillActivation(payload) {
 		attrs[attr.GenAIToolCallArgumentsKey] = jsonString(map[string]string{"skill": skill})

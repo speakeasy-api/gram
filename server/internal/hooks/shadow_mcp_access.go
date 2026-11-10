@@ -94,6 +94,24 @@ func (s *Service) isCanonicalAgentBuiltinMCPServer(ctx context.Context, payload 
 	return shadowmcp.IsAgentBuiltinServer(serverName, inventoryServerProvenance(entries, serverName))
 }
 
+// canonicalAgentBuiltinMCPMatch returns the bare server name to record as a
+// canonical tool event's gram.mcp.match when the call targets an agent
+// built-in server that the same check as enforcement proves transport-less:
+// the payload states no URL or command and the session inventory loaded and
+// configures none. The findings scanner trusts that bare-prefix match as known
+// provenance. Any other call, including one whose inventory cannot be read,
+// returns "" and records no match, so the scanner stays fail-closed.
+func (s *Service) canonicalAgentBuiltinMCPMatch(ctx context.Context, payload *gen.IngestPayload) string {
+	rawToolName := canonicalToolName(payload)
+	if !toolref.IsMCPToolName(rawToolName) {
+		return ""
+	}
+	if !s.isCanonicalAgentBuiltinMCPServer(ctx, payload, rawToolName, canonicalShadowMCPEvidence(payload, rawToolName)) {
+		return ""
+	}
+	return toolref.MCPServerOf(rawToolName)
+}
+
 // canonicalPayloadProvenance is the transport a canonical hook payload states
 // for its MCP server. The payload is authoritative about itself, so the result
 // is known. The evidence identity counts as a launch command whenever it is
