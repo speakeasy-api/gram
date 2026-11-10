@@ -1599,7 +1599,7 @@ func newStartCommand() *cli.Command {
 			)
 			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
 			if err != nil {
-				return err
+				return fmt.Errorf("hooks version policy: %w", err)
 			}
 			hooksService.SetVersionPolicy(hooksVersionPolicy)
 			hooks.Attach(mux, hooksService)
