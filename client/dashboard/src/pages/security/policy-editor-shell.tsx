@@ -254,8 +254,9 @@ export function PolicyHeader({
       align="center"
       justify="space-between"
       gap={4}
+      wrap="wrap"
     >
-      <Stack gap={1} className="min-w-0 flex-1">
+      <Stack gap={1} className="min-w-0 grow basis-80">
         <Stack direction="horizontal" gap={2} align="center">
           <KindIcon className="text-muted-foreground h-4 w-4 shrink-0" />
           {editingName ? (
@@ -323,9 +324,14 @@ export function PolicyHeader({
           </Text>
         )}
       </Stack>
-      <Stack direction="horizontal" gap={2} align="center" className="shrink-0">
+      <Stack
+        direction="horizontal"
+        gap={2}
+        align="center"
+        className="ml-auto max-w-full min-w-0"
+      >
         {isCreate && createBlockedReason ? (
-          <Text small muted>
+          <Text small muted className="max-w-80 min-w-0 text-right">
             {createBlockedReason}
           </Text>
         ) : null}
