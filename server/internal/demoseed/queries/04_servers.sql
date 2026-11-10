@@ -181,6 +181,62 @@ WHERE project_id = @project_id::uuid AND slug = 'github';
 -- project-scoped CIMD client, Slack carries one inert shared Service Account
 -- credential, and GitHub intentionally has no upstream identity. The demo
 -- values are display fixtures only and cannot authenticate to any service.
+-- Two more vendor remotes for the agent MCP sign-in tab: Notion signs each
+-- caller in to its own account through OAuth, and DeepWiki is a public server
+-- that needs no sign-in at all. Public endpoints, nothing connects on its own.
+-- name: ServersInsertSignInExampleRemoteMCPServers :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
+   'streamable-http', 'https://mcp.notion.com/mcp'),
+  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+   'streamable-http', 'https://mcp.deepwiki.com/mcp');
+
+-- name: ServersInsertNotionUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode) VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, 'notion',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
+
+-- DeepWiki takes no credential, so it sits under the shared workforce issuer
+-- like GitHub, with no upstream client to sign in through.
+-- name: ServersInsertSignInExampleMCPServers :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+                         remote_mcp_server_id, user_session_issuer_id,
+                         visibility) VALUES
+  (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
+   NULL, @remote_notion_id::uuid, @issuer_notion_id::uuid, 'private'),
+  (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
+   NULL, @remote_deepwiki_id::uuid, @issuer_workforce_id::uuid, 'private');
+
+-- Notion's authorization server, as its discovery document names it.
+-- name: ServersInsertNotionRemoteSessionIssuer :exec
+INSERT INTO remote_session_issuers
+  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
+   token_endpoint, scopes_supported, grant_types_supported,
+   response_types_supported, token_endpoint_auth_methods_supported,
+   code_challenge_methods_supported, client_id_metadata_document_supported,
+   name)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'notion', 'https://mcp.notion.com',
+   'https://mcp.notion.com/authorize',
+   'https://mcp.notion.com/token',
+   ARRAY[]::text[], ARRAY['authorization_code', 'refresh_token'],
+   ARRAY['code'], ARRAY['none'], ARRAY['S256'], FALSE,
+   'Notion');
+
+-- A public client with a placeholder id: signing in to Notion for real needs
+-- a registration, which an admin makes from the server's page.
+-- name: ServersInsertNotionRemoteSessionClient :exec
+INSERT INTO remote_session_clients
+  (id, project_id, organization_id, remote_session_issuer_id, client_id,
+   client_id_issued_at, token_endpoint_auth_method, scope)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @remote_session_issuer_id::uuid, @client_id::text,
+   clock_timestamp(), 'none', NULL);
+
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,

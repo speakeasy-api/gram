@@ -1,5 +1,7 @@
 import { toast } from "sonner";
+import { Pencil } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
@@ -325,7 +327,6 @@ export function CredentialsWizard({
   signInOnly = false,
   section = false,
   initialEditView = "sign-in",
-  savedAt,
   grants,
   onDone,
   onBusy,
@@ -355,17 +356,12 @@ export function CredentialsWizard({
    * and how Speakeasy signs in to each. Implies `editing`. Only the server
    * picker and the sign-in step are shown, with no stepper or summary: the
    * agent is already set up, and the tab is not a walk through setting it up
-   * again. Saving stays on the tab.
+   * again. There is no save button: each change saves as it is made, on
+   * Continue from the picker, on removing a server, and on a new connection.
    */
   section?: boolean;
   /** Which of the tab's two views opens first. */
   initialEditView?: "servers" | "sign-in";
-  /**
-   * When the tab last saved. Its save button reads "Saved" for a moment
-   * after, so the save is seen to have landed. Not a dirty check: a save also
-   * assigns sign-ins reconnected since, which the selection does not show.
-   */
-  savedAt?: number;
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -384,7 +380,6 @@ export function CredentialsWizard({
   verifyPollMs?: number;
 }): JSX.Element {
   const editing = editingProp || section;
-  const justSaved = useJustSaved(savedAt);
   const sdk = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
@@ -1493,6 +1488,44 @@ export function CredentialsWizard({
     }
   };
 
+  // The MCP sign-in tab saves each change as it is made. A change only asks
+  // for a save: it runs after the render that holds the change, since save
+  // reads the selection from state, and waits out a save already running and
+  // the checks a save waits for.
+  const [savePending, setSavePending] = useState(false);
+  const requestSave = () => setSavePending(true);
+  useEffect(() => {
+    if (!savePending || saving || !reconciled) return;
+    if (authPending || enforcementPending) return;
+    setSavePending(false);
+    void save();
+    // save is rebuilt every render; these are what decide when it may run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savePending, saving, reconciled, authPending, enforcementPending]);
+
+  // The picker changes a draft until Continue saves it. Back puts the saved
+  // selection back, so a change abandoned there is not saved by the next one.
+  const pickerStart = useRef<{
+    selected: ServerSelection[];
+    allServers: boolean;
+  } | null>(null);
+  const openPicker = () => {
+    pickerStart.current = { selected, allServers };
+    setStep(SERVERS_STEP);
+  };
+  const cancelPicker = () => {
+    const start = pickerStart.current;
+    if (start) {
+      setSelected(start.selected);
+      setAllServers(start.allServers);
+    }
+    setStep(SIGN_IN_STEP);
+  };
+  const confirmPicker = () => {
+    setStep(SIGN_IN_STEP);
+    requestSave();
+  };
+
   // What the reader last decided, marked on the rail. The rail is a growing
   // block of text, and without this it looks the same before and after a
   // click: the mark is how a glance confirms the choice landed.
@@ -1974,7 +2007,7 @@ export function CredentialsWizard({
     />
   );
 
-  const body = () => {
+  const body = (at: number = step) => {
     // Past the credential step, a federated agent is following its platform's
     // own setup, one of its steps per wizard step.
     if (workloadStep !== undefined) {
@@ -1987,7 +2020,7 @@ export function CredentialsWizard({
         />
       );
     }
-    switch (step) {
+    switch (at) {
       case 0:
         return (
           <div className="space-y-6">
@@ -2085,7 +2118,27 @@ export function CredentialsWizard({
                 );
               } else
                 setSelected(selected.filter((entry) => entry.server.id !== id));
+              if (section) requestSave();
             }}
+            // A new connection is assigned to the agent by a save.
+            onConnected={section ? requestSave : undefined}
+            listAction={
+              section ? (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  // Until the stored grants are in the selection the picker
+                  // would open on none, and Back would restore none.
+                  disabled={saving || !reconciled}
+                  onClick={openPicker}
+                >
+                  <Button.LeftIcon>
+                    <Pencil className="size-4" />
+                  </Button.LeftIcon>
+                  <Button.Text>Change servers</Button.Text>
+                </Button>
+              ) : undefined
+            }
           />
         );
       case 3:
@@ -2193,73 +2246,6 @@ export function CredentialsWizard({
             : null;
 
   const footer = () => {
-    // Editing has two views: the servers and their sign-in, where saving
-    // happens, and the picker that changes which servers there are.
-    if (section) {
-      if (step === SERVERS_STEP) {
-        return (
-          <WizardFooter
-            note={
-              blocked ??
-              (allServers
-                ? "All servers selected."
-                : `${selected.length} of ${listedServers.length} servers selected.`)
-            }
-            onBack={() => setStep(SIGN_IN_STEP)}
-            primary={
-              <Button
-                disabled={!!blocked}
-                onClick={() => setStep(SIGN_IN_STEP)}
-              >
-                Continue
-              </Button>
-            }
-          />
-        );
-      }
-      return (
-        <WizardFooter
-          note={
-            authStop ??
-            (authPending ? authPendingNote : null) ??
-            (enforcementPending ? enforcementPendingNote : null) ??
-            refusedChoice ??
-            (reconciled
-              ? "Changing what an agent reaches is recorded in the organization audit log."
-              : inventory.isError
-                ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                : "Reading the servers this agent reaches…")
-          }
-          primary={
-            <>
-              <Button
-                variant="secondary"
-                disabled={saving}
-                onClick={() => setStep(SERVERS_STEP)}
-              >
-                Change servers
-              </Button>
-              <Button
-                // Nothing may be written until the stored grants are in the
-                // selection: the diff against an empty one withdraws them all.
-                disabled={
-                  saving ||
-                  justSaved ||
-                  !reconciled ||
-                  refusedChoice !== null ||
-                  authStop !== null ||
-                  authPending ||
-                  enforcementPending
-                }
-                onClick={() => void save()}
-              >
-                {saving ? "Saving…" : justSaved ? "Saved" : "Save changes"}
-              </Button>
-            </>
-          }
-        />
-      );
-    }
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
     // The app opens editing only from the Agent sign-in step now, so these
@@ -2528,13 +2514,43 @@ export function CredentialsWizard({
   );
 
   // A tab on the agent's page: no steps to count and no summary of a draft,
-  // because nothing here is a draft. The agent page already names it.
+  // because nothing here is a draft. The agent page already names it. The
+  // servers' sign-in is the tab; the picker opens over it.
   if (section) {
     return (
       <div className="space-y-6">
         {errorAlert}
-        <div>{body()}</div>
-        {footer()}
+        <div>{body(SIGN_IN_STEP)}</div>
+        <Dialog
+          open={step === SERVERS_STEP}
+          onOpenChange={(open) => {
+            if (!open) cancelPicker();
+          }}
+        >
+          <Dialog.Content className="max-h-[85vh] max-w-3xl overflow-y-auto">
+            <Dialog.Title className="sr-only">Change MCP servers</Dialog.Title>
+            <Dialog.Description className="sr-only">
+              Pick the MCP servers this agent calls. Continue saves them.
+            </Dialog.Description>
+            {body(SERVERS_STEP)}
+            <Dialog.Footer className="items-center gap-3 sm:justify-between">
+              <Text small muted>
+                {blocked ??
+                  (allServers
+                    ? "All servers selected."
+                    : `${selected.length} of ${listedServers.length} servers selected.`)}
+              </Text>
+              <div className="flex gap-2">
+                <Button variant="tertiary" onClick={cancelPicker}>
+                  Cancel
+                </Button>
+                <Button disabled={!!blocked || saving} onClick={confirmPicker}>
+                  Continue
+                </Button>
+              </div>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
       </div>
     );
   }
@@ -2577,31 +2593,4 @@ export function CredentialsWizard({
       {footer()}
     </div>
   );
-}
-
-/** How long the MCP sign-in tab's save button reads "Saved" after a save. */
-const SAVED_FOR_MS = 2500;
-
-/**
- * Whether a save at savedAt is recent enough to still show. The tab reopens
- * its views after a save, so this reads the time rather than a flag the
- * remount would lose.
- */
-function useJustSaved(savedAt: number | undefined): boolean {
-  const recent = () =>
-    savedAt !== undefined && Date.now() - savedAt < SAVED_FOR_MS;
-  const [shown, setShown] = useState(recent);
-  useEffect(() => {
-    if (savedAt === undefined) return;
-    const left = SAVED_FOR_MS - (Date.now() - savedAt);
-    // A remount after the window has passed shows nothing, not a flash.
-    if (left <= 0) {
-      setShown(false);
-      return;
-    }
-    setShown(true);
-    const timer = setTimeout(() => setShown(false), left);
-    return () => clearTimeout(timer);
-  }, [savedAt]);
-  return shown;
 }

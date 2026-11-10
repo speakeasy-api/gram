@@ -1,5 +1,5 @@
 import { ServerInfoPopover } from "./ServerInfoPopover";
-import { useState, type JSX } from "react";
+import { useEffect, useRef, useState, type JSX, type ReactNode } from "react";
 import {
   Accordion,
   AccordionContent,
@@ -17,6 +17,10 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import {
+  displayedConnections,
+  serversNeedingConnection,
+} from "./connectionAttention";
 import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
@@ -27,38 +31,50 @@ export function StepAuthentication({
   connections,
   allServers,
   onRemove,
+  onConnected,
+  listAction,
   showHeader = true,
 }: {
   servers: InventoryServer[];
   connections: OwnerConnections;
   allServers: boolean;
   onRemove: (id: string) => void;
+  /**
+   * Called once the reader's own connection to a server they just signed in
+   * to is ready, for a page that saves each change as it is made.
+   */
+  onConnected?: () => void;
+  /** Shown at the top right of the server list. */
+  listAction?: ReactNode;
   /** False where the page around it already titles the step. */
   showHeader?: boolean;
 }): JSX.Element {
   const { user } = useSession();
-  const oauth = useOAuthPopup(connections.refetch);
+  // The server whose sign-in popup is open, and then the one whose connection
+  // is being read back after it closed.
+  const connecting = useRef<string | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
+  const oauth = useOAuthPopup(async (reason) => {
+    await connections.refetch();
+    if (reason !== "popup-closed" || connecting.current === null) return;
+    setReading(connecting.current);
+    connecting.current = null;
+  });
+  // Only a connection that is now usable is worth saving: closing the popup
+  // without signing in changes nothing.
+  const readStatus =
+    reading === null ? undefined : connections.byServer.get(reading)?.status;
+  useEffect(() => {
+    if (reading === null || readStatus === "checking") return;
+    setReading(null);
+    if (readStatus === "ready") onConnected?.();
+  }, [reading, readStatus, onConnected]);
   const [openRows, setOpenRows] = useState<string[]>([]);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
-  // exactly as creating does. Until the editor's own connection is known,
-  // its checking or error state stands rather than a premature verdict.
-  const displayedConnections = new Map(connections.byServer);
-  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
-    const own = connections.byServer.get(serverId)?.status;
-    const keepOwn =
-      assigned.status !== "ready" &&
-      assigned.status !== "not-required" &&
-      (own === "ready" || own === "checking" || own === "error");
-    if (!keepOwn) displayedConnections.set(serverId, assigned);
-  }
-  const missing = servers.filter(
-    (server) =>
-      server.issuerId &&
-      ["missing", "ended", "error"].includes(
-        displayedConnections.get(server.id)?.status ?? "checking",
-      ),
-  );
+  // exactly as creating does.
+  const displayed = displayedConnections(connections);
+  const missing = serversNeedingConnection(servers, displayed);
   return (
     <div className="space-y-5">
       {showHeader && (
@@ -79,6 +95,14 @@ export function StepAuthentication({
           Allow popups, then try connecting again.
         </Text>
       )}
+      {listAction && (
+        <div className="flex items-center justify-between gap-3">
+          <Text small muted>
+            {servers.length === 1 ? "1 server" : `${servers.length} servers`}
+          </Text>
+          {listAction}
+        </div>
+      )}
       {/* Every row starts closed: its badge already says how Speakeasy signs
           in, and a row opens only to manage that connection. */}
       <Accordion
@@ -88,7 +112,7 @@ export function StepAuthentication({
         className="border-border border"
       >
         {servers.map((server) => {
-          const connection = displayedConnections.get(server.id);
+          const connection = displayed.get(server.id);
           const shared =
             !server.issuerId || connection?.status === "not-required";
           const expired = connection?.status === "ended";
@@ -211,7 +235,8 @@ export function StepAuthentication({
                               session.remoteSessionClientId,
                             );
                           }
-                          oauth.open(url.toString());
+                          if (oauth.open(url.toString()))
+                            connecting.current = server.id;
                         }}
                       >
                         {session ? "Reauthenticate" : "Connect account"}

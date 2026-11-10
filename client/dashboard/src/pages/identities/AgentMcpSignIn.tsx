@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
@@ -35,11 +34,6 @@ export function AgentMcpSignIn({
     throwOnError: false,
     enabled: agent.permissions.write,
   });
-  // Bumped once the saved grants are read back, so the views start again from
-  // what is now stored rather than from the draft that was just saved.
-  const [generation, setGeneration] = useState(0);
-  // When the last save landed, so the views that reopen after it say so.
-  const [savedAt, setSavedAt] = useState<number | undefined>(undefined);
 
   if (!agent.permissions.write) {
     return (
@@ -71,24 +65,21 @@ export function AgentMcpSignIn({
   return (
     <div className="bg-card border-border border p-6">
       <CredentialsWizard
-        key={generation}
         agent={agent}
         section
         initialEditView={
           params.get("view") === "servers" ? "servers" : "sign-in"
         }
         grants={grants.data}
-        savedAt={savedAt}
+        // Each change saves as it is made. The views keep what they saved as
+        // their baseline, so the next save diffs against it; the agent and
+        // its grants are read again for the rest of the page.
         onDone={() => {
           toast.success("MCP sign-in saved");
-          setSavedAt(Date.now());
           refresh();
-          // The views seed from these grants, so they reopen only once the
-          // saved ones are read back: a cached pre-save read would show the
-          // servers the save just changed, and the next save would undo it.
           void invalidateAgentsListPolicyGrants(queryClient, [
             { agentId: agent.id },
-          ]).then(() => setGeneration((value) => value + 1));
+          ]);
         }}
       />
     </div>

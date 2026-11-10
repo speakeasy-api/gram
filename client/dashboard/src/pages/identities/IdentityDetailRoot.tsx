@@ -1,5 +1,10 @@
 import { Page } from "@/components/page-layout";
-import { IdentityRail } from "@/components/identity-rail";
+import {
+  IdentityRail,
+  type IdentityRailItem,
+} from "@/components/identity-rail";
+import { useAgentMcpSignInAttention } from "./useAgentMcpSignInAttention";
+import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
   identityRailItems,
   identitySectionCrumbs,
@@ -301,17 +306,15 @@ function IdentityDetailContent(): JSX.Element {
                 } as CSSProperties)
           }
         >
-          <IdentityRail
-            items={railItems}
-            // Narrow, the rail is a scrollable row above the content: hiding
-            // it left the other sub-pages reachable only by editing the URL.
-            // Sticks clear of the header above it rather than under it: both
-            // are pinned to the same scroll container, and the header wins
-            // on z-index, so a smaller offset parks the rail out of sight.
-            // The offset is the measured header height, set on the parent;
-            // the 12rem fallback holds for the frame before it is measured.
-            className="border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0"
-          />
+          {identity.agent ? (
+            <AgentIdentityRail
+              agent={identity.agent}
+              items={railItems}
+              className={RAIL_CLASS_NAME}
+            />
+          ) : (
+            <IdentityRail items={railItems} className={RAIL_CLASS_NAME} />
+          )}
           {/* Room under the last section: without it the danger zone and
               the federated access panel sit flush against the viewport. */}
           <div className="min-w-0 flex-1 pb-24">
@@ -430,5 +433,39 @@ function IdentityDetailLoading(): JSX.Element {
       </Page.Header>
       <Page.Body isLoading>{null}</Page.Body>
     </Page>
+  );
+}
+
+// Narrow, the rail is a scrollable row above the content: hiding it left the
+// other sub-pages reachable only by editing the URL. Sticks clear of the
+// header above it rather than under it: both are pinned to the same scroll
+// container, and the header wins on z-index, so a smaller offset parks the
+// rail out of sight. The offset is the measured header height, set on the
+// parent; the 12rem fallback holds for the frame before it is measured.
+const RAIL_CLASS_NAME =
+  "border-border -mx-2 shrink-0 flex-row overflow-x-auto border-b px-2 pb-1 lg:sticky lg:top-[var(--identity-rail-top,12rem)] lg:mx-0 lg:w-44 lg:flex-col lg:self-start lg:overflow-visible lg:border-b-0 lg:px-0 lg:pb-0";
+
+/**
+ * An agent's rail, with a red count on its MCP sign-in tab of the servers
+ * someone has to sign in to, so an expired or missing connection is seen
+ * from any of its tabs.
+ */
+function AgentIdentityRail({
+  agent,
+  items,
+  className,
+}: {
+  agent: ManagedAgent;
+  items: IdentityRailItem[];
+  className: string;
+}): JSX.Element {
+  const attention = useAgentMcpSignInAttention(agent);
+  return (
+    <IdentityRail
+      className={className}
+      items={items.map((item) =>
+        item.key === "mcp-sign-in" ? { ...item, badge: attention } : item,
+      )}
+    />
   );
 }

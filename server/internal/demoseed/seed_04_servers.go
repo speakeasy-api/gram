@@ -242,6 +242,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("upsert demo linear protected resource: %w", err)
 	}
+	if err := s.seedSignInExampleServers(ctx); err != nil {
+		return err
+	}
 	if err := s.q.ServersInsertSlackIdentityHeader(ctx, repo.ServersInsertSlackIdentityHeaderParams{
 		ID:                s.det("agent-identity-header-slack"),
 		RemoteMcpServerID: s.det("remotemcp-slack"),
@@ -459,13 +462,16 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 	// Organization authorizations include Linear and Slack plus GitHub, private
-	// inventory, and both EMA servers, including on the expired history row.
+	// inventory, both EMA servers, Notion and DeepWiki, including on the
+	// expired history row.
 	for i := 1; i <= 3; i++ {
-		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki"} {
+		for _, server := range []string{"linear", "slack", "github", "private-inventory", "ema-tracker", "ema-wiki", "notion", "deepwiki"} {
 			client := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 			switch server {
 			case "linear":
 				client = uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}
+			case "notion":
+				client = uuid.NullUUID{UUID: s.det("remote-identity-client-notion"), Valid: true}
 			case "ema-tracker":
 				client = uuid.NullUUID{UUID: s.det("ema-client-tracker"), Valid: true}
 			case "ema-wiki":
@@ -909,6 +915,86 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema provider order: %w", err)
+	}
+	return nil
+}
+
+// seedSignInExampleServers adds Notion, whose callers each sign in to their
+// own account, and DeepWiki, a public server that needs no sign-in, so an
+// agent's MCP sign-in tab shows both kinds next to Linear and GitHub.
+func (s *seeder) seedSignInExampleServers(ctx context.Context) error {
+	org := s.orgID()
+	proj := s.projectID()
+	if err := s.q.ServersInsertSignInExampleRemoteMCPServers(ctx, repo.ServersInsertSignInExampleRemoteMCPServersParams{
+		NotionID:   s.det("remotemcp-notion"),
+		ProjectID:  proj,
+		DeepwikiID: s.det("remotemcp-deepwiki"),
+	}); err != nil {
+		return fmt.Errorf("insert demo notion and deepwiki remote servers: %w", err)
+	}
+	if err := s.q.ServersInsertNotionUserSessionIssuer(ctx, repo.ServersInsertNotionUserSessionIssuerParams{
+		ID:        s.det("issuer-notion"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo notion user session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertSignInExampleMCPServers(ctx, repo.ServersInsertSignInExampleMCPServersParams{
+		NotionID:          s.det("mcpserver-notion"),
+		ProjectID:         proj,
+		RemoteNotionID:    s.det("remotemcp-notion"),
+		IssuerNotionID:    s.det("issuer-notion"),
+		DeepwikiID:        s.det("mcpserver-deepwiki"),
+		RemoteDeepwikiID:  s.det("remotemcp-deepwiki"),
+		IssuerWorkforceID: s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("insert demo notion and deepwiki servers: %w", err)
+	}
+	if err := s.q.ServersInsertNotionRemoteSessionIssuer(ctx, repo.ServersInsertNotionRemoteSessionIssuerParams{
+		ID:        s.det("remote-identity-provider-notion"),
+		ProjectID: proj,
+		OrgID:     org,
+	}); err != nil {
+		return fmt.Errorf("insert demo notion remote session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertNotionRemoteSessionClient(ctx, repo.ServersInsertNotionRemoteSessionClientParams{
+		ID:                    s.det("remote-identity-client-notion"),
+		ProjectID:             proj,
+		OrgID:                 org,
+		RemoteSessionIssuerID: s.det("remote-identity-provider-notion"),
+		ClientID:              "DEMO-" + s.name("notion-client"),
+	}); err != nil {
+		return fmt.Errorf("insert demo notion remote session client: %w", err)
+	}
+	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+		RemoteSessionClientID: s.det("remote-identity-client-notion"),
+		UserSessionIssuerID:   s.det("issuer-notion"),
+	}); err != nil {
+		return fmt.Errorf("bind demo notion remote session client: %w", err)
+	}
+	// The organization gateway's sign-ins reach every server, so they choose
+	// Notion's client too, as they do Linear's.
+	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+		RemoteSessionClientID: s.det("remote-identity-client-notion"),
+		UserSessionIssuerID:   s.det("issuer-workforce"),
+	}); err != nil {
+		return fmt.Errorf("bind demo notion remote session client to the workforce issuer: %w", err)
+	}
+	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
+		RemoteSessionIssuerID: s.det("remote-identity-provider-notion"),
+		McpServerID:           s.det("mcpserver-notion"),
+		ProjectID:             proj,
+	}); err != nil {
+		return fmt.Errorf("stamp demo notion remote session issuer: %w", err)
+	}
+	if err := s.q.ServersInsertServerClientAssociation(ctx, repo.ServersInsertServerClientAssociationParams{
+		ID:                    s.det("server-client-association-notion"),
+		ProjectID:             proj,
+		OrgID:                 org,
+		McpServerID:           s.det("mcpserver-notion"),
+		RemoteSessionClientID: s.det("remote-identity-client-notion"),
+	}); err != nil {
+		return fmt.Errorf("associate demo notion server with its client: %w", err)
 	}
 	return nil
 }

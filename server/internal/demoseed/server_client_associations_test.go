@@ -24,8 +24,9 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub shares the workforce issuer with the EMA services but has no
-// evidence for either client, so it uses none.
+// GitHub and DeepWiki share the workforce issuer with the EMA services and
+// Notion but have no evidence for any of their clients, so they use none.
+// DeepWiki is public and needs no sign-in at all.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
 	ctx := t.Context()
@@ -33,10 +34,12 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	require.NoError(t, err)
 	det := func(name string) uuid.UUID { return detUUID(spec.NameSeed + name) }
 	github := det("mcpserver-github")
+	deepwiki := det("mcpserver-deepwiki")
 	want := map[uuid.UUID][]uuid.UUID{
 		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
 		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
 		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
+		det("mcpserver-notion"):      {det("remote-identity-client-notion")},
 	}
 
 	for range 2 {
@@ -62,14 +65,14 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 		for serverID, clients := range want {
 			require.ElementsMatch(t, clients, got[serverID], "server %s", serverID)
 		}
-		require.Equal(t, []uuid.UUID{github}, uncovered, "every proxied server with an issuer-bound client must be associated")
+		require.ElementsMatch(t, []uuid.UUID{github, deepwiki}, uncovered, "every proxied server with an issuer-bound client must be associated")
 
 		report, err := associationbackfill.Run(ctx, db, associationbackfill.Options{OrganizationID: spec.OrgID, Apply: false, PageSize: 0})
 		require.NoError(t, err)
 		require.Zero(t, report.Decided, "the seed must write every association the backfill would decide")
 		require.Zero(t, report.Gaps)
 		for _, result := range report.Results {
-			if result.MCPServerID == github {
+			if result.MCPServerID == github || result.MCPServerID == deepwiki {
 				require.Equal(t, associationbackfill.OutcomeNoClient, result.Outcome)
 			}
 		}

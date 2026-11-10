@@ -3750,7 +3750,7 @@ describe("The MCP sign-in tab", () => {
     },
   ] as never;
 
-  function tab(initialEditView?: "servers" | "sign-in", savedAt?: number) {
+  function tab(initialEditView?: "servers" | "sign-in") {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -3762,7 +3762,6 @@ describe("The MCP sign-in tab", () => {
             agent={agent}
             section
             initialEditView={initialEditView}
-            savedAt={savedAt}
             grants={grants}
             onDone={(id) => {
               onDone(id);
@@ -3774,12 +3773,24 @@ describe("The MCP sign-in tab", () => {
     return { onDone };
   }
 
+  // Enabled once the stored servers are read into the selection.
+  async function openPicker() {
+    const change = await screen.findByRole("button", {
+      name: "Change servers",
+    });
+    await waitFor(() =>
+      expect((change as HTMLButtonElement).disabled).toBe(false),
+    );
+    fireEvent.click(change);
+  }
+
   it("opens on the servers' sign-in, with no setup steps around it", async () => {
     tab();
     expect(
-      await screen.findByRole("button", { name: "Save changes" }),
+      await screen.findByRole("button", { name: "Change servers" }),
     ).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Change servers" })).toBeTruthy();
+    // Each change saves as it is made, so there is nothing to press.
+    expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
     // Nothing of setting the agent up: no name, no stepper, no summary.
     expect(screen.queryByLabelText("Name")).toBeNull();
     expect(screen.queryByText(/Step \d of/i)).toBeNull();
@@ -3797,18 +3808,11 @@ describe("The MCP sign-in tab", () => {
     ).toBeTruthy();
   });
 
-  it("changes the servers, comes back to their sign-in, and saves in place", async () => {
+  it("saves the servers on Continue, back on their sign-in", async () => {
     const { onDone } = tab();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Change servers" }),
-    );
+    await openPicker();
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    const save = await screen.findByRole("button", { name: "Save changes" });
-    await waitFor(() =>
-      expect((save as HTMLButtonElement).disabled).toBe(false),
-    );
-    fireEvent.click(save);
 
     await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(
@@ -3816,21 +3820,38 @@ describe("The MCP sign-in tab", () => {
         ?.grantId,
     ).toBe("grant_one");
     expect(mocks.renameAgent).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Change servers" })).toBeTruthy();
   });
 
-  // The tab reopens on what was stored after a save, so the button says the
-  // save landed rather than offering the same save again.
-  it("reads Saved for a moment after a save", async () => {
-    tab(undefined, Date.now());
-    const saved = await screen.findByRole("button", { name: "Saved" });
-    expect((saved as HTMLButtonElement).disabled).toBe(true);
+  it("drops a change abandoned with Cancel", async () => {
+    const { onDone } = tab();
+    await openPicker();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await screen.findByRole("button", { name: "Change servers" });
+
+    await openPicker();
     expect(
-      await screen.findByRole(
-        "button",
-        { name: "Save changes" },
-        { timeout: 4000 },
-      ),
-    ).toBeTruthy();
+      (
+        (await screen.findByRole("checkbox", {
+          name: "GitHub",
+        })) as HTMLInputElement
+      ).getAttribute("aria-checked") ?? "",
+    ).not.toBe("false");
+    expect(onDone).not.toHaveBeenCalled();
+    expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("saves as soon as a server is removed from the list", async () => {
+    const { onDone } = tab();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Remove GitHub" }),
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(
+      mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm
+        ?.grantId,
+    ).toBe("grant_one");
   });
 });
 
