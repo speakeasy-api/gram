@@ -41,6 +41,7 @@ import (
 	mcpmetadatarepo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
@@ -1016,6 +1017,14 @@ func (s *Service) UpdateMcpServer(ctx context.Context, payload *gen.UpdateMcpSer
 		attached, pluginCreated, err = s.attachToDefaultPlugin(ctx, dbtx, authCtx, updated)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Moving the server onto an issuer configures its sign-in, so a server
+	// that is the issuer's only consumer offers the clients bound there.
+	if ids.UserSessionIssuerID.Valid && ids.UserSessionIssuerID != existing.UserSessionIssuerID {
+		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, []uuid.UUID{ids.UserSessionIssuerID.UUID}, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "capture mcp server upstream clients").LogError(ctx, logger)
 		}
 	}
 

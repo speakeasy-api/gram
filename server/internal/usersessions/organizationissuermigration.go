@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -648,6 +649,12 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		}
 	}
 	for _, projectID := range mcpServerProjectIDs {
+		// The migration moves the servers onto the target, which configures
+		// their sign-in there, so a server that is the target's only consumer
+		// offers the clients bound to it.
+		if err := upstreamclients.CaptureSoleConsumers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{target.ID}, nil); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "capture MCP server upstream clients").LogError(ctx, logger)
+		}
 		if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, projectID, []uuid.UUID{source.ID, target.ID}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resync MCP server remote session issuers").LogError(ctx, logger)
 		}

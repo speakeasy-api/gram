@@ -1,6 +1,7 @@
 package mcpservers_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,11 +18,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
+// Choosing an issuer no other server or gateway uses configures the server's
+// sign-in, so the server offers the clients already bound there, with and
+// without upstream auth enforcement.
 func TestCreateMCPServerInTransaction_PublishesOAuthBeforeCommit(t *testing.T) {
 	t.Parallel()
+	for _, enforced := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enforced=%t", enforced), func(t *testing.T) {
+			t.Parallel()
+			testCreatePublishesOAuthBeforeCommit(t, enforced)
+		})
+	}
+}
+
+func testCreatePublishesOAuthBeforeCommit(t *testing.T, enforced bool) {
+	t.Helper()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
+	if enforced {
+		_, err := productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+			OrganizationID: auth.ActiveOrganizationID,
+			FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+		})
+		require.NoError(t, err)
+	}
 	issuer := createOrganizationIssuer(t, ctx, ti, auth.ActiveOrganizationID)
 	remoteIssuer, remoteClient := linkRemoteClientWithID(t, ctx, ti, auth.ActiveOrganizationID, *auth.ProjectID, issuer)
 	source := uuid.New()
@@ -48,7 +69,8 @@ func TestCreateMCPServerInTransaction_PublishesOAuthBeforeCommit(t *testing.T) {
 // A server created on a user session issuer another server already signs in
 // through gets that server's client only while the issuer's bindings are what
 // serves both. Under upstream auth enforcement a server offers what was
-// configured for it, and nothing was configured for the new one.
+// configured for it, and an issuer another server uses configures nothing for
+// the new one.
 func TestCreateMCPServerInTransaction_InheritsIssuerClientOnlyWithoutEnforcement(t *testing.T) {
 	t.Parallel()
 
