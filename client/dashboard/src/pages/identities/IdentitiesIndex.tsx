@@ -1145,46 +1145,8 @@ function IdentitiesIndexContent({ kind }: { kind: RosterKind }): JSX.Element {
           );
         },
       },
-      {
-        key: "actions",
-        header: "Actions",
-        width: "160px",
-        render: (identity) => {
-          const agentId = identity.registeredAgentId ?? "";
-          if (agentId === "") return null;
-          return (
-            // Stops the row's own click from firing underneath: the row opens
-            // the agent, and Edit is a different destination.
-            <div
-              className="flex items-center justify-end gap-2"
-              onClick={(event) => event.stopPropagation()}
-            >
-              <Button asChild size="sm" variant="primary">
-                <Link to={routes.identities.agents.edit.href(agentId)}>
-                  Edit
-                </Link>
-              </Button>
-              <Button asChild size="sm" variant="secondary">
-                <Link
-                  to={routes.identities.detail.overview.href(
-                    encodeIdentityUrn(identityUrnForEmployee(identity)),
-                  )}
-                >
-                  View
-                </Link>
-              </Button>
-            </div>
-          );
-        },
-      },
     ],
-    [
-      agentsById,
-      platformsByAgent,
-      workloads.isSuccess,
-      workloads.isError,
-      routes,
-    ],
+    [agentsById, platformsByAgent, workloads.isSuccess, workloads.isError],
   );
   // One sorted list, split by what the row is. The filters above still narrow
   // both; the Kind column is dropped inside each table because the heading

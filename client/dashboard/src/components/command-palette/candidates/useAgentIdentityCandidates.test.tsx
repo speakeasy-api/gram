@@ -264,6 +264,7 @@ describe("useAgentIdentityCandidates", () => {
     expect(result.current.map((candidate) => candidate.id)).toEqual([
       "agent-identity:editable",
       "agent-sign-in:editable",
+      "agent-mcp-sign-in:editable",
     ]);
     mocks.routeProjectSlug = "project-one";
     mocks.projectSlug = "project-one";
@@ -303,6 +304,36 @@ describe("useAgentIdentityCandidates", () => {
     void aliases[0]!.run("open");
     expect(mocks.navigate).toHaveBeenCalledWith(
       "/acme/projects/project-one/identities/agent%3Aeditable/permissions?range=30d&from=2025-01-01&to=2025-01-31",
+    );
+  });
+
+  it("offers the MCP sign-in tab only for agents the reader can change", () => {
+    mocks.queryData = {
+      pages: [
+        {
+          items: [
+            { id: "read_only", name: "Viewer", permissions: { write: false } },
+            { id: "editable", name: "Worker", permissions: { write: true } },
+          ],
+        },
+      ],
+    };
+    const { result } = renderHook(() =>
+      useAgentIdentityCandidates({ enabled: true }),
+    );
+    const signIns = result.current.filter((candidate) =>
+      candidate.id.startsWith("agent-mcp-sign-in:"),
+    );
+    expect(signIns).toHaveLength(1);
+    expect(signIns[0]).toMatchObject({
+      title: "Worker · MCP sign-in",
+      fuzzyOnly: true,
+      kind: "person",
+      keywords: expect.arrayContaining(["mcp", "reconnect"]),
+    });
+    void signIns[0]!.run("open");
+    expect(mocks.navigate).toHaveBeenCalledWith(
+      "/acme/projects/project-one/identities/agent%3Aeditable/mcp-sign-in?range=30d&from=2025-01-01&to=2025-01-31",
     );
   });
 });

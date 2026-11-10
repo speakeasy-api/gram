@@ -1,6 +1,5 @@
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
-  Link,
   Navigate,
   useLocation,
   useNavigate,
@@ -11,11 +10,8 @@ import { Text } from "@/components/ui/Text";
 import { useRoutes } from "@/routes";
 import { AgentAPIKeys } from "@/pages/agents/AgentAPIKeys";
 import { AgentOwnership } from "@/pages/agents/AgentOwnership";
-import {
-  AgentIdentityFacts,
-  AgentLifecycle,
-  RenameAgentButton,
-} from "@/pages/agents/agent-admin";
+import { AgentIdentityFacts, AgentLifecycle } from "@/pages/agents/agent-admin";
+import { AgentMcpSignIn } from "./AgentMcpSignIn";
 import { AgentFederatedAccess } from "@/pages/agents/AgentFederatedAccess";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import { ManagedAgentSessions } from "@/pages/agents/ManagedAgentSessions";
@@ -35,38 +31,6 @@ import { IdentitySection } from "./IdentitySection";
 import { IdentityToolLogsPanel } from "./IdentityToolLogs";
 import { useShowLocalTools } from "./identityLocalTools";
 import { LocalToolsSwitch } from "./LocalToolsSwitch";
-
-/**
- * Edit, for the page header's top right: it acts on the agent itself, not on
- * any one section, so it sits in the header rather than under a tab.
- */
-export function AgentHeaderActions({
-  agent,
-}: {
-  agent: ManagedAgent;
-}): JSX.Element | null {
-  const routes = useRoutes();
-  // Changing what the agent reaches is the same set of questions it was
-  // registered with, so it is the same flow. Same gate as rename: saving the
-  // edit flow needs write access.
-  if (!agent.permissions.write) return null;
-  return (
-    <Button asChild variant="primary" size="sm">
-      <Link to={routes.identities.agents.edit.href(agent.id)}>Edit</Link>
-    </Button>
-  );
-}
-
-/** Rename, as a pencil beside the agent's name that shows on hover. */
-export function AgentRenameAction({
-  agent,
-  refresh,
-}: {
-  agent: ManagedAgent;
-  refresh: () => void;
-}): JSX.Element | null {
-  return <RenameAgentButton agent={agent} refresh={refresh} iconOnly />;
-}
 
 /** Agent data is keyed by its principal, never by its human owner's identifiers. */
 export function AgentIdentityProfile({
@@ -134,9 +98,18 @@ export function AgentIdentityProfile({
           <AgentIdentityChallenges agent={agent} />
         </IdentitySection>
       );
-    case "activity":
+    case "mcp-sign-in":
       return (
-        <IdentitySection title="Activity" timeRange>
+        <IdentitySection
+          title="MCP sign-in"
+          meta="Which MCP servers this agent calls, and how Speakeasy signs in to each"
+        >
+          <AgentMcpSignIn agent={agent} refresh={refresh} />
+        </IdentitySection>
+      );
+    case "audit-trail":
+      return (
+        <IdentitySection title="Audit trail" timeRange>
           <AgentIdentityAudit agent={agent} subject />
           <AgentIdentityAudit agent={agent} />
         </IdentitySection>
@@ -254,6 +227,7 @@ export function AgentIdentityProfile({
         devices: "sign-in",
         provisioning: "sign-in",
         credentials: "sign-in",
+        activity: "audit-trail",
       };
       // The section's own segment is swapped for the new one. A relative `..`
       // does not work here: this renders in the identity route's place, so
