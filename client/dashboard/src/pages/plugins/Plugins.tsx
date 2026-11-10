@@ -8,12 +8,13 @@ import { Page } from "@/components/page-layout";
 import { Icon } from "@/components/ui/Icon";
 import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { Text } from "@/components/ui/Text";
 import { useFetcher } from "@/contexts/Fetcher";
 import { openSafeExternalUrl } from "@/lib/safe-external-url";
 import { useRoutes } from "@/routes";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
-import { Plugin } from "@gram/client/models/components/plugin.js";
+import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useCreatePluginMutation } from "@gram/client/react-query/createPlugin";
 import {
   invalidateAllPlugins,
@@ -75,7 +76,7 @@ export default function Plugins(): JSX.Element | null {
   const { hasScope, isLoading } = useRBAC();
   const organization = useOrganization();
   const canWritePlugin = usePluginWriteAccess();
-  if (isLoading) return null;
+  if (isLoading) return <SplashScreen />;
   if (!canWritePlugin && !hasScope("org:read", organization.id)) return null;
   return hasScope("org:admin", organization.id) ? (
     <PluginsWithMarketplaceSettings />

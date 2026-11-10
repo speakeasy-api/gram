@@ -19,10 +19,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -48,7 +51,7 @@ func TestResolveAccessToken_RefreshBackfillsNullResource(t *testing.T) {
 
 	require.False(t, getRemoteSessionRow(t, ctx, ti, clientID, subject).Resource.Valid, "fixture must seed a legacy NULL-resource row")
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://mcp.example.com/mcp")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "https://mcp.example.com/mcp")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -57,6 +60,43 @@ func TestResolveAccessToken_RefreshBackfillsNullResource(t *testing.T) {
 	require.Equal(t, "https://mcp.example.com/mcp", conv.FromPGTextOrEmpty[string](sess.Resource), "refresh must stamp the resource it used onto a legacy NULL row")
 	// The stamped value is exactly the wire value the refresh grant carried.
 	require.Equal(t, spy.form.Get("resource"), conv.FromPGTextOrEmpty[string](sess.Resource), "the stored binding must equal the form resource the grant used")
+}
+
+func TestResolveAccessToken_GlobalIssuerRefreshFallback(t *testing.T) {
+	t.Parallel()
+
+	for _, resource := range []string{"", "https://global-fallback.example.com/mcp"} {
+		t.Run(resource, func(t *testing.T) {
+			t.Parallel()
+			var spy upstreamSpy
+			ctx, mgr, ti, clientID, _ := setupRefreshFixtureWithHandler(t, "global-fallback", pgtype.Text{}, spyRefreshHandler(&spy))
+			// A NULL organization and project represent a platform-global issuer.
+			globalIssuer, err := testrepo.New(ti.conn).InsertOrganizationTierUserSessionIssuerFixture(ctx, testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{
+				OrganizationID:     pgtype.Text{},
+				Slug:               "global-fallback",
+				AuthnChallengeMode: "interactive",
+				SessionDuration:    pgtype.Interval{Microseconds: int64(time.Hour / time.Microsecond), Valid: true},
+			})
+			require.NoError(t, err)
+			organizationID, err := repo.New(ti.conn).GetUserSessionIssuerOrganizationID(ctx, globalIssuer)
+			require.NoError(t, err, "a platform-global issuer must not fail scanning a NULL organization")
+			require.Empty(t, organizationID)
+
+			subject := urn.NewUserSubject("global-fallback-subject")
+			seedExpiredRemoteSession(t, ctx, ti, testenv.NewEncryptionClient(t), subject, globalIssuer, clientID)
+			if resource != "" {
+				attachClientUpstream(t, ctx, ti, clientID, "global-fallback-upstream", resource)
+			}
+			token, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
+			require.NoError(t, err)
+			require.NoError(t, spy.handlerErr)
+			require.Equal(t, "refreshed-access", token)
+			require.Equal(t, resource, spy.form.Get("resource"))
+			session := getRemoteSessionRow(t, ctx, ti, clientID, subject)
+			require.Equal(t, resource, conv.FromPGTextOrEmpty[string](session.Resource))
+			require.Equal(t, resource != "", session.Resource.Valid)
+		})
+	}
 }
 
 func TestResolveAccessToken_RefreshNeverOverwritesStoredResource(t *testing.T) {
@@ -73,7 +113,7 @@ func TestResolveAccessToken_RefreshNeverOverwritesStoredResource(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://drifted.example.com/mcp")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "https://drifted.example.com/mcp")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -89,7 +129,7 @@ func TestResolveAccessToken_RefreshLeavesResourceNullWhenUnderivable(t *testing.
 	var spy upstreamSpy
 	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "backfill-underivable", pgtype.Text{String: "", Valid: false}, spyRefreshHandler(&spy))
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -125,7 +165,7 @@ func TestResolveAccessToken_RefreshCASLossStampsNothing(t *testing.T) {
 	}
 	resolved := make(chan resolveResult, 1)
 	go func() {
-		tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://mcp.example.com/mcp")
+		tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "https://mcp.example.com/mcp")
 		resolved <- resolveResult{token: tok, err: err}
 	}()
 
@@ -176,7 +216,7 @@ func TestResolveAccessToken_InvalidGrantLeavesResourceNull(t *testing.T) {
 	}
 	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "backfill-invalid-grant", pgtype.Text{String: "", Valid: false}, handler)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "https://mcp.example.com/mcp")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "https://mcp.example.com/mcp")
 	require.NoError(t, err)
 	require.Empty(t, tok)
 
@@ -195,7 +235,7 @@ func TestResolveAccessToken_RefreshBackfillIsIdempotent(t *testing.T) {
 	ctx, mgr, ti, clientID, subject := setupRefreshFixtureWithHandler(t, "backfill-idempotent", pgtype.Text{String: "", Valid: false}, spyRefreshHandler(&spy))
 
 	const used = "https://mcp.example.com/mcp"
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, used)
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, used)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -206,7 +246,7 @@ func TestResolveAccessToken_RefreshBackfillIsIdempotent(t *testing.T) {
 	// Age the fresh access token out so the next resolve refreshes again.
 	require.NoError(t, testrepo.New(ti.conn).ExpireRemoteSessionAccessTokenFixture(ctx, stamped.ID))
 
-	tok, err = mgr.ResolveAccessToken(ctx, clientID, subject, used)
+	tok, err = mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, used)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)
@@ -259,7 +299,7 @@ func TestResolveAccessTokens_RefreshingRequestCarriesBackfilledResource(t *testi
 	// this resource: the value under test is never a caller-supplied string.
 	seedRemoteMCPServerForIssuer(t, ctx, ti, row.UserSessionIssuerID, "backfill-same-request-mcp", derived)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must have carried the derived resource")
@@ -362,7 +402,7 @@ func TestResolveAccessTokens_BackfillStampsTheRefreshedClientsOwnResource(t *tes
 	attachClientUpstream(t, ctx, ti, clientID, "backfill-wrong-client-own", derived)
 	attachClientUpstream(t, ctx, ti, siblingClient, "backfill-wrong-client-sibling", siblingResource)
 
-	tokens, err := mgr.ResolveAccessTokens(ctx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, *authCtx.ProjectID, authCtx.ActiveOrganizationID, row.UserSessionIssuerID, subject)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, derived, spy.form.Get("resource"), "the refresh grant must carry the refreshed client's own derived resource")
@@ -405,7 +445,8 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
 	require.NoError(t, err)
-	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache)
+	rec := mcpconnectionattemptstest.New(t)
+	refresher := remotesessions.NewRefreshService(testenv.NewLogger(t), testenv.NewMeterProvider(t), ti.conn, testenv.NewEncryptionClient(t), policy, nil, cache.NoopCache, remotesessions.WithRefreshConnectionRecorder(rec.Recorder))
 	activity := activities.NewRemoteSessionRefresh(testenv.NewLogger(t), ti.conn, refresher)
 
 	res, err := activity.Do(ctx, activities.RefreshRemoteSessionInput{
@@ -416,6 +457,12 @@ func TestRemoteSessionRefreshActivity_SweepBackfillsNullResource(t *testing.T) {
 	require.False(t, res.RateLimited)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refresh_token", spy.form.Get("grant_type"), "the sweep must have executed the refresh grant")
+
+	attemptRow := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.ResultRefreshed)
+	require.Equal(t, authCtx.ActiveOrganizationID, attemptRow.OrganizationID)
+	require.Equal(t, "provider_session", attemptRow.ServerKind)
+	require.Equal(t, mcpconnectionattempts.AppBackground.String(), attemptRow.AppKey)
+	require.Equal(t, string(remotesessionmetrics.RefreshTriggerScheduled), attemptRow.SubReason)
 
 	sess := getRemoteSessionRow(t, ctx, ti, clientID, subject)
 	require.Equal(t, mcpURL, conv.FromPGTextOrEmpty[string](sess.Resource), "the sweep must stamp the client-derived fallback")

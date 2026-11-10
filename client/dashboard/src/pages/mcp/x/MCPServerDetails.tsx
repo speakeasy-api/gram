@@ -1,3 +1,5 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { ProviderSetupPage } from "./setup/ProviderSetupPage";
 import { isKnownEnumValue } from "@/lib/enum";
 import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
@@ -8,6 +10,7 @@ import {
 } from "@/lib/mcp-server-visibility";
 import { handleError } from "@/lib/errors";
 import { Page } from "@/components/page-layout";
+import { SplashScreen } from "@/components/ui/LogoLoader";
 import { RequireScope } from "@/components/require-scope";
 import { AttachedUserSessions } from "@/components/sessions/AttachedUserSessions";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -48,6 +51,7 @@ import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
   activeTabFromPath,
   mcpServerTabHref,
@@ -82,6 +86,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
@@ -142,7 +147,22 @@ export default function MCPServerDetails(): JSX.Element | null {
     return <Navigate to={routes.mcp.href()} replace />;
   }
   // Which tabs exist depends on the server's kind, so route only once it loads.
-  if (!mcpServer) return null;
+  if (!mcpServer) return <SplashScreen />;
+  if (activeTab === "setup") {
+    if (providerSetupRollout === "loading") return <SplashScreen />;
+    if (providerSetupRollout !== "enabled")
+      return (
+        <Navigate
+          to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
+          replace
+        />
+      );
+    return (
+      <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
+        <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
+      </RequireScope>
+    );
+  }
   // Retired tab segments (`authentication`, the toolset page's `performance`).
   if (tabSegment !== undefined && !activeTab) {
     const target = serverTabForToolsetTab(tabSegment, location.hash);
@@ -193,7 +213,7 @@ export default function MCPServerDetails(): JSX.Element | null {
           activeTab !== "guardrails" &&
           activeTab !== "skills";
     if (hosted && needsToolset && !hostedToolset) {
-      if (isLoadingToolset) return null;
+      if (isLoadingToolset) return <SplashScreen />;
       return (
         <div className="mx-auto w-full max-w-[1270px] px-8 py-8">
           <Alert variant="error" dismissible={false}>
@@ -283,18 +303,22 @@ export default function MCPServerDetails(): JSX.Element | null {
                 level="page"
               >
                 {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
-                <MCPTeamAccessTab
-                  resourceId={mcpServer.id}
-                  serverName={mcpServer.name ?? undefined}
-                  tools={hostedToolset?.tools}
-                />
+                {mcpServer.remoteMcpServerId ? (
+                  <RemoteTeamAccessTab server={mcpServer} />
+                ) : (
+                  <MCPTeamAccessTab
+                    resourceId={mcpServer.id}
+                    serverName={mcpServer.name ?? undefined}
+                    tools={hostedToolset?.tools}
+                  />
+                )}
               </RequireScope>
             </RequireScope>
           )
         );
       case "guardrails":
         // Wait out the flag lookup rather than bouncing a deep link to it.
-        if (mcpScopedFlag.status === "loading") return null;
+        if (mcpScopedFlag.status === "loading") return <SplashScreen />;
         return mcpServer && mcpScoped && !mcpServer.unproxiedMcpServerId ? (
           <GuardrailsTab mcpServer={mcpServer} />
         ) : (
@@ -609,11 +633,9 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  // Speakeasy manages a built-in server's visibility.
   const canWrite =
     hasScope("mcp:write") &&
-    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility) &&
-    !server.builtinBackend;
+    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const followRenamedServer = useFollowRenamedServer();

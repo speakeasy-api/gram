@@ -44,7 +44,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/environments"
-	environments_repo "github.com/speakeasy-api/gram/server/internal/environments/repo"
 	"github.com/speakeasy-api/gram/server/internal/functions"
 	"github.com/speakeasy-api/gram/server/internal/gateway"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -67,9 +66,9 @@ type Service struct {
 	tracer            trace.Tracer
 	db                *pgxpool.Pool
 	auth              *auth.Auth
+	authz             *authz.Engine
 	chatSessions      *chatsessions.Manager
 	toolset           *toolsets.Toolsets
-	environmentsRepo  *environments_repo.Queries
 	env               *environments.EnvironmentEntries
 	toolProxy         *gateway.ToolProxy
 	scanEvaluator     *mcpriskscan.Evaluator
@@ -104,20 +103,19 @@ func NewService(
 	authzEngine *authz.Engine,
 	scanEvaluator *mcpriskscan.Evaluator,
 ) *Service {
-	envRepo := environments_repo.New(db)
 	tracer := traceProvider.Tracer("github.com/speakeasy-api/gram/server/internal/instances")
 	logger = logger.With(attr.SlogComponent("instances"))
 
 	return &Service{
-		logger:           logger,
-		tracer:           tracer,
-		db:               db,
-		auth:             auth.New(logger, db, sessions, authzEngine),
-		chatSessions:     chatSessions,
-		toolset:          toolsets.NewToolsets(db),
-		environmentsRepo: envRepo,
-		env:              env,
-		tracking:         tracking,
+		logger:       logger,
+		tracer:       tracer,
+		db:           db,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		chatSessions: chatSessions,
+		toolset:      toolsets.NewToolsets(db),
+		env:          env,
+		tracking:     tracking,
 		toolProxy: gateway.NewToolProxy(
 			logger,
 			traceProvider,
@@ -128,6 +126,11 @@ func NewService(
 			guardianPolicy,
 			funcCaller,
 			platformTools,
+			// No shutdown drain: the direct path answers dashboard and
+			// playground callers rather than MCP clients, so its calls run
+			// until the server's shutdown deadline instead of being answered
+			// with an MCP server_shutdown error.
+			nil,
 		),
 		scanEvaluator:     scanEvaluator,
 		toolsetCache:      cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheImpl, cache.SuffixNone),
@@ -338,12 +341,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	ciEnv := toolconfig.NewCaseInsensitiveEnv()
 	if environmentSlug := r.URL.Query().Get(environmentSlugQueryParam); environmentSlug != "" {
-		envModel, err := s.environmentsRepo.GetEnvironmentBySlug(ctx, environments_repo.GetEnvironmentBySlugParams{
-			ProjectID: *authCtx.ProjectID,
-			Slug:      strings.ToLower(environmentSlug),
-		})
+		envModel, err := environments.ResolveReadableEnvironment(ctx, logger, s.authz, s.db, *authCtx.ProjectID, toolconfig.Slug(environmentSlug))
 		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "failed to load environment").LogError(ctx, logger)
+			return err
 		}
 
 		environmentEntries, err := s.env.ListEnvironmentEntries(ctx, *authCtx.ProjectID, envModel.ID, false)
@@ -400,10 +400,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	if toolset != nil {
 		scanToolsetID = toolset.ID
 	}
-	scanToolName := descriptor.Name
-	if plan.Kind == gateway.ToolKindExternalMCP {
-		scanToolName = descriptor.URN.Name
-	}
 	requestSubject := mcpriskscan.NewRequest(ctx, mcpriskscan.Event{
 		Surface:         mcpriskscan.SurfaceInstances,
 		Method:          mcpriskscan.MethodToolsCall,
@@ -412,7 +408,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		ServerID:        "",
 		MetaServerID:    "",
 		ToolsetID:       scanToolsetID,
-		ToolName:        scanToolName,
+		ToolName:        descriptor.Name,
 		ResourceURI:     "",
 		PromptName:      "",
 		ChatID:          chatID,
@@ -425,7 +421,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	err = s.toolProxy.Do(ctx, interceptor, bytes.NewReader(requestBodyBytes), toolconfig.ToolCallEnv{
 		SystemEnv:  systemConfig,
 		UserConfig: ciEnv,
-		OAuthToken: "", // Instances do not support OAuth tokens for external MCP
 		GramEmail:  "",
 		GramChatID: "",
 		// Direct invocation — there is no MCP client on the other end.
@@ -435,7 +430,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 		return fmt.Errorf("failed to proxy tool call: %w", err)
 	}
 	if plan.Kind != gateway.ToolKindPrompt {
-		responsePayload := instanceResponsePayload(plan.Kind, interceptor.headers.Get("content-type"), interceptor.buffer.Bytes())
+		responsePayload := instanceResponsePayload(interceptor.headers.Get("content-type"), interceptor.buffer.Bytes())
 		decision = s.scanEvaluator.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			interceptor.buffer.Reset()
@@ -466,8 +461,6 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 	// Capture the usage for billing purposes (async to not block response)
 	outputNumBytes := int64(interceptor.buffer.Len())
-	// External MCP tools forward the upstream result, whose isError is the verdict.
-	resultIsError := plan.Kind == gateway.ToolKindExternalMCP && dialect.MCPResultIsError(interceptor.buffer.Bytes())
 
 	// Extract function metrics from headers (originally trailers from functions runner)
 	var functionCPU *float64
@@ -529,7 +522,7 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 
 		attrRecorder[attr.EventSourceKey] = string(tm.EventSourceToolCall)
 		attrRecorder.RecordStatusCode(interceptor.statusCode)
-		attrRecorder[attr.OutcomeKey] = dialect.ToolCallOutcome(interceptor.statusCode, resultIsError)
+		attrRecorder[attr.OutcomeKey] = dialect.ToolCallOutcome(interceptor.statusCode, false)
 		attrRecorder.RecordRequestBody(requestNumBytes)
 		attrRecorder.RecordResponseBody(outputNumBytes)
 		attrRecorder.RecordTraceContext(ctx)
@@ -568,16 +561,9 @@ func (s *Service) ExecuteInstanceTool(w http.ResponseWriter, r *http.Request) er
 	return nil
 }
 
-func instanceResponsePayload(kind gateway.ToolKind, contentType string, body []byte) mcpriskscan.Payload {
+func instanceResponsePayload(contentType string, body []byte) mcpriskscan.Payload {
 	if mediaType, _, err := mime.ParseMediaType(contentType); err == nil && mediaType == "text/event-stream" {
 		return mcpriskscan.Payload{}
-	}
-	if kind == gateway.ToolKindExternalMCP {
-		payload, err := mcpriskscan.ParseToolResultPayload(body)
-		if err != nil {
-			return mcpriskscan.Payload{}
-		}
-		return payload
 	}
 	// Invalid bytes are replaced, not dropped, so one stray byte cannot hide the text around it.
 	return mcpriskscan.TextResponsePayload([]byte(strings.ToValidUTF8(string(body), "\uFFFD")))

@@ -70,6 +70,30 @@ const (
 	// AuthClientParityAgreedKey reports whether a shadow comparison of the typed auth client resolver agreed with the legacy choice.
 	AuthClientParityAgreedKey = attribute.Key("gram.auth_client.parity_agreed")
 
+	// AuthClientResolverModeKey is the organization's typed auth client resolver mode: off, shadow or enforced, or unknown when it could not be read.
+	AuthClientResolverModeKey = attribute.Key("gram.auth_client.resolver_mode")
+
+	// UpstreamIssuerSurfaceKey is the serving surface an upstream issuer comparison ran on.
+	UpstreamIssuerSurfaceKey = attribute.Key("gram.upstream_issuer.surface")
+
+	// UpstreamIssuerSiteKey is the code site an upstream issuer comparison or re-consent forecast ran at.
+	UpstreamIssuerSiteKey = attribute.Key("gram.upstream_issuer.site")
+
+	// UpstreamIssuerOutcomeKey is how the server's column and association upstream issuers compared at a site.
+	UpstreamIssuerOutcomeKey = attribute.Key("gram.upstream_issuer.outcome")
+
+	// UpstreamIssuerSourceKey is which upstream issuer was authoritative: the column or the associations.
+	UpstreamIssuerSourceKey = attribute.Key("gram.upstream_issuer.source")
+
+	// UpstreamIssuerAssociationProviderKey is the one remote session issuer an MCP server's client associations name, if any.
+	UpstreamIssuerAssociationProviderKey = attribute.Key("gram.upstream_issuer.association_provider")
+
+	// UpstreamIssuerAssociationProvidersKey is how many distinct remote session issuers an MCP server's client associations name.
+	UpstreamIssuerAssociationProvidersKey = attribute.Key("gram.upstream_issuer.association_providers")
+
+	// UpstreamIssuerConsenterKey identifies whose consent a re-consent forecast is about, such as a user session.
+	UpstreamIssuerConsenterKey = attribute.Key("gram.upstream_issuer.consenter")
+
 	// MandatoryAuthzSurfaceKey is where a shadowed mandatory check ran: hosted_connect, proxied_connect, gateway_member, auth_client, token_issuance, or consent.
 	MandatoryAuthzSurfaceKey = attribute.Key("gram.authz.mandatory.surface")
 	// MandatoryAuthzCallerKey classifies the caller: anonymous, unrepresented, represented, or cross_org.
@@ -161,6 +185,8 @@ const (
 	HTTPResponseSizeKey                  = semconv.HTTPResponseSizeKey
 	ObservedTimeUnixNanoKey              = attribute.Key("observed_time_unix_nano")
 	ServerAddressKey                     = semconv.ServerAddressKey
+	ServerPortKey                        = semconv.ServerPortKey
+	LogRecordUIDKey                      = semconv.LogRecordUIDKey
 	ServiceEnvKey                        = semconv.DeploymentEnvironmentNameKey
 	ServiceInstanceIDKey                 = semconv.ServiceInstanceIDKey
 	ServiceNameKey                       = semconv.ServiceNameKey
@@ -309,7 +335,6 @@ const (
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
-	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
 	URLKey                      = attribute.Key("url")
 	CacheKeyKey                 = attribute.Key("gram.cache.key")
@@ -437,6 +462,7 @@ const (
 	HTTPResponseExternalKey             = attribute.Key("gram.http.response.external")
 	HTTPResponseFilteredKey             = attribute.Key("gram.http.response.filtered")
 	HTTPStatusCodePatternKey            = attribute.Key("gram.http.status_code_pattern")
+	HTTPStreamEndReasonKey              = attribute.Key("gram.http.stream.end_reason") // closed set of httpstream.EndReason values
 	IngressNameKey                      = attribute.Key("gram.ingress.name")
 	CustomDomainProvisionerKindKey      = attribute.Key("gram.custom_domain.provisioner.kind")
 	NetworkSurfaceKey                   = attribute.Key("gram.network.surface")
@@ -451,6 +477,7 @@ const (
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainDNSRoutingMethodKey     = attribute.Key("gram.custom_domain.dns.routing_method")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
 	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
 	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
@@ -532,6 +559,7 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -566,9 +594,10 @@ const (
 	// — the ones Speakeasy emits across DCR registration, /authorize, /token, and
 	// /revoke, and the ones an upstream authorization server answers Speakeasy
 	// with (IdP and remote-login callbacks, token refresh).
-	OAuthErrorKey            = attribute.Key("gram.oauth.error")
-	OAuthErrorDescriptionKey = attribute.Key("gram.oauth.error_description")
-	OAuthFailureReasonKey    = attribute.Key("gram.oauth.failure_reason")
+	OAuthErrorKey               = attribute.Key("gram.oauth.error")
+	OAuthForwardedClientNameKey = attribute.Key("gram.oauth.forwarded_client_name")
+	OAuthErrorDescriptionKey    = attribute.Key("gram.oauth.error_description")
+	OAuthFailureReasonKey       = attribute.Key("gram.oauth.failure_reason")
 	// OAuthFlowIDKey is the stable correlation identifier for a single
 	// user-facing OAuth flow. Minted once at /authorize and threaded through
 	// every handler in the flow (idp_callback, consent, token) so the whole
@@ -581,6 +610,9 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthResponseIssuerKey is the RFC 9207 iss value an authorization server returned on its redirect. It is untrusted input, so callers truncate it.
+	OAuthResponseIssuerKey = attribute.Key("gram.oauth.response_issuer")
 
 	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
 	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
@@ -624,6 +656,15 @@ const (
 	// manual consent-page or admin action. Used as a metric dimension on
 	// gram.remote_session.upstream_refresh.
 	OAuthRefreshTriggerKey = attribute.Key("gram.oauth.refresh_trigger")
+
+	// OAuthStoredTokenKey names which stored upstream token, access or
+	// refresh, could not be decrypted.
+	OAuthStoredTokenKey = attribute.Key("gram.oauth.stored_token")
+
+	// EncryptionKeyFingerprintKey is the first characters of the SHA-256 of
+	// the encryption key a process holds, so pods with different keys can be
+	// told apart without revealing the key.
+	EncryptionKeyFingerprintKey = attribute.Key("gram.encryption.key_fingerprint")
 
 	// OAuthValidationTriggerKey names which caller presented a stored remote
 	// session credential to its upstream: the consent page's Verify, the
@@ -701,72 +742,98 @@ const (
 	// OAuthResourceProbeDurationMsKey is how long a login's probe of its resource took, in milliseconds.
 	OAuthResourceProbeDurationMsKey = attribute.Key("gram.oauth.resource_probe_duration_ms")
 	// OAuthIssuerScopesSupportedKey lists the scopes an RFC 8414 document advertises.
-	OAuthIssuerScopesSupportedKey     = attribute.Key("gram.oauth.issuer_scopes_supported")
-	OAuthTokenEndpointKey             = attribute.Key("gram.oauth.token_endpoint")
-	OAuthVersionKey                   = attribute.Key("gram.oauth.version")
-	OAuthStatusKey                    = attribute.Key("gram.oauth.status")
-	OAuthConnectedKey                 = attribute.Key("gram.oauth.connected")
-	OAuthExpiredKey                   = attribute.Key("gram.oauth.expired")
-	MessageObserverCountKey           = attribute.Key("gram.message_observer.count")
-	OAuthProviderCountKey             = attribute.Key("gram.oauth.provider_count")
-	OpenAPIMethodKey                  = attribute.Key("gram.openapi.method")
-	OpenAPIOperationIDKey             = attribute.Key("gram.openapi.operation_id")
-	OpenAPIPathKey                    = attribute.Key("gram.openapi.path")
-	OpenAPIVersionKey                 = attribute.Key("gram.openapi.version")
-	OpenRouterBackfillAmbiguousKey    = attribute.Key("gram.openrouter.backfill.ambiguous")
-	OpenRouterBackfillBatchesKey      = attribute.Key("gram.openrouter.backfill.batches")
-	OpenRouterBackfillClassifiedKey   = attribute.Key("gram.openrouter.backfill.classified")
-	OpenRouterBackfillModeKey         = attribute.Key("gram.openrouter.backfill.mode")
-	OpenRouterBackfillScannedKey      = attribute.Key("gram.openrouter.backfill.scanned")
-	OpenRouterBackfillUpdatedKey      = attribute.Key("gram.openrouter.backfill.updated")
-	EmbeddingInputCountKey            = attribute.Key("gram.openrouter.embedding.input_count")
-	EmbeddingFallbackStrategyKey      = attribute.Key("gram.openrouter.embedding.fallback_strategy")
-	EmbeddingTruncatedInputCountKey   = attribute.Key("gram.openrouter.embedding.truncated_input_count")
-	OpenRouterKeyLimitKey             = attribute.Key("gram.openrouter.key.limit")
-	OpenRouterKeyPreviousLimitKey     = attribute.Key("gram.openrouter.key.previous_limit")
-	OpenRouterKeyTypeKey              = attribute.Key("gram.openrouter.key.type")
-	OpenRouterResponseBodyKey         = attribute.Key("gram.openrouter.response.body")
-	OpenRouterRateLimitLimitKey       = attribute.Key("gram.openrouter.ratelimit.limit")
-	OpenRouterRateLimitRemainingKey   = attribute.Key("gram.openrouter.ratelimit.remaining")
-	OpenRouterRateLimitResetKey       = attribute.Key("gram.openrouter.ratelimit.reset")
-	OpenRouterRetryAfterKey           = attribute.Key("gram.openrouter.retry_after")
-	OrganizationAccountTypeKey        = attribute.Key("gram.org.account_type")
-	OrganizationInviteIDKey           = attribute.Key("gram.org.invite.id")
-	OrganizationInviteEmailKey        = attribute.Key("gram.org.invite.email")
-	OrganizationInviteStateKey        = attribute.Key("gram.org.invite.state")
-	OrganizationInviteRoleSlugKey     = attribute.Key("gram.org.invite.role_slug")
-	OutboxIDKey                       = attribute.Key("gram.outbox.id")
-	OutboxPublicIDKey                 = attribute.Key("gram.outbox.public_id")
-	OutboxBatchSizeKey                = attribute.Key("gram.outbox.batch_size")
-	AccessMemberIDKey                 = attribute.Key("gram.access.member.id")
-	AccessRoleIDKey                   = attribute.Key("gram.access.role.id")
-	AccessRoleSlugKey                 = attribute.Key("gram.access.role.slug")
-	AccessRoleSourceKey               = attribute.Key("gram.access.role.source")
-	AccessRoleDBWriteFailedKey        = attribute.Key("gram.access.role.db_write_failed_post_workos")
-	OrganizationRoleAssignmentIDKey   = attribute.Key("gram.org.role_assignment.id")
-	OrganizationIDKey                 = attribute.Key("gram.org.id")
-	OrganizationSlugKey               = attribute.Key("gram.org.slug")
-	WorkOSOrganizationIDKey           = attribute.Key("gram.workos.organization_id")
-	WorkOSLinkedUserIDKey             = attribute.Key("gram.workos.linked_user_id")
-	WorkOSUserIDKey                   = attribute.Key("gram.workos.user_id")
-	WorkOSSSOEnabledKey               = attribute.Key("gram.workos.sso_enabled")
-	WorkOSSCIMEnabledKey              = attribute.Key("gram.workos.scim_enabled")
-	WorkOSDirectoryUserIDKey          = attribute.Key("gram.workos.directory_user_id")
-	ExternalCredentialIDKey           = attribute.Key("gram.external_credential.id")
-	GcpKmsKeyVersionKey               = attribute.Key("gram.gcp_kms.key_version")
-	IdentityProviderConnectionIDKey   = attribute.Key("gram.identity_provider_connection.id")
-	OktaApplicationsSeenKey           = attribute.Key("gram.okta_applications.seen")
-	OktaApplicationsAddedKey          = attribute.Key("gram.okta_applications.added")
-	OktaApplicationsRemovedKey        = attribute.Key("gram.okta_applications.removed")
-	OktaAssignmentsAddedKey           = attribute.Key("gram.okta_applications.assignments_added")
-	OktaAssignmentsRemovedKey         = attribute.Key("gram.okta_applications.assignments_removed")
-	OktaApplicationsTruncatedKey      = attribute.Key("gram.okta_applications.truncated")
-	OktaReconcileRunIDKey             = attribute.Key("gram.okta_applications.run_id")
-	GCPImpersonateServiceAccountKey   = attribute.Key("gram.gcp.impersonate_service_account")
-	WorkOSDirectoryGroupIDKey         = attribute.Key("gram.workos.directory_group_id")
-	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
-	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
-	OutcomeKey                        = attribute.Key("gram.outcome")
+	OAuthIssuerScopesSupportedKey   = attribute.Key("gram.oauth.issuer_scopes_supported")
+	OAuthTokenEndpointKey           = attribute.Key("gram.oauth.token_endpoint")
+	OAuthVersionKey                 = attribute.Key("gram.oauth.version")
+	OAuthStatusKey                  = attribute.Key("gram.oauth.status")
+	OAuthConnectedKey               = attribute.Key("gram.oauth.connected")
+	OAuthExpiredKey                 = attribute.Key("gram.oauth.expired")
+	MessageObserverCountKey         = attribute.Key("gram.message_observer.count")
+	OAuthProviderCountKey           = attribute.Key("gram.oauth.provider_count")
+	OpenAPIMethodKey                = attribute.Key("gram.openapi.method")
+	OpenAPIOperationIDKey           = attribute.Key("gram.openapi.operation_id")
+	OpenAPIPathKey                  = attribute.Key("gram.openapi.path")
+	OpenAPIVersionKey               = attribute.Key("gram.openapi.version")
+	OpenRouterBackfillAmbiguousKey  = attribute.Key("gram.openrouter.backfill.ambiguous")
+	OpenRouterBackfillBatchesKey    = attribute.Key("gram.openrouter.backfill.batches")
+	OpenRouterBackfillClassifiedKey = attribute.Key("gram.openrouter.backfill.classified")
+	OpenRouterBackfillModeKey       = attribute.Key("gram.openrouter.backfill.mode")
+	OpenRouterBackfillScannedKey    = attribute.Key("gram.openrouter.backfill.scanned")
+	OpenRouterBackfillUpdatedKey    = attribute.Key("gram.openrouter.backfill.updated")
+	EmbeddingInputCountKey          = attribute.Key("gram.openrouter.embedding.input_count")
+	EmbeddingFallbackStrategyKey    = attribute.Key("gram.openrouter.embedding.fallback_strategy")
+	EmbeddingTruncatedInputCountKey = attribute.Key("gram.openrouter.embedding.truncated_input_count")
+	OpenRouterKeyLimitKey           = attribute.Key("gram.openrouter.key.limit")
+	OpenRouterKeyPreviousLimitKey   = attribute.Key("gram.openrouter.key.previous_limit")
+	OpenRouterKeyTypeKey            = attribute.Key("gram.openrouter.key.type")
+	OpenRouterResponseBodyKey       = attribute.Key("gram.openrouter.response.body")
+	OpenRouterRateLimitLimitKey     = attribute.Key("gram.openrouter.ratelimit.limit")
+	OpenRouterRateLimitRemainingKey = attribute.Key("gram.openrouter.ratelimit.remaining")
+	OpenRouterRateLimitResetKey     = attribute.Key("gram.openrouter.ratelimit.reset")
+	OpenRouterRetryAfterKey         = attribute.Key("gram.openrouter.retry_after")
+	OrganizationAccountTypeKey      = attribute.Key("gram.org.account_type")
+	OrganizationInviteIDKey         = attribute.Key("gram.org.invite.id")
+	OrganizationInviteEmailKey      = attribute.Key("gram.org.invite.email")
+	OrganizationInviteStateKey      = attribute.Key("gram.org.invite.state")
+	OrganizationInviteRoleSlugKey   = attribute.Key("gram.org.invite.role_slug")
+	OutboxIDKey                     = attribute.Key("gram.outbox.id")
+	OutboxPublicIDKey               = attribute.Key("gram.outbox.public_id")
+	OutboxBatchSizeKey              = attribute.Key("gram.outbox.batch_size")
+	AccessMemberIDKey               = attribute.Key("gram.access.member.id")
+	AccessRoleIDKey                 = attribute.Key("gram.access.role.id")
+	AccessRoleSlugKey               = attribute.Key("gram.access.role.slug")
+	AccessRoleSourceKey             = attribute.Key("gram.access.role.source")
+	AccessRoleDBWriteFailedKey      = attribute.Key("gram.access.role.db_write_failed_post_workos")
+	OrganizationRoleAssignmentIDKey = attribute.Key("gram.org.role_assignment.id")
+	OrganizationIDKey               = attribute.Key("gram.org.id")
+	OrganizationSlugKey             = attribute.Key("gram.org.slug")
+	WorkOSOrganizationIDKey         = attribute.Key("gram.workos.organization_id")
+	WorkOSLinkedUserIDKey           = attribute.Key("gram.workos.linked_user_id")
+	WorkOSUserIDKey                 = attribute.Key("gram.workos.user_id")
+	WorkOSSSOEnabledKey             = attribute.Key("gram.workos.sso_enabled")
+	WorkOSSCIMEnabledKey            = attribute.Key("gram.workos.scim_enabled")
+	WorkOSDirectoryUserIDKey        = attribute.Key("gram.workos.directory_user_id")
+	ExternalCredentialIDKey         = attribute.Key("gram.external_credential.id")
+	GcpKmsKeyVersionKey             = attribute.Key("gram.gcp_kms.key_version")
+	IdentityProviderConnectionIDKey = attribute.Key("gram.identity_provider_connection.id")
+	OktaApplicationsSeenKey         = attribute.Key("gram.okta_applications.seen")
+	OktaApplicationsAddedKey        = attribute.Key("gram.okta_applications.added")
+	OktaApplicationsRemovedKey      = attribute.Key("gram.okta_applications.removed")
+	OktaAssignmentsAddedKey         = attribute.Key("gram.okta_applications.assignments_added")
+	OktaAssignmentsRemovedKey       = attribute.Key("gram.okta_applications.assignments_removed")
+	OktaApplicationsTruncatedKey    = attribute.Key("gram.okta_applications.truncated")
+	OktaReconcileRunIDKey           = attribute.Key("gram.okta_applications.run_id")
+	GCPImpersonateServiceAccountKey = attribute.Key("gram.gcp.impersonate_service_account")
+	WorkOSDirectoryGroupIDKey       = attribute.Key("gram.workos.directory_group_id")
+	DirectoryMembershipsOpenedKey   = attribute.Key("gram.directory_group.memberships_opened")
+	DirectoryMembershipsClosedKey   = attribute.Key("gram.directory_group.memberships_closed")
+	OutcomeKey                      = attribute.Key("gram.outcome")
+
+	// ExtMcpConnection keys are customer-facing, on exported MCP connection logs. Recorder metrics use the gram.connection keys.
+	ExtMcpConnectionAttemptIDKey        = attribute.Key("speakeasy.mcp_connection.attempt_id")
+	ExtMcpConnectionServerIDKey         = attribute.Key("speakeasy.mcp_connection.server_id")
+	ExtMcpConnectionServerKindKey       = attribute.Key("speakeasy.mcp_connection.server_kind")
+	ExtMcpConnectionMemberIDKey         = attribute.Key("speakeasy.mcp_connection.member_id")
+	ExtMcpConnectionOutcomeKey          = attribute.Key("speakeasy.mcp_connection.outcome")
+	ExtMcpConnectionWhoFixesKey         = attribute.Key("speakeasy.mcp_connection.who_fixes")
+	ExtMcpConnectionStepKey             = attribute.Key("speakeasy.mcp_connection.step")
+	ExtMcpConnectionStepResultKey       = attribute.Key("speakeasy.mcp_connection.step_result")
+	ExtMcpConnectionFinalKey            = attribute.Key("speakeasy.mcp_connection.final")
+	ExtMcpConnectionUserMessageKey      = attribute.Key("speakeasy.mcp_connection.user_message")
+	ExtMcpConnectionUserNextStepKey     = attribute.Key("speakeasy.mcp_connection.user_next_step")
+	ExtMcpConnectionGrantTypeKey        = attribute.Key("speakeasy.mcp_connection.grant_type")
+	ExtMcpConnectionRepeatedFailuresKey = attribute.Key("speakeasy.mcp_connection.repeated_failures")
+	ExtMcpConnectionDurationKey         = attribute.Key("speakeasy.mcp_connection.duration")
+	ExtMcpConnectionSubjectKindKey      = attribute.Key("speakeasy.mcp_connection.subject_kind")
+	ExtMcpConnectionClientNameKey       = attribute.Key("speakeasy.mcp_connection.client_name")
+	ExtMcpConnectionClientVersionKey    = attribute.Key("speakeasy.mcp_connection.client_version")
+
+	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
+	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
+	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
+	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionStepKey                 = attribute.Key("gram.connection.step")
+	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
@@ -784,6 +851,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -858,7 +926,11 @@ const (
 	SlackTeamIDKey               = attribute.Key("gram.slack.team.id")
 	ToolCallDurationKey          = attribute.Key("gram.tool_call.duration")
 	// ToolCallIDKey names one gateway tool call on its telemetry_logs row.
-	ToolCallIDKey                  = attribute.Key("gram.tool_call.id")
+	ToolCallIDKey = attribute.Key("gram.tool_call.id")
+	// ToolCallInterruptReasonKey is why the server stopped waiting for a tool
+	// call it was running, such as "server_shutdown" when a deploy interrupted
+	// it, so the failure is not attributed to the tool.
+	ToolCallInterruptReasonKey     = attribute.Key("gram.tool_call.interrupt_reason")
 	ToolCallKindKey                = attribute.Key("gram.tool_call.kind")
 	ToolCallSourceKey              = attribute.Key("gram.tool_call.source")
 	ToolHTTPResponseContentTypeKey = attribute.Key("gram.tool.http.response.content_type")
@@ -925,6 +997,22 @@ const (
 	HookDeviceHarnessVariantKey = attribute.Key("gram.hook.device.harness_variant")
 	HookDeviceHarnessVersionKey = attribute.Key("gram.hook.device.harness_version")
 	HookDeviceElapsedMsKey      = attribute.Key("gram.hook.device.elapsed_ms")
+	// HookDeviceInstallRouteKey is the install route the binary reports, from
+	// speakeasy.json or SPEAKEASY_AI_HOOKS_INSTALL_ROUTE. Known routes are
+	// marketplace, download, agent_install, hooks_install and dogfood; the
+	// value is free-form. Installs that predate it don't report one.
+	HookDeviceInstallRouteKey = attribute.Key("gram.hook.device.install_route")
+	// The client state snapshot rides the binary's first hook event of each
+	// day. FailOpen is the effective fail-open posture ("true" or "false"),
+	// DebugLog whether a debug log is enabled, and SpoolDepth how many events
+	// wait in the spool to be resent.
+	HookDeviceFailOpenKey   = attribute.Key("gram.hook.device.fail_open")
+	HookDeviceDebugLogKey   = attribute.Key("gram.hook.device.debug_log")
+	HookDeviceSpoolDepthKey = attribute.Key("gram.hook.device.spool_depth")
+	// HookEndpointGenerationKey records which generation of hook endpoint
+	// and sender produced a row (see the HookEndpointGeneration* values), so
+	// traffic on retired endpoints can be found and moved to a supported one.
+	HookEndpointGenerationKey = attribute.Key("gram.hook.endpoint_generation")
 	// Device-side delivery failure reports (client.delivery_failed): what the
 	// speakeasy-hooks binary observed when an event could not reach the
 	// control plane. Rows carrying these are diagnostic
@@ -959,6 +1047,24 @@ const (
 	AgentDeviceSerialKey      = attribute.Key("gram.agent.device.serial")
 	AgentDeviceHostnameKey    = attribute.Key("gram.agent.device.hostname")
 	AgentDeviceEnvironmentKey = attribute.Key("gram.agent.device.environment")
+	// A device agent crash report (device-agent ADR-0030). Build fields name
+	// the build that crashed, which is not always the one that reported it.
+	AgentCrashIDKey              = attribute.Key("gram.agent.crash.id")
+	AgentCrashKindKey            = attribute.Key("gram.agent.crash.kind")
+	AgentCrashComponentKey       = attribute.Key("gram.agent.crash.component")
+	AgentCrashSignatureKey       = attribute.Key("gram.agent.crash.signature")
+	AgentCrashOccurredAtKey      = attribute.Key("gram.agent.crash.occurred_at")
+	AgentCrashCountKey           = attribute.Key("gram.agent.crash.count")
+	AgentCrashSchemaVersionKey   = attribute.Key("gram.agent.crash.schema_version")
+	AgentCrashOtherGoroutinesKey = attribute.Key("gram.agent.crash.other_goroutines")
+	AgentCrashRollbackFromKey    = attribute.Key("gram.agent.crash.rollback.from")
+	AgentCrashRollbackToKey      = attribute.Key("gram.agent.crash.rollback.to")
+	AgentBuildBinaryKey          = attribute.Key("gram.agent.build.binary")
+	AgentBuildVersionKey         = attribute.Key("gram.agent.build.version")
+	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
+	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
+	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1287,6 +1393,44 @@ func AuthClientLegacyOutcome(v string) attribute.KeyValue {
 }
 
 func AuthClientParityAgreed(v bool) attribute.KeyValue { return AuthClientParityAgreedKey.Bool(v) }
+
+func AuthClientResolverMode(v string) attribute.KeyValue { return AuthClientResolverModeKey.String(v) }
+
+func UpstreamIssuerSurface(v string) attribute.KeyValue { return UpstreamIssuerSurfaceKey.String(v) }
+
+// SlogUpstreamIssuerSurface is the serving surface of an upstream issuer comparison.
+func SlogUpstreamIssuerSurface(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerSurfaceKey), v)
+}
+
+func UpstreamIssuerSite(v string) attribute.KeyValue { return UpstreamIssuerSiteKey.String(v) }
+
+// SlogUpstreamIssuerSite is the code site of an upstream issuer comparison.
+func SlogUpstreamIssuerSite(v string) slog.Attr { return slog.String(string(UpstreamIssuerSiteKey), v) }
+
+func UpstreamIssuerOutcome(v string) attribute.KeyValue { return UpstreamIssuerOutcomeKey.String(v) }
+
+// SlogUpstreamIssuerOutcome is how an upstream issuer comparison came out.
+func SlogUpstreamIssuerOutcome(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerOutcomeKey), v)
+}
+
+func UpstreamIssuerSource(v string) attribute.KeyValue { return UpstreamIssuerSourceKey.String(v) }
+
+// SlogUpstreamIssuerAssociationProvider is the one provider an MCP server's associations name.
+func SlogUpstreamIssuerAssociationProvider(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerAssociationProviderKey), v)
+}
+
+// SlogUpstreamIssuerAssociationProviders is how many providers an MCP server's associations name.
+func SlogUpstreamIssuerAssociationProviders(v int64) slog.Attr {
+	return slog.Int64(string(UpstreamIssuerAssociationProvidersKey), v)
+}
+
+// SlogUpstreamIssuerConsenter identifies whose consent a re-consent forecast is about.
+func SlogUpstreamIssuerConsenter(v string) slog.Attr {
+	return slog.String(string(UpstreamIssuerConsenterKey), v)
+}
 
 func MandatoryAuthzSurface(v string) attribute.KeyValue { return MandatoryAuthzSurfaceKey.String(v) }
 func SlogMandatoryAuthzSurface(v string) slog.Attr {
@@ -1631,6 +1775,70 @@ func SlogAgentDeviceEnvironment(v string) slog.Attr {
 	return slog.String(string(AgentDeviceEnvironmentKey), v)
 }
 
+func SlogAgentCrashID(v string) slog.Attr {
+	return slog.String(string(AgentCrashIDKey), v)
+}
+
+func SlogAgentCrashKind(v string) slog.Attr {
+	return slog.String(string(AgentCrashKindKey), v)
+}
+
+func SlogAgentCrashComponent(v string) slog.Attr {
+	return slog.String(string(AgentCrashComponentKey), v)
+}
+
+func SlogAgentCrashSignature(v string) slog.Attr {
+	return slog.String(string(AgentCrashSignatureKey), v)
+}
+
+func SlogAgentCrashOccurredAt(v string) slog.Attr {
+	return slog.String(string(AgentCrashOccurredAtKey), v)
+}
+
+func SlogAgentCrashCount(v int) slog.Attr {
+	return slog.Int(string(AgentCrashCountKey), v)
+}
+
+func SlogAgentCrashSchemaVersion(v int) slog.Attr {
+	return slog.Int(string(AgentCrashSchemaVersionKey), v)
+}
+
+func SlogAgentCrashOtherGoroutines(v int) slog.Attr {
+	return slog.Int(string(AgentCrashOtherGoroutinesKey), v)
+}
+
+func SlogAgentCrashRollbackFrom(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackFromKey), v)
+}
+
+func SlogAgentCrashRollbackTo(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackToKey), v)
+}
+
+func SlogAgentBuildBinary(v string) slog.Attr {
+	return slog.String(string(AgentBuildBinaryKey), v)
+}
+
+func SlogAgentBuildVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildVersionKey), v)
+}
+
+func SlogAgentBuildChannel(v string) slog.Attr {
+	return slog.String(string(AgentBuildChannelKey), v)
+}
+
+func SlogAgentBuildOS(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSKey), v)
+}
+
+func SlogAgentBuildArch(v string) slog.Attr {
+	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
+}
+
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
 func SlogHookReplayed(v bool) slog.Attr      { return slog.Bool(string(HookReplayedKey), v) }
 
@@ -1674,6 +1882,9 @@ func SlogHookDeliverySpoolDepth(v int) slog.Attr {
 
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
+func ServerPort(v int) attribute.KeyValue       { return ServerPortKey.Int(v) }
+func LogRecordUID(v string) attribute.KeyValue  { return LogRecordUIDKey.String(v) }
+func SlogServerPort(v int) slog.Attr            { return slog.Int(string(ServerPortKey), v) }
 
 func ServiceName(v string) attribute.KeyValue { return ServiceNameKey.String(v) }
 func SlogServiceName(v string) slog.Attr      { return slog.String(string(ServiceNameKey), v) }
@@ -2221,6 +2432,11 @@ func SlogHTTPStatusCodePattern(v string) slog.Attr {
 	return slog.String(string(HTTPStatusCodePatternKey), v)
 }
 
+func HTTPStreamEndReason(v string) attribute.KeyValue { return HTTPStreamEndReasonKey.String(v) }
+func SlogHTTPStreamEndReason(v string) slog.Attr {
+	return slog.String(string(HTTPStreamEndReasonKey), v)
+}
+
 func HTTPParamName(v string) attribute.KeyValue { return HTTPParamNameKey.String(v) }
 
 func HTTPHeaderAliasName(v string) attribute.KeyValue { return HTTPHeaderAliasNameKey.String(v) }
@@ -2321,6 +2537,14 @@ func SlogCustomDomainHealthIssue(v string) slog.Attr {
 	return slog.String(string(CustomDomainHealthIssueKey), v)
 }
 
+func CustomDomainDNSRoutingMethod(v string) attribute.KeyValue {
+	return CustomDomainDNSRoutingMethodKey.String(v)
+}
+
+func SlogCustomDomainDNSRoutingMethod(v string) slog.Attr {
+	return slog.String(string(CustomDomainDNSRoutingMethodKey), v)
+}
+
 func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {
 	return CustomDomainNotifyRecipientCountKey.Int(v)
 }
@@ -2377,6 +2601,9 @@ func SlogOAuthClientSecretGenerated(v bool) slog.Attr {
 
 func OAuthError(v string) attribute.KeyValue { return OAuthErrorKey.String(v) }
 func SlogOAuthError(v string) slog.Attr      { return slog.String(string(OAuthErrorKey), v) }
+func SlogOAuthForwardedClientName(v bool) slog.Attr {
+	return slog.Bool(string(OAuthForwardedClientNameKey), v)
+}
 
 func OAuthFlowID(v string) attribute.KeyValue { return OAuthFlowIDKey.String(v) }
 func SlogOAuthFlowID(v string) slog.Attr      { return slog.String(string(OAuthFlowIDKey), v) }
@@ -2390,6 +2617,14 @@ func OAuthRefreshTrigger[V ~string](v V) attribute.KeyValue {
 
 func SlogOAuthRefreshTrigger(v string) slog.Attr {
 	return slog.String(string(OAuthRefreshTriggerKey), v)
+}
+
+func OAuthStoredToken[V ~string](v V) attribute.KeyValue {
+	return OAuthStoredTokenKey.String(string(v))
+}
+
+func SlogEncryptionKeyFingerprint(v string) slog.Attr {
+	return slog.String(string(EncryptionKeyFingerprintKey), v)
 }
 
 func OAuthValidationTrigger[V ~string](v V) attribute.KeyValue {
@@ -2446,6 +2681,11 @@ func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGr
 
 func OAuthIssuer(v string) attribute.KeyValue { return OAuthIssuerKey.String(v) }
 func SlogOAuthIssuer(v string) slog.Attr      { return slog.String(string(OAuthIssuerKey), v) }
+
+func OAuthResponseIssuer(v string) attribute.KeyValue { return OAuthResponseIssuerKey.String(v) }
+func SlogOAuthResponseIssuer(v string) slog.Attr {
+	return slog.String(string(OAuthResponseIssuerKey), v)
+}
 
 func OAuthPresentedAuthMethod(v string) attribute.KeyValue {
 	return OAuthPresentedAuthMethodKey.String(v)
@@ -2929,6 +3169,135 @@ func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMet
 
 func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
 
+func SlogConnectionDropCounts(v string) slog.Attr {
+	return slog.String(string(ConnectionDropCountsKey), v)
+}
+
+func ConnectionDropReason(v string) attribute.KeyValue { return ConnectionDropReasonKey.String(v) }
+func SlogConnectionDropReason(v string) slog.Attr {
+	return slog.String(string(ConnectionDropReasonKey), v)
+}
+
+func ConnectionOutcome(v string) attribute.KeyValue  { return ConnectionOutcomeKey.String(v) }
+func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
+func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
+func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
+
+func ExtMcpConnectionAttemptID(v string) attribute.KeyValue {
+	return ExtMcpConnectionAttemptIDKey.String(v)
+}
+func SlogExtMcpConnectionAttemptID(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionAttemptIDKey), v)
+}
+
+func ExtMcpConnectionServerID(v string) attribute.KeyValue {
+	return ExtMcpConnectionServerIDKey.String(v)
+}
+func SlogExtMcpConnectionServerID(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionServerIDKey), v)
+}
+
+func ExtMcpConnectionServerKind(v string) attribute.KeyValue {
+	return ExtMcpConnectionServerKindKey.String(v)
+}
+func SlogExtMcpConnectionServerKind(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionServerKindKey), v)
+}
+
+func ExtMcpConnectionMemberID(v string) attribute.KeyValue {
+	return ExtMcpConnectionMemberIDKey.String(v)
+}
+func SlogExtMcpConnectionMemberID(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionMemberIDKey), v)
+}
+
+func ExtMcpConnectionOutcome(v string) attribute.KeyValue {
+	return ExtMcpConnectionOutcomeKey.String(v)
+}
+func SlogExtMcpConnectionOutcome(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionOutcomeKey), v)
+}
+
+func ExtMcpConnectionWhoFixes(v string) attribute.KeyValue {
+	return ExtMcpConnectionWhoFixesKey.String(v)
+}
+func SlogExtMcpConnectionWhoFixes(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionWhoFixesKey), v)
+}
+
+func ExtMcpConnectionStep(v string) attribute.KeyValue { return ExtMcpConnectionStepKey.String(v) }
+func SlogExtMcpConnectionStep(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionStepKey), v)
+}
+
+func ExtMcpConnectionStepResult(v string) attribute.KeyValue {
+	return ExtMcpConnectionStepResultKey.String(v)
+}
+func SlogExtMcpConnectionStepResult(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionStepResultKey), v)
+}
+
+func ExtMcpConnectionFinal(v bool) attribute.KeyValue { return ExtMcpConnectionFinalKey.Bool(v) }
+func SlogExtMcpConnectionFinal(v bool) slog.Attr {
+	return slog.Bool(string(ExtMcpConnectionFinalKey), v)
+}
+
+func ExtMcpConnectionUserMessage(v string) attribute.KeyValue {
+	return ExtMcpConnectionUserMessageKey.String(v)
+}
+func SlogExtMcpConnectionUserMessage(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionUserMessageKey), v)
+}
+
+func ExtMcpConnectionUserNextStep(v string) attribute.KeyValue {
+	return ExtMcpConnectionUserNextStepKey.String(v)
+}
+func SlogExtMcpConnectionUserNextStep(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionUserNextStepKey), v)
+}
+
+func ExtMcpConnectionGrantType(v string) attribute.KeyValue {
+	return ExtMcpConnectionGrantTypeKey.String(v)
+}
+func SlogExtMcpConnectionGrantType(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionGrantTypeKey), v)
+}
+
+func ExtMcpConnectionRepeatedFailures(v uint32) attribute.KeyValue {
+	return ExtMcpConnectionRepeatedFailuresKey.Int64(int64(v))
+}
+func SlogExtMcpConnectionRepeatedFailures(v uint32) slog.Attr {
+	return slog.Int64(string(ExtMcpConnectionRepeatedFailuresKey), int64(v))
+}
+
+func ExtMcpConnectionDuration(v time.Duration) attribute.KeyValue {
+	return ExtMcpConnectionDurationKey.Float64(v.Seconds())
+}
+func SlogExtMcpConnectionDuration(v time.Duration) slog.Attr {
+	return slog.Float64(string(ExtMcpConnectionDurationKey), v.Seconds())
+}
+
+func ExtMcpConnectionSubjectKind(v string) attribute.KeyValue {
+	return ExtMcpConnectionSubjectKindKey.String(v)
+}
+func SlogExtMcpConnectionSubjectKind(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionSubjectKindKey), v)
+}
+
+func ExtMcpConnectionClientName(v string) attribute.KeyValue {
+	return ExtMcpConnectionClientNameKey.String(v)
+}
+func SlogExtMcpConnectionClientName(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionClientNameKey), v)
+}
+
+func ExtMcpConnectionClientVersion(v string) attribute.KeyValue {
+	return ExtMcpConnectionClientVersionKey.String(v)
+}
+func SlogExtMcpConnectionClientVersion(v string) slog.Attr {
+	return slog.String(string(ExtMcpConnectionClientVersionKey), v)
+}
+
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {
 	return slog.String(string(ProductFeatureNameKey), v)
@@ -2976,6 +3345,11 @@ func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(Wo
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
 }
 
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
@@ -3434,6 +3808,8 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
 
+func SlogMcpSessionSubject(v string) slog.Attr { return slog.String(string(McpSessionSubjectKey), v) }
+
 func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
 func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
 
@@ -3563,6 +3939,13 @@ func SlogToolCallDuration(v time.Duration) slog.Attr {
 func ToolCallID(v string) attribute.KeyValue { return ToolCallIDKey.String(v) }
 func SlogToolCallID(v string) slog.Attr      { return slog.String(string(ToolCallIDKey), v) }
 
+func ToolCallInterruptReason(v string) attribute.KeyValue {
+	return ToolCallInterruptReasonKey.String(v)
+}
+func SlogToolCallInterruptReason(v string) slog.Attr {
+	return slog.String(string(ToolCallInterruptReasonKey), v)
+}
+
 func VisibilityInternal() attribute.KeyValue {
 	return VisibilityKey.String(VisibilityInternalValue)
 }
@@ -3649,9 +4032,6 @@ func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCP
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }
-
-func ExternalMCPSlug(v string) attribute.KeyValue { return ExternalMCPSlugKey.String(v) }
-func SlogExternalMCPSlug(v string) slog.Attr      { return slog.String(string(ExternalMCPSlugKey), v) }
 
 func ExternalMCPName(v string) attribute.KeyValue { return ExternalMCPNameKey.String(v) }
 func SlogExternalMCPName(v string) slog.Attr      { return slog.String(string(ExternalMCPNameKey), v) }

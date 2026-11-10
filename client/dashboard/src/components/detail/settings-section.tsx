@@ -1,9 +1,10 @@
 // oxlint-disable react/only-export-components -- compound component (Object.assign) pattern
+import { Spinner } from "@/components/ui/Spinner";
 import { Heading } from "@/components/ui/Heading";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Loader2, SaveIcon } from "lucide-react";
+import { SaveIcon } from "lucide-react";
 import { createContext, type ComponentProps, use } from "react";
 
 type SettingsSectionTone = "default" | "danger";
@@ -196,7 +197,7 @@ export function FooterSaveButton({
     <Button variant="primary" size="md" {...buttonProps}>
       <Button.LeftIcon>
         {pending ? (
-          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+          <Spinner className="mr-0 size-4" />
         ) : (
           <SaveIcon aria-hidden="true" className="size-4" />
         )}

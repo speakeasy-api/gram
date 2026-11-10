@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { ChatMessage } from "@gram/client/models/components/chatmessage.js";
 import type { ClaudeToolUsage } from "@gram/client/models/components/claudetoolusage.js";
@@ -7,6 +8,8 @@ import {
   buildClaudeUsageByMessageId,
   formatByteCount,
   formatDurationFromNanos,
+  isCostUnknown,
+  totalTokensFor,
 } from "./claudeUsage";
 
 let seqCounter = 0;
@@ -118,5 +121,46 @@ describe("formatByteCount", () => {
 describe("formatDurationFromNanos", () => {
   it("carries seconds into minutes", () => {
     expect(formatDurationFromNanos("0", "59999000000")).toBe("1m 0s");
+  });
+
+  it("keeps minutes and seconds under a day", () => {
+    expect(formatDurationFromNanos("0", "86399000000000")).toBe("1439m 59s");
+  });
+
+  it("does not round a duration just under a day up to 1d", () => {
+    // 23h 59m 59.6s rounds to 86400 s but is still under a day.
+    expect(formatDurationFromNanos("0", "86399600000000")).toBe("1440m 0s");
+  });
+
+  it("reads a day or more in days and hours", () => {
+    // 5570m 34s
+    expect(formatDurationFromNanos("0", "334234000000000")).toBe("3d 20h");
+  });
+});
+
+describe("isCostUnknown", () => {
+  it("treats tokens with no cost as an unknown cost", () => {
+    expect(isCostUnknown({ totalCost: 0, totalTokens: 10 })).toBe(true);
+    expect(isCostUnknown({ totalInputTokens: 4, totalOutputTokens: 6 })).toBe(
+      true,
+    );
+  });
+
+  it("keeps a reported cost", () => {
+    expect(isCostUnknown({ totalCost: 0.5, totalTokens: 10 })).toBe(false);
+  });
+
+  it("does not flag a session with no usage at all", () => {
+    expect(isCostUnknown({ totalCost: 0, totalTokens: 0 })).toBe(false);
+    expect(isCostUnknown({})).toBe(false);
+  });
+});
+
+describe("totalTokensFor", () => {
+  it("prefers the reported total and falls back to input plus output", () => {
+    expect(totalTokensFor({ totalTokens: 12, totalInputTokens: 1 })).toBe(12);
+    expect(totalTokensFor({ totalInputTokens: 3, totalOutputTokens: 4 })).toBe(
+      7,
+    );
   });
 });

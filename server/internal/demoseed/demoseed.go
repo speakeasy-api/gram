@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
+	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 )
 
@@ -44,7 +45,7 @@ const (
 // summaries.
 //
 // Pass DefaultSpec() for the shared production demo org.
-func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, spec Spec) (retErr error) {
+func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.Conn, blob assets.BlobStore, enc *encryption.Client, spec Spec) (retErr error) {
 	logger = logger.With(attr.SlogComponent("demoseed"), attr.SlogOrganizationID(spec.OrgID))
 
 	if err := spec.Validate(); err != nil {
@@ -63,8 +64,9 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 	}
 
 	const lockName = "gram-demo-seed"
-	var locked bool
-	if err := conn.QueryRow(ctx, "SELECT pg_try_advisory_lock(hashtext($1))", lockName).Scan(&locked); err != nil {
+	lockQueries := repo.New(conn)
+	locked, err := lockQueries.TryAcquireSeedLock(ctx, lockName)
+	if err != nil {
 		// Cancellation can surface after PostgreSQL acquired the session lock.
 		// Destroy the uncertain session instead of returning it to the pool.
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
@@ -82,8 +84,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), demoSeedLockCleanupTimeout)
 		defer cancel()
 
-		var unlocked bool
-		unlockErr := conn.QueryRow(unlockCtx, "SELECT pg_advisory_unlock(hashtext($1))", lockName).Scan(&unlocked)
+		unlocked, unlockErr := lockQueries.ReleaseSeedLock(unlockCtx, lockName)
 		if unlockErr == nil && unlocked {
 			conn.Release()
 			return
@@ -98,7 +99,7 @@ func Run(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ch driver.C
 		retErr = errors.Join(retErr, fmt.Errorf("release demo seed advisory lock: %w", unlockErr))
 	}()
 
-	s, err := seedPostgres(ctx, logger, conn, blob, spec)
+	s, err := seedPostgres(ctx, logger, conn, blob, enc, spec)
 	if err != nil {
 		return err
 	}
@@ -126,8 +127,11 @@ type txBeginner interface {
 // seedPostgres runs the Postgres seed for spec in one transaction on db, so a
 // failed run leaves the previous data in place. It returns the seeder, whose
 // clock the ClickHouse seed reuses.
-func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, spec Spec) (*seeder, error) {
-	s := &seeder{spec: spec, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
+func seedPostgres(ctx context.Context, logger *slog.Logger, db txBeginner, blob assets.BlobStore, enc *encryption.Client, spec Spec) (*seeder, error) {
+	if enc == nil {
+		return nil, errors.New("demo seed needs the environment's encryption key")
+	}
+	s := &seeder{spec: spec, enc: enc, q: nil, logger: logger, now: time.Time{}, signalSequences: nil}
 	if err := pgx.BeginFunc(ctx, db, func(tx pgx.Tx) error {
 		s.q = repo.New(tx)
 		if err := s.runPostgres(ctx); err != nil {

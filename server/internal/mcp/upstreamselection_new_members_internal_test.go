@@ -209,7 +209,7 @@ func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
 	serve := func(ctx context.Context, preserved bool) []remotemcp.BuildOption {
 		t.Helper()
 		upstream := remotesessions.UpstreamToken{Token: "existing-token"}
-		got, options, err := f.service.agentKeyUngatedUpstream(ctx, httptest.NewRecorder(), testenv.NewLogger(t), "https://mcp.example.com", endpoint, server, f.orgID, upstream, sentinel)
+		got, options, err := f.service.agentKeyUngatedUpstream(ctx, httptest.NewRecorder(), nil, testenv.NewLogger(t), "https://mcp.example.com", endpoint, server, f.orgID, upstream, sentinel)
 		require.NoError(t, err)
 		if preserved {
 			require.Equal(t, upstream, got)

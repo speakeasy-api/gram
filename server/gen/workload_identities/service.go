@@ -66,8 +66,10 @@ type Service interface {
 	// policy, so a caller replaces its view rather than merging into it.
 	UpdateSubject(context.Context, *UpdateSubjectPayload) (res *WorkloadIdentityPolicy, err error)
 	// Withdraw an admitted subject and its agent assignment, stopping it
-	// authenticating. Requires workload:write.
-	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WorkloadIdentityPolicy, err error)
+	// authenticating. A subject can be admitted at the organization and in a
+	// project independently; withdrawing one leaves the other in force, and the
+	// result names the tier removed. Requires workload:write.
+	WithdrawSubject(context.Context, *WithdrawSubjectPayload) (res *WithdrawnWorkloadSubjectPolicy, err error)
 	// Create a single-use join token that enrolls one headless box with no
 	// platform identity as a workload assigned to an agent. The token is returned
 	// once and only its hash is kept. Only a person can create one: a key backed
@@ -303,6 +305,17 @@ type WithdrawSubjectPayload struct {
 	ProjectSlugInput *string
 }
 
+// WithdrawnWorkloadSubjectPolicy is the result type of the workloadIdentities
+// service withdrawSubject method.
+type WithdrawnWorkloadSubjectPolicy struct {
+	// The tier of the admission that was withdrawn: organization or project.
+	WithdrawnTier string
+	// Trusted issuers, organization tier first.
+	Issuers []*types.WorkloadIssuer
+	// Admitted subjects.
+	Admissions []*types.WorkloadAdmission
+}
+
 // WorkloadCustomFlows is the result type of the workloadIdentities service
 // getCustomFlows method.
 type WorkloadCustomFlows struct {
@@ -442,8 +455,27 @@ type WorkloadPlatformConstant struct {
 	Visibility string
 }
 
-// The access rule a catalog platform produces.
+// The access rule a catalog platform produces by default, and the others the
+// operator may choose instead.
 type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternative
+}
+
+// An access rule a catalog platform offers in place of its default.
+type WorkloadPlatformSubjectAlternative struct {
+	// Identifies the choice within the platform.
+	Key string
+	// What the operator chooses it by.
+	Label string
 	// The subject with {key} placeholders for rule-tier variables; the stem, for a
 	// wildcard rule.
 	Template string

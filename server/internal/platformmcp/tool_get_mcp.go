@@ -16,7 +16,7 @@ const GetMCPToolPagingNote = "When tool_exposure.next_tool_cursor is present, to
 func registerGetMCPTool(reg *Registrar, reader Reader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "get_mcp",
-		Title:       "Get One MCP Server",
+		Title:       "Get an MCP Server",
 		Description: "Get a summary of one MCP server already set up in a named project. " + GetMCPToolPagingNote,
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryMCPRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input GetMCPInput) (*mcp.CallToolResult, MCP, error) {

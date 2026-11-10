@@ -1,4 +1,10 @@
 import {
+  redirecting,
+  redirectingClient as sharedRedirectingClient,
+} from "@/lib/adminSdkClient";
+export { isRedirectingToLogin, redirectOnUnauthorized } from "@/lib/adminAuth";
+
+import {
   buildAdminCurateRegistryPromotionCandidateMutation,
   type AdminCurateRegistryPromotionCandidateMutationData,
   type AdminCurateRegistryPromotionCandidateMutationError,
@@ -74,17 +80,11 @@ import { buildAdminListCustomerUsageQuery } from "@gram/admin-client/react-query
 import type { AdminListCustomerUsageRequest } from "@gram/admin-client/models/operations/adminlistcustomerusage";
 import { buildAdminDescribeMcpServerHealthQuery } from "@gram/admin-client/react-query/adminDescribeMcpServerHealth.core";
 import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-query/adminGetMcpServerToolCalls.core";
+import { buildAdminSetMcpServerScopePinMutation } from "@gram/admin-client/react-query/adminSetMcpServerScopePin";
+import type { SetMcpServerScopePinRequestBody } from "@gram/admin-client/models/components/setmcpserverscopepinrequestbody";
+import type { AdminMcpServerResourceScopes } from "@gram/admin-client/models/components/adminmcpserverresourcescopes";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
-import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
-import {
-  buildAdminPreviewExternalMcpMigrationMutation,
-  type AdminPreviewExternalMcpMigrationMutationVariables,
-} from "@gram/admin-client/react-query/adminPreviewExternalMcpMigration";
-import {
-  buildAdminMigrateExternalMcpServersMutation,
-  type AdminMigrateExternalMcpServersMutationVariables,
-} from "@gram/admin-client/react-query/adminMigrateExternalMcpServers";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -146,7 +146,6 @@ import {
 } from "@tanstack/react-query";
 
 import { GramCore } from "@gram/admin-client/core";
-import { HTTPClient } from "@gram/admin-client/lib/http";
 import { buildAdminGetSessionQuery } from "@gram/admin-client/react-query/adminGetSession.core";
 import {
   buildAdminListOrganizationActivityInfiniteQuery,
@@ -160,6 +159,8 @@ import { buildSetAdminOrganizationOnboardingStackMutation } from "@gram/admin-cl
 import type { AdminOnboardingStack } from "@gram/admin-client/models/components/adminonboardingstack";
 import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
+import { adminSetOrganizationProviderSetup } from "@gram/admin-client/funcs/adminSetOrganizationProviderSetup";
+import type { SetOrganizationProviderSetupRequestBody } from "@gram/admin-client/models/components/setorganizationprovidersetuprequestbody";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/models/operations/admingetorganizationfeatures";
@@ -169,56 +170,7 @@ import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/mod
 // fetch defaults preserve the ambient first-party gram_admin cookie; do not set
 // credentials, mode, Authorization, or Cookie here.
 const mutationClient = new GramCore({ serverURL: window.location.origin });
-const redirectingHTTPClient = new HTTPClient().addHook("response", (response) =>
-  startLoginRedirect(response),
-);
-const redirectingClient = new GramCore({
-  serverURL: window.location.origin,
-  httpClient: redirectingHTTPClient,
-});
-
-let redirectingToLogin = false;
-
-export function isRedirectingToLogin(): boolean {
-  return redirectingToLogin;
-}
-
-function statusCode(error: unknown): number | undefined {
-  if (!error || typeof error !== "object") return undefined;
-  if ("statusCode" in error && typeof error.statusCode === "number") {
-    return error.statusCode;
-  }
-  if ("status" in error && typeof error.status === "number") {
-    return error.status;
-  }
-  return undefined;
-}
-
-function startLoginRedirect(error: unknown): void {
-  if (statusCode(error) === 401 && !redirectingToLogin) {
-    const returnTo = encodeURIComponent(
-      window.location.pathname + window.location.search,
-    );
-    redirectingToLogin = true;
-    window.location.href = `/admin/auth.login?return_to=${returnTo}&prompt=consent`;
-  }
-}
-
-// Shared by generated operations and the handwritten predecessor during the
-// consumer migration. Assignment starts navigation but does not unwind callers,
-// so the original error remains the operation result.
-export function redirectOnUnauthorized(error: unknown): never {
-  startLoginRedirect(error);
-  throw error;
-}
-
-async function redirecting<T>(operation: Promise<T>): Promise<T> {
-  try {
-    return await operation;
-  } catch (error) {
-    return redirectOnUnauthorized(error);
-  }
-}
+const redirectingClient = sharedRedirectingClient();
 
 function createAdminSessionQuery() {
   const generated = buildAdminGetSessionQuery(redirectingClient);
@@ -349,6 +301,30 @@ function createMcpServerHealthQuery(
     },
     staleTime: 30_000,
   });
+}
+
+// Every health read in one project. A pin applies to every server in the
+// project that shares its upstream URL, so a pin write changes what each of
+// them reports.
+export function mcpServerHealthProjectKey(
+  organizationIdOrSlug: string,
+  projectId: string,
+): readonly [string, string, string] {
+  return [
+    "gram-admin-mcp-server-health",
+    organizationIdOrSlug,
+    projectId,
+  ] as const;
+}
+
+export function adminSetMcpServerScopePin(
+  request: SetMcpServerScopePinRequestBody,
+): Promise<AdminMcpServerResourceScopes> {
+  return redirecting(
+    buildAdminSetMcpServerScopePinMutation(redirectingClient).mutationFn({
+      request,
+    }),
+  );
 }
 
 // Tool call telemetry for the same server, keyed the same way so the two
@@ -513,6 +489,14 @@ export function setAdminOrganizationFeature(
   request: SetOrganizationFeatureRequestBody,
 ): Promise<ProductFeatures> {
   return generatedFeatureMutation.mutationFn({ request });
+}
+
+export function setAdminOrganizationProviderSetup(
+  request: SetOrganizationProviderSetupRequestBody,
+): Promise<ProductFeatures> {
+  return unwrapAsync(
+    adminSetOrganizationProviderSetup(mutationClient, request),
+  );
 }
 
 type SetFeatureMutationOptions = Omit<
@@ -1191,45 +1175,6 @@ export function disableUpstreamAuthEnforcement(
   return redirecting(
     generatedDisableUpstreamAuthEnforcementMutation.mutationFn({
       request: { organizationId: organizationID },
-    }),
-  );
-}
-
-function createAdminListExternalMcpMigrationCandidatesQuery() {
-  const generated =
-    buildAdminListExternalMcpMigrationCandidatesQuery(redirectingClient);
-  return queryOptions({
-    ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
-  });
-}
-
-export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
-  typeof createAdminListExternalMcpMigrationCandidatesQuery
-> {
-  return createAdminListExternalMcpMigrationCandidatesQuery();
-}
-
-export function adminPreviewExternalMcpMigration(
-  request: AdminPreviewExternalMcpMigrationMutationVariables["request"],
-): ReturnType<
-  ReturnType<typeof buildAdminPreviewExternalMcpMigrationMutation>["mutationFn"]
-> {
-  return redirecting(
-    buildAdminPreviewExternalMcpMigrationMutation(redirectingClient).mutationFn(
-      { request },
-    ),
-  );
-}
-
-export function adminMigrateExternalMcpServers(
-  request: AdminMigrateExternalMcpServersMutationVariables["request"],
-): ReturnType<
-  ReturnType<typeof buildAdminMigrateExternalMcpServersMutation>["mutationFn"]
-> {
-  return redirecting(
-    buildAdminMigrateExternalMcpServersMutation(redirectingClient).mutationFn({
-      request,
     }),
   );
 }

@@ -15,7 +15,7 @@ Turn an AICP Watchdog review into a concise, channel-neutral digest: establish t
 - Require an explicit project slug or ID from the user or saved task instructions. Do not silently choose the Default project. A request explicitly naming the Default project is sufficient.
 - If an expected organization ID is configured, require an exact match. Otherwise report the connection's organization ID and ask the user to confirm it before reading findings. Never infer an organization name from its ID.
 - This skill only returns a digest. Do not send messages, create schedules, or change policies, exclusions, or MCP configuration. Delivery and scheduling belong to separate user instructions and independently authorized connectors. No delivery connector is required to run this skill.
-- Never request or expose credentials. If authentication or permissions fail, stop and ask the user to reconnect or obtain access through the approved setup flow.
+- Never request or expose credentials. If authentication fails, stop and follow the `platform-sign-in` workflow to sign this client in. If permissions fail, stop and ask the user to obtain access through the approved setup flow.
 
 ## Read workflow
 

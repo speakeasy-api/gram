@@ -26,9 +26,14 @@ const (
 	// connection.
 	ActionAgentConnectionBlockCreate Action = "agent:connection_block_create"
 	ActionAgentConnectionBlockDelete Action = "agent:connection_block_delete"
-	ActionAgentOwnerLoss             Action = "agent:owner_loss"
-	ActionAgentTransfer              Action = "agent:transfer"
-	ActionAgentReassign              Action = "agent:reassign"
+	// A person attached their own connection to an agent, or detached it.
+	// Recorded alongside remote-session:attach and remote-session:detach,
+	// whose subject is the connection, so the agent's own history shows it.
+	ActionAgentConnectionAttach Action = "agent:connection_attach"
+	ActionAgentConnectionDetach Action = "agent:connection_detach"
+	ActionAgentOwnerLoss        Action = "agent:owner_loss"
+	ActionAgentTransfer         Action = "agent:transfer"
+	ActionAgentReassign         Action = "agent:reassign"
 )
 
 // AgentSnapshot is the bounded, organization-visible audit projection of an
@@ -82,6 +87,7 @@ func (l *Logger) LogAgent(ctx context.Context, dbtx repo.DBTX, event LogAgentEve
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
@@ -114,6 +120,7 @@ func (l *Logger) LogAgentPolicyGrant(ctx context.Context, dbtx repo.DBTX, event 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:         false,
 		OrganizationID:     event.OrganizationID,
 		ProjectID:          uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ActorID:            event.Actor.ID,
@@ -130,6 +137,58 @@ func (l *Logger) LogAgentPolicyGrant(ctx context.Context, dbtx repo.DBTX, event 
 		Metadata:           nil,
 		ActingSurface:      conv.ToPGTextEmpty(""),
 		ActingClientID:     conv.ToPGTextEmpty(""),
+	}
+
+	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AgentV1})
+}
+
+// AgentConnectionMetadata names the connection a person attached to an agent
+// or detached from it.
+type AgentConnectionMetadata struct {
+	BindingID             uuid.UUID `json:"binding_id"`
+	RemoteSessionID       uuid.UUID `json:"remote_session_id"`
+	RemoteSessionClientID uuid.UUID `json:"remote_session_client_id"`
+	UserSessionIssuerID   uuid.UUID `json:"user_session_issuer_id"`
+	// UpstreamAccount is the upstream account the connection signs in as,
+	// when the connection reports one.
+	UpstreamAccount string `json:"upstream_account,omitempty"`
+}
+
+type LogAgentConnectionEvent struct {
+	OrganizationID   string
+	ProjectID        uuid.UUID
+	AgentURN         urn.Identity
+	Actor            urn.Principal
+	ActorDisplayName *string
+	Action           Action
+	Name             string
+	Metadata         AgentConnectionMetadata
+}
+
+func (l *Logger) LogAgentConnection(ctx context.Context, dbtx repo.DBTX, event LogAgentConnectionEvent) error {
+	metadata, err := marshalAuditPayload(event.Metadata)
+	if err != nil {
+		return fmt.Errorf("marshal %s metadata: %w", event.Action, err)
+	}
+
+	entry := repo.InsertAuditLogParams{
+		OrganizationID:     event.OrganizationID,
+		ProjectID:          uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
+		ActorID:            event.Actor.ID,
+		ActorType:          string(event.Actor.Type),
+		ActorDisplayName:   conv.PtrToPGTextEmpty(event.ActorDisplayName),
+		ActorSlug:          conv.ToPGTextEmpty(""),
+		Action:             string(event.Action),
+		SubjectID:          event.AgentURN.ID,
+		SubjectType:        string(subjectTypeAgent),
+		SubjectDisplayName: conv.ToPGTextEmpty(event.Name),
+		SubjectSlug:        conv.ToPGTextEmpty(""),
+		BeforeSnapshot:     nil,
+		AfterSnapshot:      nil,
+		Metadata:           metadata,
+		ActingSurface:      conv.ToPGTextEmpty(""),
+		ActingClientID:     conv.ToPGTextEmpty(""),
+		IsInternal:         false,
 	}
 
 	return l.log(ctx, dbtx, auditEntry{Params: entry, OutboxEvent: events.AgentV1})

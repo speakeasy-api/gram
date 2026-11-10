@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
+	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
 )
 
@@ -445,4 +446,104 @@ func TestErrorTypeLooksThroughWrappingForANamedType(t *testing.T) {
 	require.Equal(t, "custom.Named", errorType(namedError{}))
 	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", namedError{})))
 	require.Equal(t, "custom.Named", errorType(fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", namedError{}))))
+}
+
+func connectionRecordWith(key string) log.Record {
+	var record log.Record
+	record.SetEventName("speakeasy.mcp_connection")
+	record.SetTimestamp(time.Unix(1_700_000_000, 0))
+	record.AddAttributes(log.String(key, "value"))
+	return record
+}
+
+func TestLogAllowsTheExportedConnectionKeysOnlyUnderTheConnectionSource(t *testing.T) {
+	t.Parallel()
+
+	ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	logger := NewLogger(publisher, resource.Empty(), testScope, WithProvenanceSource(dialect.ConnectionLogSource))
+	require.NoError(t, logger.Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")))
+	require.Len(t, *published, 1)
+	require.Equal(t, "value", attributeValue((*published)[0], "speakeasy.mcp_connection.outcome"))
+	require.Equal(t, dialect.ConnectionLogSource, (*published)[0].GetProvenance().GetSource())
+
+	publisher, published = capture(t, gcp.NewSuccessPublishResult())
+	require.ErrorContains(t, testLogger(publisher).Log(ctx, connectionRecordWith("speakeasy.mcp_connection.outcome")), "reserved namespace")
+	require.Empty(t, *published)
+}
+
+func TestLogStampsTheIngestSourceByDefault(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewSuccessPublishResult())
+	ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+	require.NoError(t, testLogger(publisher).Log(ctx, connectionRecordWith("gram.session.id")))
+	require.Len(t, *published, 1)
+	require.Equal(t, otelsvc.ProvenanceSource, (*published)[0].GetProvenance().GetSource())
+}
+
+func TestLogRefusesForgedTenancyKeys(t *testing.T) {
+	t.Parallel()
+
+	for _, key := range []string{"speakeasy.project.id", "speakeasy.organization.id", "speakeasy.api_key.id", "speakeasy.user.roles", "speakeasy.original_instrumentation_scope.name"} {
+		publisher, published := capture(t, gcp.NewSuccessPublishResult())
+		ctx := WithRecordID(WithTenant(t.Context(), testOrganizationID, testProjectID.String()), "attempt-1")
+
+		err := testLogger(publisher).Log(ctx, connectionRecordWith(key))
+		require.ErrorContains(t, err, "reserved namespace", key)
+		require.Empty(t, *published, key)
+	}
+}
+
+// pendingResult never settles until released, like a publish Pub/Sub has not acked.
+type pendingResult struct{ ready chan struct{} }
+
+func (r pendingResult) Ready() <-chan struct{} { return r.ready }
+
+func (r pendingResult) Get(ctx context.Context) (string, error) {
+	select {
+	case <-r.ready:
+		return "server-id", nil
+	case <-ctx.Done():
+		return "", fmt.Errorf("wait for ack: %w", ctx.Err())
+	}
+}
+
+func TestPublishReturnsBeforeTheAck(t *testing.T) {
+	t.Parallel()
+
+	pending := pendingResult{ready: make(chan struct{})}
+	publisher, published := capture(t, pending)
+	ctx := WithTenant(t.Context(), testOrganizationID, testProjectID.String())
+
+	result := testLogger(publisher).Publish(ctx, toolCallRecord(time.Now()))
+	require.Len(t, *published, 1, "the record reached the publisher")
+	select {
+	case <-result.Ready():
+		require.Fail(t, "the result settled before Pub/Sub acked")
+	default:
+	}
+
+	close(pending.ready)
+	_, err := result.Get(t.Context())
+	require.NoError(t, err)
+}
+
+func TestPublishSettlesWithWhatLogWouldReturn(t *testing.T) {
+	t.Parallel()
+
+	publisher, published := capture(t, gcp.NewErrPublishResult(errors.New("pubsub unavailable")))
+	_, err := testLogger(publisher).Publish(t.Context(), toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorContains(t, err, "no tenancy in context")
+	require.Empty(t, *published)
+
+	ctx := WithTenant(t.Context(), testOrganizationID, testProjectID.String())
+	_, err = testLogger(publisher).Publish(ctx, toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorContains(t, err, "publish log record: pubsub unavailable")
+
+	logger := testLogger(publisher)
+	logger.Close()
+	_, err = logger.Publish(ctx, toolCallRecord(time.Now())).Get(t.Context())
+	require.ErrorIs(t, err, ErrClosed)
 }

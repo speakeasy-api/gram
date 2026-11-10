@@ -102,7 +102,7 @@ func registerRiskPresetTools(reg *Registrar) {
 
 	addTool(reg, &mcp.Tool{
 		Name:        "suggest_risk_policy",
-		Title:       "Suggest Risk Policy",
+		Title:       "Suggest a Risk Policy",
 		Description: "Turn a plain-language description of a risk into a policy draft without creating anything: the closest preset with its detectors, action and severity, or a bespoke prompt-based guardrail carrying the description as its instruction when no preset fits. The match is a deterministic keyword mapping over the preset catalog; you are the model, so refine the draft with the administrator before creating it. Returns the draft in create_risk_policy's shape plus the runner-up presets. The draft carries no mcp_scope, so as returned it applies to the agent sessions the project observes and is not enforced at an MCP server for other callers; can_scope_to_mcp says whether create_risk_policy accepts an mcp_scope for it.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: closedObject(map[string]*jsonschema.Schema{

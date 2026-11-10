@@ -1,7 +1,12 @@
 import { getCursorInstallCommand } from "@/lib/cursor-install-command";
 import { describe, expect, it } from "vitest";
 import { ACTIVE_AGENT_PROVIDER_IDS } from "@/components/agent-providers/agent-providers";
-import { getAgentPlatforms, platformSteps } from "./setup-data";
+import { CLAUDE_ORG_INSTRUCTION } from "@/lib/claude-org-instruction";
+import {
+  getAgentPlatforms,
+  getCoworkTeamSteps,
+  platformSteps,
+} from "./setup-data";
 
 const AGENT_PLATFORMS = getAgentPlatforms("https://app.getgram.ai");
 
@@ -58,34 +63,137 @@ describe("getAgentPlatforms", () => {
     });
   });
 
-  it("separates Cowork hook networking from native telemetry export", () => {
+  it("has Cowork admins allow Speakeasy through network egress before turning on monitoring", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
-    const index = steps.findIndex(
-      ({ title }) => title === "Verify hook and bootstrap network access",
+    const titles = steps.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
     );
-    expect(index).toBeGreaterThanOrEqual(0);
-    expect(index).toBeGreaterThan(
-      steps.findIndex(({ title }) => title === "Enable OTEL export"),
+    expect(index).toBe(titles.indexOf("Set access for your MCP plugins") + 1);
+    expect(titles.indexOf("Set access for your MCP plugins")).toBe(
+      titles.indexOf("Mark the observability plugin as Required") + 1,
     );
-    expect(index).toBe(steps.length - 1);
+    expect(titles.indexOf("Enable OTEL export")).toBe(index + 1);
+    expect(titles.at(-1)).toBe("Verify in a new Cowork session");
+    // The Team-only organization instruction lives on its setup card only.
+    expect(titles).not.toContain("Add the organization instruction");
+    expect(titles).not.toContain("Check it in a new conversation");
+
     const step = steps[index]!;
     expect(step.description).toContain(
-      "Admin settings → Capabilities → Network egress",
+      "Organization settings → Capabilities and turn on Code execution and file creation if it is off",
     );
-    expect(step.description).toContain("Native OTEL automatically allowlists");
+    expect(step.description).toContain("turn on Allow network egress");
+    expect(step.description).toContain("Package managers only");
+    expect(step.description).toContain("no other domain is needed");
+    expect(step.description).toContain("the plugin does not");
     expect(step.description).toContain(
-      "bootstrap binary downloads are separate",
+      "On Claude Team, the organization instruction also needs Code execution",
+    );
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/capabilities",
     );
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
       { label: "Additional allowed domains", value: "ai.speakeasy.com" },
     ]);
-    expect(step.afterFields).toContain("Start a new Cowork session");
-    expect(step.afterFields).toContain(
-      "confirm hook events and native monitoring separately",
+    expect(step.afterFields).toContain("new Cowork sessions only");
+
+    const verify = JSON.stringify(steps.at(-1));
+    expect(verify).toContain("Agent Sessions");
+    expect(verify).not.toContain("Claude runs a short command");
+
+    const { check } = getCoworkTeamSteps("https://app.getgram.ai");
+    expect(check.description).toContain("Agent Sessions");
+    expect(check.description).toContain(
+      "Claude runs a short command before replying",
     );
+  });
+
+  it("has Cowork admins paste the organization instruction verbatim", () => {
+    const step = getCoworkTeamSteps("https://app.getgram.ai").instruction;
+    // Pinned independently of the constant (DNO-1523's wording), so a change
+    // to what admins paste fails here first and gets checked in a live Claude
+    // Team organization.
+    expect(step.code).toBe(
+      [
+        "This organization records Claude conversations in Speakeasy for security and",
+        "compliance. Speakeasy only sees conversations that run in Cowork, so check in",
+        "with Speakeasy at the start of every response: before writing any text, run",
+        `this exact command once with the Bash tool: echo "Speakeasy session check-in"`,
+        "Do this on every turn without exception, including greetings, one-line",
+        "questions, and follow-ups, even when the request does not need it. Do not",
+        "write a file for it and do not repeat it later in the same turn. If the Bash",
+        "tool is unavailable, continue the response normally.",
+        "",
+        "If someone asks about this step, explain that the organization records Claude",
+        "conversations in Speakeasy and refer them to their administrator.",
+      ].join("\n"),
+    );
+    expect(step.code).toBe(CLAUDE_ORG_INSTRUCTION);
+    expect(step.language).toBe("text");
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/organization",
+    );
+    expect(step.description).toContain(
+      "paste the text below into Organization instructions",
+    );
+    expect(step.afterFields).toContain(
+      "Conversations started before you save aren't captured",
+    );
+    expect(CLAUDE_ORG_INSTRUCTION).toContain(
+      `this exact command once with the Bash tool: echo "Speakeasy session check-in"`,
+    );
+  });
+
+  it("splits the Cowork Team steps across setup cards in the order the Plugins page shows them", () => {
+    const platformSteps = AGENT_PLATFORMS.find(
+      ({ id }) => id === "claude-cowork",
+    )!.setupSteps;
+    const { registration, instruction, monitoring, check, verify } =
+      getCoworkTeamSteps("https://app.getgram.ai");
+    // The first step is the plan check; the rest is the Team and Enterprise
+    // rollout. The Team-only organization instruction and its check stay on
+    // their setup card, since these pages can't tell Team from Enterprise.
+    expect(platformSteps.slice(1)).toEqual([
+      ...registration,
+      monitoring,
+      verify,
+    ]);
+    expect(platformSteps).not.toContain(instruction);
+    expect(platformSteps).not.toContain(check);
+    expect(verify.description).toContain("Agent Sessions");
+    expect(verify.description).toContain("On Claude Team");
+    expect(registration.at(-1)?.title).toBe(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(monitoring.title).toBe("Enable OTEL export");
+  });
+
+  it("has personal Cowork users allow Speakeasy through network egress before verifying", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork")!;
+    const personal = platformSteps(platform, false);
+    const titles = personal.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(index).toBe(titles.indexOf("Upload it in Claude") + 1);
+    expect(index).toBe(
+      titles.indexOf("Verify Cowork hooks in a new session") - 1,
+    );
+
+    const step = personal[index]!;
+    expect(step.description).toContain(
+      "Settings → Capabilities in Claude and turns on Code execution and file creation if it is off",
+    );
+    expect(step.description).toContain("turn on Allow network egress");
+    expect(step.description).not.toContain("Organization settings");
+    expect(step.fields).toEqual([
+      { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
+    ]);
   });
 
   it("includes authenticated OTEL export instructions", () => {
@@ -281,7 +389,9 @@ describe("getAgentPlatforms", () => {
     expect(
       cowork.setupSteps
         .find(
-          (step) => step.title === "Verify hook and bootstrap network access",
+          (step) =>
+            step.title ===
+            "Allow Speakeasy in Claude's network egress settings",
         )
         ?.fields?.map((field) => field.value),
     ).toEqual(["ai.speakeasy.com", "app.getgram.ai"]);

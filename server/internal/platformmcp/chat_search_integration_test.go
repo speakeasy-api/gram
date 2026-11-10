@@ -611,3 +611,28 @@ func TestChatSearchKeepsNumericUsageCounters(t *testing.T) {
 	require.NotContains(t, text, "123456")
 	require.NotContains(t, text, "456789")
 }
+
+// A cron chat captured before cron titles stored its raw envelope; search and
+// read name it after its job, as the dashboard does.
+func TestChatSearchNamesStoredCronEnvelopesAfterTheirJob(t *testing.T) {
+	t.Parallel()
+	f := newChatSearchFixture(t)
+	ctx := f.context(t.Context())
+	chatID := f.chat(t, ctx, "user_fixture_cron_owner", "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skills")
+	anchor := seedRecallMessage(t, ctx, f.db, chatID, f.project.ID, recallMessageSeed{role: "user", content: "Review the skill collection", at: f.base})
+
+	output, err := f.service.Search(ctx, f.principal, f.search("skill collection"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Equal(t, "Cron: weekly-skill-review", output.Hits[0].ChatTitle)
+
+	// The title as shown matches too, though the stored envelope reads otherwise.
+	output, err = f.service.Search(ctx, f.principal, f.search("Cron: weekly-skill"))
+	require.NoError(t, err)
+	require.Len(t, output.Hits, 1)
+	require.Equal(t, anchor.String(), output.Hits[0].MessageID)
+
+	read, err := f.service.Read(ctx, f.principal, ReadChatInput{ProjectID: f.project.ID.String(), ChatID: chatID.String(), MessageID: anchor.String()})
+	require.NoError(t, err)
+	require.Equal(t, "Cron: weekly-skill-review", read.ChatTitle)
+}

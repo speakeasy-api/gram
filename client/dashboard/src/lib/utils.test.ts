@@ -142,4 +142,15 @@ describe("partner signup redirect", () => {
     expect(url.searchParams.get("org_name")).toBe("Acme");
     expect(url.searchParams.get("redirect")).toBe("/welcome");
   });
+
+  it("adds sign-up attribution params", () => {
+    const url = new URL(
+      buildLoginRedirectURL("/welcome", "Acme", undefined, undefined, {
+        utm_source: "linkedin",
+        analytics_session_id: "sess-123",
+      }),
+    );
+    expect(url.searchParams.get("utm_source")).toBe("linkedin");
+    expect(url.searchParams.get("analytics_session_id")).toBe("sess-123");
+  });
 });

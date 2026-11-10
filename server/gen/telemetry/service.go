@@ -120,6 +120,10 @@ type Service interface {
 	// and recent tool-call counts plus the last tool-call time, so the listing can
 	// flag servers that have never received a tool call or that have gone quiet.
 	GetMcpServerActivity(context.Context, *GetMcpServerActivityPayload) (res *GetMcpServerActivityResult, err error)
+	// Get recent per-MCP-server tool-call activity for every project in the
+	// organization the caller can read, in one request. Only the recent window is
+	// scanned.
+	GetOrgMcpServerActivity(context.Context, *GetOrgMcpServerActivityPayload) (res *GetOrgMcpServerActivityResult, err error)
 	// List hook traces aggregated by trace_id with user information
 	ListHooksTraces(context.Context, *ListHooksTracesPayload) (res *ListHooksTracesResult, err error)
 }
@@ -146,7 +150,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [38]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [39]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "getOrgMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -449,6 +453,25 @@ type GetObservabilityOverviewResult struct {
 	IntervalSeconds int64
 }
 
+// GetOrgMcpServerActivityPayload is the payload type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityPayload struct {
+	SessionToken *string
+	// Size of the recent-activity window in days. A server with tool calls in the
+	// overall lookback window but none inside this window is flagged as stale.
+	// Defaults to 14.
+	RecentWindowDays int
+}
+
+// GetOrgMcpServerActivityResult is the result type of the telemetry service
+// getOrgMcpServerActivity method.
+type GetOrgMcpServerActivityResult struct {
+	// One entry per readable project whose activity was read
+	Projects []*ProjectMcpServerActivity
+	// The recent-activity window size in days that was applied
+	RecentWindowDays int
+}
+
 // GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
 // service getOrganizationGatewayOverview method.
 type GetOrganizationGatewayOverviewPayload struct {
@@ -491,6 +514,9 @@ type GetProjectOverviewPayload struct {
 	From string
 	// End time in ISO 8601 format
 	To string
+	// Also return the project home usage breakdowns (usage_by_user,
+	// usage_by_agent, mcp_usage) in the same response
+	IncludeUsage bool
 }
 
 // GetProjectOverviewResult is the result type of the telemetry service
@@ -498,10 +524,18 @@ type GetProjectOverviewPayload struct {
 type GetProjectOverviewResult struct {
 	// Current period summary metrics
 	Summary *ProjectOverviewSummary
-	// Previous period summary metrics for trend calculation
-	Comparison *ProjectOverviewSummary
-	// Indicates whether metrics are session-based or tool-call-based
-	MetricsMode string
+	// Agent usage grouped by user email, ranked by LLM tokens (top 100, no time
+	// series). Only set when include_usage is true and the caller has org:read.
+	UsageByUser *QueryResult
+	// Agent usage grouped by hook source, ranked by LLM tokens (top 10, no time
+	// series). Only set when include_usage is true and usage_by_user has agent
+	// usage.
+	UsageByAgent *QueryResult
+	// External end user and tool usage summary. Only set when include_usage is
+	// true and usage_by_user shows no agent usage, which includes when that read
+	// fails or the caller lacks org:read. Do not treat its presence as proof the
+	// project has no agent usage.
+	McpUsage *ProjectMcpUsage
 }
 
 // GetToolUsageClientToolBreakdownPayload is the payload type of the telemetry
@@ -1336,14 +1370,6 @@ type HooksUserSummary struct {
 	FailureRate float64
 }
 
-// Usage breakdown by LLM client/agent
-type LLMClientUsage struct {
-	// Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-	ClientName string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
-}
-
 // ListAttributeKeysPayload is the payload type of the telemetry service
 // listAttributeKeys method.
 type ListAttributeKeysPayload struct {
@@ -1622,29 +1648,58 @@ type ObservabilitySummary struct {
 	AvgLatencyMs float64
 }
 
+// Tool calls made by one external end user
+type ProjectMcpEndUser struct {
+	// External end user ID
+	UserID string
+	// Number of tool calls
+	ToolCalls int64
+}
+
+// Recent MCP server activity for one project
+type ProjectMcpServerActivity struct {
+	// The project the activity belongs to
+	ProjectID string
+	// One entry per MCP server in the project with at least one tool call inside
+	// the recent window
+	Activity []*McpServerActivity
+}
+
+// Calls and failures for one tool made by external end users
+type ProjectMcpToolUsage struct {
+	// Tool URN, or the tool name for agent hook events
+	Urn string
+	// Number of calls
+	Calls int64
+	// Number of failed calls
+	Failures int64
+}
+
+// External end user and MCP tool usage for a project in a time period
+type ProjectMcpUsage struct {
+	// Number of distinct external end users with activity in the period
+	EndUsersCount int64
+	// Top 5 external end users by tool calls
+	TopEndUsers []*ProjectMcpEndUser
+	// Top 5 tools by calls
+	TopTools []*ProjectMcpToolUsage
+	// Top 5 tools with at least one failure, ranked by failure rate, then by
+	// failures
+	TopFailingTools []*ProjectMcpToolUsage
+}
+
 // Aggregated project-level summary metrics for a time period
 type ProjectOverviewSummary struct {
 	// Total number of chat sessions
 	TotalChats int64
-	// Number of resolved chat sessions
-	ResolvedChats int64
-	// Number of failed chat sessions
-	FailedChats int64
 	// Total number of tool calls
 	TotalToolCalls int64
 	// Number of failed tool calls
 	FailedToolCalls int64
 	// Number of MCP servers with at least one tool call in the time period
 	ActiveServersCount int64
-	// Number of unique users with activity in the time period
-	ActiveUsersCount int64
-	// Top 10 users by activity (# of messages or tool calls depending on
-	// metrics_mode)
-	TopUsers []*TopUser
 	// Top 10 MCP servers by tool call count
 	TopServers []*TopServer
-	// Breakdown of messages/activity by LLM client/agent
-	LlmClientBreakdown []*LLMClientUsage
 }
 
 // Aggregated metrics
@@ -2515,6 +2570,31 @@ type ToolUsageTraceSummary struct {
 	// Display name of the dispatching gateway; a deleted gateway keeps its last
 	// name
 	ViaMetaMcpServerName *string
+	// Kind of the dispatching gateway: project for a gateway stored in a project,
+	// organization for the organization gateway, agent for an agent's gateway;
+	// absent when the gateway id resolves to no gateway of the organization
+	ViaMetaMcpServerKind *string
+	// Slug of the project whose page shows the dispatching gateway: the project
+	// holding a project gateway, or the project an organization gateway was
+	// restricted to; absent when the gateway or its project is deleted, and for an
+	// organization gateway serving the whole organization
+	ViaMetaMcpServerProjectSlug *string
+	// Agent whose gateway dispatched this call; absent for other gateway kinds and
+	// when the agent is deleted
+	ViaMetaMcpServerAgentID *string
+	// Kind of the gateway the call reached when target_type is meta_mcp_server:
+	// project for a gateway stored in a project, organization for the organization
+	// gateway, agent for an agent's gateway; absent for other targets and when the
+	// gateway id resolves to no gateway of the organization
+	TargetMetaMcpServerKind *string
+	// Slug of the project whose page shows the gateway the call reached: the
+	// project holding a project gateway, or the project an organization gateway
+	// was restricted to; absent when the gateway or its project is deleted, and
+	// for an organization gateway serving the whole organization
+	TargetMetaMcpServerProjectSlug *string
+	// Agent whose gateway the call reached; absent for other gateway kinds and
+	// when the agent is deleted
+	TargetMetaMcpServerAgentID *string
 	// Stable MCP client identity used by filters; 'unattributed' when the caller
 	// never reported one
 	ClientKey string
@@ -2612,16 +2692,6 @@ type TopServer struct {
 	ServerName string
 	// Total number of tool calls
 	ToolCallCount int64
-}
-
-// Top user by activity
-type TopUser struct {
-	// User ID (internal or external depending on availability)
-	UserID string
-	// Type of user ID
-	UserType string
-	// Number of messages (session mode) or tool calls (tool_call mode)
-	ActivityCount int64
 }
 
 // Per-dimension billed token breakdown for the usage details table

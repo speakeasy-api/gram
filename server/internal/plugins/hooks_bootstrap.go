@@ -40,6 +40,15 @@ func hooksReleaseTargets(version string, sha256s map[string]string) map[string]h
 // allowlisted for ingest.
 var hooksBinaryTargets = hooksReleaseTargets(hooksBinaryVersion, hooksBinarySHA256s)
 
+// Values of GenerateConfig.InstallRoute. The speakeasy-hooks binary's own
+// install command writes "hooks_install".
+const (
+	InstallRouteMarketplace  = "marketplace"
+	InstallRouteDownload     = "download"
+	InstallRouteAgentInstall = "agent_install"
+	InstallRouteDogfood      = "dogfood"
+)
+
 func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 	b, err := json.MarshalIndent(relay.FileConfig{
 		ServerURL: cfg.ServerURL,
@@ -55,7 +64,8 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		// Legacy observability-mode flag; new plugins never set it. Outage
 		// tolerance flows to the binary at run time via ingest effects
 		// (hooks_fail_open), not through baked configuration.
-		Nonblocking: false,
+		Nonblocking:  false,
+		InstallRoute: cfg.InstallRoute,
 	}, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("marshal speakeasy.json: %w", err)
@@ -87,6 +97,9 @@ func hooksDownloadHost(serverURL string) string {
 	}
 	return serverURL
 }
+
+// LatestHooksVersion is the hooks release new installs get.
+func LatestHooksVersion() string { return hooksBinaryVersion }
 
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
 	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), cfg.InstallFailOpen, hooksDownloadHost(cfg.ServerURL))

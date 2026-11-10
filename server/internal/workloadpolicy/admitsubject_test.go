@@ -120,6 +120,22 @@ func TestAdmitSubject_RefusesAStarInAnExactSubject(t *testing.T) {
 	require.ErrorIs(t, err, workloadidentity.ErrExactSubjectHasWildcard)
 }
 
+func TestAdmitSubject_RefusesAMalformedWorkloadIdentifier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	// A conformant issuer never signs a wimse:// subject with a query, so the
+	// rule would be saved and then match nothing.
+	_, err := admit(t, ctx, ti, channelOne+"?x=1", string(workloadidentity.MatchKindExact), agentID)
+	requireOopsCode(t, err, oops.CodeInvalid)
+	require.ErrorIs(t, err, workloadidentity.ErrURISubjectMalformed)
+	// The reason reaches the caller, so the operator knows what to fix.
+	require.ErrorContains(t, err, "a query or fragment is not allowed")
+}
+
 func TestAdmitSubject_RefusesAnUnregisteredIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

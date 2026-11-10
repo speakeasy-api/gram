@@ -1,3 +1,4 @@
+import { Spinner } from "@/components/ui/Spinner";
 import { MCPStatusIndicator } from "@/components/mcp/MCPStatusIndicator";
 import { Badge } from "@/components/ui/Badge";
 import { Icon } from "@/components/ui/Icon";
@@ -14,7 +15,7 @@ import { useListAssets } from "@gram/client/react-query/listAssets.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useRoutes } from "@/routes";
 import { cn } from "@/lib/utils";
-import { Download, Loader2 } from "lucide-react";
+import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { downloadSourceFile, sourceDownloadFilename } from "./sourceDownload";
@@ -525,7 +526,7 @@ export function SourceDownloadButton({
         <Button.Text>{label}</Button.Text>
         <Button.RightIcon>
           {isDownloading ? (
-            <Loader2 className="size-4 animate-spin" />
+            <Spinner className="mr-0 size-4" />
           ) : (
             <Download className="size-4" />
           )}
@@ -545,7 +546,7 @@ export function SourceDownloadButton({
     >
       {label}
       {isDownloading ? (
-        <Loader2 className="size-3 animate-spin" />
+        <Spinner className="mr-0 size-3" />
       ) : (
         <Download className="size-3" />
       )}

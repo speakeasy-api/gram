@@ -158,6 +158,7 @@ func TestHandleFirstPartyConnect_BindsAgentRefreshAttemptToOAuthState(t *testing
 	require.NoError(t, err)
 	require.Equal(t, attempt.AttemptID, challenge.BindingRefreshAttemptID)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+initialID+"&code=idp-code", nil).WithContext(ctx)
+	callback.AddCookie(response.Result().Cookies()[0])
 	returned := httptest.NewRecorder()
 	require.NoError(t, ti.service.HandleIDPCallback(returned, callback))
 	location, err := url.Parse(returned.Header().Get("Location"))

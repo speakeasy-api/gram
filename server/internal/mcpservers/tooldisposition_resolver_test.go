@@ -16,7 +16,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/mcp_servers"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/tooldisposition"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestToolDispositionResolver_DerivesFromMetadata(t *testing.T) {
@@ -149,4 +154,140 @@ func TestToolDispositionResolver_InvalidProjectIDFailsClosed(t *testing.T) {
 
 	_, err = ti.dispositions.Dispositions(ctx, serverID, "not-a-uuid")
 	require.Error(t, err)
+}
+
+func TestToolCatalog_RecordMissingToolsAddsOnlyNewToolsAndAuditsAsSystem(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	_, err := ti.service.AddToolMetadataBatch(ctx, &gen.AddToolMetadataBatchPayload{
+		McpServerID: serverID,
+		Tools: []*gen.ToolMetadataForm{
+			{ToolName: "edited", Title: nil, ReadOnlyHint: new(true), DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+		},
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+	})
+	require.NoError(t, err)
+
+	// Reading first fills the cache, proving the write evicts it.
+	_, err = ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+
+	before, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+
+	err = ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "edited", Title: nil, ReadOnlyHint: nil, DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
+		{ToolName: "delete_item", Title: nil, ReadOnlyHint: nil, DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{
+		"edited":      "read_only",
+		"delete_item": "destructive",
+		"ping":        "",
+	}, catalog, "existing entries keep their labels and a tool with no hints is still recorded")
+
+	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
+
+	// Nothing new: no write and no audit entry.
+	err = ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	unchanged, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, after, unchanged)
+}
+
+func TestToolCatalog_RecordMissingToolsEvictsAStaleViewWhenNothingIsNew(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	// Reading first caches a view with no tools.
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Empty(t, catalog)
+
+	// Written behind the cache, as when another request's eviction failed.
+	_, err = repo.New(ti.conn).AddMCPServerToolMetadata(ctx, repo.AddMCPServerToolMetadataParams{
+		ProjectID:   *authCtx.ProjectID,
+		McpServerID: uuid.MustParse(serverID),
+		Tools:       []byte(`[{"tool_name":"ping"}]`),
+	})
+	require.NoError(t, err)
+
+	err = ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	catalog, err = ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Contains(t, catalog, "ping")
+}
+
+func TestToolCatalog_RecordMissingToolsAuditsAsSystemWhenAnAgentTriggersIt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+	agentCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()))
+
+	err := ti.dispositions.RecordMissingTools(agentCtx, authCtx.ActiveOrganizationID, serverID, authCtx.ProjectID.String(), []tooldisposition.ToolRecord{
+		{ToolName: "ping", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionMcpServerToolMetadataUpdate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), record.ActorType)
+}
+
+func TestToolCatalog_RecordMissingToolsTrimsNamesAndSkipsBlankOnes(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := authCtx.ProjectID.String()
+
+	serverID := createRemoteBackedMcpServer(t, ctx, ti)
+
+	err := ti.dispositions.RecordMissingTools(ctx, authCtx.ActiveOrganizationID, serverID, projectID, []tooldisposition.ToolRecord{
+		{ToolName: " foo ", Title: nil, ReadOnlyHint: nil, DestructiveHint: new(true), IdempotentHint: nil, OpenWorldHint: nil},
+		{ToolName: "  ", Title: nil, ReadOnlyHint: nil, DestructiveHint: nil, IdempotentHint: nil, OpenWorldHint: nil},
+	})
+	require.NoError(t, err)
+
+	catalog, err := ti.dispositions.ToolCatalog(ctx, serverID, projectID)
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"foo": "destructive"}, catalog)
 }

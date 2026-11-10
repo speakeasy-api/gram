@@ -5,16 +5,8 @@ import type { ReactNode } from "react";
 import { identityUrnFor, type IdentityRef } from "@/lib/identity-urn";
 import { ToolUsageIdentity } from "./tool-usage-identity";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      detail: {
-        overview: {
-          href: (urn: string) => `/example/project/identities/${urn}/overview`,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 // The href carries the identifier the component asked for, so these tests
 // assert which identity a link points at rather than only that one rendered.

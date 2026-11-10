@@ -28,6 +28,9 @@ vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
 vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
 }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => auth.isPlatformAdmin,
 }));
@@ -38,17 +41,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasScope: () => auth.isOrgAdmin,
     hasAllScopes: () => auth.isOrgAdmin,
     isLoading: false,
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        goTo: vi.fn(),
-        overview: { href: (id: string) => `/rip/${id}/overview` },
-        settings: { href: (id: string) => `/rip/${id}/settings` },
-      },
-    },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -200,6 +192,7 @@ function client(
     tokenEndpointAuthMethod: method,
     jsonWebKeySetId: "set-1",
     legacyCallbackUrl: false,
+    forwardClientName: false,
     ...overrides,
   } as RemoteSessionClient;
 }
@@ -286,7 +279,9 @@ describe("client overview authorization server card", () => {
     const link = screen.getByRole("link", {
       name: "View authorization server",
     });
-    expect(link.getAttribute("href")).toBe("/rip/issuer-1/overview");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/remote-identity-providers/issuer-1/overview",
+    );
     expect(screen.getByText("Example IdP")).toBeTruthy();
     expect(
       screen.getAllByText("https://idp.example.com").length,
@@ -601,7 +596,7 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBe("api://example");
   });
 
-  it("omits an emptied audience and shows the kept one after saving", async () => {
+  it("clears an emptied audience and shows it empty after saving", async () => {
     renderTab({ client: client(undefined, { audience: "old-aud" }) });
 
     fireEvent.change(screen.getByLabelText("Audience"), {
@@ -609,16 +604,20 @@ describe("client overview settings", () => {
     });
     save();
 
-    expect(lastSaved().audience).toBeUndefined();
+    expect(lastSaved().audience).toBe("");
+
+    expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
+      "  ",
+    );
 
     await act(async () => {
       await mutation.onSuccess?.({
-        audience: "old-aud",
         clientId: "upstream-client",
+        audience: "",
       });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
-      "old-aud",
+      "",
     );
   });
 
@@ -666,10 +665,10 @@ describe("client overview settings", () => {
       expect.objectContaining({
         id: "client-1",
         tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
-        clientSecret: undefined,
-        tokenEndpointAuthAudienceFormat: undefined,
       }),
     );
+    expect(lastSaved()).not.toHaveProperty("clientSecret");
+    expect(lastSaved()).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
 
     fireEvent.change(
       screen.getByRole("combobox", { name: "Authentication method" }),

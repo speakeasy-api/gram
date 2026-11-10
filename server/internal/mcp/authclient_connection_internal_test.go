@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -19,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -50,7 +53,7 @@ func enforcedShadowService(t *testing.T, f *authClientFixture) *sdkmetric.Manual
 	f.service.logger = testenv.NewLogger(t)
 	f.service.metrics = mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t))
 	f.service.features = flags
-	f.service.mandatoryShadowLog = newMandatoryShadowLog()
+	f.service.mandatoryShadowLog = newOnceLog()
 	f.service.authz = authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
 	f.service.authClientPermitter = mandatoryPermitter{engine: f.service.authz}
 	return reader
@@ -134,6 +137,20 @@ func TestAttachedAgentAuthClientChecksTheAttachedConnectionOwner(t *testing.T) {
 		require.Equal(t, authClientNoAccess, res.outcome, "ownership filters grants and never grants, even against a wildcard")
 		require.Equal(t, authClientReasonNotPermitted, res.reason)
 		require.Equal(t, map[string]int64{"deny/not_granted": 1}, authClientShadowOutcomes(t, reader))
+	})
+
+	t.Run("a refused direct caller writes one row", func(t *testing.T) {
+		t.Parallel()
+		lookup := &fakeAttachedConnections{conn: remotesessions.AttachedConnection{RemoteSessionID: uuid.New(), OwnerUserID: "user_2"}, attached: true, err: nil}
+		f, selector, _, agent := setup(t, lookup)
+		rec := mcpconnectionattemptstest.New(t)
+		f.service.connections = rec.Recorder
+		f.service.siteURL = &url.URL{Scheme: "https", Host: "app.example.com"}
+		endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
+		_, err := f.service.enforceAuthClient(sessionContext(t, f.orgID, personalAuthGrant()), httptest.NewRecorder(), &issuerGateAuthentication{endpoint: endpoint, subject: agent}, selector)
+		require.Error(t, err)
+		rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+		require.Len(t, rec.Rows(), 1)
 	})
 
 	t.Run("a removed grant refuses the owner's attached connection", func(t *testing.T) {
@@ -427,8 +444,9 @@ func TestAgentSessionAuthClientUsesItsAuthorizersConnection(t *testing.T) {
 // fakeUpstreamTokens serves the chosen client's token from whichever
 // connection its binding names when tokens are read.
 type fakeUpstreamTokens struct {
-	issuerID uuid.UUID
-	bound    uuid.UUID
+	clientErr error
+	issuerID  uuid.UUID
+	bound     uuid.UUID
 	// subjects records whose connection each read asked for.
 	subjects []urn.SessionSubject
 }
@@ -442,19 +460,22 @@ func (f *fakeUpstreamTokens) ResolveAuthClientAccessTokens(_ context.Context, re
 	return f.tokens(), nil
 }
 
-func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+func (f *fakeUpstreamTokens) ResolveClientAccessTokens(_ context.Context, _ remotesessions.RefreshAttribution, _ uuid.UUID, _ string, _ uuid.UUID, subject urn.SessionSubject, _ uuid.UUID, _ bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 	f.subjects = append(f.subjects, subject)
+	if f.clientErr != nil {
+		return nil, f.clientErr
+	}
 	return f.tokens(), nil
 }
 
 // unusedChainer fails a test that reaches identity chaining.
 type unusedChainer struct{ identityChainer }
 
-// A personal client handed back to the upstream client choice, for stale
-// header copies or a registration that may chain, was checked against the
-// agent's attached connection. If the binding moves to another lender's
-// connection between that check and the token read, neither the direct nor
-// the gateway path serves it; the checked connection still serves.
+// A personal client on a compatibility path, for stale header copies or a
+// registration that may chain, was checked against the agent's attached
+// connection. If the binding moves to another lender's connection between
+// that check and the token read, neither the direct nor the gateway path
+// serves it; the checked connection still serves.
 func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 	t.Parallel()
 
@@ -488,8 +509,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 		f := newAuthClientFixture(t, pool)
 		client := handback(t, f)
 		// The credential chose both the client and its registration, which
-		// stays bound to the sign-in, so the upstream client choice remains
-		// usable for the handback.
+		// stays bound to the sign-in.
 		selector := &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: uuid.New(), credentialID: uuid.New()}
 		require.NoError(t, f.q.SeedUserSessionIssuerFixture(t.Context(), authclientbackfill.SeedUserSessionIssuerFixtureParams{ID: selector.userSessionIssuerID, ProjectID: validUUID(f.projectID), Slug: "usi-" + selector.userSessionIssuerID.String()[:8]}))
 		require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: selector.userSessionIssuerID}))
@@ -516,14 +536,12 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				f, selector, tokens, checked, agent, ctx := setup(t, hb.setup)
 				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID, McpServerID: validUUID(f.serverID)}
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent}
-				_, handled, err := f.service.enforceAuthClient(ctx, httptest.NewRecorder(), authentication, selector)
+				choice, err := f.service.enforceAuthClient(ctx, httptest.NewRecorder(), authentication, selector)
 				require.NoError(t, err)
-				require.False(t, handled, "the request is handed back to the upstream client choice")
-				require.Nil(t, authentication.authClient, "a handback is not served as a typed client")
+				require.Nil(t, authentication.authClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, authentication.attachedSession, "the checked connection is carried apart from the typed selection")
-				choice, err := selector.forServer(ctx, f.serverID)
-				require.NoError(t, err)
-				authentication.chosenClient = choice.clientID
+				require.Equal(t, validUUID(f.registration), choice.clientID, "the resolver's own registration serves")
+				require.Equal(t, choice.clientID, authentication.chosenClient)
 
 				if replaced {
 					tokens.bound = uuid.New()
@@ -554,7 +572,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				endpoint := &ResolvedMcpEndpoint{ProjectID: f.projectID, OrganizationID: f.orgID, UserSessionIssuerID: selector.userSessionIssuerID}
 				choices := &memberChoices{selector: selector, enforced: true, subject: agent, byServer: map[uuid.UUID]*memberTokens{}}
 				choices.resolve = func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return f.service.resolveChosenMemberTokens(ctx, endpoint, agent, true, member)
+					return f.service.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
 				}
 				members := []metaMember{{serverID: f.serverID, projectID: f.projectID, slug: "member", backend: metaMemberBackendProxied}}
 				choices.apply(ctx, testenv.NewLogger(t), members, true)
@@ -562,7 +580,7 @@ func TestLegacyHandbackServesOnlyTheCheckedAttachedConnection(t *testing.T) {
 				require.NoError(t, member.upstreamUnavailable)
 				require.Equal(t, authClientLegacy, member.authClient.outcome)
 				require.Equal(t, hb.reason, member.authClient.reason)
-				require.False(t, member.typedAuthClient, "a handback is not served as a typed client")
+				require.False(t, member.typedAuthClient, "a compatibility path is not served as a typed client")
 				require.Equal(t, checked, member.authClient.attachedSession)
 
 				if replaced {

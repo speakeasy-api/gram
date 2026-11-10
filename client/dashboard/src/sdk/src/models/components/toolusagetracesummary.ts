@@ -46,6 +46,19 @@ export type ToolUsageTraceSummaryTargetKind = OpenEnum<
 >;
 
 /**
+ * Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent for other targets and when the gateway id resolves to no gateway of the organization
+ */
+export const TargetMetaMcpServerKind = {
+  Project: "project",
+  Organization: "organization",
+  Agent: "agent",
+} as const;
+/**
+ * Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent for other targets and when the gateway id resolves to no gateway of the organization
+ */
+export type TargetMetaMcpServerKind = OpenEnum<typeof TargetMetaMcpServerKind>;
+
+/**
  * Tool usage target type
  */
 export const ToolUsageTraceSummaryTargetType = {
@@ -79,6 +92,19 @@ export const ToolUsageTraceSummaryUserKind = {
 export type ToolUsageTraceSummaryUserKind = OpenEnum<
   typeof ToolUsageTraceSummaryUserKind
 >;
+
+/**
+ * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+ */
+export const ViaMetaMcpServerKind = {
+  Project: "project",
+  Organization: "organization",
+  Agent: "agent",
+} as const;
+/**
+ * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+ */
+export type ViaMetaMcpServerKind = OpenEnum<typeof ViaMetaMcpServerKind>;
 
 /**
  * A single target-aware tool usage trace row
@@ -181,6 +207,18 @@ export type ToolUsageTraceSummary = {
    */
   targetLabel: string;
   /**
+   * Agent whose gateway the call reached; absent for other gateway kinds and when the agent is deleted
+   */
+  targetMetaMcpServerAgentId?: string | undefined;
+  /**
+   * Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent for other targets and when the gateway id resolves to no gateway of the organization
+   */
+  targetMetaMcpServerKind?: TargetMetaMcpServerKind | undefined;
+  /**
+   * Slug of the project whose page shows the gateway the call reached: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization
+   */
+  targetMetaMcpServerProjectSlug?: string | undefined;
+  /**
    * Tool usage target type
    */
   targetType: ToolUsageTraceSummaryTargetType;
@@ -205,13 +243,25 @@ export type ToolUsageTraceSummary = {
    */
   userLabel: string;
   /**
+   * Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted
+   */
+  viaMetaMcpServerAgentId?: string | undefined;
+  /**
    * Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
    */
   viaMetaMcpServerId?: string | undefined;
   /**
+   * Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent's gateway; absent when the gateway id resolves to no gateway of the organization
+   */
+  viaMetaMcpServerKind?: ViaMetaMcpServerKind | undefined;
+  /**
    * Display name of the dispatching gateway; a deleted gateway keeps its last name
    */
   viaMetaMcpServerName?: string | undefined;
+  /**
+   * Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization
+   */
+  viaMetaMcpServerProjectSlug?: string | undefined;
 };
 
 /** @internal */
@@ -227,6 +277,12 @@ export const ToolUsageTraceSummaryTargetKind$inboundSchema: z.ZodMiniType<
 > = openEnums.inboundSchema(ToolUsageTraceSummaryTargetKind);
 
 /** @internal */
+export const TargetMetaMcpServerKind$inboundSchema: z.ZodMiniType<
+  TargetMetaMcpServerKind,
+  unknown
+> = openEnums.inboundSchema(TargetMetaMcpServerKind);
+
+/** @internal */
 export const ToolUsageTraceSummaryTargetType$inboundSchema: z.ZodMiniType<
   ToolUsageTraceSummaryTargetType,
   unknown
@@ -237,6 +293,12 @@ export const ToolUsageTraceSummaryUserKind$inboundSchema: z.ZodMiniType<
   ToolUsageTraceSummaryUserKind,
   unknown
 > = openEnums.inboundSchema(ToolUsageTraceSummaryUserKind);
+
+/** @internal */
+export const ViaMetaMcpServerKind$inboundSchema: z.ZodMiniType<
+  ViaMetaMcpServerKind,
+  unknown
+> = openEnums.inboundSchema(ViaMetaMcpServerKind);
 
 /** @internal */
 export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
@@ -268,14 +330,22 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     target_id: z.string(),
     target_kind: ToolUsageTraceSummaryTargetKind$inboundSchema,
     target_label: z.string(),
+    target_meta_mcp_server_agent_id: z.optional(z.string()),
+    target_meta_mcp_server_kind: z.optional(
+      TargetMetaMcpServerKind$inboundSchema,
+    ),
+    target_meta_mcp_server_project_slug: z.optional(z.string()),
     target_type: ToolUsageTraceSummaryTargetType$inboundSchema,
     tool_name: z.string(),
     trace_id: z.optional(z.string()),
     user_key: z.string(),
     user_kind: ToolUsageTraceSummaryUserKind$inboundSchema,
     user_label: z.string(),
+    via_meta_mcp_server_agent_id: z.optional(z.string()),
     via_meta_mcp_server_id: z.optional(z.string()),
+    via_meta_mcp_server_kind: z.optional(ViaMetaMcpServerKind$inboundSchema),
     via_meta_mcp_server_name: z.optional(z.string()),
+    via_meta_mcp_server_project_slug: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -302,14 +372,20 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "target_id": "targetId",
       "target_kind": "targetKind",
       "target_label": "targetLabel",
+      "target_meta_mcp_server_agent_id": "targetMetaMcpServerAgentId",
+      "target_meta_mcp_server_kind": "targetMetaMcpServerKind",
+      "target_meta_mcp_server_project_slug": "targetMetaMcpServerProjectSlug",
       "target_type": "targetType",
       "tool_name": "toolName",
       "trace_id": "traceId",
       "user_key": "userKey",
       "user_kind": "userKind",
       "user_label": "userLabel",
+      "via_meta_mcp_server_agent_id": "viaMetaMcpServerAgentId",
       "via_meta_mcp_server_id": "viaMetaMcpServerId",
+      "via_meta_mcp_server_kind": "viaMetaMcpServerKind",
       "via_meta_mcp_server_name": "viaMetaMcpServerName",
+      "via_meta_mcp_server_project_slug": "viaMetaMcpServerProjectSlug",
     });
   }),
 );

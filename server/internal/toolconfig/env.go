@@ -155,11 +155,9 @@ func (m MCPClientIdentity) IsZero() bool {
 
 // ToolCallEnv holds the environment configuration for a tool call.
 // SystemEnv contains base values, UserConfig contains user overrides.
-// OAuthToken is an optional OAuth token for external MCP servers that require authentication.
 type ToolCallEnv struct {
 	SystemEnv  *CaseInsensitiveEnv
 	UserConfig *CaseInsensitiveEnv
-	OAuthToken string // OAuth token for external MCP servers (empty if not applicable)
 	GramEmail  string // Authenticated Speakeasy user's email (empty if not applicable)
 	// GramChatID is the authoritative assistant chat UUID when supplied by the caller.
 	GramChatID string

@@ -3,11 +3,14 @@ import { queryKeyMcpServerAuthentication } from "@gram/client/react-query/mcpSer
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import {
   offersPersonalSignIn,
   serverConnection,
+  serverSignIns,
   userSubject,
   type ServerConnection,
+  type ServerSignIn,
 } from "./ownerConnections";
 import type { InventoryServer } from "./useServerInventory";
 
@@ -30,7 +33,10 @@ export interface OwnerConnections {
  * for. Provisioning checks the agent's real candidates again before attaching.
  *
  * A server with an issuer still needs nobody when its own auth clients offer
- * no personal sign-in: the issuer may be shared with servers that do.
+ * no personal sign-in: the issuer may be shared with servers that do. Under
+ * upstream auth enforcement the sign-ins it asks for come from those auth
+ * clients too, since a shared issuer binds another server's registration;
+ * otherwise from the issuer, which is what routes the call.
  */
 export function useOwnerConnections(
   servers: InventoryServer[],
@@ -38,6 +44,7 @@ export function useOwnerConnections(
   agentId?: string,
 ): OwnerConnections {
   const sdk = useSdkClient();
+  const enforcement = useUpstreamAuthEnforcement();
   const organization = useOrganization();
   const { user } = useSession();
   const personal = servers.filter((server) => server.issuerId);
@@ -120,6 +127,29 @@ export function useOwnerConnections(
       throwOnError: false,
     })),
   });
+  const issuerIndex = (server: InventoryServer) =>
+    issuers.findIndex(
+      (issuer) =>
+        issuer.gramProject === server.projectSlug &&
+        issuer.userSessionIssuerId === server.issuerId,
+    );
+  /**
+   * The upstream sign-ins a server asks for, once its auth is read: from its
+   * own auth clients when enforced, else from its issuer's registrations.
+   */
+  const signIns = (
+    server: InventoryServer,
+  ): { data?: ServerSignIn[]; isError: boolean } => {
+    const authRead = auth[personal.indexOf(server)];
+    if (enforcement === "loading") return { isError: false };
+    const typed =
+      enforcement === "enforced" && authRead?.data
+        ? serverSignIns(authRead.data)
+        : undefined;
+    if (typed) return { data: typed, isError: false };
+    const read = clients[issuerIndex(server)];
+    return { data: read?.data, isError: !!read?.isError };
+  };
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {
     if (shared(server)) {
@@ -128,26 +158,12 @@ export function useOwnerConnections(
     }
     const authRead = auth[personal.indexOf(server)];
     const sessionRead = sessions[projects.indexOf(server.projectSlug)];
-    const clientRead =
-      clients[
-        issuers.findIndex(
-          (issuer) =>
-            issuer.gramProject === server.projectSlug &&
-            issuer.userSessionIssuerId === server.issuerId,
-        )
-      ];
-    const bindingRead =
-      bindings[
-        issuers.findIndex(
-          (issuer) =>
-            issuer.gramProject === server.projectSlug &&
-            issuer.userSessionIssuerId === server.issuerId,
-        )
-      ];
+    const clientRead = signIns(server);
+    const bindingRead = bindings[issuerIndex(server)];
     if (
       authRead?.isError ||
       sessionRead?.isError ||
-      clientRead?.isError ||
+      clientRead.isError ||
       (agentId && bindingRead?.isError)
     ) {
       byServer.set(server.id, { status: "error" });
@@ -156,7 +172,7 @@ export function useOwnerConnections(
     if (
       !authRead?.data ||
       !sessionRead?.data ||
-      !clientRead?.data ||
+      !clientRead.data ||
       (agentId && !bindingRead?.data)
     ) {
       byServer.set(server.id, { status: "checking" });
@@ -186,15 +202,10 @@ export function useOwnerConnections(
       // checking or error state stands.
       const authRead = auth[personal.indexOf(server)];
       if (shared(server) || !authRead?.data || authRead.isError) continue;
-      const index = issuers.findIndex(
-        (issuer) =>
-          issuer.gramProject === server.projectSlug &&
-          issuer.userSessionIssuerId === server.issuerId,
-      );
-      const clientsRead = clients[index];
-      const bindingRead = bindings[index];
+      const clientsRead = signIns(server);
+      const bindingRead = bindings[issuerIndex(server)];
       if (
-        !clientsRead?.data ||
+        !clientsRead.data ||
         !bindingRead?.data ||
         clientsRead.isError ||
         bindingRead.isError

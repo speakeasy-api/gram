@@ -17,9 +17,9 @@ import { useProjectSlugForRequests } from "@/contexts/Sdk";
 import { RESERVED_MCP_SEGMENTS, mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { useToolsets } from "@/pages/toolsets/useToolsets";
-import { Assistant } from "@gram/client/models/components/assistant.js";
-import { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
-import { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
+import type { AssistantMCPServerRef } from "@gram/client/models/components/assistantmcpserverref.js";
+import type { AssistantToolsetRef } from "@gram/client/models/components/assistanttoolsetref.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useListEnvironments } from "@gram/client/react-query/listEnvironments.js";
@@ -28,6 +28,7 @@ import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 // The Select can't represent "no environment" with an empty value, so the
 // project-default choice gets a sentinel that is stripped before saving.
@@ -464,9 +465,11 @@ function DialogOptionsBody({
 }): JSX.Element {
   if (isLoading) {
     return (
-      <Text small muted>
-        Loading servers…
-      </Text>
+      <Skeleton label="Loading servers">
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+        <div className="h-7 w-full" />
+      </Skeleton>
     );
   }
   if (isError) {

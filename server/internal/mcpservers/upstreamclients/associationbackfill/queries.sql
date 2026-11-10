@@ -21,6 +21,9 @@
 -- pair_recorded is true when an association row exists for the pair, live or
 -- removed: a removed row on a shared issuer is an explicit detach the backfill
 -- must not undo.
+--
+-- offers_own_oauth_client reports that the server offers an OAuth-backed auth
+-- client an administrator or a server-only identity commit configured for it.
 WITH page AS (
     SELECT s.id,
            s.project_id,
@@ -92,6 +95,19 @@ SELECT page.id AS mcp_server_id,
          WHERE live.mcp_server_id = page.id
            AND live.deleted IS FALSE
        )::bigint AS live_associations,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.source = 'admin'
+          AND offered.remote_session_client_id IS NOT NULL
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = page.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+       )::boolean AS offers_own_oauth_client,
        c.id AS remote_session_client_id,
        COALESCE((
          SELECT i.issuer = ANY (rpr.authorization_servers)
@@ -356,6 +372,8 @@ ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO 
 -- client: request routing matches tunnels by derived issuer alone, and so
 -- does this. derived_match reports that the client's authorization server is
 -- the one derived for the server, the comparison consent claimed members by.
+-- offers_own_oauth_client reports that the server offers an OAuth-backed auth
+-- client an administrator or a server-only identity commit configured for it.
 WITH fronted AS (
     SELECT g.user_session_issuer_id AS issuer_id, s.id AS server_id
     FROM meta_mcp_servers AS g
@@ -398,6 +416,19 @@ WITH fronted AS (
       ) = 1
 )
 SELECT f.issuer_id::uuid AS issuer_id,
+       EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.source = 'admin'
+          AND offered.remote_session_client_id IS NOT NULL
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = s.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+       )::boolean AS offers_own_oauth_client,
        s.id AS mcp_server_id,
        s.project_id,
        p.organization_id,

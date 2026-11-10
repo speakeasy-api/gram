@@ -154,6 +154,14 @@ type AdminMcpWriteEvent struct {
 	// @access: restricted
 	RequestID pgtype.Text
 	// @access: confidential
+	Operation pgtype.Text
+	// @access: confidential
+	OrganizationID pgtype.Text
+	// @access: restricted
+	ResourceKind pgtype.Text
+	// @access: restricted
+	ResourceID pgtype.Text
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -938,6 +946,8 @@ type AuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
 	// @access: confidential
+	IsInternal bool
+	// @access: confidential
 	Seq int64
 	// @access: confidential
 	OrganizationID string
@@ -1516,6 +1526,16 @@ type CustomDomain struct {
 	// @access: confidential
 	ConsecutiveFailures pgtype.Int4
 	// @access: confidential
+	DnsTargetToken pgtype.Text
+	// @access: confidential
+	DnsRoutingMethod pgtype.Text
+	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
+	// @access: confidential
+	DnsConfigurationStatus pgtype.Text
+	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// @access: confidential
+	DnsCheckedAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
@@ -1573,6 +1593,58 @@ type DashboardWidget struct {
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
+}
+
+type DataEncryptionKey struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	EncryptionConfigID uuid.UUID
+	// @access: confidential
+	UseCase string
+	// @access: confidential
+	State string
+	// @access: confidential
+	ActivatedAt pgtype.Timestamptz
+	// @access: confidential
+	RetiredAt pgtype.Timestamptz
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
+type DataEncryptionKeyWrap struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	DataEncryptionKeyID uuid.UUID
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: restricted
+	ExternalKeyVersion pgtype.Text
+	// @access: secret-restricted
+	WrappedKey []byte
+	// @access: confidential
+	LastUnwrappedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
 }
 
 type DataExportRoute struct {
@@ -2280,6 +2352,8 @@ type ExternalKey struct {
 	ExternalCredentialID uuid.UUID
 	// @access: confidential
 	Provider string
+	// @access: confidential
+	Purpose string
 	// @access: confidential
 	Algorithm string
 	// @access: confidential
@@ -3027,6 +3101,19 @@ type LitellmInstance struct {
 	DeletedAt pgtype.Timestamptz
 	// @access: confidential
 	Deleted bool
+}
+
+type ManagedEncryptionKey struct {
+	// @access: confidential
+	ExternalKeyID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	KmsDisabledAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
 }
 
 // Append-only approve/deny history with the rationale and the evidence it rested on.
@@ -4013,6 +4100,43 @@ type OpenrouterSpendDaily struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type OrganizationEncryptionConfig struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	Mode string
+	// @access: confidential
+	State string
+	// @access: confidential
+	KekExternalKeyID uuid.UUID
+	// @access: confidential
+	PreviousKekExternalKeyID uuid.NullUUID
+	// @access: confidential
+	SwitchStartedAt pgtype.Timestamptz
+	// @access: confidential
+	SwitchCompletedAt pgtype.Timestamptz
+	// @access: confidential
+	SuspendedAt pgtype.Timestamptz
+	// Provider error summary; never carries key material or ciphertext.
+	// @access: restricted
+	SuspendedReason pgtype.Text
+	// @access: confidential
+	LastKekCheckAt pgtype.Timestamptz
+	// Provider error summary; never carries key material or ciphertext.
+	// @access: restricted
+	LastKekCheckError pgtype.Text
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	DeletedAt pgtype.Timestamptz
+	// @access: confidential
+	Deleted bool
+}
+
 type OrganizationFeature struct {
 	// @access: confidential
 	ID int64
@@ -4979,6 +5103,9 @@ type PrincipalGrant struct {
 	// JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 	// @access: opaque-restricted
 	Selectors []byte
+	// When a temporary grant stops authorizing new requests. NULL = permanent. A row whose expires_at has passed grants nothing and is ignored by every reader.
+	// @access: confidential
+	ExpiresAt pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5280,6 +5407,12 @@ type RegistryPromotionCandidate struct {
 	CurationRetryRevision pgtype.Text
 	// @access: confidential
 	CurationRetryAction pgtype.Text
+	// How guide delivery resolved: requested (factory issue filed), existing_guide (guide already on the setup-docs default branch) or guide_in_review (an open guide PR is pending). NULL with docs_queued_at set means requested (resolved before this was recorded); NULL with docs_queued_at NULL means delivery has not resolved yet.
+	// @access: confidential
+	DocsOutcome pgtype.Text
+	// When delivery first found an open guide PR for this slug; cleared on any other outcome. Drives the stalled-review alert.
+	// @access: confidential
+	DocsReviewSince pgtype.Timestamptz
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -5503,6 +5636,8 @@ type RemoteSessionClient struct {
 	CredentialOwner string
 	// @access: opaque-confidential
 	DisplayName pgtype.Text
+	// @access: confidential
+	ForwardClientName bool
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
@@ -6171,6 +6306,8 @@ type RiskResult struct {
 type SecurityAuditLog struct {
 	// @access: confidential
 	ID uuid.UUID
+	// @access: confidential
+	IsInternal bool
 	// @access: confidential
 	Seq int64
 	// @access: confidential
@@ -6871,6 +7008,9 @@ type SlackDirectoryConnection struct {
 	LastSyncFailedAt pgtype.Timestamptz
 	// @access: confidential
 	LastErrorCode pgtype.Text
+	// Project whose managed assistant answers the Speakeasy app in this workspace.
+	// @access: confidential
+	DefaultProjectID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

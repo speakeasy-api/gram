@@ -69,7 +69,26 @@ SELECT p.organization_id, m.project_id, m.id AS mcp_server_id, r.id AS remote_mc
           AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
       )
     )
-  )::boolean AS upstream_auth_pending, m.remote_session_issuer_id,
+  )::boolean AS upstream_auth_pending,
+  ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = m.id
+        AND a.project_id = m.project_id
+        AND a.organization_id = p.organization_id
+        AND a.deleted IS FALSE
+  )::uuid[] AS association_provider_ids,
   left(COALESCE(pr.resource_name,''),200)::text AS resource_name, left(COALESCE(pr.resource_documentation,''),2049)::text AS resource_documentation,
   md5(m.updated_at::text || r.updated_at::text || COALESCE(h.revision, '') || COALESCE(a.revision, '') || COALESCE(o.revision, ''))::text AS source_revision,
   GREATEST(m.updated_at, r.updated_at, h.updated_at, a.updated_at, o.updated_at)::timestamptz AS changed_at,
@@ -208,6 +227,7 @@ UPDATE registry_promotion_candidates SET docs_url=sqlc.narg(docs_url)::text,
  docs_queued_at=sqlc.narg(docs_queued_at)::timestamptz,delivery_error=sqlc.narg(delivery_error)::text,
  docs_needs_attention= @needs_attention::boolean,docs_failures= @failures::integer,
  docs_next_attempt_at=sqlc.narg(next_attempt_at)::timestamptz,
+ docs_outcome=sqlc.narg(docs_outcome)::text,docs_review_since=sqlc.narg(docs_review_since)::timestamptz,
  docs_lease_until=NULL,docs_lease_token=NULL,docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND docs_lease_token= @lease_token::uuid;
 
@@ -239,15 +259,16 @@ SELECT * FROM registry_promotion_candidates WHERE organization_id= @organization
 
 -- name: RetryDocs :one
 UPDATE registry_promotion_candidates SET docs_needs_attention=false,docs_failures=0,
- docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,
+ docs_next_attempt_at=NULL,docs_lease_token=NULL,docs_lease_until=NULL,delivery_error=NULL,docs_outcome=NULL,docs_review_since=NULL,
  docs_retry_key= @retry_key,docs_retry_revision= @retry_revision,docs_retry_by= @actor,
  docs_revision=generate_uuidv7(),updated_at=clock_timestamp()
 WHERE id= @id AND project_id IS NOT DISTINCT FROM sqlc.narg(project_id)::uuid AND organization_id= @organization_id RETURNING *;
 
 -- name: JobStatus :one
-SELECT count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE)::bigint AS pending_docs,
+SELECT count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome IS DISTINCT FROM 'guide_in_review')::bigint AS pending_docs,
  count(*) FILTER (WHERE docs_needs_attention)::bigint AS needs_attention,
- min(promoted_at) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE)::timestamptz AS oldest_pending_at,
+ min(promoted_at) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome IS DISTINCT FROM 'guide_in_review')::timestamptz AS oldest_pending_at,
+ count(*) FILTER (WHERE promoted_at IS NOT NULL AND docs_queued_at IS NULL AND docs_needs_attention IS FALSE AND docs_outcome='guide_in_review')::bigint AS guide_in_review,
  max(discovery_last_attempt_at)::timestamptz AS last_discovery_at,
  count(*) FILTER (WHERE discovery_failures>0 AND promoted_at IS NULL AND curation_status='active')::bigint AS discovery_failures
 FROM registry_promotion_candidates;

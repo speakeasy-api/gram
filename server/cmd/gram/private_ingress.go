@@ -125,6 +125,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 func privateIngressServerFlags() []cli.Flag {
 	flags := mcpRuntimeFlags()
 	return append(flags,
+		riskFingerprintPepperFlag(),
 		&cli.StringFlag{
 			Name:    "netingress-address",
 			Usage:   "Private network ingress HTTPS address; empty disables the listener",
@@ -242,7 +243,7 @@ func servePrivateIngress(
 		<-sigctx.Done()
 		// Listen streams never finish on their own, so end them first and let
 		// their clients reconnect to a replica that is still serving.
-		deps.Runtime.MCP.StartDrain(relayedRequestInterruptAfter)
+		deps.Runtime.MCP.StartDrain(requestInterruptAfter)
 		drainHTTPServer(ctx, deps.Logger, server, cancelRequests, shutdownDrainTimeout, "failed to shutdown private network ingress listener")
 	}()
 

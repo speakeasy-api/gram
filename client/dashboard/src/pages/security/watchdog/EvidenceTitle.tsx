@@ -25,7 +25,8 @@ import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { useLoadChat } from "@gram/client/react-query/loadChat.js";
 import { useQuery } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
+import { Spinner } from "@/components/ui/Spinner";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { TRANSCRIPT_DENIED_REASON, useCanReadFindingChat } from "../unmask";
@@ -107,7 +108,7 @@ export function EvidenceTitle({
               onClick={() => setExpanded((prev) => !prev)}
             >
               {flaggedMessage.loading ? (
-                <Loader2 className="size-4 animate-spin" />
+                <Spinner className="mr-0" />
               ) : (
                 <Icon
                   name={expanded ? "chevron-up" : "chevron-down"}
@@ -175,7 +176,12 @@ export function FlaggedMessage({
     );
   }
   if (message.loading) {
-    return <Loader2 className="text-muted-foreground size-4 animate-spin" />;
+    return (
+      <Spinner
+        className="text-muted-foreground mr-0"
+        label="Loading flagged message"
+      />
+    );
   }
   return <FlaggedMessageBody message={message} chatId={chatId} />;
 }

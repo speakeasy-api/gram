@@ -66,7 +66,10 @@ func seedHostedMetaMember(
 
 	toolsetSlug := "member-ts-" + uuid.NewString()[:8]
 	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, toolsetSlug)
-	toolURNs := addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
+	toolURNs := map[string]urn.Tool{}
+	if len(toolNames) != 0 {
+		toolURNs = addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolNames...)
+	}
 
 	serverID, err := uuid.NewV7()
 	require.NoError(t, err)

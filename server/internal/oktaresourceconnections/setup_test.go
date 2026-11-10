@@ -221,7 +221,33 @@ func createServerWithBackend(t *testing.T, ctx context.Context, si *instance, pr
 		Visibility:            "private",
 	})
 	require.NoError(t, err)
+	associateServerIssuer(t, ctx, si, projectID, id, issuerID)
 	return id, backendID
+}
+
+// associateServerIssuer makes issuerID the server's provider through a live
+// client association, reusing a client the server's project can see so that
+// tests counting the issuer's clients keep their expected number.
+func associateServerIssuer(t *testing.T, ctx context.Context, si *instance, projectID, serverID, issuerID uuid.UUID) {
+	t.Helper()
+	clients, err := si.q.ListIssuerClients(ctx, repo.ListIssuerClientsParams{OrganizationID: si.orgID, IssuerIds: []uuid.UUID{issuerID}})
+	require.NoError(t, err)
+	clientID := uuid.Nil
+	for _, c := range clients {
+		if !c.ProjectID.Valid || c.ProjectID.UUID == projectID {
+			clientID = c.ID
+			break
+		}
+	}
+	if clientID == uuid.Nil {
+		clientID = addClient(t, ctx, si, issuerID, uuid.NullUUID{UUID: projectID, Valid: true}, "0oaassociated"+uuid.NewString()[:8])
+	}
+	require.NoError(t, testrepo.New(si.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{
+		ProjectID:             projectID,
+		OrganizationID:        si.orgID,
+		McpServerID:           serverID,
+		RemoteSessionClientID: clientID,
+	}))
 }
 
 func createUserSessionIssuer(t *testing.T, ctx context.Context, si *instance) uuid.UUID {

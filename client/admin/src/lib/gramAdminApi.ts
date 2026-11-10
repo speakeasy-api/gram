@@ -1,9 +1,9 @@
 import type { RepairInferenceKeyRequestBody } from "@gram/admin-client/models/components/repairinferencekeyrequestbody";
 import { GramError } from "@gram/admin-client/models/errors/gramerror";
 
-import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/gramAdminClient";
+import { redirectOnUnauthorized as startLoginRedirect } from "@/lib/adminAuth";
 
-export { isRedirectingToLogin } from "@/lib/gramAdminClient";
+export { isRedirectingToLogin } from "@/lib/adminAuth";
 
 // Speakeasy admin API client.
 //
@@ -588,6 +588,59 @@ export function listOrganizationProjects(
   const qs = toSearchParams({ organization_id: organizationID });
   return gramAdminFetch<ListOrganizationProjectsResult>(
     `/admin/organization.projects?${qs}`,
+  );
+}
+
+export type AdminProjectRedeployPreview = {
+  organization_id: string;
+  project_id: string;
+  project_name: string;
+  // Sent back as `expected_active_deployment_id`, so a redeploy clones the
+  // deployment the operator reviewed or refuses.
+  active_deployment_id: string;
+  openapi_assets: number;
+  function_assets: number;
+  packages: number;
+  external_mcps: number;
+};
+
+export function getProjectRedeployPreview(
+  organizationID: string,
+  projectID: string,
+): Promise<AdminProjectRedeployPreview> {
+  const qs = toSearchParams({
+    organization_id: organizationID,
+    project_id: projectID,
+  });
+  return gramAdminFetch<AdminProjectRedeployPreview>(
+    `/admin/project.redeployPreview?${qs}`,
+  );
+}
+
+export type RedeployProjectRequest = {
+  organization_id: string;
+  project_id: string;
+  expected_active_deployment_id: string;
+};
+
+export type AdminProjectRedeployResult = {
+  project_id: string;
+  source_deployment_id: string;
+  // Processing continues after this returns, and this deployment becomes active
+  // only if it succeeds.
+  deployment_id: string;
+};
+
+export function redeployProject(
+  body: RedeployProjectRequest,
+): Promise<AdminProjectRedeployResult> {
+  return gramAdminMutation<AdminProjectRedeployResult>(
+    "/admin/project.redeploy",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
   );
 }
 

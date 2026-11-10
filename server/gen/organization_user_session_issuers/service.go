@@ -346,8 +346,11 @@ type OrganizationUserSessionIssuerMigratePreflight struct {
 	CimdClientCount int
 	// Remote-session credentials whose issuer provenance would move.
 	RemoteSessionCount int
-	// Active OAuth client ids already present on both issuers. Non-empty blocks
-	// migration.
+	// Active OAuth client ids present on both issuers that cannot be merged.
+	// Non-empty blocks migration. A client resolved from the same Client ID
+	// Metadata Document on both issuers is not listed: it merges onto the target's
+	// client, keeping its sessions and consents, unless an issuance selection
+	// profile pins the source client to the source issuer.
 	ConflictingClientIds []string
 	// Active principal bindings that would violate target uniqueness. Non-zero
 	// blocks migration.

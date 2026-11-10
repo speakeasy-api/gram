@@ -478,6 +478,95 @@ paths:
       x-speakeasy-name-override: createRole
       x-speakeasy-react-hook:
         name: CreateRole
+  /rpc/access.createTemporaryGrant:
+    post:
+      description: 'Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.'
+      operationId: createTemporaryGrant
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemporaryGrantForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryGrant'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createTemporaryGrant access
+      tags:
+        - access
+      x-speakeasy-name-override: createTemporaryGrant
+      x-speakeasy-react-hook:
+        name: CreateTemporaryGrant
+        type: mutation
   /rpc/access.deleteDirectoryRoleMapping:
     delete:
       description: Remove a directory role mapping.
@@ -1254,6 +1343,88 @@ paths:
       x-speakeasy-name-override: listAIDetections
       x-speakeasy-react-hook:
         name: AIDetections
+  /rpc/access.listAgentPolicyScopes:
+    get:
+      description: 'List the scopes an agent policy may hold, as the catalogue describes them. Needs a session and no organization grant: an owner configuring their own agent holds no RBAC grant, and the list is product configuration.'
+      operationId: listAgentPolicyScopes
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListAgentPolicyScopesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listAgentPolicyScopes access
+      tags:
+        - access
+      x-speakeasy-name-override: listAgentPolicyScopes
+      x-speakeasy-react-hook:
+        name: ListAgentPolicyScopes
   /rpc/access.listAudienceOptions:
     get:
       description: 'List the principals that can be given access: everyone, roles, people, and agents.'
@@ -1522,6 +1693,16 @@ paths:
           schema:
             description: Filter by scope.
             type: string
+        - allowEmptyValue: true
+          description: Leave out checks of these scopes, from the rows and from the total.
+          in: query
+          name: exclude_scopes
+          schema:
+            description: Leave out checks of these scopes, from the rows and from the total.
+            items:
+              type: string
+            maxItems: 20
+            type: array
         - allowEmptyValue: true
           description: Filter to a specific project.
           in: query
@@ -2950,6 +3131,104 @@ paths:
       x-speakeasy-name-override: listShadowMCPInventoryUsers
       x-speakeasy-react-hook:
         name: ShadowMCPInventoryUsers
+  /rpc/access.listTemporaryGrants:
+    get:
+      description: List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
+      operationId: listTemporaryGrants
+      parameters:
+        - allowEmptyValue: true
+          description: The principal whose grants to list, e.g. user:<id>, role:organization:<id> or agent:<id>. Members who are not organization administrators may only pass their own user URN.
+          in: query
+          name: principal_urn
+          required: true
+          schema:
+            description: The principal whose grants to list, e.g. user:<id>, role:organization:<id> or agent:<id>. Members who are not organization administrators may only pass their own user URN.
+            type: string
+        - allowEmptyValue: true
+          description: Include grants whose deadline has passed.
+          in: query
+          name: include_expired
+          schema:
+            default: false
+            description: Include grants whose deadline has passed.
+            type: boolean
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListTemporaryGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listTemporaryGrants access
+      tags:
+        - access
+      x-speakeasy-name-override: listTemporaryGrants
+      x-speakeasy-react-hook:
+        name: TemporaryGrants
   /rpc/access.previewDirectoryRoleSetup:
     get:
       description: 'Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.'
@@ -3040,6 +3319,95 @@ paths:
       x-speakeasy-name-override: previewDirectoryRoleSetup
       x-speakeasy-react-hook:
         name: DirectoryRoleSetupPreview
+  /rpc/access.renewTemporaryGrant:
+    post:
+      description: 'Move an active temporary grant''s deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.'
+      operationId: renewTemporaryGrant
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RenewTemporaryGrantForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryGrant'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: renewTemporaryGrant access
+      tags:
+        - access
+      x-speakeasy-name-override: renewTemporaryGrant
+      x-speakeasy-react-hook:
+        name: RenewTemporaryGrant
+        type: mutation
   /rpc/access.requestAccess:
     post:
       description: Request access to a scope by sending an email notification to organization administrators.
@@ -3418,6 +3786,95 @@ paths:
       x-speakeasy-name-override: resolveShadowMCPInventoryRequest
       x-speakeasy-react-hook:
         name: ResolveShadowMCPInventoryRequest
+        type: mutation
+  /rpc/access.revokeTemporaryGrant:
+    post:
+      description: 'End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal''s roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.'
+      operationId: revokeTemporaryGrant
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RiskIDRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemporaryGrant'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: revokeTemporaryGrant access
+      tags:
+        - access
+      x-speakeasy-name-override: revokeTemporaryGrant
+      x-speakeasy-react-hook:
+        name: RevokeTemporaryGrant
         type: mutation
   /rpc/access.setAIToolDecision:
     post:
@@ -7203,6 +7660,94 @@ paths:
       x-speakeasy-name-override: deleteAiScanTarget
       x-speakeasy-react-hook:
         name: DeleteAiScanTarget
+  /rpc/agent.getClaudeObservabilityPlugin:
+    get:
+      description: 'Download the organization''s Claude observability plugin as a ZIP for the enrolled user to upload to claude.ai (Customize > Plugins), so sessions in Claude''s cloud environment are recorded. The plugin carries a hooks-only key attributed to the enrolled user; each download replaces that user''s previous key. Requires a per-user key, whose owner is the enrolled user. The org install key is refused: it is shared by every device in the organization, so it cannot prove which member is asking, and accepting it would let any holder mint a key attributed to any member and revoke theirs.'
+      operationId: getAgentClaudeObservabilityPlugin
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+      responses:
+        "200":
+          content:
+            application/zip:
+              schema:
+                format: binary
+                type: string
+          description: OK response.
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+            Content-Type:
+              schema:
+                type: string
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: getClaudeObservabilityPlugin agent
+      tags:
+        - agent
+      x-speakeasy-name-override: getClaudeObservabilityPlugin
   /rpc/agent.getConfiguration:
     get:
       description: Get the organization-wide device-agent configuration for the dashboard. Requires a session with the org:admin scope. An unconfigured organization returns an empty document with is_configured=false; enrolled agents do not receive a remote layer until an administrator saves one.
@@ -7959,6 +8504,116 @@ paths:
       x-speakeasy-name-override: reportAIScan
       x-speakeasy-react-hook:
         name: ReportAgentAIScan
+  /rpc/agent.reportCrash:
+    post:
+      description: 'Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy''s monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.'
+      operationId: reportAgentCrash
+      parameters:
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+          in: header
+          name: Gram-User-Email
+          schema:
+            description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+            type: string
+        - allowEmptyValue: true
+          description: Hardware serial number of the machine that crashed, when the agent can read it.
+          in: header
+          name: Gram-Device-Serial
+          schema:
+            description: Hardware serial number of the machine that crashed, when the agent can read it.
+            type: string
+        - allowEmptyValue: true
+          description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+          in: header
+          name: Gram-Device-Environment
+          schema:
+            description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCrashRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReportCrashResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - device_agent_token_header_Authorization: []
+        - apikey_header_Gram-Key: []
+        - {}
+      summary: reportCrash agent
+      tags:
+        - agent
+      x-speakeasy-name-override: reportCrash
+      x-speakeasy-react-hook:
+        name: ReportAgentCrash
   /rpc/agent.reportSessionMoved:
     post:
       description: 'Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent''s perspective: the daemon must never fail a move because this call failed.'
@@ -12210,14 +12865,23 @@ paths:
                 type: string
           description: OK response.
           headers:
+            Content-Disposition:
+              schema:
+                type: string
             Content-Length:
               schema:
                 format: int64
                 type: integer
+            Content-Security-Policy:
+              schema:
+                type: string
             Content-Type:
               schema:
                 type: string
             Last-Modified:
+              schema:
+                type: string
+            X-Content-Type-Options:
               schema:
                 type: string
         "400":
@@ -12310,14 +12974,23 @@ paths:
             Access-Control-Allow-Origin:
               schema:
                 type: string
+            Content-Disposition:
+              schema:
+                type: string
             Content-Length:
               schema:
                 format: int64
                 type: integer
+            Content-Security-Policy:
+              schema:
+                type: string
             Content-Type:
               schema:
                 type: string
             Last-Modified:
+              schema:
+                type: string
+            X-Content-Type-Options:
               schema:
                 type: string
         "400":
@@ -14740,6 +15413,27 @@ paths:
             format: date-time
             type: string
         - allowEmptyValue: true
+          description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+          in: query
+          name: category
+          schema:
+            default: configuration
+            description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+            enum:
+              - configuration
+              - security
+            type: string
+        - allowEmptyValue: true
+          description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+          in: query
+          name: origin
+          schema:
+            description: 'Who initiated the entries to list: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+            enum:
+              - user
+              - system
+            type: string
+        - allowEmptyValue: true
           description: API Key header
           in: header
           name: Gram-Key
@@ -14843,6 +15537,27 @@ paths:
           name: project_slug
           schema:
             description: Project slug to filter facet values to a specific project.
+            type: string
+        - allowEmptyValue: true
+          description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+          in: query
+          name: category
+          schema:
+            default: configuration
+            description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+            enum:
+              - configuration
+              - security
+            type: string
+        - allowEmptyValue: true
+          description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+          in: query
+          name: origin
+          schema:
+            description: 'Who initiated the entries to compute facet values from, matching the list being filtered: ''user'' for changes initiated by a person, API key, agent or assistant, or ''system'' for changes Speakeasy made on its own, such as background jobs. Omit for both.'
+            enum:
+              - user
+              - system
             type: string
         - allowEmptyValue: true
           description: API Key header
@@ -15256,6 +15971,48 @@ paths:
           name: support_handoff
           schema:
             description: Opaque, one-time organization support handoff. Never included in OAuth state.
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM source.'
+          in: query
+          name: utm_source
+          schema:
+            description: 'Optional sign-up attribution: UTM source.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM medium.'
+          in: query
+          name: utm_medium
+          schema:
+            description: 'Optional sign-up attribution: UTM medium.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM campaign.'
+          in: query
+          name: utm_campaign
+          schema:
+            description: 'Optional sign-up attribution: UTM campaign.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM term.'
+          in: query
+          name: utm_term
+          schema:
+            description: 'Optional sign-up attribution: UTM term.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: UTM content.'
+          in: query
+          name: utm_content
+          schema:
+            description: 'Optional sign-up attribution: UTM content.'
+            type: string
+        - allowEmptyValue: true
+          description: 'Optional sign-up attribution: the browser''s product analytics session id.'
+          in: query
+          name: analytics_session_id
+          schema:
+            description: 'Optional sign-up attribution: the browser''s product analytics session id.'
             type: string
       responses:
         "307":
@@ -17713,6 +18470,132 @@ paths:
       x-speakeasy-name-override: search
       x-speakeasy-react-hook:
         name: SearchBusinessMemories
+  /rpc/chat.countByUser:
+    get:
+      description: Count agent sessions per user for a time range. Uses the same population and visibility scoping as listChats, so each user's count matches listChats filtered to that user and the total matches the unfiltered listChats total.
+      operationId: countChatsByUser
+      parameters:
+        - allowEmptyValue: true
+          description: Count chats last active after this timestamp (ISO 8601)
+          in: query
+          name: from
+          schema:
+            description: Count chats last active after this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Count chats created before this timestamp (ISO 8601)
+          in: query
+          name: to
+          schema:
+            description: Count chats created before this timestamp (ISO 8601)
+            format: date-time
+            type: string
+        - allowEmptyValue: true
+          description: Maximum number of users to return
+          in: query
+          name: limit
+          schema:
+            default: 10
+            description: Maximum number of users to return
+            format: int64
+            maximum: 100
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+        - allowEmptyValue: true
+          description: Chat Sessions token header
+          in: header
+          name: Gram-Chat-Session
+          schema:
+            description: Chat Sessions token header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountChatsByUserResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - chat_sessions_token_header_Gram-Chat-Session: []
+        - {}
+      summary: countByUser chat
+      tags:
+        - chat
+      x-speakeasy-name-override: countByUser
+      x-speakeasy-react-hook:
+        name: CountChatsByUser
+        type: query
   /rpc/chat.creditUsage:
     get:
       description: Get the total number of chat credits and usage for the current billing period
@@ -18378,6 +19261,14 @@ paths:
               - asc
               - desc
             type: string
+        - allowEmptyValue: true
+          description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+          in: query
+          name: pinned_first
+          schema:
+            default: false
+            description: List pinned chats before unpinned ones, then apply sort_by and sort_order within each group
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -19567,7 +20458,7 @@ paths:
       x-speakeasy-name-override: revoke
   /rpc/cliAuth.authorize:
     post:
-      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, scopes:[agent,hooks], challenge} against the code with a ~5 minute TTL. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
+      description: Mint a short-lived one-time code bound to a PKCE code_challenge, on behalf of the authenticated dashboard user. Resolves the target project (given slug, else the org's default/first project) and records {user, org, project, key scope, challenge} against the code with a ~5 minute TTL. A producer key scope requires org:admin. Requires membership in the active organization. Refused (403) while impersonating an organization or user, or without membership in the active org.
       operationId: cliAuthAuthorize
       parameters:
         - allowEmptyValue: true
@@ -19653,7 +20544,7 @@ paths:
       x-speakeasy-name-override: authorize
   /rpc/cliAuth.redeem:
     post:
-      description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted per-user [agent,hooks] API key. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
+      description: 'Exchange a one-time code plus its PKCE code_verifier for a freshly minted API key of the scope requested at authorize. No session or API-key auth: proving knowledge of the code_verifier that matches the stored challenge IS the credential. The code is single-use — consumed atomically on lookup — so any missing/expired/already-consumed code or PKCE mismatch returns 401. The raw key is returned exactly once and never again.'
       operationId: cliAuthRedeem
       requestBody:
         content:
@@ -23065,6 +23956,278 @@ paths:
       x-speakeasy-name-override: getCoverage
       x-speakeasy-react-hook:
         name: DeviceIntegrationCoverage
+  /rpc/deviceIntegrations.getFleetCoverage:
+    get:
+      description: Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.
+      operationId: getFleetCoverage
+      parameters:
+        - allowEmptyValue: true
+          description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+          in: query
+          name: provider
+          schema:
+            description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FleetCoverage'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: getFleetCoverage deviceIntegrations
+      tags:
+        - deviceIntegrations
+      x-speakeasy-name-override: getFleetCoverage
+      x-speakeasy-react-hook:
+        name: FleetCoverage
+  /rpc/deviceIntegrations.listFleetDevices:
+    get:
+      description: 'Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.'
+      operationId: listFleetDevices
+      parameters:
+        - allowEmptyValue: true
+          description: Only devices synced from this provider. Excludes agent-only machines.
+          in: query
+          name: provider
+          schema:
+            description: Only devices synced from this provider. Excludes agent-only machines.
+            type: string
+        - allowEmptyValue: true
+          description: true for devices a connected MDM holds, false for agent-only machines.
+          in: query
+          name: in_inventory
+          schema:
+            description: true for devices a connected MDM holds, false for agent-only machines.
+            type: boolean
+        - allowEmptyValue: true
+          description: Only devices in this coverage bucket.
+          in: query
+          name: coverage_bucket
+          schema:
+            description: Only devices in this coverage bucket.
+            enum:
+              - agent_active
+              - agent_stale
+              - agent_other_device
+              - no_agent
+              - no_email
+              - unresolved_email
+              - missing
+            type: string
+        - allowEmptyValue: true
+          description: Only agent_active devices in this policy state.
+          in: query
+          name: policy_state
+          schema:
+            description: Only agent_active devices in this policy state.
+            enum:
+              - attested
+              - outdated
+              - unreported
+              - halted
+            type: string
+        - allowEmptyValue: true
+          description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+          in: query
+          name: user_ids
+          schema:
+            description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Only devices whose user_email is one of these, matched case-insensitively.
+          in: query
+          name: user_emails
+          schema:
+            description: Only devices whose user_email is one of these, matched case-insensitively.
+            items:
+              type: string
+            type: array
+        - allowEmptyValue: true
+          description: Pagination cursor from a previous page.
+          in: query
+          name: cursor
+          schema:
+            description: Pagination cursor from a previous page.
+            type: string
+        - allowEmptyValue: true
+          description: Page size. Defaults to 50, maximum 200.
+          in: query
+          name: limit
+          schema:
+            default: 50
+            description: Page size. Defaults to 50, maximum 200.
+            format: int64
+            maximum: 200
+            minimum: 1
+            type: integer
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListFleetDevicesResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - apikey_header_Gram-Key: []
+        - session_header_Gram-Session: []
+        - {}
+      summary: listFleetDevices deviceIntegrations
+      tags:
+        - deviceIntegrations
+      x-speakeasy-name-override: listFleetDevices
+      x-speakeasy-pagination:
+        inputs:
+          - in: parameters
+            name: cursor
+            type: cursor
+        outputs:
+          nextCursor: $.next_cursor
+        type: cursor
+      x-speakeasy-react-hook:
+        name: FleetDevices
   /rpc/deviceIntegrations.listManagedDevices:
     get:
       description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
@@ -36375,13 +37538,13 @@ paths:
             example: https://mcp.box.com
             type: string
         - allowEmptyValue: true
-          description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-          example: com.pulsemcp.mirror/box
+          description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+          example: io.example/server
           in: query
           name: registry_specifier
           schema:
-            description: Registry specifier for the server, as returned by listCatalog (e.g., 'com.pulsemcp.mirror/box')
-            example: com.pulsemcp.mirror/box
+            description: Registry specifier for the server, as returned by listCatalog (e.g., 'io.example/server')
+            example: io.example/server
             type: string
         - allowEmptyValue: true
           description: Session header
@@ -37275,6 +38438,120 @@ paths:
       x-speakeasy-name-override: get
       x-speakeasy-react-hook:
         name: GetMcpServer
+  /rpc/mcpServers.getUsageImpact:
+    get:
+      description: 'Preview who a breaking change to an MCP server affects: the server''s active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server''s user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.'
+      operationId: getMcpServerUsageImpact
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the MCP server
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the MCP server
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: API Key header
+          in: header
+          name: Gram-Key
+          schema:
+            description: API Key header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/McpServerUsageImpact'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - apikey_header_Gram-Key: []
+          project_slug_header_Gram-Project: []
+        - {}
+      summary: getMcpServerUsageImpact mcpServers
+      tags:
+        - mcpServers
+      x-speakeasy-name-override: getUsageImpact
+      x-speakeasy-react-hook:
+        name: McpServerUsageImpact
   /rpc/mcpServers.list:
     get:
       description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
@@ -40622,6 +41899,984 @@ paths:
       x-speakeasy-name-override: restore
       x-speakeasy-react-hook:
         name: RestoreOktaServerSuggestion
+  /rpc/orgEncryption.completeSwitch:
+    post:
+      description: 'Complete an in-flight key switch now instead of waiting for the grace period: drop the previous key''s wraps. Requires org:admin. After this the previous key is no longer needed to read the organization''s data.'
+      operationId: completeOrgEncryptionKeySwitch
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: completeSwitch orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: completeSwitch
+      x-speakeasy-react-hook:
+        name: CompleteOrgEncryptionKeySwitch
+  /rpc/orgEncryption.createGcpKey:
+    post:
+      description: Register a customer-managed GCP KMS symmetric key the organization can switch to. Requires org:admin. The key is not used until the organization switches to it.
+      operationId: createOrgEncryptionGcpKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrgEncryptionGcpKeyForm'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionKey'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: createGcpKey orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: createGcpKey
+      x-speakeasy-react-hook:
+        name: CreateOrgEncryptionGcpKey
+  /rpc/orgEncryption.deleteKey:
+    delete:
+      description: Delete a customer-managed encryption key. Requires org:admin. Refused with a conflict while the key is the organization's key, is being switched to or away from, or still wraps any data encryption key, because the data it protects would become unreadable. Speakeasy-managed keys cannot be deleted.
+      operationId: deleteOrgEncryptionKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to delete.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to delete.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "204":
+          description: No Content response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: deleteKey orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: deleteKey
+      x-speakeasy-react-hook:
+        name: DeleteOrgEncryptionKey
+  /rpc/orgEncryption.getConfig:
+    get:
+      description: Get the organization's encryption configuration. Requires org:read. Not found until a feature has encrypted data for the organization.
+      operationId: getOrgEncryptionConfig
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getConfig orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: getConfig
+      x-speakeasy-react-hook:
+        name: OrgEncryptionConfig
+  /rpc/orgEncryption.listKeys:
+    get:
+      description: List the organization's encryption keys, Speakeasy-managed and customer-managed. Requires org:read.
+      operationId: listOrgEncryptionKeys
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListOrgEncryptionKeysResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: listKeys orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: listKeys
+      x-speakeasy-react-hook:
+        name: OrgEncryptionKeys
+  /rpc/orgEncryption.resume:
+    post:
+      description: Resume a suspended organization after its key was fixed. Requires org:admin. Speakeasy first proves the key unwraps every data encryption key; the hourly health probe also resumes on its own once the key works again.
+      operationId: resumeOrgEncryption
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: resume orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: resume
+      x-speakeasy-react-hook:
+        name: ResumeOrgEncryption
+  /rpc/orgEncryption.rollbackSwitch:
+    post:
+      description: 'Roll back an in-flight key switch: return to the previous key and drop the wraps made under the new one. Requires org:admin.'
+      operationId: rollbackOrgEncryptionKeySwitch
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rollbackSwitch orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: rollbackSwitch
+      x-speakeasy-react-hook:
+        name: RollbackOrgEncryptionKeySwitch
+  /rpc/orgEncryption.rotateDataKey:
+    post:
+      description: Replace a use case's data encryption key with a new one. Requires org:admin. Values encrypted before the rotation stay readable and are re-encrypted under the new key when next written.
+      operationId: rotateOrgEncryptionDataKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RotateOrgEncryptionDataKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: rotateDataKey orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: rotateDataKey
+      x-speakeasy-react-hook:
+        name: RotateOrgEncryptionDataKey
+  /rpc/orgEncryption.switchKey:
+    post:
+      description: Start switching the organization to a customer-managed key. Requires org:admin. Speakeasy verifies the key, then wraps every data encryption key under it; the previous key keeps everything readable until the switch completes, either through completeSwitch or automatically after the grace period, or rolls back.
+      operationId: switchOrgEncryptionKey
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SwitchOrgEncryptionKeyRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgEncryptionConfig'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: switchKey orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: switchKey
+      x-speakeasy-react-hook:
+        name: SwitchOrgEncryptionKey
+  /rpc/orgEncryption.verifyKey:
+    post:
+      description: 'Probe that Speakeasy can reach an encryption key and use it: encrypt a probe payload and decrypt it again. Performs real KMS operations, billed to the key''s owner and recorded in their audit log. Nothing is persisted. Rate limited per organization. Requires org:admin.'
+      operationId: verifyOrgEncryptionKey
+      parameters:
+        - allowEmptyValue: true
+          description: The ID of the key to verify.
+          in: query
+          name: id
+          required: true
+          schema:
+            description: The ID of the key to verify.
+            format: uuid
+            type: string
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyOrgEncryptionKeyResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "412":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'failed_precondition: resource is not in a valid state for this operation'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "429":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'rate_limit_exceeded: rate limit exceeded'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: service temporarily unavailable'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: verifyKey orgEncryption
+      tags:
+        - orgEncryption
+      x-speakeasy-name-override: verifyKey
+      x-speakeasy-react-hook:
+        name: VerifyOrgEncryptionKey
   /rpc/organizationAssets.uploadImage:
     post:
       description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -54543,7 +56798,7 @@ paths:
         name: AttachUserSessionIssuer
   /rpc/remoteSessionClients.create:
     post:
-      description: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
+      description: 'Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client''s upstream registration: the server copies that client''s secret and callback into the new record, and neither is returned to the caller.'
       operationId: createRemoteSessionClient
       parameters:
         - allowEmptyValue: true
@@ -57330,7 +59585,7 @@ paths:
       x-speakeasy-name-override: detachBinding
   /rpc/remoteSessions.detachServerClientAssociation:
     post:
-      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding and is refused here with a conflict: turn off User Identity on the server instead. Requires mcp:write on the server.'
+      description: 'Remove one MCP server''s association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer''s client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server''s issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.'
       operationId: detachServerClientAssociation
       parameters:
         - allowEmptyValue: true
@@ -57479,6 +59734,13 @@ paths:
             description: An existing client being bound. Omit for a new client.
             format: uuid
             type: string
+        - allowEmptyValue: true
+          description: Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.
+          in: query
+          name: replace_client
+          schema:
+            description: Preview replacing the provider's bound client, as commitServerIdentityConfiguration's replace_client does. The servers that use it are listed with the resignin impact, and that list is what the commit must confirm. Only with change replace and mcp_server_id.
+            type: boolean
         - allowEmptyValue: true
           description: Session header
           in: header
@@ -58040,6 +60302,102 @@ paths:
       x-speakeasy-name-override: revoke
       x-speakeasy-react-hook:
         name: RevokeRemoteSession
+  /rpc/remoteSessions.testServerConnection:
+    post:
+      description: Initialize a directly Remote MCP-backed server and discover all tools using the signed-in user's saved authorization. Never executes tools. A provider tab returning is not evidence of authorization. Requires an ordinary dashboard session and mcp:connect on the exact server; API keys are refused. Requires the staff-managed provider_setup organization feature, disabled by default; unavailable organizations receive HTTP 404.
+      operationId: testServerConnection
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+        - allowEmptyValue: true
+          description: project header
+          in: header
+          name: Gram-Project
+          schema:
+            description: project header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TestServerConnectionRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServerConnectionTestResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - project_slug_header_Gram-Project: []
+          session_header_Gram-Session: []
+        - {}
+      summary: testServerConnection remoteSessions
+      tags:
+        - remoteSessions
+      x-speakeasy-name-override: testServerConnection
+      x-speakeasy-react-hook:
+        name: TestServerConnection
   /rpc/resources.list:
     get:
       description: List all resources for a project
@@ -69548,6 +71906,100 @@ paths:
       x-speakeasy-name-override: listPersonAccounts
       x-speakeasy-react-hook:
         name: SlackPersonAccounts
+  /rpc/slackDirectoryConnections.setDefaultProject:
+    post:
+      description: Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.
+      operationId: setSlackDirectoryDefaultProject
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetSlackDirectoryDefaultProjectRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlackDirectoryConnection'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+        "503":
+          content:
+            application/vnd.goa.error:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: setDefaultProject slackDirectoryConnections
+      tags:
+        - slackDirectoryConnections
+      x-speakeasy-name-override: setDefaultProject
+      x-speakeasy-react-hook:
+        name: SetSlackDirectoryDefaultProject
   /rpc/slackDirectoryConnections.setMapping:
     post:
       description: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
@@ -71451,6 +73903,95 @@ paths:
       x-speakeasy-react-hook:
         name: GetObservabilityOverview
         type: query
+  /rpc/telemetry.getOrgMcpServerActivity:
+    post:
+      description: Get recent per-MCP-server tool-call activity for every project in the organization the caller can read, in one request. Only the recent window is scanned.
+      operationId: getOrgMcpServerActivity
+      parameters:
+        - allowEmptyValue: true
+          description: Session header
+          in: header
+          name: Gram-Session
+          schema:
+            description: Session header
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetMcpServerActivityPayload'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetOrgMcpServerActivityResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      security:
+        - session_header_Gram-Session: []
+        - {}
+      summary: getOrgMcpServerActivity telemetry
+      tags:
+        - telemetry
+      x-speakeasy-name-override: getOrgMcpServerActivity
+      x-speakeasy-react-hook:
+        name: GetOrgMcpServerActivity
+        type: query
   /rpc/telemetry.getOrganizationGatewayOverview:
     post:
       description: Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
@@ -71765,7 +74306,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GetProjectMetricsSummaryPayload'
+              $ref: '#/components/schemas/GetProjectOverviewPayload'
         required: true
       responses:
         "200":
@@ -85691,7 +88232,7 @@ paths:
         name: WithdrawWorkloadIssuer
   /rpc/workloadIdentities.withdrawSubject:
     delete:
-      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
       operationId: withdrawWorkloadSubject
       parameters:
         - allowEmptyValue: true
@@ -85729,7 +88270,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+                $ref: '#/components/schemas/WithdrawnWorkloadSubjectPolicy'
           description: OK response.
         "400":
           content:
@@ -86762,37 +89303,6 @@ components:
           description: The version of the package.
       required:
         - name
-    AddExternalMCPForm:
-      type: object
-      properties:
-        name:
-          type: string
-          description: The display name for the external MCP server.
-          example: My Slack Integration
-        registry_id:
-          type: string
-          description: The ID of the external MCP registry the server is from.
-          format: uuid
-        registry_server_specifier:
-          type: string
-          description: The canonical server name used to look up the server in the registry (e.g., 'slack', 'ai.exa/exa').
-          example: slack
-        selected_remotes:
-          type: array
-          items:
-            type: string
-          description: URLs of the remotes to use for this MCP server. If not provided, the backend will auto-select based on transport type preference.
-          example:
-            - https://mcp.example.com/sse
-        slug:
-          type: string
-          description: A short url-friendly label that uniquely identifies a resource.
-          pattern: ^[a-z0-9_-]{1,128}$
-          maxLength: 40
-      required:
-        - name
-        - slug
-        - registry_server_specifier
     AddExternalOAuthServerRequestBody:
       type: object
       properties:
@@ -87076,6 +89586,126 @@ components:
           format: uuid
       required:
         - block_id
+    AgentCrashBuild:
+      type: object
+      properties:
+        arch:
+          type: string
+          maxLength: 16
+        binary:
+          type: string
+          description: speakeasyd or speakeasy-ui.
+          maxLength: 32
+        channel:
+          type: string
+          description: Release channel.
+          maxLength: 32
+        os:
+          type: string
+          maxLength: 16
+        os_version:
+          type: string
+          description: OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+          maxLength: 64
+        version:
+          type: string
+          maxLength: 64
+      required:
+        - binary
+        - version
+    AgentCrashFrame:
+      type: object
+      properties:
+        file:
+          type: string
+          description: Module-relative source file.
+          maxLength: 512
+        function:
+          type: string
+          description: Fully qualified function name.
+          maxLength: 512
+        line:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 1e+07
+      required:
+        - function
+    AgentCrashReport:
+      type: object
+      properties:
+        build:
+          $ref: '#/components/schemas/AgentCrashBuild'
+        component:
+          type: string
+          description: 'Where it happened: ipc, policy_scheduler, update_scheduler, aiscan, sessions, ui or runtime.'
+          maxLength: 32
+        count:
+          type: integer
+          description: Times this crash recurred in one process before it was reported.
+          format: int64
+          minimum: 1
+          maximum: 1e+06
+        id:
+          type: string
+          description: Random report id; repeats of the same id are one report.
+          minLength: 1
+          maxLength: 64
+        kind:
+          type: string
+          description: fatal, recovered or rollback.
+          maxLength: 32
+        message:
+          type: string
+          description: Go runtime error text, when the panic was one. Other panics send panic_type instead.
+          maxLength: 512
+        occurred_at:
+          type: string
+          description: When it happened, by the device clock.
+          format: date-time
+        other_goroutines:
+          type: integer
+          description: Goroutines in a fatal dump besides the crashing one. Their stacks are not sent.
+          format: int64
+          minimum: 0
+          maximum: 1e+06
+        panic_type:
+          type: string
+          description: Go type of a non-runtime panic value.
+          maxLength: 256
+        rollback:
+          $ref: '#/components/schemas/AgentCrashRollback'
+        schema_version:
+          type: integer
+          description: Report schema version.
+          format: int64
+          minimum: 1
+        stack:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCrashFrame'
+          description: Frames of the crashing goroutine, innermost first.
+          maxItems: 50
+      description: 'One device agent crash: a fatal crash, a recovered panic, or a self-rollback.'
+      required:
+        - schema_version
+        - id
+        - kind
+        - component
+        - occurred_at
+        - count
+        - build
+    AgentCrashRollback:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Version that failed to stabilize.
+          maxLength: 64
+        to:
+          type: string
+          description: Version restored.
+          maxLength: 64
     AgentDelegatedGrant:
       type: object
       properties:
@@ -89163,6 +91793,12 @@ components:
           type: string
         after_snapshot: {}
         before_snapshot: {}
+        category:
+          type: string
+          description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+          enum:
+            - configuration
+            - security
         created_at:
           type: string
           description: The creation date of the audit log.
@@ -89466,9 +92102,16 @@ components:
           description: PKCE challenge method. Only S256 is supported.
           enum:
             - S256
+        key_scope:
+          type: string
+          description: The kind of key redeem mints. agent_user (the default) is the device agent's per-user project-scoped key. producer is the organization-wide key the Speakeasy CLI uses, and requires org:admin, the same as creating one in the dashboard.
+          default: agent_user
+          enum:
+            - agent_user
+            - producer
         project_slug:
           type: string
-          description: Optional project slug to scope the minted key to. Defaults to the org's default (first) project when omitted.
+          description: Optional project slug. For agent_user keys it is the project the key is scoped to; for producer keys it is only reported back to the CLI as its default project. Defaults to the org's default (first) project when omitted.
       required:
         - code_challenge
         - code_challenge_method
@@ -90812,6 +93455,27 @@ components:
         - tool_calls
         - tool_results
         - risk_only
+    ChatUserSessionCount:
+      type: object
+      properties:
+        count:
+          type: integer
+          description: Number of sessions; equals the chat.list total when filtered to this user
+          format: int64
+        display_name:
+          type: string
+          description: The user's display name, empty when unknown
+        email:
+          type: string
+          description: The user's email, empty when unknown
+        user_id:
+          type: string
+          description: Speakeasy user ID. Empty for sessions with no Speakeasy user (external users, agent actors).
+      required:
+        - user_id
+        - email
+        - display_name
+        - count
     CheckAgentPolicyGrantsForm:
       type: object
       properties:
@@ -91165,7 +93829,7 @@ components:
           $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
         existing_client_id:
           type: string
-          description: An existing visible remote-session client to link. Required only for existing mode.
+          description: 'An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.'
           format: uuid
         mcp_server_id:
           type: string
@@ -91181,6 +93845,18 @@ components:
           enum:
             - cimd
             - dcr
+        replace_client:
+          type: boolean
+          description: Replace the selected provider's client already bound to the user session issuer, rather than reuse it or be refused. Everyone signed in through the old client must sign in again, on this server and every other server that uses it. The other servers move to the new client. Refused when a gateway or a server that is not directly Remote MCP-backed shares the issuer, or when a server using the client is in another project.
+        replace_client_server_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With replace_client, exactly the other MCP servers that use the client being replaced, as getServerIdentityImpact listed them. The commit is refused if they no longer match.
+        target_server_only:
+          type: boolean
+          description: Refuse a save if the user session issuer also serves another MCP server. Setup screens must set this to avoid changing shared sign-in bindings. Explicitly assign a dedicated issuer before retrying.
       description: 'A complete plan for configuring identity on one Remote MCP-backed MCP server. Exactly one of provider_id or create_provider is required. client_mode controls which client fields are accepted: existing requires existing_client_id and no client_configuration; auto and manual require client_configuration and no existing_client_id.'
       required:
         - mcp_server_id
@@ -91271,6 +93947,21 @@ components:
           description: The confirmed servers with their new state.
       required:
         - servers
+    CountChatsByUserResult:
+      type: object
+      properties:
+        total:
+          type: integer
+          description: Total sessions across all users; equals the unfiltered chat.list total for the same range
+          format: int64
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatUserSessionCount'
+          description: Users ranked by session count, highest first, truncated to the requested limit
+      required:
+        - users
+        - total
     CountRemoteSessionsResult:
       type: object
       properties:
@@ -91558,6 +94249,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -91576,10 +94268,6 @@ components:
           type: string
           description: The external ID to refer to the deployment. This can be a git commit hash for example.
           example: bc5f4a555e933e6861d12edba4c2d87ef6caf8e6
-        external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
         external_url:
           type: string
           description: The upstream URL a deployment can refer to. This can be a github url to a commit hash or pull request.
@@ -92109,6 +94797,26 @@ components:
       description: Form for creating a new meta MCP server. URL addressability is managed separately through MCP endpoints.
       required:
         - name
+    CreateOrgEncryptionGcpKeyForm:
+      type: object
+      properties:
+        customer_grant_reference:
+          type: string
+          description: Optional. The Speakeasy principal, as reported by externalCredentials.getGcpSetupInfo, that the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. That service account, in the customer's project, is what holds roles/cloudkms.cryptoKeyEncrypterDecrypter on the key; Speakeasy is never granted on the key directly. Not a secret.
+        external_credential_id:
+          type: string
+          description: The organization's gcp_iam external credential Speakeasy reaches the key with.
+          format: uuid
+        name:
+          type: string
+          description: A human-readable name for the key.
+        resource_name:
+          type: string
+          description: 'The GCP KMS crypto key resource name, without a version: projects/<p>/locations/<l>/keyRings/<r>/cryptoKeys/<k>. The key must have purpose ENCRYPT_DECRYPT.'
+      required:
+        - external_credential_id
+        - name
+        - resource_name
     CreateOrganizationRemoteSessionClientForm:
       type: object
       properties:
@@ -92445,6 +95153,10 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+        template_client_id:
+          type: string
+          description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
+          format: uuid
         token_endpoint_auth_audience_format:
           type: string
           description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
@@ -92465,7 +95177,7 @@ components:
             type: string
             format: uuid
           description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
-      description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+      description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.
       required:
         - remote_session_issuer_id
         - client_id
@@ -93104,6 +95816,29 @@ components:
         - target
         - limit_usd
         - window_kind
+    CreateTemporaryGrantForm:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.
+          format: date-time
+        principal_urn:
+          type: string
+          description: 'The principal receiving the access: an organization member (user:<id>), everyone (user:all), a role (role:organization:<id> or role:global:<id>) or an active agent (agent:<id>).'
+        reason:
+          type: string
+          description: Why the access is needed, recorded in the audit log.
+          maxLength: 1000
+        scope:
+          type: string
+          description: The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.
+        selector:
+          $ref: '#/components/schemas/Selector'
+      required:
+        - principal_urn
+        - scope
+        - expires_at
     CreateToolsetRequestBody:
       type: object
       properties:
@@ -93441,6 +96176,22 @@ components:
           type: string
           description: When the custom domain was created.
           format: date-time
+        dns_checked_at:
+          type: string
+          description: When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.
+          format: date-time
+        dns_configuration_status:
+          type: string
+          description: 'Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.'
+        dns_routing_method:
+          type: string
+          description: 'How the latest health check observed this domain''s DNS routing traffic to Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.'
+        dns_target:
+          type: string
+          description: The designated CNAME target for this domain (<dns_target_token>.<suffix>). Pointing the domain here lets Speakeasy move it without DNS changes. Absent when per-domain targets are not configured or the token is not yet assigned.
+        dns_target_token:
+          type: string
+          description: The random DNS label identifying this domain's designated CNAME target. Assigned when the domain is registered and unchanged for its lifetime. Absent until assigned.
         domain:
           type: string
           description: The custom domain name
@@ -93674,6 +96425,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -95573,7 +98325,7 @@ components:
           type: array
           items:
             type: string
-          description: The external MCP servers, identified by slug, to exclude from the new deployment when cloning a previous deployment.
+          description: 'Has no effect: new deployments never include external MCP servers. Accepted so existing callers keep working.'
         exclude_functions:
           type: array
           items:
@@ -95593,11 +98345,6 @@ components:
           type: boolean
           description: If true, the deployment will be created in non-blocking mode where the request will return immediately and the deployment will proceed asynchronously.
           example: false
-        upsert_external_mcps:
-          type: array
-          items:
-            $ref: '#/components/schemas/AddExternalMCPForm'
-          description: The external MCP servers to upsert in the new deployment.
         upsert_functions:
           type: array
           items:
@@ -96229,7 +98976,7 @@ components:
           format: uri
         is_read_only:
           type: boolean
-          description: Whether every tool on the server is read-only
+          description: Whether every declared tool is read-only, when catalog evidence is available
         mcp_server_id:
           type: string
           description: ID of the attached MCP server backing this server
@@ -96267,7 +99014,7 @@ components:
           description: Display name for the server
         tool_count:
           type: integer
-          description: Number of tools the server exposes
+          description: Number of declared tools, when catalog evidence is available
           format: int64
         toolset_id:
           type: string
@@ -96282,8 +99029,6 @@ components:
         - registry_specifier
         - version
         - description
-        - tool_count
-        - is_read_only
         - supports_dcr
     ExternalMCPTool:
       type: object
@@ -96512,6 +99257,182 @@ components:
         - id
         - label
         - count
+    FleetCoverage:
+      type: object
+      properties:
+        active_window_minutes:
+          type: integer
+          description: 'Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.'
+          format: int64
+        agent_active:
+          type: integer
+          description: Devices with an agent heartbeat or state report within the window, agent-only machines included.
+          format: int64
+        agent_active_device_attested:
+          type: integer
+          description: How many of agent_active are backed by that machine's own heartbeat or state report.
+          format: int64
+        agent_only_devices:
+          type: integer
+          description: Machines running the agent that no connected MDM inventory holds. Always 0 when provider is set.
+          format: int64
+        agent_other_device:
+          type: integer
+          description: MDM devices whose assigned user runs the agent, but not on this machine. Device-level matching only.
+          format: int64
+        agent_stale:
+          type: integer
+          description: Devices with a known agent that went quiet.
+          format: int64
+        attestation:
+          type: string
+          description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+          enum:
+            - device
+            - user
+        enforcement_halted:
+          type: integer
+          description: agent_active devices whose latest state report says the kill switch halted enforcement.
+          format: int64
+        mdm_connected:
+          type: boolean
+          description: True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.
+        missing:
+          type: integer
+          description: MDM devices absent from the latest completed inventory snapshot.
+          format: int64
+        no_agent:
+          type: integer
+          description: MDM devices whose assigned email resolves to an org member with no agent at all.
+          format: int64
+        no_email:
+          type: integer
+          description: MDM devices with no assigned-user email.
+          format: int64
+        organization_id:
+          type: string
+          description: Organization the coverage describes.
+        policy_attested:
+          type: integer
+          description: agent_active devices whose latest report applies the policy last served to the reporting user.
+          format: int64
+        policy_outdated:
+          type: integer
+          description: agent_active devices that report a different policy, or none.
+          format: int64
+        policy_unreported:
+          type: integer
+          description: agent_active devices with no state report within the window.
+          format: int64
+        total_devices:
+          type: integer
+          description: Every device counted here, missing and agent-only ones included.
+          format: int64
+        unresolved_email:
+          type: integer
+          description: MDM devices whose assigned email matches neither an agent user nor an org member.
+          format: int64
+      description: 'Agent coverage and policy enforcement across every device the organization can see: its MDM inventories plus the agent machines no inventory holds. Works with no MDM connected, when every device is an agent-only machine.'
+      required:
+        - organization_id
+        - active_window_minutes
+        - mdm_connected
+        - attestation
+        - agent_active
+        - agent_active_device_attested
+        - agent_stale
+        - agent_other_device
+        - no_agent
+        - no_email
+        - unresolved_email
+        - missing
+        - agent_only_devices
+        - total_devices
+        - policy_attested
+        - policy_outdated
+        - policy_unreported
+        - enforcement_halted
+    FleetDevice:
+      type: object
+      properties:
+        agent_last_seen_at:
+          type: string
+          description: The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.
+          format: date-time
+        agent_state:
+          $ref: '#/components/schemas/ManagedDeviceAgentState'
+        coverage_bucket:
+          type: string
+          description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
+          enum:
+            - agent_active
+            - agent_stale
+            - agent_other_device
+            - no_agent
+            - no_email
+            - unresolved_email
+            - missing
+        external_id:
+          type: string
+          description: The MDM's identifier for the device. Omitted for an agent-only machine.
+        first_seen_at:
+          type: string
+          description: When the MDM or the agent first reported this device.
+          format: date-time
+        hostname:
+          type: string
+          description: Device hostname, from the MDM or the agent.
+        id:
+          type: string
+          description: 'Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an agent-only machine.'
+        in_inventory:
+          type: boolean
+          description: True when a connected MDM's inventory holds this device. False for a machine only its agent reports.
+        last_seen_at:
+          type: string
+          description: When the MDM or the agent last reported this device.
+          format: date-time
+        mdm_last_check_in_at:
+          type: string
+          description: Last device check-in as reported by the MDM.
+          format: date-time
+        missing_since:
+          type: string
+          description: When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.
+          format: date-time
+        os_name:
+          type: string
+          description: Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.
+        os_version:
+          type: string
+          description: Operating system version as the MDM reports it. Omitted for an agent-only machine.
+        policy_state:
+          type: string
+          description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+          enum:
+            - attested
+            - outdated
+            - unreported
+            - halted
+        provider:
+          type: string
+          description: Provider the device was synced from. Omitted for an agent-only machine.
+        serial_number:
+          type: string
+          description: Hardware serial number, from the MDM or the agent. Omitted when neither reported one.
+        user_email:
+          type: string
+          description: The MDM's assigned user, or for an agent-only machine the user its agent runs as.
+        user_id:
+          type: string
+          description: Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.
+      description: 'One device the organization can see: a device from a connected MDM''s inventory, or a machine running the Speakeasy device agent that no connected inventory holds. MDM devices carry the same coverage bucket as listManagedDevices; agent-only devices are only ever agent_active or agent_stale, classified by their own heartbeat and state reports.'
+      required:
+        - id
+        - in_inventory
+        - coverage_bucket
+        - first_seen_at
+        - last_seen_at
     FunctionEnvironmentVariable:
       type: object
       properties:
@@ -97562,6 +100483,22 @@ components:
         - top_tools_by_count
         - top_tools_by_failure_rate
         - interval_seconds
+    GetOrgMcpServerActivityResult:
+      type: object
+      properties:
+        projects:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpServerActivity'
+          description: One entry per readable project whose activity was read
+        recent_window_days:
+          type: integer
+          description: The recent-activity window size in days that was applied
+          format: int64
+      description: Recent MCP server activity across the organization. Only the recent window is scanned, so each server's total_tool_calls equals its recent_tool_calls. A project the caller can read but whose activity could not be read is absent, so its servers' counts are unknown rather than zero.
+      required:
+        - projects
+        - recent_window_days
     GetOrganizationGatewayActivityPayload:
       type: object
       properties:
@@ -97630,24 +100567,41 @@ components:
       required:
         - from
         - to
+    GetProjectOverviewPayload:
+      type: object
+      properties:
+        from:
+          type: string
+          description: Start time in ISO 8601 format
+          example: "2025-12-19T10:00:00Z"
+          format: date-time
+        include_usage:
+          type: boolean
+          description: Also return the project home usage breakdowns (usage_by_user, usage_by_agent, mcp_usage) in the same response
+          default: false
+        to:
+          type: string
+          description: End time in ISO 8601 format
+          example: "2025-12-19T11:00:00Z"
+          format: date-time
+      description: Payload for getting project-level overview
+      required:
+        - from
+        - to
     GetProjectOverviewResult:
       type: object
       properties:
-        comparison:
-          $ref: '#/components/schemas/ProjectOverviewSummary'
-        metrics_mode:
-          type: string
-          description: Indicates whether metrics are session-based or tool-call-based
-          enum:
-            - session
-            - tool_call
+        mcp_usage:
+          $ref: '#/components/schemas/ProjectMcpUsage'
         summary:
           $ref: '#/components/schemas/ProjectOverviewSummary'
+        usage_by_agent:
+          $ref: '#/components/schemas/QueryResult'
+        usage_by_user:
+          $ref: '#/components/schemas/QueryResult'
       description: Result of project overview query
       required:
         - summary
-        - comparison
-        - metrics_mode
     GetProjectResult:
       type: object
       properties:
@@ -100508,20 +103462,6 @@ components:
         - affected
         - affected_now
         - scheduled
-    LLMClientUsage:
-      type: object
-      properties:
-        activity_count:
-          type: integer
-          description: Number of messages (session mode) or tool calls (tool_call mode)
-          format: int64
-        client_name:
-          type: string
-          description: Client/agent name (e.g., 'cursor', 'claude-code', 'cowork')
-      description: Usage breakdown by LLM client/agent
-      required:
-        - client_name
-        - activity_count
     LauncherCandidate:
       type: object
       properties:
@@ -100688,6 +103628,16 @@ components:
           description: Cursor for the next page; absent when exhausted.
       required:
         - items
+    ListAgentPolicyScopesResult:
+      type: object
+      properties:
+        scopes:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeDefinition'
+          description: The scopes an agent policy may hold, in catalogue order.
+      required:
+        - scopes
     ListAgentsResult:
       type: object
       properties:
@@ -101324,6 +104274,19 @@ components:
       description: Result of listing filter options
       required:
         - options
+    ListFleetDevicesResult:
+      type: object
+      properties:
+        devices:
+          type: array
+          items:
+            $ref: '#/components/schemas/FleetDevice'
+          description: Devices, newest first.
+        next_cursor:
+          type: string
+          description: Cursor for the next page. Omitted on the last page.
+      required:
+        - devices
     ListGlobalRemoteSessionIssuersResult:
       type: object
       properties:
@@ -101719,6 +104682,16 @@ components:
         - suggestions
         - open_count
         - total_count
+    ListOrgEncryptionKeysResult:
+      type: object
+      properties:
+        keys:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrgEncryptionKey'
+          description: The organization's encryption keys, newest first.
+      required:
+        - keys
     ListOrganizationMcpServersResult:
       type: object
       properties:
@@ -102040,6 +105013,8 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
+            - org:device_agent_sync
+            - org:hooks_ingest
             - project:read
             - project:blocked_read
             - project:write
@@ -102060,12 +105035,12 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - plugin:write
+            - plugin:blocked_write
             - assistant:read
             - assistant:blocked_read
             - assistant:write
             - assistant:blocked_write
-            - plugin:write
-            - plugin:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
             - risk_policy:block
@@ -102081,8 +105056,6 @@ components:
             - workload:blocked_read
             - workload:write
             - workload:blocked_write
-            - org:device_agent_sync
-            - org:hooks_ingest
         selectors:
           type: array
           items:
@@ -102097,6 +105070,8 @@ components:
               - org:blocked_read
               - org:admin
               - org:blocked_admin
+              - org:device_agent_sync
+              - org:hooks_ingest
               - project:read
               - project:blocked_read
               - project:write
@@ -102117,12 +105092,12 @@ components:
               - skill:blocked_read
               - skill:write
               - skill:blocked_write
+              - plugin:write
+              - plugin:blocked_write
               - assistant:read
               - assistant:blocked_read
               - assistant:write
               - assistant:blocked_write
-              - plugin:write
-              - plugin:blocked_write
               - risk_policy:evaluate
               - risk_policy:bypass
               - risk_policy:block
@@ -102138,8 +105113,6 @@ components:
               - workload:blocked_read
               - workload:write
               - workload:blocked_write
-              - org:device_agent_sync
-              - org:hooks_ingest
           description: The inherited scopes the primary scope grants.
       required:
         - scope
@@ -102170,8 +105143,14 @@ components:
           items:
             $ref: '#/components/schemas/ScopeDefinition'
           description: The scopes available in access control.
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeTask'
+          description: Tasks that need more than one scope, so a missing scope can be explained in context.
       required:
         - scopes
+        - tasks
     ListServerClientAssociationsResult:
       type: object
       properties:
@@ -102180,8 +105159,15 @@ components:
           items:
             $ref: '#/components/schemas/ServerClientAssociation'
           description: The server's associated upstream OAuth clients, oldest first.
+        required_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.
       required:
         - associations
+        - required_client_ids
     ListServerHeadersResult:
       type: object
       properties:
@@ -102521,6 +105507,16 @@ components:
           description: Emails seen syncing the device agent, most recently active first.
       required:
         - users
+    ListTemporaryGrantsResult:
+      type: object
+      properties:
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/TemporaryGrant'
+          description: Temporary grants, soonest deadline first. At most 500 are returned.
+      required:
+        - grants
     ListToolFiltersResult:
       type: object
       properties:
@@ -103769,11 +106765,6 @@ components:
     McpServer:
       type: object
       properties:
-        builtin_backend:
-          type: string
-          description: A first-party backend Speakeasy serves itself, if any. approvals is the server agents call request_approval on; Speakeasy creates it with a project's first approval policy and manages its backend.
-          enum:
-            - approvals
         created_at:
           type: string
           description: When the MCP server was created
@@ -103987,6 +106978,93 @@ components:
         - tool_selection_mode
         - external_mcp_slugs
         - external_mcp_proxy_only
+    McpServerUsageImpact:
+      type: object
+      properties:
+        active_connection_count:
+          type: integer
+          description: Unexpired, unrevoked sessions that can reach this server.
+          format: int64
+        active_subject_count:
+          type: integer
+          description: Distinct subjects (people, API keys, agents, workloads, anonymous callers) holding those sessions.
+          format: int64
+        last_used_at:
+          type: string
+          description: Most recent use across all those sessions, accurate to within five minutes. Absent when none has a recorded use.
+          format: date-time
+        server_name:
+          type: string
+          description: The server's display name, which confirmations ask the operator to type.
+        shared_connection_count:
+          type: integer
+          description: Of active_connection_count, the sessions issued for the whole shared sign-in rather than this server's address. Always zero when shared_sign_in is false.
+          format: int64
+        shared_sign_in:
+          type: boolean
+          description: Whether the server's user session issuer also serves other MCP servers or gateways. Connections not bound to this server's address may then be using one of those instead.
+        sign_in_required:
+          type: boolean
+          description: 'Whether the server has a user session issuer. When false nothing is counted: callers are not signed in, so their usage is unknown.'
+        subjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerUsageSubject'
+          description: Subjects holding active sessions, most recently used first.
+        subjects_truncated:
+          type: boolean
+          description: Whether more subjects exist than are listed.
+      description: Active signed-in usage of an MCP server, for confirming a breaking change.
+      required:
+        - server_name
+        - sign_in_required
+        - shared_sign_in
+        - active_connection_count
+        - active_subject_count
+        - shared_connection_count
+        - subjects
+        - subjects_truncated
+    McpServerUsageSubject:
+      type: object
+      properties:
+        client_names:
+          type: array
+          items:
+            type: string
+          description: Self-reported names of the MCP clients behind the sessions. Unverified.
+        connection_count:
+          type: integer
+          description: Active sessions this subject holds.
+          format: int64
+        display_name:
+          type: string
+          description: Resolved human-readable name of the subject, if known.
+        email:
+          type: string
+          description: Email of the subject when it is a Speakeasy user.
+        last_used_at:
+          type: string
+          description: Most recent use across this subject's sessions, accurate to within five minutes. Absent when unknown.
+          format: date-time
+        photo_url:
+          type: string
+          description: Avatar URL of the subject when it is a Speakeasy user with one.
+        shared_sign_in:
+          type: boolean
+          description: Whether every one of this subject's sessions was issued for the whole shared sign-in rather than this server, so the subject may be using another server instead.
+        subject_type:
+          type: string
+          description: 'Subject kind: ''user'', ''apikey'', ''agent'', ''anonymous'', or ''workload''.'
+        subject_urn:
+          type: string
+          description: The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> | workload:<issuer-id>:<external-subject>).
+      description: One subject's active connections to an MCP server.
+      required:
+        - subject_urn
+        - subject_type
+        - connection_count
+        - client_names
+        - shared_sign_in
     MetaMcpDiscoveryFunnel:
       type: object
       properties:
@@ -105564,6 +108642,102 @@ components:
         - type
         - summary
         - env_variables
+    OrgEncryptionConfig:
+      type: object
+      properties:
+        config_state:
+          type: string
+          description: 'active: one key protects all data. switching: data is readable under both the current and previous key. suspended: the key is unusable and every encrypt and decrypt fails.'
+          enum:
+            - active
+            - switching
+            - suspended
+        id:
+          type: string
+          description: The ID of the configuration.
+          format: uuid
+        key_id:
+          type: string
+          description: The ID of the current key encryption key.
+          format: uuid
+        key_mode:
+          type: string
+          description: Who controls the current key.
+          enum:
+            - speakeasy_managed
+            - customer_managed
+        last_check_at:
+          type: string
+          description: When the hourly health probe last checked the keys.
+          format: date-time
+        last_check_error:
+          type: string
+          description: The error from the last health probe, when it failed.
+        previous_key_id:
+          type: string
+          description: The ID of the key being switched away from, while a switch is in flight.
+          format: uuid
+        suspended_at:
+          type: string
+          description: When the configuration was suspended.
+          format: date-time
+        suspended_reason:
+          type: string
+          description: The provider error that caused the suspension.
+        switch_completed_at:
+          type: string
+          description: When the last switch completed.
+          format: date-time
+        switch_started_at:
+          type: string
+          description: When the in-flight or last switch started.
+          format: date-time
+      description: Which key encryption key protects the organization's data, and whether it is usable.
+      required:
+        - id
+        - key_mode
+        - config_state
+        - key_id
+    OrgEncryptionKey:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the key was registered.
+          format: date-time
+        customer_grant_reference:
+          type: string
+          description: The Speakeasy principal the customer granted roles/iam.serviceAccountTokenCreator on the credential's service account. Not a secret.
+        external_credential_id:
+          type: string
+          description: The external credential Speakeasy reaches the key with. Omitted for Speakeasy-managed keys.
+          format: uuid
+        id:
+          type: string
+          description: The ID of the key.
+          format: uuid
+        managed:
+          type: boolean
+          description: Whether Speakeasy minted and controls the key.
+        name:
+          type: string
+          description: A human-readable name for the key.
+        provider:
+          type: string
+          description: The cloud KMS provider of the key.
+          enum:
+            - gcp_kms
+        resource_name:
+          type: string
+          description: The GCP KMS crypto key resource name (projects/.../cryptoKeys/...).
+      description: A symmetric KMS key that can protect the organization's data.
+      required:
+        - id
+        - name
+        - provider
+        - resource_name
+        - managed
+        - created_at
     Organization:
       type: object
       properties:
@@ -105997,7 +109171,7 @@ components:
           type: array
           items:
             type: string
-          description: Active OAuth client ids already present on both issuers. Non-empty blocks migration.
+          description: 'Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target''s client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.'
         consent_count:
           type: integer
           description: User-session consents that would move.
@@ -107143,6 +110317,9 @@ components:
         platform_mcp_enabled:
           type: boolean
           description: Whether the organization can use the Speakeasy Platform MCP capability
+        provider_setup_enabled:
+          type: boolean
+          description: Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.
         remote_session_auto_refresh_enabled:
           type: boolean
           description: Whether consent screens expose automatic remote-session refresh for the organization
@@ -107173,6 +110350,9 @@ components:
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
+        upstream_auth_enforced:
+          type: boolean
+          description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
       required:
         - logs_enabled
         - tool_io_logs_enabled
@@ -107249,6 +110429,83 @@ components:
         - id
         - name
         - slug
+    ProjectMcpEndUser:
+      type: object
+      properties:
+        tool_calls:
+          type: integer
+          description: Number of tool calls
+          format: int64
+        user_id:
+          type: string
+          description: External end user ID
+      description: Tool calls made by one external end user
+      required:
+        - user_id
+        - tool_calls
+    ProjectMcpServerActivity:
+      type: object
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: '#/components/schemas/McpServerActivity'
+          description: One entry per MCP server in the project with at least one tool call inside the recent window
+        project_id:
+          type: string
+          description: The project the activity belongs to
+          format: uuid
+      description: Recent MCP server activity for one project
+      required:
+        - project_id
+        - activity
+    ProjectMcpToolUsage:
+      type: object
+      properties:
+        calls:
+          type: integer
+          description: Number of calls
+          format: int64
+        failures:
+          type: integer
+          description: Number of failed calls
+          format: int64
+        urn:
+          type: string
+          description: Tool URN, or the tool name for agent hook events
+      description: Calls and failures for one tool made by external end users
+      required:
+        - urn
+        - calls
+        - failures
+    ProjectMcpUsage:
+      type: object
+      properties:
+        end_users_count:
+          type: integer
+          description: Number of distinct external end users with activity in the period
+          format: int64
+        top_end_users:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpEndUser'
+          description: Top 5 external end users by tool calls
+        top_failing_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools with at least one failure, ranked by failure rate, then by failures
+        top_tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectMcpToolUsage'
+          description: Top 5 tools by calls
+      description: External end user and MCP tool usage for a project in a time period
+      required:
+        - end_users_count
+        - top_end_users
+        - top_tools
+        - top_failing_tools
     ProjectOverviewSummary:
       type: object
       properties:
@@ -107256,37 +110513,15 @@ components:
           type: integer
           description: Number of MCP servers with at least one tool call in the time period
           format: int64
-        active_users_count:
-          type: integer
-          description: Number of unique users with activity in the time period
-          format: int64
-        failed_chats:
-          type: integer
-          description: Number of failed chat sessions
-          format: int64
         failed_tool_calls:
           type: integer
           description: Number of failed tool calls
-          format: int64
-        llm_client_breakdown:
-          type: array
-          items:
-            $ref: '#/components/schemas/LLMClientUsage'
-          description: Breakdown of messages/activity by LLM client/agent
-        resolved_chats:
-          type: integer
-          description: Number of resolved chat sessions
           format: int64
         top_servers:
           type: array
           items:
             $ref: '#/components/schemas/TopServer'
           description: Top 10 MCP servers by tool call count
-        top_users:
-          type: array
-          items:
-            $ref: '#/components/schemas/TopUser'
-          description: Top 10 users by activity (# of messages or tool calls depending on metrics_mode)
         total_chats:
           type: integer
           description: Total number of chat sessions
@@ -107298,15 +110533,10 @@ components:
       description: Aggregated project-level summary metrics for a time period
       required:
         - total_chats
-        - resolved_chats
-        - failed_chats
         - total_tool_calls
         - failed_tool_calls
         - active_servers_count
-        - active_users_count
-        - top_users
         - top_servers
-        - llm_client_breakdown
     ProjectSummary:
       type: object
       properties:
@@ -108228,7 +111458,7 @@ components:
       properties:
         access_token:
           type: string
-          description: The raw gram_ API key, carrying the [agent,hooks] scopes. Returned exactly once.
+          description: The raw gram_ API key, carrying the scope requested at authorize. Returned exactly once.
         project_slug:
           type: string
           description: Slug of the project the key is scoped to.
@@ -108645,6 +111875,9 @@ components:
           type: string
           description: The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
           format: uri
+        forward_client_name:
+          type: boolean
+          description: Whether the connecting MCP client's self-reported name is sent to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions.
         grant_types:
           type: array
           items:
@@ -108654,6 +111887,10 @@ components:
         id:
           type: string
           description: The remote_session_client id.
+          format: uuid
+        identity_provider_connection_id:
+          type: string
+          description: The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.
           format: uuid
         json_web_key_set_id:
           type: string
@@ -108713,6 +111950,7 @@ components:
         - user_session_issuer_ids
         - client_id
         - legacy_callback_url
+        - forward_client_name
         - credential_owner
         - created_at
         - updated_at
@@ -109141,6 +112379,20 @@ components:
           description: The rendered prompt
       required:
         - prompt
+    RenewTemporaryGrantForm:
+      type: object
+      properties:
+        expires_at:
+          type: string
+          description: The new deadline. At least five minutes and at most 24 hours from now.
+          format: date-time
+        id:
+          type: string
+          description: The temporary grant to renew.
+          format: uuid
+      required:
+        - id
+        - expires_at
     ReplaceIdentityProviderConnectionClientSecretRequestBody:
       type: object
       properties:
@@ -109182,6 +112434,27 @@ components:
         - scan_completed_at
         - target_list_version
         - matches
+    ReportCrashRequestBody:
+      type: object
+      properties:
+        reports:
+          type: array
+          items:
+            $ref: '#/components/schemas/AgentCrashReport'
+          description: Queued crash reports, oldest first.
+          minItems: 1
+          maxItems: 10
+      required:
+        - reports
+    ReportCrashResult:
+      type: object
+      properties:
+        accepted:
+          type: integer
+          description: Reports accepted. A report not shaped like a device agent crash is dropped and not counted. The agent removes every report in the batch on success.
+          format: int64
+      required:
+        - accepted
     ReportSessionMovedRequestBody:
       type: object
       properties:
@@ -110348,8 +113621,6 @@ components:
             - require_approval
         approval_config:
           $ref: '#/components/schemas/RiskPolicyApprovalConfig'
-        approvals_server_setup:
-          $ref: '#/components/schemas/RiskPolicyApprovalsServerSetup'
         approved_email_domains:
           type: array
           items:
@@ -110621,27 +113892,6 @@ components:
       required:
         - id
         - decision
-    RiskPolicyApprovalsServerSetup:
-      type: object
-      properties:
-        added_to_default_plugin:
-          type: boolean
-          description: Whether the server joined the project's Default plugin, which republishes so agents that use the plugin get it.
-        mcp_server_id:
-          type: string
-          description: The approvals server Speakeasy created in the project.
-          format: uuid
-        mcp_server_slug:
-          type: string
-          description: The approvals server's slug.
-        plugin_server_name:
-          type: string
-          description: How plugins name the server, and how held calls refer to it.
-      required:
-        - mcp_server_id
-        - mcp_server_slug
-        - plugin_server_name
-        - added_to_default_plugin
     RiskPolicyBypassApprovalRequestBody:
       type: object
       properties:
@@ -111551,6 +114801,8 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
+            - org:device_agent_sync
+            - org:hooks_ingest
             - project:read
             - project:blocked_read
             - project:write
@@ -111571,12 +114823,12 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - plugin:write
+            - plugin:blocked_write
             - assistant:read
             - assistant:blocked_read
             - assistant:write
             - assistant:blocked_write
-            - plugin:write
-            - plugin:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
             - risk_policy:block
@@ -111592,8 +114844,6 @@ components:
             - workload:blocked_read
             - workload:write
             - workload:blocked_write
-            - org:device_agent_sync
-            - org:hooks_ingest
         selectors:
           type: array
           items:
@@ -111780,6 +115030,14 @@ components:
         - previous_keys
         - previous_keys_retired
         - marketplace_republished
+    RotateOrgEncryptionDataKeyRequestBody:
+      type: object
+      properties:
+        use_case:
+          type: string
+          description: The use case whose data encryption key to rotate.
+      required:
+        - use_case
     RotateRequestBody:
       type: object
       properties:
@@ -111889,9 +115147,27 @@ components:
         agent_eligible:
           type: boolean
           description: Whether an agent principal can hold this scope. Roles may carry scopes agents cannot hold; those are ignored for the role's agent members rather than granted.
+        category:
+          type: string
+          description: 'How the dashboard groups the permission. Differs from resource_type where one resource type carries several permission families: plugins and tool logs are checked against a project but are not project permissions.'
+          enum:
+            - org
+            - project
+            - mcp
+            - mcp_auth_client
+            - environment
+            - skill
+            - plugin
+            - assistant
+            - risk_policy
+            - session
+            - inference
+            - log
+            - agent
+            - workload
         description:
           type: string
-          description: What this scope protects.
+          description: What a holder of this scope can do and, where it matters, what the scope does not include.
         exclusion_scope:
           type: string
           description: The scope used to store exception rules for this scope.
@@ -111908,12 +115184,15 @@ components:
             - environment:blocked_write
             - skill:blocked_read
             - skill:blocked_write
+            - plugin:blocked_write
             - assistant:blocked_read
             - assistant:blocked_write
-            - plugin:blocked_write
             - risk_policy:bypass
             - workload:blocked_read
             - workload:blocked_write
+        label:
+          type: string
+          description: Short name for the permission as people see it, e.g. "View tool logs".
         resource_type:
           type: string
           description: The type of resource this scope applies to.
@@ -111930,6 +115209,16 @@ components:
             - agent
             - workload
             - mcp_auth_client
+        sensitive:
+          type: boolean
+          description: Whether granting this scope exposes other members' private activity or allows destructive administration. Clients warn before granting it.
+        sensitivity:
+          type: string
+          description: Why the scope is sensitive. Absent when sensitive is false.
+          enum:
+            - conversations
+            - tool_logs
+            - destructive_admin
         slug:
           type: string
           description: Unique scope identifier.
@@ -111938,6 +115227,8 @@ components:
             - org:blocked_read
             - org:admin
             - org:blocked_admin
+            - org:device_agent_sync
+            - org:hooks_ingest
             - project:read
             - project:blocked_read
             - project:write
@@ -111958,12 +115249,12 @@ components:
             - skill:blocked_read
             - skill:write
             - skill:blocked_write
+            - plugin:write
+            - plugin:blocked_write
             - assistant:read
             - assistant:blocked_read
             - assistant:write
             - assistant:blocked_write
-            - plugin:write
-            - plugin:blocked_write
             - risk_policy:evaluate
             - risk_policy:bypass
             - risk_policy:block
@@ -111979,8 +115270,11 @@ components:
             - workload:blocked_read
             - workload:write
             - workload:blocked_write
-            - org:device_agent_sync
-            - org:hooks_ingest
+        sub_scopes:
+          type: array
+          items:
+            type: string
+          description: 'User-visible scopes a grant of this scope also satisfies, one step down: org:admin also satisfies org:read. Empty when the scope implies nothing else.'
         visibility:
           type: string
           description: Whether this scope is a first-class permission or an internal storage/evaluation scope.
@@ -111989,10 +115283,85 @@ components:
             - internal
       required:
         - slug
+        - label
         - description
         - resource_type
+        - category
         - visibility
         - agent_eligible
+        - sensitive
+        - sub_scopes
+    ScopeTask:
+      type: object
+      properties:
+        label:
+          type: string
+          description: What a person is trying to do.
+          example: Review other members' sessions
+        scopes:
+          type: array
+          items:
+            type: string
+            enum:
+              - org:read
+              - org:blocked_read
+              - org:admin
+              - org:blocked_admin
+              - org:device_agent_sync
+              - org:hooks_ingest
+              - project:read
+              - project:blocked_read
+              - project:write
+              - project:blocked_write
+              - mcp:read
+              - mcp:blocked_read
+              - mcp:write
+              - mcp:blocked_write
+              - mcp:connect
+              - mcp:blocked_connect
+              - mcp:auth
+              - mcp:blocked_auth
+              - environment:read
+              - environment:blocked_read
+              - environment:write
+              - environment:blocked_write
+              - skill:read
+              - skill:blocked_read
+              - skill:write
+              - skill:blocked_write
+              - plugin:write
+              - plugin:blocked_write
+              - assistant:read
+              - assistant:blocked_read
+              - assistant:write
+              - assistant:blocked_write
+              - risk_policy:evaluate
+              - risk_policy:bypass
+              - risk_policy:block
+              - chat:read
+              - chat:write
+              - inference:execute
+              - log:read
+              - agent:read
+              - agent:write
+              - agent:authorize
+              - agent:transfer
+              - workload:read
+              - workload:blocked_read
+              - workload:write
+              - workload:blocked_write
+          description: Every scope the task needs end to end.
+          example:
+            - chat:read
+            - log:read
+        slug:
+          type: string
+          description: Stable identifier of the task.
+          example: session_review
+      required:
+        - slug
+        - label
+        - scopes
     SearchBusinessMemoriesRequestBody:
       type: object
       properties:
@@ -112648,6 +116017,32 @@ components:
         - scope
         - server_count
         - associated_at
+    ServerConnectionTestResult:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Stable, credential-free reason suitable for choosing a recovery action.
+        message:
+          type: string
+          description: Safe message for display in the failed setup step.
+        status:
+          type: string
+          description: Live result of this test, never a persisted completion record.
+          enum:
+            - ready
+            - authorization_required
+            - configuration_required
+            - failed
+        tool_count:
+          type: integer
+          description: Tools discovered, present only after every tools/list page succeeds.
+          format: int64
+          minimum: 0
+      required:
+        - status
+        - code
+        - message
     ServerIdentityClientConfiguration:
       type: object
       properties:
@@ -112669,6 +116064,10 @@ components:
             pattern: ^[!#-[\]-~]+$
             maxLength: 128
           description: Each value must be an RFC 6749 scope token.
+        template_client_id:
+          type: string
+          description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
+          format: uuid
         token_endpoint_auth_method:
           type: string
           description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
@@ -112676,14 +116075,26 @@ components:
             - client_secret_basic
             - client_secret_post
             - none
-      description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+      description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.
     ServerIdentityImpactResult:
       type: object
       properties:
+        detach_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With change detach and mcp_server_id, the clients only that server uses, which leaving User Identity unbinds from the issuer.
         hidden_server_count:
           type: integer
           description: MCP servers and gateways the caller cannot read; they are not named. When the change touches an organization-level client this counts every such server on the issuer, affected or not.
           format: int64
+        release_client_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: With change detach and mcp_server_id, the clients other consumers also use. They stay bound, and leaving User Identity only removes that server's association with them.
         servers:
           type: array
           items:
@@ -113496,6 +116907,19 @@ components:
       required:
         - mcp_server_id
         - scopes
+    SetSlackDirectoryDefaultProjectRequestBody:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Durable organization workspace connection ID.
+          format: uuid
+        project_id:
+          type: string
+          description: Project in the organization. Omit to clear the default project.
+          format: uuid
+      required:
+        - id
     SetSlackIdentityMappingRequestBody:
       type: object
       properties:
@@ -115261,6 +118685,10 @@ components:
     SlackDirectoryConnection:
       type: object
       properties:
+        default_project_id:
+          type: string
+          description: Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+          format: uuid
         directory_status:
           type: string
           description: Whether a snapshot belongs to the usable current authorization.
@@ -116310,6 +119738,15 @@ components:
         - summary
         - impact
         - cached
+    SwitchOrgEncryptionKeyRequestBody:
+      type: object
+      properties:
+        external_key_id:
+          type: string
+          description: The ID of the registered encryption key to switch to.
+          format: uuid
+      required:
+        - external_key_id
     SyncDirectoryGroupsResult:
       type: object
       properties:
@@ -116469,6 +119906,59 @@ components:
       required:
         - from
         - to
+    TemporaryGrant:
+      type: object
+      properties:
+        created_at:
+          type: string
+          description: When the grant was given, or restarted after expiring.
+          format: date-time
+        expires_at:
+          type: string
+          description: When the grant stops, or stopped, authorizing new requests.
+          format: date-time
+        id:
+          type: string
+          description: Temporary grant ID.
+          format: uuid
+        other_access:
+          type: array
+          items:
+            type: string
+          description: 'For an active grant, the principal URNs of the holder''s other grants that already give the same access: for a member or agent, a role, everyone (user:all), or the holder itself for a grant made to it directly; for a role or everyone, only that principal''s own other grants. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.'
+        principal_urn:
+          type: string
+          description: Canonical principal URN holding the access.
+        remaining_seconds:
+          type: integer
+          description: Seconds until the deadline while active; 0 once ended.
+          format: int64
+        scope:
+          type: string
+          description: The scope given.
+        selector:
+          $ref: '#/components/schemas/Selector'
+        status:
+          type: string
+          description: 'active: authorizing requests. expired: its deadline passed. revoked: ended early by this request.'
+          enum:
+            - active
+            - expired
+            - revoked
+        updated_at:
+          type: string
+          format: date-time
+      required:
+        - id
+        - principal_urn
+        - scope
+        - selector
+        - expires_at
+        - status
+        - remaining_seconds
+        - other_access
+        - created_at
+        - updated_at
     TestDetectionRuleMatch:
       type: object
       properties:
@@ -116544,6 +120034,15 @@ components:
       required:
         - matches
         - supported
+    TestServerConnectionRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          description: Exact MCP server to test.
+          format: uuid
+      required:
+        - mcp_server_id
     TierLimits:
       type: object
       properties:
@@ -117516,6 +121015,19 @@ components:
         target_label:
           type: string
           description: User-facing target label
+        target_meta_mcp_server_agent_id:
+          type: string
+          description: Agent whose gateway the call reached; absent for other gateway kinds and when the agent is deleted
+        target_meta_mcp_server_kind:
+          type: string
+          description: 'Kind of the gateway the call reached when target_type is meta_mcp_server: project for a gateway stored in a project, organization for the organization gateway, agent for an agent''s gateway; absent for other targets and when the gateway id resolves to no gateway of the organization'
+          enum:
+            - project
+            - organization
+            - agent
+        target_meta_mcp_server_project_slug:
+          type: string
+          description: 'Slug of the project whose page shows the gateway the call reached: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization'
         target_type:
           type: string
           description: Tool usage target type
@@ -117547,12 +121059,25 @@ components:
         user_label:
           type: string
           description: User-facing user identity label
+        via_meta_mcp_server_agent_id:
+          type: string
+          description: Agent whose gateway dispatched this call; absent for other gateway kinds and when the agent is deleted
         via_meta_mcp_server_id:
           type: string
           description: Gateway (meta MCP server) that dispatched this call to the target; absent for direct calls and for calls observed against a gateway itself
+        via_meta_mcp_server_kind:
+          type: string
+          description: 'Kind of the dispatching gateway: project for a gateway stored in a project, organization for the organization gateway, agent for an agent''s gateway; absent when the gateway id resolves to no gateway of the organization'
+          enum:
+            - project
+            - organization
+            - agent
         via_meta_mcp_server_name:
           type: string
           description: Display name of the dispatching gateway; a deleted gateway keeps its last name
+        via_meta_mcp_server_project_slug:
+          type: string
+          description: 'Slug of the project whose page shows the dispatching gateway: the project holding a project gateway, or the project an organization gateway was restricted to; absent when the gateway or its project is deleted, and for an organization gateway serving the whole organization'
       description: A single target-aware tool usage trace row
       required:
         - id
@@ -118221,27 +121746,6 @@ components:
       required:
         - server_name
         - tool_call_count
-    TopUser:
-      type: object
-      properties:
-        activity_count:
-          type: integer
-          description: Number of messages (session mode) or tool calls (tool_call mode)
-          format: int64
-        user_id:
-          type: string
-          description: User ID (internal or external depending on availability)
-        user_type:
-          type: string
-          description: Type of user ID
-          enum:
-            - internal
-            - external
-      description: Top user by activity
-      required:
-        - user_id
-        - user_type
-        - activity_count
     Trial:
       type: object
       properties:
@@ -119397,7 +122901,7 @@ components:
       properties:
         config:
           type: object
-          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.
+          description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, disable_ai_scan, and disable_crash_reports. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.
           additionalProperties: true
       required:
         - config
@@ -119587,8 +123091,8 @@ components:
       properties:
         audience:
           type: string
-          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
-          pattern: ^[!-~]+$
+          description: Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
+          pattern: ^[!-~]*$
           maxLength: 512
         client_secret:
           type: string
@@ -120076,8 +123580,8 @@ components:
       properties:
         audience:
           type: string
-          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
-          pattern: ^[!-~]+$
+          description: Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
+          pattern: ^[!-~]*$
           maxLength: 512
         client_id:
           type: string
@@ -120090,6 +123594,9 @@ components:
           type: string
           description: Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.
           maxLength: 200
+        forward_client_name:
+          type: boolean
+          description: Send the connecting MCP client's self-reported name to this provider as speakeasy_client_name on /authorize. Only sent for anonymous sessions. Omit to leave unchanged.
         id:
           type: string
           description: The remote_session_client id.
@@ -120447,6 +123954,7 @@ components:
             - product_telemetry
             - risk_findings
             - tool_call_logs
+            - mcp_connection_logs
         enabled:
           type: boolean
           description: Whether the route is enabled.
@@ -122148,6 +125656,32 @@ components:
         - events
         - latest_unix_nano
         - total_count
+    VerifyOrgEncryptionKeyResult:
+      type: object
+      properties:
+        detail:
+          type: string
+          description: Human-readable detail about the probe outcome, including the failure reason when it did not verify.
+        key_probe_outcome:
+          type: string
+          description: The machine-readable outcome of the probe.
+          enum:
+            - verified
+            - credential_unusable
+            - invalid_resource_name
+            - key_not_found
+            - permission_denied
+            - key_unusable
+            - round_trip_failed
+            - unavailable
+            - unexpected
+        verified:
+          type: boolean
+          description: Whether the key encrypted the probe payload and decrypted it again.
+      description: Result of a live probe that Speakeasy can encrypt and decrypt with a key.
+      required:
+        - verified
+        - key_probe_outcome
     VerifyPlatformCredentialResult:
       type: object
       properties:
@@ -122279,6 +125813,30 @@ components:
       required:
         - id
         - name
+    WithdrawnWorkloadSubjectPolicy:
+      type: object
+      properties:
+        admissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadAdmission'
+          description: Admitted subjects.
+        issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadIssuer'
+          description: Trusted issuers, organization tier first.
+        withdrawn_tier:
+          type: string
+          description: 'The tier of the admission that was withdrawn: organization or project.'
+          enum:
+            - organization
+            - project
+      description: The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.
+      required:
+        - withdrawn_tier
+        - issuers
+        - admissions
     WorkOSDomainVerificationIntentOptions:
       type: object
       properties:
@@ -122733,14 +126291,44 @@ components:
     WorkloadPlatformSubject:
       type: object
       properties:
+        alternatives:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadPlatformSubjectAlternative'
+          description: Other rules the operator may choose instead, in the order they are offered. Absent where there are none.
+        label:
+          type: string
+          description: Names the default rule beside its alternatives. Empty where there are none.
+          default: ""
         template:
           type: string
           description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
         wildcard:
           type: boolean
           description: Whether the rule is the filled template followed by *.
-      description: The access rule a catalog platform produces.
+      description: The access rule a catalog platform produces by default, and the others the operator may choose instead.
       required:
+        - template
+        - wildcard
+    WorkloadPlatformSubjectAlternative:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Identifies the choice within the platform.
+        label:
+          type: string
+          description: What the operator chooses it by.
+        template:
+          type: string
+          description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
+        wildcard:
+          type: boolean
+          description: Whether the rule is the filled template followed by *.
+      description: An access rule a catalog platform offers in place of its default.
+      required:
+        - key
+        - label
         - template
         - wildcard
     WorkloadPlatformVariable:
@@ -122937,8 +126525,6 @@ components:
 tags:
   - name: killswitches
     description: Manage MCP tool-call killswitches for users in the active organization. Requires an ordinary live organization-administrator session.
-  - name: access
-    description: Manage roles, team member access control, and authorization challenge events.
   - name: agent
     description: Endpoints consumed by the Speakeasy device agent running on developer machines. Authenticates via an API key carrying the 'agent_user' scope — the per-user credential minted by token-exchange. An org key with the broader 'agent' scope also satisfies most of these endpoints (it implies 'agent_user'), so existing installs keep working during the transition. A headless device enrolled as a workload may call getPlugins with a device-agent token instead. The content-bearing session-portability endpoints — getSessionMeta and createSessionHandoff — refuse it and require a per-user key.
   - name: agents
@@ -122968,7 +126554,7 @@ tags:
   - name: chatSessions
     description: Manages chat session tokens for client-side authentication
   - name: cliAuth
-    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for a per-user [agent,hooks] API key.
+    description: Interactive device-agent enrollment via a PKCE one-time-code exchange. authorize (dashboard session) mints a short-lived code bound to a PKCE challenge; redeem (no auth — the code+verifier pair is the credential) exchanges it once for an API key of the scope requested at authorize, which is the device agent's per-user key by default or the Speakeasy CLI's organization-wide producer key.
   - name: dashboards
     description: 'Dashboards: a project''s layouts of saved widgets. Any member can make one; editing someone else''s needs project write access.'
   - name: dataExports
@@ -123035,6 +126621,8 @@ tags:
     description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
   - name: organizations
     description: Organization membership, invitations, and directory.
+  - name: orgEncryption
+    description: 'Manage the key encryption key that protects an organization''s data: Speakeasy-managed by default, or a customer-managed GCP KMS key.'
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages
@@ -123125,5 +126713,7 @@ tags:
     description: 'Configure which workloads an organization recognises as its own: the issuers it trusts, the subjects those issuers may present, and the agent each admitted workload inherits its policy from.'
   - name: variations
     description: Manage variations of tools.
+  - name: access
+    description: Manage roles, team member access control, and authorization challenge events.
   - name: external
     description: Endpoints for external services to interact with gram.
