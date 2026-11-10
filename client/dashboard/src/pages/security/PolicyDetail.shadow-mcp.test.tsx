@@ -3,6 +3,7 @@ import type { ShadowMCPInventoryServer } from "@gram/client/models/components/sh
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -34,6 +35,7 @@ const mocks = vi.hoisted(() => ({
     disabledReason?: string;
   }>,
   pinnedActions: [] as Array<{ value: string; reason: string } | undefined>,
+  setFormAction: undefined as ((action: string) => void) | undefined,
   slot: {
     pending: false,
     failed: false,
@@ -146,10 +148,13 @@ vi.mock("./use-cel-status", () => ({
 vi.mock("./PolicyCenter", () => ({
   ActionPicker: ({
     pinnedAction,
+    setFormAction,
   }: {
     pinnedAction?: { value: string; reason: string };
+    setFormAction?: (action: string) => void;
   }) => {
     mocks.pinnedActions.push(pinnedAction);
+    mocks.setFormAction = setFormAction;
     return null;
   },
   CustomizeRulesSheet: () => null,
@@ -389,6 +394,8 @@ describe("StandardPolicyEditor existing Shadow MCP blocking policy", () => {
     cleanup();
     mocks.slot.existing = undefined;
     mocks.slot.href = undefined;
+    mocks.slot.pending = false;
+    mocks.slot.failed = false;
   });
 
   beforeEach(() => {
@@ -460,6 +467,112 @@ describe("StandardPolicyEditor existing Shadow MCP blocking policy", () => {
     expect(
       page.queryByText("One Shadow MCP blocking policy per project"),
     ).toBeNull();
+  });
+
+  // A new policy also keeps Create off until a scope is chosen, so the Block
+  // gate is asserted on an existing policy's Save, which shares saveBlocked.
+  function renderEdit(policy: RiskPolicy) {
+    mocks.step = "action";
+    mocks.saveDisabledRenders.length = 0;
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    queryClient.setQueryData(shadowMCPPolicyInventoryQueryKey("project-1"), [
+      inventoryServer(),
+    ]);
+    const view = render(
+      <MemoryRouter>
+        <QueryClientProvider client={queryClient}>
+          <TooltipProvider>
+            <StandardPolicyEditor policy={policy} />
+          </TooltipProvider>
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    return within(view.container);
+  }
+
+  // Spreading reads the name once, so this policy is clean until Block is
+  // chosen; Save then appears and reports whether Block can be saved. The
+  // free-slot case proves Block alone leaves it on.
+  function flaggingPolicy(): RiskPolicy {
+    return { ...blockingPolicyWithDirtyDraftName(), action: "flag" };
+  }
+
+  async function chooseBlock() {
+    await waitFor(() => expect(mocks.setFormAction).toBeDefined());
+    act(() => mocks.setFormAction?.("block"));
+  }
+
+  it("keeps Save off when Block meets another policy's slot", async () => {
+    const page = renderEdit(flaggingPolicy());
+
+    await chooseBlock();
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(true));
+    expect(
+      page.getByText(
+        /Choose another action, or disable or delete Existing blocker first/,
+      ),
+    ).toBeTruthy();
+  });
+
+  it("allows Block when the slot is free", async () => {
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+    renderEdit(flaggingPolicy());
+
+    await chooseBlock();
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(false));
+  });
+
+  it("keeps Save off for Block while the policy list loads", async () => {
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+    mocks.slot.pending = true;
+    const page = renderEdit(flaggingPolicy());
+
+    await chooseBlock();
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(true));
+    expect(
+      page.queryByText("Could not check for a Shadow MCP blocking policy"),
+    ).toBeNull();
+  });
+
+  it("keeps Save off for Block and says why when the policy list fails", async () => {
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+    mocks.slot.failed = true;
+    const page = renderEdit(flaggingPolicy());
+
+    await chooseBlock();
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(true));
+    expect(
+      page.getByText("Could not check for a Shadow MCP blocking policy"),
+    ).toBeTruthy();
+  });
+
+  it("does not report the edited policy as its own conflict", async () => {
+    mocks.slot.existing = { id: "policy-1", name: "Original name" };
+    mocks.slot.href = "/org/projects/test-project/risk-policies/policy-1";
+    const page = renderEdit(blockingPolicyWithDirtyDraftName());
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(false));
+    expect(
+      page.queryByText("One Shadow MCP blocking policy per project"),
+    ).toBeNull();
+  });
+
+  it("does not hold the edited blocker's Save on a pending list", async () => {
+    mocks.slot.existing = undefined;
+    mocks.slot.href = undefined;
+    mocks.slot.pending = true;
+    renderEdit(blockingPolicyWithDirtyDraftName());
+
+    await waitFor(() => expect(mocks.saveDisabledRenders.at(-1)).toBe(false));
   });
 });
 

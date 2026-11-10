@@ -24,6 +24,29 @@ export function conflictingShadowMCPBlockingPolicy<T extends { id: string }>(
   return existing;
 }
 
+/** Whether the editor cannot yet tell if this project's one Shadow MCP
+ *  blocking slot is free: the policy list is still loading or failed to load,
+ *  and the slot matters for this policy. A disabled policy is not checked
+ *  until it is enabled, and an enabled blocking policy already holds the slot,
+ *  so neither waits on the list. */
+export function shadowMCPBlockingSlotUnknown(
+  slot: { pending: boolean; failed: boolean },
+  editing: {
+    enabled: boolean;
+    sources: readonly string[];
+    action: string;
+  } | null,
+): boolean {
+  if (!slot.pending && !slot.failed) return false;
+  if (!editing) return true;
+  if (!editing.enabled) return false;
+  return !isBlockingShadowMCPPolicy(
+    editing.enabled,
+    editing.sources,
+    editing.action,
+  );
+}
+
 export function isShadowMCPBlockConfiguration(
   sources: readonly string[],
   action: string,

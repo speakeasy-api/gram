@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ShadowMCPInventoryServer } from "@gram/client/models/components/shadowmcpinventoryserver.js";
 import {
   conflictingShadowMCPBlockingPolicy,
+  shadowMCPBlockingSlotUnknown,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   shadowMCPAllowAllPostureLocked,
@@ -57,6 +58,38 @@ describe("conflictingShadowMCPBlockingPolicy", () => {
 
   it("reports nothing when the project has no blocker", () => {
     expect(conflictingShadowMCPBlockingPolicy(undefined, null)).toBeUndefined();
+  });
+});
+
+describe("shadowMCPBlockingSlotUnknown", () => {
+  const loaded = { pending: false, failed: false };
+  const pending = { pending: true, failed: false };
+  const failed = { pending: false, failed: true };
+  const flagging = { enabled: true, sources: ["shadow_mcp"], action: "flag" };
+
+  it("knows the slot once the policy list loads", () => {
+    expect(shadowMCPBlockingSlotUnknown(loaded, null)).toBe(false);
+  });
+
+  it("treats a pending or failed list as unknown for a new policy", () => {
+    expect(shadowMCPBlockingSlotUnknown(pending, null)).toBe(true);
+    expect(shadowMCPBlockingSlotUnknown(failed, null)).toBe(true);
+  });
+
+  it("treats it as unknown for an enabled policy that does not block yet", () => {
+    expect(shadowMCPBlockingSlotUnknown(pending, flagging)).toBe(true);
+  });
+
+  it("does not wait for a policy that already holds the slot", () => {
+    expect(shadowMCPBlockingSlotUnknown(failed, blockingShadowMCPPolicy)).toBe(
+      false,
+    );
+  });
+
+  it("does not wait for a disabled policy", () => {
+    expect(
+      shadowMCPBlockingSlotUnknown(failed, { ...flagging, enabled: false }),
+    ).toBe(false);
   });
 });
 

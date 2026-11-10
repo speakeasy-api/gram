@@ -98,6 +98,7 @@ import {
 } from "./policy-new-prefill";
 import {
   conflictingShadowMCPBlockingPolicy,
+  shadowMCPBlockingSlotUnknown,
   isBlockingShadowMCPPolicy,
   isShadowMCPBlockConfiguration,
   SHADOW_MCP_ALLOW_ALL_LOCK_REASON,
@@ -3397,6 +3398,10 @@ export function StandardPolicyEditor({
   const blockingPolicyConflict = shadowMCPSelected
     ? conflictingShadowMCPBlockingPolicy(shadowAISlot.existing, policy)
     : undefined;
+  // A pending or failed list read is not proof the slot is free, so Block
+  // waits for it instead of reaching the server's rejection.
+  const blockingSlotUnknown =
+    shadowMCPSelected && shadowMCPBlockingSlotUnknown(shadowAISlot, policy);
   const policyID = policy?.id ?? null;
   const editorIdentity = policyID ?? "create";
   const originalHasShadowMCPBlockConfiguration = policy
@@ -3510,7 +3515,8 @@ export function StandardPolicyEditor({
     mcpScopeIncompatible ||
     !inspectRowsValid ||
     !shadowMCPSelectionInitialized ||
-    (targetIsShadowMCPBlock && blockingPolicyConflict !== undefined);
+    (targetIsShadowMCPBlock &&
+      (blockingSlotUnknown || blockingPolicyConflict !== undefined));
 
   const shadowMCPSelectionDirty = shadowMCPSelectionIsDirty(
     targetIsShadowMCPBlock,
@@ -3814,6 +3820,19 @@ export function StandardPolicyEditor({
             href={shadowAISlot.href}
             blockSelected={targetIsShadowMCPBlock}
           />
+        ) : null}
+        {targetIsShadowMCPBlock &&
+        blockingSlotUnknown &&
+        shadowAISlot.failed ? (
+          <Alert
+            variant="error"
+            title="Could not check for a Shadow MCP blocking policy"
+          >
+            <AlertDescription>
+              A project can have only one, so Block stays off until the check
+              works. Reload the page to try again, or choose another action.
+            </AlertDescription>
+          </Alert>
         ) : null}
         {step === 0 && (
           <>
