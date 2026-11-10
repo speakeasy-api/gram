@@ -231,6 +231,12 @@ func withRowTrace(ctx context.Context, row Row) context.Context {
 	}))
 }
 
+// notExportedWhileOpen lists person or app failures left out while the attempt is open.
+var notExportedWhileOpen = map[string]bool{
+	// Link unfurlers and mail scanners trigger it on attempts that then connect.
+	CodeSessionChanged.String(): true,
+}
+
 // exportSeverity also decides what is exported: every final row that did not connect,
 // non-final rows someone other than the person has to fix, and non-final failures the
 // person or app has to fix, at WARN since the attempt may still recover.
@@ -244,7 +250,7 @@ func exportSeverity(row Row) (log.Severity, string, bool) {
 		case WhoAdmin, WhoProvider, WhoSpeakeasy:
 		case WhoPerson, WhoApp:
 			// Only failures: needs_sign_in and other normal sign-in steps are not.
-			if meaning.Outcome != OutcomeFailed {
+			if meaning.Outcome != OutcomeFailed || notExportedWhileOpen[row.Reason] {
 				return log.SeverityUndefined, "", false
 			}
 			return log.SeverityWarn, "WARN", true

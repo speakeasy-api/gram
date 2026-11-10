@@ -1,6 +1,6 @@
 ---
-"server": patch
-"dashboard": patch
+"server": minor
+"dashboard": minor
 ---
 
-MCP connection log exports set to send failed and blocked connections now also get failed steps a person or app must fix while the connection is still going, such as an expired sign-in. They arrive as warnings with `final=false`, since the person may still recover. Normal sign-in steps are not included. Exports set to failed connections only are unchanged.
+MCP connection log exports set to "Failed and blocked connections" or "Failed, blocked and declined connections" now also send failed sign-in steps that may still recover, such as a saved sign-in the service no longer accepts. They arrive as warnings with `speakeasy.mcp_connection.final=false`. Normal sign-in steps are not sent. Exports set to "Failed connections" are unchanged.
