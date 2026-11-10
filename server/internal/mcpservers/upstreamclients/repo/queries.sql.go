@@ -164,6 +164,18 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
     WHERE recorded.mcp_server_id = s.id
       AND recorded.remote_session_client_id = c.id
   )
+  AND NOT EXISTS (
+    SELECT 1
+    FROM mcp_server_auth_clients AS offer
+    JOIN mcp_auth_clients AS offered
+      ON offered.id = offer.auth_client_id
+     AND offered.organization_id = offer.organization_id
+     AND offered.deleted IS FALSE
+    WHERE offer.mcp_server_id = s.id
+      AND offer.source = 'admin'
+      AND offer.deleted IS FALSE
+      AND offered.remote_session_client_id IS DISTINCT FROM c.id
+  )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id
 `
@@ -185,7 +197,10 @@ type CaptureGatewayDerivedAssociationsParams struct {
 // a grant the issuer offers for the server's remote upstream routes it to
 // another client (a grant minted through the issuer, or one for a client the
 // issuer binds, whichever issuer minted it; a tunnel's claimed resource
-// proves nothing), or when an explicit detach was recorded for the pair.
+// proves nothing), when an explicit detach was recorded for the pair, or when
+// an administrator or a server-only identity commit gave the server an offer for
+// another registration, so the gateway issuer's client is not what it was
+// configured with.
 func (q *Queries) CaptureGatewayDerivedAssociations(ctx context.Context, arg CaptureGatewayDerivedAssociationsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, captureGatewayDerivedAssociations, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
@@ -230,6 +245,21 @@ JOIN remote_session_clients AS c
 WHERE s.project_id = $2::uuid
   AND s.deleted IS FALSE
   AND s.user_session_issuer_id = ANY($3::uuid[])
+  AND ($4::uuid[] IS NULL
+       OR c.id = ANY($4::uuid[]))
+  AND (NOT $5::boolean
+       OR NOT EXISTS (
+         SELECT 1
+         FROM mcp_server_auth_clients AS offer
+         JOIN mcp_auth_clients AS offered
+           ON offered.id = offer.auth_client_id
+          AND offered.organization_id = offer.organization_id
+          AND offered.deleted IS FALSE
+         WHERE offer.mcp_server_id = s.id
+           AND offer.source = 'admin'
+           AND offer.deleted IS FALSE
+           AND offered.remote_session_client_id IS DISTINCT FROM c.id
+       ))
   AND NOT EXISTS (
     SELECT 1
     FROM mcp_servers AS other
@@ -256,9 +286,11 @@ RETURNING mcp_server_id
 `
 
 type CaptureSoleConsumerAssociationsParams struct {
-	OrganizationID       string
-	ProjectID            uuid.UUID
-	UserSessionIssuerIds []uuid.UUID
+	OrganizationID                        string
+	ProjectID                             uuid.UUID
+	UserSessionIssuerIds                  []uuid.UUID
+	RemoteSessionClientIds                []uuid.UUID
+	SkipServersOfferingOtherRegistrations bool
 }
 
 // Returns the server of each association it adds, so the caller can record
@@ -268,14 +300,27 @@ type CaptureSoleConsumerAssociationsParams struct {
 // organization. With one consumer the binding can only be meant for that
 // server, so the association is proven rather than guessed. Issuers shared by
 // several servers, or also fronting a gateway, prove nothing and are left for
-// explicit configuration.
+// explicit configuration. remote_session_client_ids limits the capture to those
+// clients; NULL captures every client bound to the issuer.
+// skip_servers_offering_other_registrations leaves out a server an administrator
+// or a server-only identity commit gave an offer for another registration, since
+// a binding on its issuer is not meant for it; a caller that has just configured
+// the binding for this server clears it.
+// Disabled admin offers still record explicit routing intent. Disabling that
+// registration must not authorize capture of a different issuer-bound client.
 //
 // Tenancy: the ids arrive from callers that already hold the issuer, but are
 // re-pinned to the caller's project and organization so a foreign id writes
 // nothing, and only the organization's own servers and gateways count as
 // other consumers.
 func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) ([]uuid.UUID, error) {
-	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
+	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.UserSessionIssuerIds,
+		arg.RemoteSessionClientIds,
+		arg.SkipServersOfferingOtherRegistrations,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1173,13 +1218,127 @@ func (q *Queries) ListMCPServerUpstreamIssuers(ctx context.Context, arg ListMCPS
 	return items, nil
 }
 
+const listOrganizationLevelUserSessionIssuerIDs = `-- name: ListOrganizationLevelUserSessionIssuerIDs :many
+SELECT id
+FROM user_session_issuers
+WHERE organization_id = $1::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+ORDER BY id
+`
+
+// The organization's live organization-level user session issuers.
+func (q *Queries) ListOrganizationLevelUserSessionIssuerIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationLevelUserSessionIssuerIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationProjectsWithServers = `-- name: ListOrganizationProjectsWithServers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE p.organization_id = $1::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+// The organization's live projects with a live MCP server, for a change that
+// re-decides associations in every one of them: one to the organization's
+// organization-level issuers, which decide whether the organization gateway
+// fronts each server.
+func (q *Queries) ListOrganizationProjectsWithServers(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProjectsWithServers, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsConsumingUserSessionIssuers = `-- name: ListProjectsConsumingUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+UNION
+SELECT g.project_id
+FROM meta_mcp_servers AS g
+JOIN projects AS p ON p.id = g.project_id
+WHERE g.user_session_issuer_id = ANY($1::uuid[])
+  AND g.organization_id = $2::text
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND g.deleted IS FALSE
+ORDER BY 1
+`
+
+type ListProjectsConsumingUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// The organization's live projects with a live MCP server or gateway on one of
+// the user session issuers. A change to those issuers' bindings re-decides the
+// associations of each.
+func (q *Queries) ListProjectsConsumingUserSessionIssuers(ctx context.Context, arg ListProjectsConsumingUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsConsumingUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
 SELECT latest.mcp_server_id,
-       latest.auth_client_id::uuid AS auth_client_id
+       latest.auth_client_id,
+       latest.remote_session_client_id
 FROM (
   SELECT DISTINCT ON (sel.mcp_server_id)
          sel.mcp_server_id,
-         sel.auth_client_id
+         sel.auth_client_id,
+         sel.remote_session_client_id
   FROM upstream_client_selections AS sel
   JOIN user_sessions AS us
     ON COALESCE(us.credential_id, us.id) = sel.credential_id
@@ -1190,7 +1349,7 @@ FROM (
     AND sel.deleted IS FALSE
   ORDER BY sel.mcp_server_id, sel.created_at DESC
 ) AS latest
-WHERE latest.auth_client_id IS NOT NULL
+WHERE latest.auth_client_id IS NOT NULL OR latest.remote_session_client_id IS NOT NULL
 `
 
 type ListRememberedAuthClientsParams struct {
@@ -1200,14 +1359,15 @@ type ListRememberedAuthClientsParams struct {
 }
 
 type ListRememberedAuthClientsRow struct {
-	McpServerID  uuid.UUID
-	AuthClientID uuid.UUID
+	McpServerID           uuid.UUID
+	AuthClientID          uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
-// The auth client a subject most recently approved for each MCP server
-// through any of their user sessions. It only prefills a new consent and is
-// checked again before use. A latest approval with no client remembers
-// nothing.
+// The auth client and connected service a subject most recently approved for
+// each MCP server through any of their user sessions. It only prefills a new
+// consent and is checked again before use. Callers skip rows whose column they
+// read is null: a latest approval without it remembers nothing.
 func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRememberedAuthClientsParams) ([]ListRememberedAuthClientsRow, error) {
 	rows, err := q.db.Query(ctx, listRememberedAuthClients, arg.SubjectUrn, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1217,7 +1377,7 @@ func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRemembe
 	var items []ListRememberedAuthClientsRow
 	for rows.Next() {
 		var i ListRememberedAuthClientsRow
-		if err := rows.Scan(&i.McpServerID, &i.AuthClientID); err != nil {
+		if err := rows.Scan(&i.McpServerID, &i.AuthClientID, &i.RemoteSessionClientID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

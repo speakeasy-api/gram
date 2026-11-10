@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -296,19 +297,6 @@ func requireVerifyNotice(t *testing.T, fx validationFixture, clientID uuid.UUID,
 	}
 }
 
-// requireVerifyRefused posts Verify and checks the message and that nothing was probed.
-func requireVerifyRefused(t *testing.T, fx validationFixture, clientID uuid.UUID, message string) {
-	t.Helper()
-	_, err := postValidate(t, fx, clientID)
-	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeBadRequest, shareable.Code)
-	require.Equal(t, message, shareable.Error())
-	if fx.member != nil {
-		require.Empty(t, fx.member.drain(), "no probe reached the member")
-	}
-}
-
 // storeVerifyGrant replaces the fixture's grant with one whose access token has expired.
 func storeVerifyGrant(t *testing.T, ctx context.Context, fx validationFixture, refreshEncrypted pgtype.Text, refreshExpires, authorizationExpires pgtype.Timestamptz) {
 	t.Helper()
@@ -520,37 +508,59 @@ func TestServeConsentAction_VerifyNeverConnectedAsksToConnect(t *testing.T) {
 	require.Regexp(t, `data-connect-link > Connect`, normalizeSpaces(renderConsent(t, fx)))
 }
 
-// Verify can't reach a typed registration: "connect" would contradict its card, and a server does use it.
-func TestServeConsentAction_VerifyTypedRegistrationCannotBeChecked(t *testing.T) {
+// A registration the server offers through a typed auth client is verified and
+// disconnected from that offer. Only its own token is presented, whether or not
+// the sign-in links another client that holds one.
+func TestServeConsentAction_TypedRegistrationCardActionsWithoutASignInLink(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name    string
 		sibling bool
 	}{
-		{name: "no linked client for its provider"},
-		{name: "a linked client holds a token for its provider", sibling: true},
+		{name: "no linked client"},
+		{name: "a linked client holds a token", sibling: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, fx := typedConsentEndpoint(t, "typed-verify-"+uuid.NewString()[:8])
-			asBase := "https://typed-verify-" + uuid.NewString()[:8] + "-as.example.com"
-			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-verify", asBase, nil)
-			fixtures := authclientfixtures.New(fx.ti.conn)
-			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: registration, Valid: true}})
-			require.NoError(t, err)
-			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: fx.projectID, OrganizationID: fx.orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
-			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, registration, fx.subject, "typed-token", consentChainedUpstream)
-			if tc.sibling {
-				sibling := createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, "typed-verify-sibling", asBase, []uuid.UUID{fx.shared})
-				insertQualifiedRemoteSessionToken(t, ctx, fx.ti, fx.shared, sibling, fx.subject, "sibling-token", consentChainedUpstream)
+			prefix := "typed-verify-" + uuid.NewString()[:8]
+			ctx, fx := seedStandaloneValidationFixture(t, prefix)
+			projectID, orgID := consentTestTenant(t, ctx)
+			linked, shared := fx.clientID, fx.endpoint.UserSessionIssuerID
+			if !tc.sibling {
+				require.NoError(t, remotesessions_repo.New(fx.ti.conn).DeleteUserSessionIssuerAttachmentsForRemoteSessionClient(ctx, remotesessions_repo.DeleteUserSessionIssuerAttachmentsForRemoteSessionClientParams{RemoteSessionClientID: linked, ProjectID: conv.ToNullUUID(projectID)}))
 			}
 
-			vfx := validationFixture{ti: fx.ti, reader: nil, endpoint: fx.endpoint, stateID: fx.stateID, subject: fx.subject, member: nil, clientID: registration, name: ""}
-			code, page, _ := render(t, fx)
-			require.Equal(t, http.StatusOK, code, page)
-			require.Contains(t, page, `data-validate-link`, "the connected card offers Verify")
-			requireVerifyRefused(t, vfx, registration, verifyUnservedMessage)
+			registration := createConsentRemoteClient(t, ctx, fx.ti.conn, projectID, orgID, prefix+"-typed", "", nil)
+			fixtures := authclientfixtures.New(fx.ti.conn)
+			authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: orgID, ProjectID: conv.ToNullUUID(projectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(registration)})
+			require.NoError(t, err)
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: projectID, OrganizationID: orgID, McpServerID: fx.endpoint.McpServerID.UUID, AuthClientID: authClientID, Source: "admin"}))
+			fx.ti.service.SetAuthClientPermitted(true)
+			_, err = productfeaturesrepo.New(fx.ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: orgID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+			require.NoError(t, err)
+			insertQualifiedRemoteSessionToken(t, ctx, fx.ti, shared, registration, fx.subject, "typed-token", fx.member.url)
+			fx.clientID = registration
+
+			require.Contains(t, renderConsent(t, fx), `data-validate-link`, "the connected card offers Verify")
+
+			fx.member.set(memberAccepts)
+			requireValidated(t, fx)
+			requireProbe(t, fx.member.drain(), "typed-token", true, true)
+			require.Equal(t, "valid", storedSession(t, ctx, fx).ValidationStatus.String)
+
+			form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"disconnect"}, "client_id": {registration.String()}}
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			w := httptest.NewRecorder()
+			require.NoError(t, fx.ti.service.ServeConsentAction(w, req, fx.endpoint))
+			require.Equal(t, http.StatusSeeOther, w.Code)
+
+			q := remotesessions_repo.New(fx.ti.conn)
+			_, err = q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: registration})
+			require.ErrorIs(t, err, pgx.ErrNoRows, "the card's own grant is gone")
+			_, err = q.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: fx.subject, RemoteSessionClientID: linked})
+			require.NoError(t, err, "another client's grant is untouched")
 		})
 	}
 }

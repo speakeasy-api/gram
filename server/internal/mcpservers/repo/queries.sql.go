@@ -952,7 +952,7 @@ func (q *Queries) ListMCPServerAssociationProviders(ctx context.Context, arg Lis
 
 const listMCPServerConsentConfigurations = `-- name: ListMCPServerConsentConfigurations :many
 WITH servers AS (
-    SELECT m.id, m.project_id, m.remote_session_issuer_id,
+    SELECT m.id, m.project_id, m.toolset_id, m.remote_session_issuer_id,
            jsonb_build_object(
                'remote', m.remote_mcp_server_id, 'url', r.url,
                'transport', r.transport_type,
@@ -999,7 +999,14 @@ SELECT id, project_id,
            (base || jsonb_build_object('issuer', remote_session_issuer_id))::text, 'UTF8')), 'hex')::text AS configuration_hash,
        encode(sha256(convert_to(
            (base || jsonb_build_object('issuer',
-               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash
+               CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END))::text, 'UTF8')), 'hex')::text AS association_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer', remote_session_issuer_id) END)::text, 'UTF8')), 'hex')::text AS typed_configuration_hash,
+       encode(sha256(convert_to(
+           (CASE WHEN toolset_id IS NULL THEN base
+                 ELSE base || jsonb_build_object('issuer',
+                     CASE WHEN cardinality(association_provider_ids) = 1 THEN association_provider_ids[1] END) END)::text, 'UTF8')), 'hex')::text AS typed_association_configuration_hash
 FROM servers
 `
 
@@ -1009,10 +1016,12 @@ type ListMCPServerConsentConfigurationsParams struct {
 }
 
 type ListMCPServerConsentConfigurationsRow struct {
-	ID                           uuid.UUID
-	ProjectID                    uuid.UUID
-	ConfigurationHash            string
-	AssociationConfigurationHash string
+	ID                                uuid.UUID
+	ProjectID                         uuid.UUID
+	ConfigurationHash                 string
+	AssociationConfigurationHash      string
+	TypedConfigurationHash            string
+	TypedAssociationConfigurationHash string
 }
 
 // Hash stored routing configuration in one tenant-scoped read. Header secrets
@@ -1023,6 +1032,12 @@ type ListMCPServerConsentConfigurationsRow struct {
 // provider, or null with several or none. jsonb stores its keys sorted, so
 // adding the issuer to the rest renders the same text as building every key
 // at once.
+//
+// The typed hashes are what an approval is compared on where typed auth
+// clients choose upstream authentication: they leave out a proxied server's
+// upstream issuer, which decides nothing there, so resynchronizing it changes
+// nothing an approval covers. A hosted server is still routed by that issuer,
+// so its typed hashes cover it.
 func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg ListMCPServerConsentConfigurationsParams) ([]ListMCPServerConsentConfigurationsRow, error) {
 	rows, err := q.db.Query(ctx, listMCPServerConsentConfigurations, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1037,6 +1052,8 @@ func (q *Queries) ListMCPServerConsentConfigurations(ctx context.Context, arg Li
 			&i.ProjectID,
 			&i.ConfigurationHash,
 			&i.AssociationConfigurationHash,
+			&i.TypedConfigurationHash,
+			&i.TypedAssociationConfigurationHash,
 		); err != nil {
 			return nil, err
 		}
@@ -1342,7 +1359,9 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
-  -- Same live-toolset rule as ListMCPServersByProjectID.
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
   AND (
     m.toolset_id IS NULL
     OR EXISTS (
@@ -1402,6 +1421,7 @@ SELECT ms.id, ms.project_id, ms.name, ms.slug, ms.environment_id, ms.user_sessio
 FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -1424,7 +1444,9 @@ type ListMCPServersByProjectIDParams struct {
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
-// A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+// A toolset-backed row whose toolset is deleted serves nothing, so it is not
+// listed. Neither is a retired approvals server (builtin_backend), which the
+// gateway answers as not found until a cleanup migration deletes it.
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
 		arg.ProjectID,

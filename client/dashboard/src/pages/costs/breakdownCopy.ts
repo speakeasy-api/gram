@@ -1,4 +1,4 @@
-import { Dimension } from "@gram/client/models/components/queryfilter.js";
+import type { Dimension } from "@gram/client/models/components/queryfilter.js";
 import {
   type Crumb,
   friendlyName,

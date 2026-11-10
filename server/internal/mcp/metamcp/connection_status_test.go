@@ -177,7 +177,7 @@ func TestConnectionStatusView_PreservesOutageAndConsentHints(t *testing.T) {
 func TestConnectionStatusText_AgentEditorReconnects(t *testing.T) {
 	t.Parallel()
 
-	link := "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	link := "https://app.example.com/acme/projects/default/identities/agent:agent-1/mcp-sign-in"
 	result := ConnectionStatusResult{
 		ConnectURL: link,
 		Audience:   ConnectionStatusAudienceAgentEditors,
@@ -225,7 +225,7 @@ func TestConnectionStatusText_AgentEditorReconnects(t *testing.T) {
 func TestConnectionStatusText_AgentHiddenServers(t *testing.T) {
 	t.Parallel()
 
-	link := "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	link := "https://app.example.com/acme/projects/default/identities/agent:agent-1/mcp-sign-in"
 	servers := []ConnectionStatusServer{
 		{Slug: "linear", Name: "Linear", Status: SignInNotConnected, Reconnect: true},
 		{Slug: "github", Name: "GitHub", Status: SignInHidden},
@@ -255,7 +255,7 @@ func TestConnectionStatusResult_JSONShape(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"connectUrl":"https://example.com/connect","servers":[{"slug":"linear","status":"not_connected"}]}`, string(person))
 
-	link := "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	link := "https://app.example.com/acme/projects/default/identities/agent:agent-1/mcp-sign-in"
 	agent, err := json.Marshal(ConnectionStatusResult{
 		ConnectURL: link,
 		Audience:   ConnectionStatusAudienceAgentEditors,

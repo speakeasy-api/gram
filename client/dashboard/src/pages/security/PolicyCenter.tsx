@@ -84,7 +84,7 @@ import {
 import { POLICY_TYPE_LABEL, policyTypeOf } from "./policy-type";
 import { cn } from "@/lib/utils";
 import { dateTimeFormatters, HumanizeDateTime } from "@/lib/dates";
-import { useDetectionRulesStore } from "./detection-rules-data";
+import type { useDetectionRulesStore } from "./detection-rules-data";
 import { useTelemetry } from "@/contexts/Telemetry";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";

@@ -491,7 +491,6 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).
@@ -1092,7 +1091,6 @@ func newAgentConnectionStatuses(config platformMCPConfig) *platformmcp.PluginsSe
 	return platformmcp.NewPluginsService(config.DB, platformmcp.OperationBudget{}, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(platformMCPIdentityChaining(config)).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger)
@@ -1296,7 +1294,6 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
 		WithAuthorization(config.Authz).
 		WithRemoteSessions(config.RemoteChallengeManager).
-		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
 		WithInstallLinks(config.DashboardURL, config.ServerURL).
 		WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts, config.Logger).

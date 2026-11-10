@@ -10,8 +10,8 @@ import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 import { externalMcpSlugFromToolUrn } from "@/pages/catalog/catalogInstall";
 import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
+import type { CatalogServer } from "@/pages/catalog/hooks";
 import {
-  CatalogServer,
   useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
@@ -25,7 +25,8 @@ import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Minus, Server as ServerIcon } from "lucide-react";
-import { ReactNode, useMemo, useState } from "react";
+import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 import { Spinner } from "@/components/ui/Spinner";
 import { MCPServerCard } from "@/components/mcp/MCPServerCard";

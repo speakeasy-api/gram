@@ -42,3 +42,16 @@ func TestAccessRoleMutationToolsAreStableExternalOnlyMutations(t *testing.T) {
 		require.JSONEq(t, `{"code":"feature_unavailable","feature":"access_role_mutations","message":"This Platform MCP capability is not enabled for the current rollout."}`, refusal.Payload)
 	}
 }
+
+func TestCredentialOfferDescribesRemovalBoundary(t *testing.T) {
+	t.Parallel()
+	_, registrar := newServer(nil, nil, nil, "", nil, nil, nil, nil, nil, nil, nil, nil, nil, CatalogDescriptor{})
+	descriptor := descriptorByName(t, registrar, operationOfferMCPUpstreamCredential)
+	require.Equal(t, externalOnly, descriptor.Meta.Audiences)
+	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptor.Meta.Authorization)
+	require.Equal(t, ProjectScopeExplicit, descriptor.Meta.ProjectScope)
+	require.Contains(t, descriptor.Description, "only adds an administrator-owned offer")
+	require.Contains(t, descriptor.Description, "Review removal in the dashboard")
+	require.Contains(t, descriptor.Description, "legacy OAuth-association detach is not its inverse")
+	require.NotContains(t, string(descriptor.InputSchema), "remote_session_client_id")
+}

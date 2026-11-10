@@ -721,6 +721,21 @@ func (q *Queries) CountPublishOutboxRowsByTopic(ctx context.Context, arg CountPu
 	return count, err
 }
 
+const countRemoteSessionClientBindingsFixture = `-- name: CountRemoteSessionClientBindingsFixture :one
+SELECT count(*)
+FROM remote_session_client_user_session_issuers
+WHERE remote_session_client_id = $1
+`
+
+// Counts a client's user session issuer bindings, whether or not the client is
+// deleted.
+func (q *Queries) CountRemoteSessionClientBindingsFixture(ctx context.Context, remoteSessionClientID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countRemoteSessionClientBindingsFixture, remoteSessionClientID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countSkillScanRecords = `-- name: CountSkillScanRecords :one
 SELECT count(*)
 FROM risk_results rr
@@ -3716,6 +3731,25 @@ INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certifi
 
 func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
+	return err
+}
+
+const insertRetiredApprovalsServerFixture = `-- name: InsertRetiredApprovalsServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')
+`
+
+type InsertRetiredApprovalsServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      pgtype.Text
+}
+
+// A project's approvals server as Speakeasy created it before the server was
+// retired. Such rows stay until a cleanup migration deletes them, and every
+// read path must treat them as gone.
+func (q *Queries) InsertRetiredApprovalsServerFixture(ctx context.Context, arg InsertRetiredApprovalsServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRetiredApprovalsServerFixture, arg.ID, arg.ProjectID, arg.Slug)
 	return err
 }
 

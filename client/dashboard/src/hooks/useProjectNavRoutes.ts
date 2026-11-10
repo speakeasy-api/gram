@@ -2,8 +2,9 @@ import { useMemo } from "react";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
-import { AppRoute, useRoutes } from "@/routes";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { AppRoute } from "@/routes";
+import { useRoutes } from "@/routes";
 import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 

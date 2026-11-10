@@ -2110,6 +2110,11 @@ func unmarshalCustomDomainResponseBodyToDomainsCustomDomain(v *CustomDomainRespo
 		RootMcpEndpointID:        v.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: v.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *v.SuggestedRecordType,
+		DNSTargetToken:           v.DNSTargetToken,
+		DNSTarget:                v.DNSTarget,
+		DNSRoutingMethod:         v.DNSRoutingMethod,
+		DNSConfigurationStatus:   v.DNSConfigurationStatus,
+		DNSCheckedAt:             v.DNSCheckedAt,
 	}
 	res.IPAllowlist = make([]string, len(v.IPAllowlist))
 	for i, val := range v.IPAllowlist {

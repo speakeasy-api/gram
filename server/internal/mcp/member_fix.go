@@ -2,11 +2,11 @@
 //
 // A person fixes their own connection on the member's connect page. An agent
 // cannot sign in itself: someone who can edit it reconnects the member at the
-// agent's MCP sign-in step in the dashboard, or reviews its permissions there.
+// agent's MCP sign-in tab in the dashboard, or reviews its permissions there.
 // The message names no one, since the owner is not the only person who may
 // fix it, and the links carry no credential: the page asks the reader to sign
-// in to Speakeasy and shows the step only to someone allowed to edit the
-// agent. Anywhere else, an administrator fixes it.
+// in to Speakeasy and shows its sign-in controls only to someone allowed to
+// edit the agent. Anywhere else, an administrator fixes it.
 
 package mcp
 
@@ -28,9 +28,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
-// agentEditSignInStep is the agent edit wizard's MCP sign-in step (0 Name,
-// 1 MCP Selection, 2 MCP sign-in), where each server is reconnected.
-const agentEditSignInStep = "2"
+// agentMCPSignInSection is the agent page's MCP sign-in tab, where each of its
+// servers is reconnected or changed. It used to be a step of the setup
+// wizard, which old links still reach through a redirect.
+const agentMCPSignInSection = "mcp-sign-in"
 
 // agentEditors is who an agent sends to fix its connection. The owner is one
 // of them, but anyone allowed to edit the agent may reconnect a server or
@@ -45,7 +46,7 @@ type memberFix struct {
 	agent bool
 
 	// url opens the page where the connection is made: the member's connect
-	// page on the gateway for a person, or the agent's MCP sign-in step.
+	// page on the gateway for a person, or the agent's MCP sign-in tab.
 	// Empty when there is none, or it could not be built.
 	url string
 
@@ -79,7 +80,7 @@ func (f memberFix) callerURL() string {
 }
 
 // askEditorToReconnect is the instruction an agent passes on: who opens the
-// sign-in step to reconnect the server.
+// MCP sign-in tab to reconnect the server.
 func (f memberFix) askEditorToReconnect() string {
 	return fmt.Sprintf("Ask %s to open %s and reconnect it, then retry", agentEditors, f.url)
 }
@@ -124,10 +125,10 @@ func sharedCredentialError(member metaMember, tokens map[uuid.UUID]remotesession
 }
 
 // agentOAuthSignIn reports whether an agent reached member through an
-// upstream OAuth connection of its own, which its sign-in step connects. An
+// upstream OAuth connection of its own, which its MCP sign-in tab connects. An
 // agent reaches a member only with the credentials its own connections
 // resolved, so a member it holds no such connection for, or only a service
-// account's token, offers nothing the sign-in step connects: its credential,
+// account's token, offers nothing the MCP sign-in tab connects: its credential,
 // if any, is configured on the server.
 func agentOAuthSignIn(member metaMember, tokens map[uuid.UUID]remotesessions.UpstreamToken) bool {
 	if member.upstreamNoAuth {
@@ -246,8 +247,7 @@ func (s *Service) newAgentFixLinks(ctx context.Context, logger *slog.Logger, org
 		mu:       sync.Mutex{},
 		projects: map[uuid.UUID]string{},
 		link: func(projectSlug string) memberFix {
-			signIn := base.JoinPath(orgSlug, "projects", projectSlug, "identities", "agents", agentID.String(), "edit")
-			signIn.RawQuery = "step=" + agentEditSignInStep
+			signIn := base.JoinPath(orgSlug, "projects", projectSlug, "identities", "agent:"+agentID.String(), agentMCPSignInSection)
 			permissions := base.JoinPath(orgSlug, "projects", projectSlug, "identities", "agent:"+agentID.String(), "permissions")
 			return memberFix{agent: true, url: signIn.String(), accessURL: permissions.String()}
 		},

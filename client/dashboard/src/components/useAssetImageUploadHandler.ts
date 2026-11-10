@@ -1,6 +1,6 @@
 import { useProject, useSession } from "@/contexts/Auth";
 import { getServerURL } from "@/lib/utils";
-import { UploadImageResult } from "@gram/client/models/components/uploadimageresult.js";
+import type { UploadImageResult } from "@gram/client/models/components/uploadimageresult.js";
 
 // The owning tier of an uploaded image asset. Project uploads go through the
 // project-scoped assets service; organization and platform uploads go through

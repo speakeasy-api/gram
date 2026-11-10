@@ -208,6 +208,7 @@ func (r *Relay) deliver(ctx context.Context, typed any) (ingestResult, authState
 	}
 	base := agenthooks.EventOf(typed)
 	ctx = withHarnessInfo(ctx, base, r.cfg.InstallRoute)
+	ctx = withDailySnapshot(ctx, r.cfg)
 	promptAttachmentAdvance := promptAttachmentHighWaterAdvance{}
 	if entries, advance, err := collectClaudePromptAttachments(base); err == nil {
 		attachPromptAttachments(&payload, entries)

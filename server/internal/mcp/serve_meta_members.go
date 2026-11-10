@@ -44,12 +44,12 @@ const (
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
 	serverID uuid.UUID
-	// configurationHash is loaded with the request's approved member set.
-	configurationHash string
+	// configuration is loaded with the request's approved member set.
+	configuration memberConfiguration
 
-	// otherConfigurationHash is configurationHash with the upstream issuer
-	// from the source the organization's flag does not make authoritative.
-	otherConfigurationHash string
+	// otherConfiguration is configuration with the upstream issuer from the
+	// source the organization's flag does not make authoritative.
+	otherConfiguration memberConfiguration
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -154,7 +154,6 @@ type metaMemberCandidate struct {
 	name                       string
 	sortOrder                  int32
 	visibility                 string
-	unproxied                  bool
 	toolsetID                  uuid.NullUUID
 	remoteServerID             uuid.NullUUID
 	tunneledServerID           uuid.NullUUID
@@ -176,8 +175,9 @@ func memberUpstreamIssuer(column uuid.NullUUID, associationProviderIDs []uuid.UU
 }
 
 // resolveMetaMemberSnapshot loads a stored meta server's servable members and
-// applies the per-member RBAC filter; unproxied members (no meta MCP dispatch
-// path) are excluded, so pre-validation memberships degrade to invisibility.
+// applies the per-member RBAC filter. Only hosted, remote, and tunneled backends
+// have a gateway dispatch path; all other members are excluded, so pre-validation
+// memberships degrade to invisibility.
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -215,7 +215,6 @@ func (s *Service) resolveMetaMemberSnapshot(
 			name:                       conv.PtrValOr(conv.FromPGText[string](row.McpServerName), ""),
 			sortOrder:                  row.SortOrder,
 			visibility:                 row.McpServerVisibility,
-			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
@@ -288,8 +287,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 			return ctx, nil, hashErr
 		}
 		for i := range members {
-			members[i].configurationHash = hashes[members[i].serverID]
-			members[i].otherConfigurationHash = otherHashes[members[i].serverID]
+			members[i].configuration = hashes[members[i].serverID]
+			members[i].otherConfiguration = otherHashes[members[i].serverID]
 		}
 	}
 	if err == nil && gate.memberChoices != nil {
@@ -372,7 +371,6 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			// requests.
 			sortOrder:                  0,
 			visibility:                 row.McpServerVisibility,
-			unproxied:                  row.McpServerUnproxiedMcpServerID.Valid,
 			toolsetID:                  row.McpServerToolsetID,
 			remoteServerID:             row.McpServerRemoteMcpServerID,
 			tunneledServerID:           row.McpServerTunneledMcpServerID,
@@ -529,13 +527,15 @@ func (s *Service) admitMetaMembers(
 	members := make([]metaMember, 0, len(candidates))
 	var denied []metaMember
 	for _, candidate := range candidates {
-		if candidate.unproxied {
-			continue
-		}
-
-		backend := metaMemberBackendProxied
-		if candidate.toolsetID.Valid {
+		// Only hosted, remote, and tunneled backends have a gateway dispatch path.
+		var backend metaMemberBackend
+		switch {
+		case candidate.toolsetID.Valid:
 			backend = metaMemberBackendHosted
+		case candidate.remoteServerID.Valid || candidate.tunneledServerID.Valid:
+			backend = metaMemberBackendProxied
+		default:
+			continue
 		}
 
 		// Visibility gates exposure and fails closed: public members are open,
@@ -558,8 +558,8 @@ func (s *Service) admitMetaMembers(
 
 		member := metaMember{
 			serverID:                       candidate.serverID,
-			configurationHash:              "",
-			otherConfigurationHash:         "",
+			configuration:                  memberConfiguration{hash: "", typedHash: ""},
+			otherConfiguration:             memberConfiguration{hash: "", typedHash: ""},
 			authClient:                     nil,
 			projectID:                      candidate.projectID,
 			projectSlug:                    candidate.projectSlug,

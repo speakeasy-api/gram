@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
@@ -196,6 +197,10 @@ type ConnectionRecoveryLink struct {
 	McpServerID    uuid.UUID
 	AuthClientID   uuid.UUID
 	RegistrationID uuid.UUID
+	// UserSessionIssuerID and UpstreamResource are the server's sign-in and
+	// upstream; a link that names no sign-in gets one that does not exist.
+	UserSessionIssuerID uuid.UUID
+	UpstreamResource    string
 }
 
 // IssueConnectionRecovery stores a connection link and returns its path.
@@ -204,9 +209,13 @@ func (s *Service) IssueConnectionRecovery(ctx context.Context, link ConnectionRe
 	if err != nil {
 		return "", err
 	}
+	signIn := link.UserSessionIssuerID
+	if signIn == uuid.Nil {
+		signIn = uuid.New()
+	}
 	err = s.connectionRecoveryCache.Store(ctx, connectionRecovery{
 		ID: token, OrganizationID: link.OrganizationID, UserID: link.UserID, ProjectID: link.ProjectID,
-		UserSessionIssuerID: uuid.New(), McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server",
+		UserSessionIssuerID: signIn, McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server", UpstreamResource: link.UpstreamResource,
 		AuthClientID: link.AuthClientID, RegistrationID: link.RegistrationID, CreatedAt: time.Now(),
 	})
 	if err != nil {
@@ -330,6 +339,12 @@ func (s *Service) RecordAuthClientPermitCallers() func() []string {
 		defer permitter.mu.Unlock()
 		return slices.Clone(permitter.users)
 	}
+}
+
+// ReloadAuthEnforcement drops the cached enforcement state, as its expiry would
+// after staff change it.
+func (s *Service) ReloadAuthEnforcement() {
+	s.authEnforcement = authenforcement.NewGate(s.db)
 }
 
 // SetAuthClientPermission installs a mutable permit decision in the test binary.

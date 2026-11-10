@@ -124,6 +124,7 @@ var frozenCodes = []string{
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
+	"approval_needs_admin",
 	"upstream_credential_denied",
 	"upstream_credential_not_chosen",
 	"sign_in_method_not_accepted",

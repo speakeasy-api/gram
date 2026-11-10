@@ -1,5 +1,6 @@
 import { useConfig } from "@/components/ui/hooks/useConfig";
-import { Toaster as Sonner, ToasterProps } from "sonner";
+import type { ToasterProps } from "sonner";
+import { Toaster as Sonner } from "sonner";
 
 const Toaster = ({ ...props }: ToasterProps): JSX.Element => {
   // The app theme lives in ConfigContext, not next-themes (which has no
