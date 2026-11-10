@@ -122,6 +122,9 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 	candidates, err := LookupRoutes(ctx, c.routes, tunnelID)
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("list tunnel routes: %w", err)
+		}
 		return nil, fmt.Errorf("list tunnel routes: %w: %w", ErrRouteStoreUnavailable, err)
 	}
 

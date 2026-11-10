@@ -89,6 +89,7 @@ func TestLookupRoutesParentCancellation(t *testing.T) {
 	t.Parallel()
 	for _, blockedRead := range []bool{false, true} {
 		t.Run(map[bool]string{false: "waiting", true: "reading"}[blockedRead], func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			store := lookupStore{candidates: func(ctx context.Context, _ string) ([]string, error) {
@@ -125,6 +126,7 @@ func TestLookupRoutesStoreError(t *testing.T) {
 	t.Parallel()
 	for _, failAt := range []int{1, 2} {
 		t.Run(map[int]string{1: "initial", 2: "after_empty"}[failAt], func(t *testing.T) {
+			t.Parallel()
 			failure := errors.New("store unavailable")
 			calls := 0
 			store := lookupStore{candidates: func(context.Context, string) ([]string, error) {
@@ -140,4 +142,16 @@ func TestLookupRoutesStoreError(t *testing.T) {
 			require.Equal(t, failAt, calls)
 		})
 	}
+}
+
+func TestLookupRoutesPreservesStoreErrorAtDeadline(t *testing.T) {
+	t.Parallel()
+	failure := errors.New("store unavailable")
+	store := lookupStore{candidates: func(ctx context.Context, _ string) ([]string, error) {
+		<-ctx.Done()
+		return nil, failure
+	}}
+	routes, err := LookupRoutes(t.Context(), store, "tunnel-1")
+	require.ErrorIs(t, err, failure)
+	require.Empty(t, routes)
 }
