@@ -3,6 +3,7 @@
 package demoseed
 
 import (
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -37,5 +39,17 @@ func TestInertDemoSessionsReadAsConnected(t *testing.T) {
 		require.NoError(t, err, key)
 		require.True(t, remotesessions.StoredSignInUsable(enc, sess, now), "%s reads as connected", key)
 		require.False(t, sess.RefreshTokenEncrypted.Valid, "%s stays inert: no refresh token", key)
+	}
+
+	// The idle re-check never presents the dummy token to an upstream.
+	due, err := remotesessionsrepo.New(db).ClaimDueRemoteSessionRecheckCandidates(ctx, remotesessionsrepo.ClaimDueRemoteSessionRecheckCandidatesParams{
+		NowTs: conv.ToPGTimestamptz(now), RecheckCutoff: conv.ToPGTimestamptz(now.Add(time.Hour)),
+		AttemptCutoff: conv.ToPGTimestamptz(now.Add(time.Hour)), ExcludedHosts: nil, LimitValue: 1000,
+	})
+	require.NoError(t, err)
+	for _, key := range keys {
+		require.False(t, slices.ContainsFunc(due, func(row remotesessionsrepo.ClaimDueRemoteSessionRecheckCandidatesRow) bool {
+			return row.ID == s.det(key)
+		}), "%s is never re-checked", key)
 	}
 }
