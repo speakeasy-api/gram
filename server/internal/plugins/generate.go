@@ -430,6 +430,7 @@ const (
 	platformMCPCodexPluginName    = "speakeasy-codex"
 	platformMCPPluginRoot         = platformMCPPluginName
 	platformMCPDescription        = "Manage MCPs, Risk Policies and explore logs in your favorite agent."
+	platformMCPPrivacyPolicyURL   = "https://www.speakeasy.com/privacy-policy"
 	platformMCPCursorPluginRoot   = cursorPluginRoot + "/" + platformMCPCursorPluginName
 	platformMCPCodexPluginRoot    = platformMCPCodexPluginName
 	platformMCPOpenCodePluginRoot = opencodePluginRoot + "/" + platformMCPPluginName
@@ -1406,13 +1407,14 @@ func generateClaudeObservabilityPluginInDir(files map[string][]byte, subdir stri
 		name = ClaudeObservabilitySlug(cfg)
 	}
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        name,
-		DisplayName: cfg.OrgName + " Observability",
-		Description: "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
-		Version:     hooksManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  nil,
+		Name:             name,
+		DisplayName:      cfg.OrgName + " Observability",
+		Description:      "Speakeasy observability hooks for " + cfg.OrgName + ". Install this plugin to forward tool events to your team's Speakeasy dashboard.",
+		Version:          hooksManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:         "https://getgram.ai",
+		UserConfig:       nil,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3337,13 +3339,14 @@ func emitPlatformMCPSkills(files map[string][]byte) error {
 func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[string][]byte, error) {
 	files := make(map[string][]byte)
 	meta, err := marshalJSON(claudePluginMeta{
-		Name:        platformMCPPluginName,
-		DisplayName: platformMCPDisplayName,
-		Description: platformMCPDescription,
-		Version:     platformMCPManifestVersion(cfg),
-		Author:      pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
-		Homepage:    "https://www.speakeasy.com/product/gram",
-		UserConfig:  nil,
+		Name:             platformMCPPluginName,
+		DisplayName:      platformMCPDisplayName,
+		Description:      platformMCPDescription,
+		Version:          platformMCPManifestVersion(cfg),
+		Author:           pluginAuthor{Name: "Speakeasy", URL: "https://www.speakeasy.com/"},
+		Homepage:         "https://www.speakeasy.com/product/gram",
+		UserConfig:       nil,
+		PrivacyPolicyURL: platformMCPPrivacyPolicyURL,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
@@ -3556,13 +3559,14 @@ func generateClaudePluginInDir(files map[string][]byte, subdir string, p PluginI
 	}
 
 	pluginJSON, err := marshalJSON(claudePluginMeta{
-		Name:        p.Slug,
-		DisplayName: p.Name,
-		Description: p.Description,
-		Version:     pluginManifestVersion(cfg),
-		Author:      pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
-		Homepage:    "https://getgram.ai",
-		UserConfig:  userConfigPtr,
+		Name:             p.Slug,
+		DisplayName:      p.Name,
+		Description:      p.Description,
+		Version:          pluginManifestVersion(cfg),
+		Author:           pluginAuthor{Name: cfg.OrgName, URL: "https://getgram.ai"},
+		Homepage:         "https://getgram.ai",
+		UserConfig:       userConfigPtr,
+		PrivacyPolicyURL: "",
 	})
 	if err != nil {
 		return fmt.Errorf("marshal plugin.json: %w", err)
@@ -3871,6 +3875,10 @@ type claudePluginMeta struct {
 	Author      pluginAuthor               `json:"author"`
 	Homepage    string                     `json:"homepage"`
 	UserConfig  map[string]userConfigEntry `json:"userConfig,omitempty"`
+	// PrivacyPolicyURL is read by the Claude plugin directory review; only the
+	// first-party Platform MCP package is listed there, so customer and
+	// observability packages leave it empty.
+	PrivacyPolicyURL string `json:"privacyPolicyUrl,omitempty"`
 }
 
 type userConfigEntry struct {
