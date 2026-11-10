@@ -31,6 +31,17 @@ func connectionRecorderShutdown(recorder *mcpconnectionattempts.Recorder) func(c
 	}
 }
 
+// startShutdown starts shutdown now and returns a wait for its result, so other shutdown
+// work runs alongside it and only what depends on it waits.
+func startShutdown(ctx context.Context, shutdown func(context.Context) error) func() error {
+	if shutdown == nil {
+		return func() error { return nil }
+	}
+	done := make(chan error, 1)
+	go func() { done <- shutdown(ctx) }()
+	return func() error { return <-done }
+}
+
 func runShutdown(logger *slog.Logger, logCtx context.Context, shutdownFuncs []func(context.Context) error) error {
 	ctx := context.Background()
 
