@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -3243,5 +3244,63 @@ func TestToolProxy_Do_HTTPTool_ArgumentVariablesReportedAsCaller(t *testing.T) {
 
 	require.Equal(t, "argument-key", sentKey)
 	require.Equal(t, []string{"api_key"}, report.CallerVariables)
-	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false}}, report.Sent)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: false, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
+}
+
+func TestToolProxy_Do_HTTPTool_RedirectStrippedCredentialNotReported(t *testing.T) {
+	t.Parallel()
+
+	var finalAuthorization atomic.Value
+	final := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		finalAuthorization.Store(r.Header.Get("Authorization"))
+		w.Header().Set("WWW-Authenticate", `Bearer error="invalid_token"`)
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer final.Close()
+	finalURL := strings.Replace(final.URL, "127.0.0.1", "localhost", 1)
+	start := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, finalURL+r.URL.Path, http.StatusTemporaryRedirect)
+	}))
+	defer start.Close()
+
+	logger := testenv.NewLogger(t)
+	tracerProvider := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tracerProvider, []string{})
+	require.NoError(t, err)
+
+	plan := &HTTPToolCallPlan{
+		ServerEnvVar:     "TEST_SERVER_URL",
+		DefaultServerUrl: NullString{Value: start.URL, Valid: true},
+		Security: []*HTTPToolSecurity{
+			{
+				Type:         NullString{Value: "http", Valid: true},
+				Scheme:       NullString{Value: "bearer", Valid: true},
+				EnvVariables: []string{"API_TOKEN"},
+			},
+		},
+		SecurityScopes:     map[string][]string{},
+		Method:             "GET",
+		Path:               "/test",
+		Schema:             []byte{},
+		HeaderParams:       map[string]*HTTPParameter{},
+		QueryParams:        map[string]*HTTPParameter{},
+		PathParams:         map[string]*HTTPParameter{},
+		RequestContentType: NullString{Value: "application/json", Valid: true},
+		ResponseFilter:     nil,
+	}
+	bodyBytes, err := json.Marshal(ToolCallBody{})
+	require.NoError(t, err)
+
+	proxy := NewToolProxy(logger, tracerProvider, testenv.NewMeterProvider(t), ToolCallSourceDirect, testenv.NewEncryptionClient(t), nil, policy, funcs, nil, nil)
+	report := &toolconfig.CredentialReport{}
+	err = proxy.Do(t.Context(), httptest.NewRecorder(), bytes.NewReader(bodyBytes), toolconfig.ToolCallEnv{
+		SystemEnv:   toolconfig.CIEnvFrom(map[string]string{"API_TOKEN": "saved-token"}),
+		UserConfig:  toolconfig.NewCaseInsensitiveEnv(),
+		Credentials: report,
+	}, NewHTTPToolCallPlan(newTestToolDescriptor(), plan), tm.HTTPLogAttributes{})
+	require.NoError(t, err)
+
+	require.Empty(t, finalAuthorization.Load(), "the redirect to another host dropped the credential")
+	require.Empty(t, report.Sent, "a credential the final request did not carry is not reported")
+	require.Equal(t, []string{`Bearer error="invalid_token"`}, report.Challenges)
 }

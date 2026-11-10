@@ -888,6 +888,7 @@ func (tp *ToolProxy) doHTTP(
 			// The challenge is kept for classification only; it is not forwarded.
 			if env.Credentials != nil {
 				env.Credentials.Challenges = resp.Header.Values("WWW-Authenticate")
+				env.Credentials.KeepCarried(resp.Request)
 			}
 			return nil
 		},

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/ettle/strcase"
@@ -193,6 +195,27 @@ type AppliedCredential struct {
 
 	// ClientGrant reports a client secret exchanged for a token, not sent as is.
 	ClientGrant bool
+
+	// Carrier is the request header that carried it, or "?" and the name of a query parameter.
+	Carrier string
+}
+
+// KeepCarried drops the credentials the final request no longer carried, as after a redirect
+// to another origin strips them.
+func (r *CredentialReport) KeepCarried(final *http.Request) {
+	if r == nil || final == nil {
+		return
+	}
+	r.Sent = slices.DeleteFunc(r.Sent, func(credential AppliedCredential) bool {
+		// A secret whose grant failed was never sent; it stands for the failed grant.
+		if credential.ClientGrant && r.GrantFailure != "" {
+			return false
+		}
+		if name, ok := strings.CutPrefix(credential.Carrier, "?"); ok {
+			return final.URL == nil || !final.URL.Query().Has(name)
+		}
+		return final.Header.Get(credential.Carrier) == ""
+	})
 }
 
 // ClientGrantFailure is why a client credentials token request failed.

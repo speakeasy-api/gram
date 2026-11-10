@@ -43,7 +43,7 @@ func processSecurity(
 	// applied keeps the credential behind each header or query parameter the request ends up carrying.
 	applied := make(map[string]toolconfig.AppliedCredential)
 	credentialFrom := func(variable string, grant bool) toolconfig.AppliedCredential {
-		return toolconfig.AppliedCredential{Variable: variable, System: env.UserConfig == nil || env.UserConfig.Get(variable) == "", ClientGrant: grant}
+		return toolconfig.AppliedCredential{Variable: variable, System: env.UserConfig == nil || env.UserConfig.Get(variable) == "", ClientGrant: grant, Carrier: ""}
 	}
 	// A grant that failed without the proxy answering 401 counts only if nothing else sent an Authorization.
 	var grantFailure toolconfig.ClientGrantFailure
@@ -61,7 +61,8 @@ func processSecurity(
 				applied[http.CanonicalHeaderKey("Authorization")] = grantCredential
 				env.Credentials.GrantFailure = grantFailure
 			}
-			for _, credential := range applied {
+			for carrier, credential := range applied {
+				credential.Carrier = carrier
 				env.Credentials.Sent = append(env.Credentials.Sent, credential)
 			}
 		}
@@ -215,7 +216,7 @@ func processSecurity(
 		if _, alreadyProcessed := securityHeadersProcessed[canonicalKey]; !alreadyProcessed {
 			req.Header.Set(headerKey, value)
 			if canonicalKey == "Authorization" && value != "" {
-				applied[canonicalKey] = toolconfig.AppliedCredential{Variable: key, System: true, ClientGrant: false}
+				applied[canonicalKey] = toolconfig.AppliedCredential{Variable: key, System: true, ClientGrant: false, Carrier: ""}
 			}
 		}
 	}

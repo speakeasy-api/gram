@@ -78,7 +78,7 @@ func TestClientGrantFailureIsReported(t *testing.T) {
 			require.False(t, ok)
 			require.Equal(t, http.StatusUnauthorized, status)
 			require.Equal(t, tc.want, report.GrantFailure)
-			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true}}, report.Sent)
+			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
 			require.Equal(t, []string{"Content-Type"}, keys(w.Header()))
 		})
 	}
@@ -108,13 +108,13 @@ func TestClientGrantMisconfigurationIsReported(t *testing.T) {
 			require.True(t, ok)
 			require.Empty(t, keys(w.Header()))
 			require.Equal(t, toolconfig.ClientGrantMisconfigured, report.GrantFailure)
-			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true}}, report.Sent)
+			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_CLIENT_SECRET", System: true, ClientGrant: true, Carrier: "Authorization"}}, report.Sent)
 
 			system["AUTHORIZATION"] = "Bearer saved"
 			ok, _, _, report = runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{machineSecurity}, system, nil)
 			require.True(t, ok)
 			require.Empty(t, report.GrantFailure)
-			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "authorization", System: true, ClientGrant: false}}, report.Sent)
+			require.Equal(t, []toolconfig.AppliedCredential{{Variable: "authorization", System: true, ClientGrant: false, Carrier: "Authorization"}}, report.Sent)
 		})
 	}
 }
@@ -127,7 +127,7 @@ func TestCallerAccessTokenSkipsClientGrant(t *testing.T) {
 		map[string]string{"MACHINE_CLIENT_ID": "id", "MACHINE_CLIENT_SECRET": "secret"}, map[string]string{"MACHINE_ACCESS_TOKEN": "caller-token"})
 	require.True(t, ok)
 	require.Empty(t, report.GrantFailure)
-	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_ACCESS_TOKEN", System: false, ClientGrant: false}}, report.Sent)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "MACHINE_ACCESS_TOKEN", System: false, ClientGrant: false, Carrier: "Authorization"}}, report.Sent)
 }
 
 // A scheme's Authorization wins over a saved system Authorization, which is then not reported.
@@ -138,11 +138,11 @@ func TestSchemeAuthorizationHidesSystemAuthorization(t *testing.T) {
 	ok, _, _, report := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{bearer},
 		map[string]string{"AUTHORIZATION": "Bearer saved"}, map[string]string{"CALLER_TOKEN": "caller"})
 	require.True(t, ok)
-	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "CALLER_TOKEN", System: false, ClientGrant: false}}, report.Sent)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "CALLER_TOKEN", System: false, ClientGrant: false, Carrier: "Authorization"}}, report.Sent)
 
 	ok, _, _, report = runSecurity(t, unsafePolicy(t), nil, map[string]string{"AUTHORIZATION": "Bearer saved"}, nil)
 	require.True(t, ok)
-	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "authorization", System: true, ClientGrant: false}}, report.Sent)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "authorization", System: true, ClientGrant: false, Carrier: "Authorization"}}, report.Sent)
 }
 
 // A value missing from the caller's layer is reported as the system one that was sent.
@@ -152,7 +152,7 @@ func TestSystemFallbackIsReportedAsSystem(t *testing.T) {
 	apiKey := &HTTPToolSecurity{Key: "api_key", Type: NullString{Value: "apiKey", Valid: true}, Name: NullString{Value: "X-Api-Key", Valid: true}, Placement: NullString{Value: "header", Valid: true}, EnvVariables: []string{"API_KEY"}}
 	ok, _, _, report := runSecurity(t, unsafePolicy(t), []*HTTPToolSecurity{apiKey}, map[string]string{"API_KEY": "saved"}, nil)
 	require.True(t, ok)
-	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: true, ClientGrant: false}}, report.Sent)
+	require.Equal(t, []toolconfig.AppliedCredential{{Variable: "API_KEY", System: true, ClientGrant: false, Carrier: "X-Api-Key"}}, report.Sent)
 }
 
 func keys(header http.Header) []string {
