@@ -296,6 +296,9 @@ func (s *GatewayService) setGatewayMembers(ctx context.Context, principal Princi
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 
+	if err := metamcp.LockMemberRemovalScope(ctx, tx, actor); err != nil {
+		return GatewayOutput{}, err //nolint:wrapcheck // Already describes the lock.
+	}
 	meta, err := s.writer.LockGateway(ctx, tx, actor, gatewayID)
 	if errors.Is(err, metamcp.ErrGatewayNotFound) {
 		return GatewayOutput{}, gatewayMissing()

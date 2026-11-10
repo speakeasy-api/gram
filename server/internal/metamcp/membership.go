@@ -15,9 +15,10 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/inv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/metamcp/memberbindings"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
@@ -150,6 +151,15 @@ func (w GatewayWriter) LockGateway(ctx context.Context, tx pgx.Tx, actor Actor, 
 		return repo.MetaMcpServer{}, fmt.Errorf("lock meta mcp server: %w", err)
 	}
 	return meta, nil
+}
+
+// LockMemberRemovalScope takes the project's upstream client writer scope a
+// transaction that removes members needs, ahead of every row lock it takes.
+func LockMemberRemovalScope(ctx context.Context, tx pgx.Tx, actor Actor) error {
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, actor.OrganizationID, []uuid.UUID{actor.ProjectID}); err != nil {
+		return fmt.Errorf("lock upstream client writer scope: %w", err)
+	}
+	return nil
 }
 
 // AddedMember is one committed-to-be member and the server it fronts.
@@ -291,50 +301,10 @@ func (w GatewayWriter) attachMemberProviderClient(ctx context.Context, tx pgx.Tx
 	return nil
 }
 
-// detachMemberProviderClient unbinds provider's client from the gateway's
-// issuer unless another member on that issuer still fronts the provider, or a
-// server signs in directly through the issuer.
-func (w GatewayWriter) detachMemberProviderClient(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, server mcpserversrepo.McpServer, provider uuid.UUID) error {
-	if err := remotesessionsrepo.New(tx).LockRemoteSessionIssuerForClientBinding(ctx, provider); err != nil {
-		return fmt.Errorf("lock remote session issuer for client binding: %w", err)
-	}
-	// TODO(AIM-925): THIS BETTER HECKING GET REMOVED once challenge state and
-	// token resolution read from a server's associations, not its issuer's
-	// bindings. Until then a server directly on a gateway's issuer depends on
-	// these bindings, and nothing says which provider it uses, so keep them.
-	outsiders, err := repo.New(tx).CountServersOnGatewayIssuer(ctx, repo.CountServersOnGatewayIssuerParams{
-		OrganizationID:  meta.OrganizationID,
-		GatewayIssuerID: meta.UserSessionIssuerID,
-	})
-	if err != nil {
-		return fmt.Errorf("count servers on gateway issuer: %w", err)
-	}
-	if err := inv.Check("metamcp.detachMemberProviderClient", "no MCP server signs in directly through a gateway's issuer", outsiders == 0); err != nil {
-		// Logged rather than returned: the member is still removable, and
-		// keeping a binding costs a stale consent tile at worst.
-		w.Logger.ErrorContext(ctx, "kept provider client on a gateway issuer shared with an MCP server",
-			attr.SlogError(err),
-			attr.SlogMetaMcpServerID(meta.ID.String()),
-			attr.SlogMcpServerID(server.ID.String()))
-		return nil
-	}
-	detached, err := repo.New(tx).AutoDetachMemberProviderClient(ctx, repo.AutoDetachMemberProviderClientParams{
-		GatewayIssuerID: meta.UserSessionIssuerID.UUID,
-		RemoteIssuerID:  provider,
-		ProjectID:       actor.ProjectID,
-	})
-	if err != nil {
-		return fmt.Errorf("detach member provider client: %w", err)
-	}
-	if detached > 0 {
-		w.Logger.InfoContext(ctx, "detached member provider client from meta mcp issuer",
-			attr.SlogMetaMcpServerID(meta.ID.String()),
-			attr.SlogMcpServerID(server.ID.String()))
-	}
-	return nil
-}
-
-// RemoveMember removes one membership of a gateway.
+// RemoveMember removes one membership of a gateway, with the associations the
+// gateway's issuer no longer serves for the member's server and the typed
+// links derived from them. The caller holds the project's upstream client
+// writer scope, LockMemberRemovalScope, from before its first row lock.
 func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor, meta repo.MetaMcpServer, memberID uuid.UUID) (repo.MetaMcpServerMember, error) {
 	txRepo := repo.New(tx)
 	existing, err := txRepo.LockMetaMCPMember(ctx, repo.LockMetaMCPMemberParams{ID: memberID, ProjectID: actor.ProjectID})
@@ -356,27 +326,14 @@ func (w GatewayWriter) RemoveMember(ctx context.Context, tx pgx.Tx, actor Actor,
 	// screen. The member row is already soft-deleted above, so the detach's
 	// "last member" guard sees the post-removal set.
 	if meta.UserSessionIssuerID.Valid {
-		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{
-			ID:        deleted.McpServerID,
-			ProjectID: actor.ProjectID,
-		})
-		switch {
-		case errors.Is(err, pgx.ErrNoRows):
-			// The member's server is itself gone (e.g. removed as part of a
-			// server deletion); its binding is cleaned up on that path.
-		case err != nil:
-			return repo.MetaMcpServerMember{}, fmt.Errorf("load removed member server: %w", err)
-		default:
-			upstream, err := upstreamclients.ServerUpstreamIssuers(ctx, tx, actor.ProjectID, server.ID)
-			if err != nil {
-				return repo.MetaMcpServerMember{}, fmt.Errorf("read removed member upstream issuers: %w", err)
-			}
-			if provider := upstream.Sole(); provider.Valid {
-				if err := w.detachMemberProviderClient(ctx, tx, actor, meta, server, provider.UUID); err != nil {
-					return repo.MetaMcpServerMember{}, err
-				}
-			}
+		gateway := memberbindings.Gateway{ID: meta.ID, OrganizationID: meta.OrganizationID, ProjectID: actor.ProjectID, UserSessionIssuerID: meta.UserSessionIssuerID.UUID}
+		if err := memberbindings.DetachServerProvider(ctx, tx, w.Logger, gateway, deleted.McpServerID); err != nil {
+			return repo.MetaMcpServerMember{}, fmt.Errorf("unbind removed member provider client: %w", err)
 		}
+	}
+
+	if err := upstreamclients.ReconcileInLockedTransaction(ctx, tx, actor.OrganizationID, actor.ProjectID, nil); err != nil {
+		return repo.MetaMcpServerMember{}, fmt.Errorf("prune removed member upstream clients: %w", err)
 	}
 
 	if err := w.Audit.LogMetaMcpMemberRemove(ctx, tx, memberAuditEvent(actor, meta, deleted)); err != nil {
@@ -438,9 +395,10 @@ func memberAuditEvent(actor Actor, meta repo.MetaMcpServer, member repo.MetaMcpS
 }
 
 // AfterMembershipCommit is the best-effort follow-up every committed
-// membership change owes: resync the denormalized issuer column and the
-// members' upstream client associations, then ask plugins carrying the
-// gateway to republish.
+// membership change owes: resync the denormalized issuer column and capture
+// a joining member's upstream client associations, then ask plugins carrying
+// the gateway to republish. A removed member's associations were pruned in
+// its transaction.
 func AfterMembershipCommit(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, publisher plugins.PluginPublishSignaler, actor Actor, meta repo.MetaMcpServer) {
 	// Every client-binding writer follows its commit with this resync so the
 	// denormalized mcp_servers.remote_session_issuer_id cannot go stale when

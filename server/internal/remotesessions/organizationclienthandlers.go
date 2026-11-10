@@ -978,6 +978,15 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
 	}
+	bindingServers, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the client's issuers").LogError(ctx, logger)
+	}
+	for _, projectID := range bindingServers.Projects(authCtx.ActiveOrganizationID) {
+		if !slices.Contains(affectedProjects, projectID) {
+			affectedProjects = append(affectedProjects, projectID)
+		}
+	}
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
 	}
@@ -1038,6 +1047,10 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "delete organization admin remote session client").LogError(ctx, logger)
 	}
 
+	if err := txRepo.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx, deleted.ID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "delete user session issuer attachments for deleted client").LogError(ctx, logger)
+	}
+
 	cascaded, err := txRepo.SoftDeleteRemoteSessionsByClientID(ctx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
@@ -1053,6 +1066,9 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	// which they offered its typed client are retired in the same transaction.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the deleted client's servers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDelete(ctx, dbtx, audit.LogRemoteSessionClientDeleteEvent{
@@ -1116,6 +1132,15 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	bindingServers, err := ReadClientBindingServers(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the client's issuers").LogError(ctx, logger)
+	}
+	for _, projectID := range bindingServers.Projects(authCtx.ActiveOrganizationID) {
+		if !slices.Contains(affectedProjects, projectID) {
+			affectedProjects = append(affectedProjects, projectID)
+		}
 	}
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
@@ -1201,6 +1226,9 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	// the registration stops offering the client derived from it.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the detached client's servers").LogError(ctx, logger)
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the detached client's servers").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

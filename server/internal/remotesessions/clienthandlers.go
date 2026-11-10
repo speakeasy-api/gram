@@ -21,7 +21,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -295,7 +294,8 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 
 	// Capture and typed synchronization share this transaction. Acquire the
 	// complete writer scope before issuer/client locks or binding mutations.
-	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.Nil, userIssuerIDs)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
 	}
 
@@ -343,7 +343,7 @@ func (s *Service) CreateRemoteSessionClient(ctx context.Context, payload *gen.Cr
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
-	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, created, userIssuerIDs)
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs)
 }
 
 // CreateCimd registers a remote_session_client in Client ID Metadata Document
@@ -387,7 +387,8 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 
 	// Capture and typed synchronization share this transaction. Acquire the
 	// complete writer scope before issuer/client locks or binding mutations.
-	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, uuid.Nil, userIssuerIDs)
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
 	}
 
@@ -428,7 +429,7 @@ func (s *Service) CreateCimd(ctx context.Context, payload *gen.CreateCimdPayload
 		return nil, oops.E(oops.CodeUnexpected, err, "create remote session client").LogError(ctx, logger)
 	}
 
-	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, created, userIssuerIDs)
+	return s.finalizeClientCreate(ctx, logger, dbtx, txRepo, *authCtx, scope, created, userIssuerIDs)
 }
 
 // validateNewClientIssuers checks the remote_session_issuer is reachable from
@@ -509,6 +510,7 @@ func (s *Service) finalizeClientCreate(
 	dbtx pgx.Tx,
 	txRepo *repo.Queries,
 	authCtx contextvalues.AuthContext,
+	scope bindingWriteScope,
 	created repo.RemoteSessionClient,
 	userIssuerIDs []uuid.UUID,
 ) (*types.RemoteSessionClient, error) {
@@ -541,8 +543,8 @@ func (s *Service) finalizeClientCreate(
 
 	// A successful binding write must include its captured associations and
 	// typed state. On failure the caller rolls back the entire DB mutation.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, userIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
+	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, userIssuerIDs, created.ID); err != nil {
+		return nil, bindingSyncError(ctx, logger, err)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -838,7 +840,8 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 
 	// Capture and typed synchronization share this transaction. Acquire the
 	// complete writer scope before issuer/client locks or binding mutations.
-	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, []uuid.UUID{userIssuerID})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
 	}
 
@@ -878,7 +881,7 @@ func (s *Service) AttachUserSessionIssuer(ctx context.Context, payload *gen.Atta
 		return nil, oops.E(oops.CodeUnexpected, err, "attach remote session client to user session issuer").LogError(ctx, logger)
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, scope, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientAttachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -925,7 +928,8 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 
 	// Capture and typed synchronization share this transaction. Acquire the
 	// complete writer scope before issuer/client locks or binding mutations.
-	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, []uuid.UUID{userIssuerID})
+	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock client binding writer scope").LogError(ctx, logger)
 	}
 
@@ -980,7 +984,7 @@ func (s *Service) DetachUserSessionIssuer(ctx context.Context, payload *gen.Deta
 		}
 	}
 
-	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
+	return s.commitClientAttachmentChange(ctx, logger, dbtx, txRepo, *authCtx, scope, clientID, []uuid.UUID{userIssuerID}, func(ctx context.Context, dbtx pgx.Tx) error {
 		return s.auditLogger.LogRemoteSessionClientDetachUserSessionIssuer(ctx, dbtx, audit.LogRemoteSessionClientUserSessionIssuerAttachmentEvent{
 			OrganizationID:         authCtx.ActiveOrganizationID,
 			ProjectID:              *authCtx.ProjectID,
@@ -1056,6 +1060,7 @@ func (s *Service) commitClientAttachmentChange(
 	dbtx pgx.Tx,
 	txRepo *repo.Queries,
 	authCtx contextvalues.AuthContext,
+	scope bindingWriteScope,
 	clientID uuid.UUID,
 	touchedUserIssuerIDs []uuid.UUID,
 	auditFn func(ctx context.Context, dbtx pgx.Tx) error,
@@ -1080,8 +1085,8 @@ func (s *Service) commitClientAttachmentChange(
 
 	// A successful binding write must include its captured associations and
 	// typed state. On failure the caller rolls back the entire DB mutation.
-	if err := ResyncMCPServerRemoteSessionIssuers(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, touchedUserIssuerIDs); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "synchronize client binding").LogError(ctx, logger)
+	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, touchedUserIssuerIDs, clientID); err != nil {
+		return nil, bindingSyncError(ctx, logger, err)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1120,6 +1125,21 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 
 	txRepo := repo.New(dbtx)
 
+	// The bindings and associations are read before the writer scope, which
+	// has to name every project the deletion re-decides and be held before any
+	// row lock. The resync checks the scope still covers them.
+	scopeIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
+		RemoteSessionClientID: clientID,
+		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
+	})
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list user session issuers bound to client").LogError(ctx, logger)
+	}
+	scope, err := lockBindingWriteScope(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, clientID, scopeIssuerIDs)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock client deletion writer scope").LogError(ctx, logger)
+	}
+
 	// A missing project-owned row is a no-op, including org-level and foreign
 	// clients. Do not inspect bindings or lock those other clients.
 	if _, err := txRepo.LockRemoteSessionClientForAuthMethodWrite(ctx, repo.LockRemoteSessionClientForAuthMethodWriteParams{
@@ -1147,8 +1167,8 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "delete remote session client").LogError(ctx, logger)
 	}
 
-	// Read the bindings before the purge removes them, so the post-commit
-	// resync knows which issuers to recompute.
+	// Read the bindings before the purge removes them, so the resync knows
+	// which issuers to recompute.
 	boundUserIssuerIDs, err := txRepo.ListUserSessionIssuersBoundToProjectClient(ctx, repo.ListUserSessionIssuersBoundToProjectClientParams{
 		RemoteSessionClientID: clientID,
 		ProjectID:             conv.ToNullUUID(*authCtx.ProjectID),
@@ -1189,6 +1209,12 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 		return oops.E(oops.CodeUnexpected, err, "log remote session client deletion").LogError(ctx, logger)
 	}
 
+	// The deleted client's associations and the typed links derived from them
+	// go with it, in every project that used it.
+	if err := scope.resync(ctx, dbtx, *authCtx.ProjectID, boundUserIssuerIDs, uuid.Nil); err != nil {
+		return bindingSyncError(ctx, logger, err)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
 	}
@@ -1197,8 +1223,6 @@ func (s *Service) DeleteRemoteSessionClient(ctx context.Context, payload *gen.De
 	// upstream tokens are revoked on the same best-effort terms as an explicit
 	// revoke: post-commit, bounded, never surfaced to the caller.
 	s.revoker.RevokeAllDetached(ctx, revokedCredentials(cascaded))
-
-	BestEffortResyncMCPServerRemoteSessionIssuers(ctx, logger, s.db, authCtx.ActiveOrganizationID, *authCtx.ProjectID, boundUserIssuerIDs)
 
 	return nil
 }

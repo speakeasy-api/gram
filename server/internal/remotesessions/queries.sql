@@ -1060,6 +1060,34 @@ WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id = @project_id;
 
+-- name: ListServerProjectsOnClientIssuers :many
+-- Each live project with a live MCP server on a user session issuer the client
+-- is bound to, with that issuer, in organization_id, or in any organization
+-- when it is null (only a platform-global client reaches several). A writer
+-- reads it before it deletes the client's bindings, so that afterwards it can
+-- re-derive the upstream issuer of servers that take it from those bindings.
+SELECT DISTINCT p.organization_id, s.project_id, link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN mcp_servers AS s
+  ON s.user_session_issuer_id = link.user_session_issuer_id
+ AND s.deleted IS FALSE
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE link.remote_session_client_id = @remote_session_client_id
+  AND (sqlc.narg('organization_id')::text IS NULL OR p.organization_id = sqlc.narg('organization_id')::text)
+ORDER BY p.organization_id, s.project_id, link.user_session_issuer_id;
+
+-- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
+-- Removes every user session issuer binding of a client the caller has just
+-- soft-deleted, in any tenant: the client row's deletion is the authorization,
+-- so a live client is never touched.
+DELETE FROM remote_session_client_user_session_issuers AS link
+USING remote_session_clients AS c
+WHERE link.remote_session_client_id = c.id
+  AND c.id = @remote_session_client_id
+  AND c.deleted IS TRUE;
+
 -- name: GetRemoteSessionClientForClientMetadataDocument :one
 -- Public CIMD document endpoint lookup. Intentionally NOT project-scoped: the
 -- endpoint is unauthenticated and addresses clients by their globally unique
