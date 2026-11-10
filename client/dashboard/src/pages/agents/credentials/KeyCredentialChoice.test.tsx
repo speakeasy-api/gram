@@ -29,7 +29,7 @@ describe("KeyCredentialChoice", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("offers a server's only shared credential as an explicit pick", () => {
+  it("picks and names a server's only shared credential instead of asking", () => {
     mocks.choices = [
       { id: "a", name: "Token", clientType: "static_credential" },
     ];
@@ -37,7 +37,28 @@ describe("KeyCredentialChoice", () => {
     render(
       <KeyCredentialChoice
         serverId="s"
-        serverName="GitHub"
+        serverName="Example"
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
+    expect(screen.getByText("Uses Token · Static credential")).toBeTruthy();
+    expect(screen.queryByRole("combobox")).toBeNull();
+  });
+
+  it("lists the connected account beside a shared credential on a server that offers accounts", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="Linear"
+        accounts
         value={undefined}
         onChange={(id) => {
           onChange(id);
@@ -47,9 +68,14 @@ describe("KeyCredentialChoice", () => {
     expect(onChange).not.toHaveBeenCalled();
     fireEvent.click(
       screen.getByRole("combobox", {
-        name: "Credential the key uses on GitHub",
+        name: "Credential the key uses on Linear",
       }),
     );
+    expect(
+      screen.getByRole("option", {
+        name: "The account connected for this agent",
+      }),
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("option", { name: /Token · Static credential/ }),
     );

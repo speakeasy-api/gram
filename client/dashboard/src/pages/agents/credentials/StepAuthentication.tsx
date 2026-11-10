@@ -21,6 +21,7 @@ import {
   displayedConnections,
   serversNeedingConnection,
 } from "./connectionAttention";
+import { KeyCredentialChoice } from "./KeyCredentialChoice";
 import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
@@ -33,6 +34,7 @@ export function StepAuthentication({
   onRemove,
   onConnected,
   listAction,
+  credentialChoice,
   showHeader = true,
 }: {
   servers: InventoryServer[];
@@ -46,6 +48,16 @@ export function StepAuthentication({
   onConnected?: () => void;
   /** Shown at the top right of the server list. */
   listAction?: ReactNode;
+  /**
+   * How the agent's keys sign in to a server that offers shared credentials,
+   * asked on the server's own row: the sign-in is this step's question, not
+   * the picker's. `show` says which rows ask.
+   */
+  credentialChoice?: {
+    show: (serverId: string) => boolean;
+    value: (serverId: string) => string | undefined;
+    onChange: (serverId: string, authClientId: string) => void;
+  };
   /** False where the page around it already titles the step. */
   showHeader?: boolean;
 }): JSX.Element {
@@ -205,6 +217,23 @@ export function StepAuthentication({
                   <X className="size-4" />
                 </Button>
               </div>
+              {credentialChoice?.show(server.id) &&
+                (server.kind === "Remote" || server.kind === "Tunneled") && (
+                  <KeyCredentialChoice
+                    className="pb-3"
+                    serverId={server.id}
+                    serverName={server.name}
+                    // A server that signs each caller in also offers the
+                    // account connected for the agent, beside its shared
+                    // credentials.
+                    accounts={!!server.issuerId && !shared}
+                    label={`Choose how the agent's keys sign in to ${server.name}`}
+                    value={credentialChoice.value(server.id)}
+                    onChange={(authClientId) =>
+                      credentialChoice.onChange(server.id, authClientId)
+                    }
+                  />
+                )}
               <AccordionContent>
                 {shared ? (
                   <Text small muted>

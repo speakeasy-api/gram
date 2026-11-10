@@ -52,7 +52,10 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
-import { keyCredentialChoices } from "./keyCredentialChoices";
+import {
+  keyCredentialChoices,
+  keyCredentialPlan,
+} from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
@@ -621,6 +624,11 @@ export function CredentialsWizard({
   // agent's gateway never lists the servers just added. Kept across a retry,
   // because the grants a failed save already wrote are not in the next diff.
   const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
+  // Servers just added on the MCP sign-in tab whose keys wait for the reader
+  // to choose, on the server's row, how they sign in there.
+  const [choicePending, setChoicePending] = useState<Set<string>>(
+    () => new Set(),
+  );
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -1359,29 +1367,38 @@ export function CredentialsWizard({
         try {
           // The credential picked on MCP sign-in for each added server, as a
           // key issued now would carry it.
-          const choices = await keyCredentialChoices(
-            sdk,
-            selected
-              .filter((entry) =>
-                keysMissing.current.some(
-                  (form) =>
-                    form.selector.resourceId === entry.server.resourceId,
-                ),
-              )
-              .map((entry) => ({
-                ...entry.server,
-                authClientId: entry.authClientId,
-              })),
+          const picks = selected
+            .filter((entry) =>
+              keysMissing.current.some(
+                (form) => form.selector.resourceId === entry.server.resourceId,
+              ),
+            )
+            .map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            }));
+          // The tab asks on each server's row how the keys sign in there, so
+          // a server with a real choice waits for it rather than failing the
+          // save or defaulting to the connected account unasked.
+          const plan = section
+            ? await keyCredentialPlan(sdk, picks, { askWhenAccounts: true })
+            : {
+                choices: await keyCredentialChoices(sdk, picks),
+                undecided: [],
+              };
+          const waiting = new Set(
+            plan.undecided.map((pick) => pick.resourceId),
           );
+          const ready = keysMissing.current.filter(
+            (form) => !waiting.has(form.selector.resourceId),
+          );
+          const choices = plan.choices;
           for (
             let start = 0;
-            start < keysMissing.current.length;
+            start < ready.length;
             start += EXTEND_KEYS_BATCH
           ) {
-            const batch = keysMissing.current.slice(
-              start,
-              start + EXTEND_KEYS_BATCH,
-            );
+            const batch = ready.slice(start, start + EXTEND_KEYS_BATCH);
             await sdk.keys.extendAgentKeys({
               extendAgentKeysForm: {
                 agentId: agent.id,
@@ -1394,7 +1411,10 @@ export function CredentialsWizard({
               },
             });
           }
-          keysMissing.current = [];
+          keysMissing.current = keysMissing.current.filter((form) =>
+            waiting.has(form.selector.resourceId),
+          );
+          setChoicePending(new Set(plan.undecided.map((pick) => pick.id)));
           void invalidateAllListAPIKeys(queryClient);
         } catch (failure) {
           toast.warning(
@@ -2118,6 +2138,32 @@ export function CredentialsWizard({
             }}
             // A new connection is assigned to the agent by a save.
             onConnected={section ? requestSave : undefined}
+            // On the tab only servers whose keys wait for the answer ask it:
+            // a key's credential is fixed when the server is added to it.
+            credentialChoice={
+              allServers
+                ? undefined
+                : {
+                    show: (serverId) => !section || choicePending.has(serverId),
+                    value: (serverId) =>
+                      selected.find((entry) => entry.server.id === serverId)
+                        ?.authClientId,
+                    onChange: (serverId, authClientId) => {
+                      const current = selected.find(
+                        (entry) => entry.server.id === serverId,
+                      )?.authClientId;
+                      if ((current ?? "") === authClientId) return;
+                      setSelected((entries) =>
+                        entries.map((entry) =>
+                          entry.server.id === serverId
+                            ? { ...entry, authClientId }
+                            : entry,
+                        ),
+                      );
+                      if (section && authClientId) requestSave();
+                    },
+                  }
+            }
             listAction={
               section ? (
                 <Button

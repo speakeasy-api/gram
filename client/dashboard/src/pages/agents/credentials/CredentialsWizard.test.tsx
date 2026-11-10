@@ -52,6 +52,8 @@ const mocks = vi.hoisted(() => ({
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
   extendAgentKeys: vi.fn(),
+  // The shared credentials each server offers a key, for every server.
+  choices: [] as { id: string; name: string; clientType: string }[],
   agentList: vi.fn(),
   nameCheckFails: false,
   sessions: vi.fn(),
@@ -69,7 +71,7 @@ vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
   useMcpServerAuthClientChoices: () => ({
     isError: false,
     isSuccess: true,
-    data: { choices: [] },
+    data: { choices: mocks.choices },
   }),
 }));
 
@@ -160,7 +162,7 @@ vi.mock("@/contexts/Sdk", () => ({
     // Each project sees its own rows among every issuer listed.
     workloadIdentities: { list: mocks.workloadList },
     authClients: {
-      listMcpServerChoices: async () => ({ choices: [] }),
+      listMcpServerChoices: async () => ({ choices: mocks.choices }),
       // How each server signs in upstream, read from its own auth clients.
       getMcpServerAuthentication: mocks.serverAuth,
     },
@@ -473,6 +475,7 @@ beforeEach(() => {
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
   mocks.extendAgentKeys.mockResolvedValue({ keys: [] });
+  mocks.choices = [];
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
   mocks.withdrawSubject.mockResolvedValue({});
@@ -3851,6 +3854,49 @@ describe("The MCP sign-in tab", () => {
       mocks.deleteGrant.mock.calls[0]?.[0]?.request?.deleteAgentPolicyGrantForm
         ?.grantId,
     ).toBe("grant_one");
+  });
+  // A key's credential on a server is fixed when the server is added to it,
+  // so the tab asks on the server's row before the keys are extended.
+  it("asks how the keys sign in to an added server on its row, then extends them", async () => {
+    const remote = {
+      id: "server_remote",
+      name: "Tracker",
+      slug: "tracker",
+      platformEndpointSlug: "tracker",
+      projectId: "project_one",
+      remoteMcpServerId: "remote_tracker",
+      visibility: "private",
+      networkAccessMode: "dual",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [remote] });
+    mocks.choices = [
+      { id: "token_a", name: "Team token", clientType: "static_credential" },
+      { id: "token_b", name: "Ops token", clientType: "static_credential" },
+    ];
+    const { onDone } = tab();
+    await openPicker();
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Tracker" }));
+    expect(
+      screen.queryByRole("combobox", { name: /Credential the key uses/ }),
+    ).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+    fireEvent.click(
+      await screen.findByRole("combobox", {
+        name: "Credential the key uses on Tracker",
+      }),
+    );
+    fireEvent.click(screen.getByRole("option", { name: /Ops token/ }));
+
+    await waitFor(() => expect(mocks.extendAgentKeys).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.extendAgentKeys.mock.calls[0]?.[0]?.extendAgentKeysForm
+        ?.authClientChoices,
+    ).toEqual([{ mcpServerId: "server_remote", authClientId: "token_b" }]);
   });
 });
 
