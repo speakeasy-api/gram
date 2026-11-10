@@ -98,6 +98,9 @@ func hooksDownloadHost(serverURL string) string {
 	return serverURL
 }
 
+// LatestHooksVersion is the hooks release new installs get.
+func LatestHooksVersion() string { return hooksBinaryVersion }
+
 func renderHooksBootstrap(cfg GenerateConfig) []byte {
 	return renderHooksBootstrapForRelease(hooksBinaryVersion, hooksServedTargets(cfg.ServerURL), cfg.InstallFailOpen, hooksDownloadHost(cfg.ServerURL))
 }
