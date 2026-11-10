@@ -124,6 +124,7 @@ var frozenCodes = []string{
 	"refresh_token_used_by_other_app",
 	"stored_session_invalid",
 	"sign_in_revoked_by_admin",
+	"approval_needs_admin",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.

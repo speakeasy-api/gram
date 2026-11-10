@@ -144,7 +144,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	if err != nil {
 		return fail(err)
 	}
-	picks, err := s.consentUpstreamClientPicks(ctx, endpoint, state, cards)
+	picks, err := s.consentUpstreamClientPicks(ctx, endpoint, state, cards, inventoryUpstreamPicks(inventory))
 	if err != nil {
 		return fail(err)
 	}
