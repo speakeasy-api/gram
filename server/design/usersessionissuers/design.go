@@ -722,7 +722,7 @@ var OrganizationUserSessionIssuerMigratePreflight = Type("OrganizationUserSessio
 	Attribute("consent_count", Int, "User-session consents that would move.")
 	Attribute("cimd_client_count", Int, "Custom CIMD allowlist entries that would move or merge.")
 	Attribute("remote_session_count", Int, "Remote-session credentials whose issuer provenance would move.")
-	Attribute("conflicting_client_ids", ArrayOf(String), "Active OAuth client ids already present on both issuers. Non-empty blocks migration.")
+	Attribute("conflicting_client_ids", ArrayOf(String), "Active OAuth client ids present on both issuers that cannot be merged. Non-empty blocks migration. A client resolved from the same Client ID Metadata Document on both issuers is not listed: it merges onto the target's client, keeping its sessions and consents, unless an issuance selection profile pins the source client to the source issuer.")
 	Attribute("principal_binding_conflict_count", Int, "Active principal bindings that would violate target uniqueness. Non-zero blocks migration.")
 	Attribute("ema_binding_conflict_count", Int, "Enterprise-managed authorization bindings already present on the target. Non-zero blocks migration.")
 	Attribute("platform_owned", Boolean, "Whether a Platform MCP catalog registration owns either issuer. True blocks migration.")

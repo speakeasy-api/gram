@@ -17,10 +17,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Check, ChevronsUpDown, Link, Plus, Unlink } from "lucide-react";
 import { useState } from "react";
-import {
-  EnvironmentVariable,
-  environmentHasAllRequiredVariables,
-} from "./environmentVariableUtils";
+import type { EnvironmentVariable } from "./environmentVariableUtils";
+import { environmentHasAllRequiredVariables } from "./environmentVariableUtils";
 
 interface Environment {
   id: string;

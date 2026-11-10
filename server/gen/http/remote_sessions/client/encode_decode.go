@@ -3301,6 +3301,7 @@ func marshalRemotesessionsServerIdentityClientConfigurationToServerIdentityClien
 	res := &ServerIdentityClientConfigurationRequestBody{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
+		TemplateClientID:        v.TemplateClientID,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 	}
@@ -3420,6 +3421,7 @@ func marshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServerId
 	res := &remotesessions.ServerIdentityClientConfiguration{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
+		TemplateClientID:        v.TemplateClientID,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 	}
@@ -3597,6 +3599,7 @@ func unmarshalRemoteSessionClientResponseBodyToTypesRemoteSessionClient(v *Remot
 		TokenEndpointAuthMethod:         v.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: v.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 v.JSONWebKeySetID,
+		IdentityProviderConnectionID:    v.IdentityProviderConnectionID,
 		Audience:                        v.Audience,
 		ForwardClientName:               *v.ForwardClientName,
 		LegacyCallbackURL:               *v.LegacyCallbackURL,

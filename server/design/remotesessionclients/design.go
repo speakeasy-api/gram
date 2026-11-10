@@ -31,6 +31,15 @@ func credentialOwnerAttribute() {
 	})
 }
 
+// TemplateClientAttribute declares the optional template_client_id a manual
+// create carries to reuse a stored client's upstream registration without the
+// secret leaving the server.
+func TemplateClientAttribute() {
+	Attribute("template_client_id", String, "An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.", func() {
+		Format(FormatUUID)
+	})
+}
+
 // createKeySetAttribute declares the optional json_web_key_set_id a create form
 // carries so a private_key_jwt client can be created in one call. It is gated
 // on the customer-managed keys entitlement when present, the same as
@@ -94,7 +103,7 @@ var _ = Service("remoteSessionClients", func() {
 	identityChainingMethods()
 
 	Method("createRemoteSessionClient", func() {
-		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.")
+		Description("Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client's upstream registration: the server copies that client's secret and callback into the new record, and neither is returned to the caller.")
 
 		Payload(func() {
 			Extend(CreateRemoteSessionClientForm)
@@ -809,7 +818,7 @@ var _ = Service("organizationRemoteSessionClients", func() {
 })
 
 var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func() {
-	Description("Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.")
+	Description("Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.")
 
 	Attribute("remote_session_issuer_id", String, "The owning remote_session_issuer id.", func() {
 		Format(FormatUUID)
@@ -821,6 +830,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	})
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
+	TemplateClientAttribute()
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	createKeySetAttribute()
@@ -983,6 +993,9 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 	// share UpdateRemoteSessionClientForm. The create forms may set it, because
 	// a create has no "leave unchanged" to tell apart from "clear".
 	Attribute("json_web_key_set_id", String, "The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("identity_provider_connection_id", String, "The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.", func() {
 		Format(FormatUUID)
 	})
 	Attribute("scope", ArrayOf(String), "Explicit upstream OAuth scopes the dance requests for this client. Null falls back to the issuer's scopes_supported.")

@@ -13,7 +13,7 @@ import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
 import { activeDetailTab } from "@/lib/detail-tabs";
 import { useOrgRoutes } from "@/routes";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { useGetJsonWebKeySet } from "@gram/client/react-query/getJsonWebKeySet";
 import { isNotNotFound } from "@/lib/query-errors";
 import { CustomerManagedKeysGate } from "@/components/customer-managed-keys-gate";

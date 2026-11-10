@@ -1,13 +1,13 @@
 "use client";
 
 import { lazy, Suspense } from "react";
-import { LucideProps } from "lucide-react";
+import type { LucideProps } from "lucide-react";
 import dynamicIconImports from "lucide-react/dynamicIconImports";
-import { ResponsiveValue, Size } from "@/components/ui/lib/types";
+import type { ResponsiveValue, Size } from "@/components/ui/lib/types";
 import useTailwindBreakpoint from "@/components/ui/hooks/useTailwindBreakpoint";
 import { resolveSizeForBreakpoint } from "@/components/ui/lib/responsiveUtils";
 
-import { IconName } from "./names";
+import type { IconName } from "./names";
 
 // TODO: Use skeleton
 // A span, not a div: icons render inside inline parents such as Link's span.

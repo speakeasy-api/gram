@@ -142,7 +142,14 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
-	route, err := repository.GetCustomDomainRouteConfig(ctx, domain.ID)
+	// Backfill rows created before DNS target tokens existed. Nothing checks
+	// the per-domain target yet, so a failure must not fail the health check.
+	backfillDNSTargetToken(ctx, c.logger, c.db, domain.OrganizationID, domain.ID, domain.Domain, domain.DnsTargetToken)
+
+	route, err := repository.GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
+		ID:             domain.ID,
+		OrganizationID: domain.OrganizationID,
+	})
 	if err != nil {
 		return noNotification, fmt.Errorf("get custom domain route for health check: %w", err)
 	}

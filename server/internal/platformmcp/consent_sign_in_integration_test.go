@@ -12,7 +12,10 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // recordingAttachment stands in for the provider attachment, which discovers
@@ -194,4 +197,37 @@ func TestConsentSignInConnectorReturnsAFailedConnection(t *testing.T) {
 	err = admin.ConnectPendingSignIn(ctx, h.principal.UserID, h.principal.OrganizationID, h.project.ID, h.registration.McpServerID.UUID)
 	require.Error(t, err)
 	require.ErrorIs(t, err, ErrIdentityProviderAttachmentUnsupported)
+}
+
+// A server whose client associations already name a live provider has its
+// sign-in provider, so the consent page connects nothing. The server's
+// upstream issuer column alone does not count.
+func TestConsentSignInConnectorLeavesAServerWithAnAssociatedProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_consent_sign_in_associated")
+	require.NoError(t, err)
+	h := newConsentSignInHarness(t, ctx, conn)
+	mcpServerID := h.registration.McpServerID.UUID
+	provider, err := remotesessionsrepo.New(conn).CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{
+		ProjectID: conv.ToNullUUID(h.project.ID), OrganizationID: conv.ToPGText(h.principal.OrganizationID),
+		Slug: "consent-sign-in-" + uuid.NewString()[:8], Issuer: "https://provider.example.test",
+		ScopesSupported: []string{}, GrantTypesSupported: []string{}, ResponseTypesSupported: []string{},
+		TokenEndpointAuthMethodsSupported: []string{}, CodeChallengeMethodsSupported: []string{},
+	})
+	require.NoError(t, err)
+	admin := NewConsentSignInConnector(conn, h.registrations, orgAdminAuthorizer{err: nil})
+
+	stamped, err := testrepo.New(conn).SetMCPServerRemoteSessionIssuerFixture(ctx, testrepo.SetMCPServerRemoteSessionIssuerFixtureParams{
+		RemoteSessionIssuerID: conv.ToNullUUID(provider.ID), ID: mcpServerID, ProjectID: h.project.ID,
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, stamped)
+	require.NoError(t, admin.ConnectPendingSignIn(ctx, h.principal.UserID, h.principal.OrganizationID, h.project.ID, mcpServerID))
+	require.Len(t, h.attachment.attached(), 1, "the column alone is not a connected sign-in provider")
+
+	associateMemberMCPClient(t, ctx, conn, h.principal.OrganizationID, h.project.ID, mcpServerID, provider.ID)
+	require.NoError(t, admin.ConnectPendingSignIn(ctx, h.principal.UserID, h.principal.OrganizationID, h.project.ID, mcpServerID))
+	require.Len(t, h.attachment.attached(), 1, "an associated provider is already connected")
 }

@@ -25,6 +25,18 @@ export type ListAuditLogFacetsQueryParamCategory = ClosedEnum<
   typeof ListAuditLogFacetsQueryParamCategory
 >;
 
+/**
+ * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export const QueryParamOrigin = {
+  User: "user",
+  System: "system",
+} as const;
+/**
+ * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+ */
+export type QueryParamOrigin = ClosedEnum<typeof QueryParamOrigin>;
+
 export type ListAuditLogFacetsRequest = {
   /**
    * Project slug to filter facet values to a specific project.
@@ -34,6 +46,10 @@ export type ListAuditLogFacetsRequest = {
    * Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
    */
   category?: ListAuditLogFacetsQueryParamCategory | undefined;
+  /**
+   * Who initiated the entries to compute facet values from, matching the list being filtered: 'user' for changes initiated by a person, API key, agent or assistant, or 'system' for changes Speakeasy made on its own, such as background jobs. Omit for both.
+   */
+  origin?: QueryParamOrigin | undefined;
   /**
    * API Key header
    */
@@ -81,9 +97,15 @@ export const ListAuditLogFacetsQueryParamCategory$outboundSchema: z.ZodMiniEnum<
 > = z.enum(ListAuditLogFacetsQueryParamCategory);
 
 /** @internal */
+export const QueryParamOrigin$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamOrigin
+> = z.enum(QueryParamOrigin);
+
+/** @internal */
 export type ListAuditLogFacetsRequest$Outbound = {
   project_slug?: string | undefined;
   category: string;
+  origin?: string | undefined;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -99,6 +121,7 @@ export const ListAuditLogFacetsRequest$outboundSchema: z.ZodMiniType<
       ListAuditLogFacetsQueryParamCategory$outboundSchema,
       "configuration",
     ),
+    origin: z.optional(QueryParamOrigin$outboundSchema),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

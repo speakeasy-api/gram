@@ -133,11 +133,14 @@ FROM mcp_servers
 WHERE slug = @slug AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: ListMCPServersByProjectID :many
--- A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+-- A toolset-backed row whose toolset is deleted serves nothing, so it is not
+-- listed. Neither is a retired approvals server (builtin_backend), which the
+-- gateway answers as not found until a cleanup migration deletes it.
 SELECT ms.*
 FROM mcp_servers ms
 WHERE ms.project_id = @project_id
   AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -161,7 +164,9 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = @organization_id
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
-  -- Same live-toolset rule as ListMCPServersByProjectID.
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
   AND (
     m.toolset_id IS NULL
     OR EXISTS (

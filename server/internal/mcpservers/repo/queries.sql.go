@@ -1359,7 +1359,9 @@ JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
   AND p.deleted IS FALSE
-  -- Same live-toolset rule as ListMCPServersByProjectID.
+  -- Same retired approvals server and live-toolset rules as
+  -- ListMCPServersByProjectID.
+  AND m.builtin_backend IS NULL
   AND (
     m.toolset_id IS NULL
     OR EXISTS (
@@ -1419,6 +1421,7 @@ SELECT ms.id, ms.project_id, ms.name, ms.slug, ms.environment_id, ms.user_sessio
 FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.deleted IS FALSE
+  AND ms.builtin_backend IS NULL
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -1441,7 +1444,9 @@ type ListMCPServersByProjectIDParams struct {
 	UnproxiedMcpServerID uuid.NullUUID
 }
 
-// A toolset-backed row whose toolset is deleted serves nothing, so it is not listed.
+// A toolset-backed row whose toolset is deleted serves nothing, so it is not
+// listed. Neither is a retired approvals server (builtin_backend), which the
+// gateway answers as not found until a cleanup migration deletes it.
 func (q *Queries) ListMCPServersByProjectID(ctx context.Context, arg ListMCPServersByProjectIDParams) ([]McpServer, error) {
 	rows, err := q.db.Query(ctx, listMCPServersByProjectID,
 		arg.ProjectID,

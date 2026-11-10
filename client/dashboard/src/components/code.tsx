@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
-import { Theme } from "@/components/ui/context/theme";
+import type { Theme } from "@/components/ui/context/theme";
 import { useConfig as useMoonshineConfig } from "@/components/ui/hooks/useConfig";
 import { Check, Copy } from "lucide-react";
 import React, { useEffect } from "react";
+import type { BuiltinTheme } from "shiki";
 import {
-  BuiltinTheme,
   type BundledLanguage,
   codeToHtml,
   codeToTokens,

@@ -3,10 +3,8 @@ import { safeSameOriginUrl } from "@/lib/safe-external-url";
 import { cn } from "@/lib/utils";
 import { authInfo } from "@gram/client/funcs/authInfo";
 import { useGramContext } from "@gram/client/react-query/_context.js";
-import {
-  buildRegisterMutation,
-  RegisterMutationVariables,
-} from "@gram/client/react-query/register.js";
+import type { RegisterMutationVariables } from "@gram/client/react-query/register.js";
+import { buildRegisterMutation } from "@gram/client/react-query/register.js";
 import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 import { AUTH_BUTTON_CLASSES } from "./auth-constants";

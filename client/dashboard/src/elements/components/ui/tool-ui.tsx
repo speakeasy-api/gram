@@ -17,7 +17,8 @@ import {
   XIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { codeToHtml, BundledLanguage } from "shiki";
+import type { BundledLanguage } from "shiki";
+import { codeToHtml } from "shiki";
 import { Button } from "./button";
 import { Popover, PopoverAnchor, PopoverContent } from "./popover";
 

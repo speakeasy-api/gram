@@ -31,8 +31,8 @@ import {
   invalidateAllTriggers,
 } from "@gram/client/react-query/triggers.js";
 import { useUpdateTriggerMutation } from "@gram/client/react-query/updateTrigger.js";
-import { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
-import { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
+import type { TriggerInstance } from "@gram/client/models/components/triggerinstance.js";
+import type { TriggerDefinition } from "@gram/client/models/components/triggerdefinition.js";
 import { CreateTriggerInstanceFormTargetKind as TargetKind } from "@gram/client/models/components/createtriggerinstanceform.js";
 import { useRoutes } from "@/routes";
 import { SlackReplyModeOptions } from "@/pages/assistants/onboarding/SlackReplyModeOptions";

@@ -37,6 +37,15 @@ export function identityRailItems(
         active: detail.overview.active,
       },
       {
+        // Where the agent's servers and their sign-in are changed. Second,
+        // because it is what is most often changed on an agent: a server
+        // added, or an expired connection signed in again.
+        key: "mcp-sign-in",
+        title: "MCP sign-in",
+        href: `${detail.mcpSignIn.href(encodedUrn)}${search}`,
+        active: detail.mcpSignIn.active,
+      },
+      {
         key: "permissions",
         title: "Permissions",
         href: `${detail.permissions.href(encodedUrn)}${search}`,
@@ -49,10 +58,10 @@ export function identityRailItems(
         active: detail.sessions.active,
       },
       {
-        key: "activity",
-        title: "Activity",
-        href: `${detail.activity.href(encodedUrn)}${search}`,
-        active: detail.activity.active,
+        key: "audit-trail",
+        title: "Audit trail",
+        href: `${detail.auditTrail.href(encodedUrn)}${search}`,
+        active: detail.auditTrail.active,
       },
       {
         // The agent's way in: the keys it holds and the platforms that sign

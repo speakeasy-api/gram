@@ -88,6 +88,8 @@ export const AUDIT_ACTIONS = [
   "dashboard:delete",
   "dashboard:layout",
   "dashboard:update",
+  "data_encryption_key:create",
+  "data_encryption_key:retire",
   "data_export_route:create",
   "data_export_route:delete",
   "data_export_route:pause",
@@ -206,6 +208,12 @@ export const AUDIT_ACTIONS = [
   "organization:setup_task_updated",
   "organization:webhooks_disabled",
   "organization:webhooks_enabled",
+  "organization_encryption_config:complete_switch",
+  "organization_encryption_config:create",
+  "organization_encryption_config:resume",
+  "organization_encryption_config:rollback_switch",
+  "organization_encryption_config:suspend",
+  "organization_encryption_config:switch_key",
   "organization_invitation:create",
   "organization_invitation:revoke",
   "organization_invitation:update_role",
@@ -1147,6 +1155,23 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created a device join token for";
     case "workload-device-join-token:redeem":
       return "enrolled a device with a join token for";
+
+    case "data_encryption_key:create":
+      return "created a data encryption key for";
+    case "data_encryption_key:retire":
+      return "retired a data encryption key for";
+    case "organization_encryption_config:create":
+      return "set up";
+    case "organization_encryption_config:switch_key":
+      return "started a key switch for";
+    case "organization_encryption_config:complete_switch":
+      return "completed the key switch for";
+    case "organization_encryption_config:rollback_switch":
+      return "rolled back the key switch for";
+    case "organization_encryption_config:suspend":
+      return "suspended";
+    case "organization_encryption_config:resume":
+      return "resumed";
 
     default:
       return assertNever(action);

@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	testAgentSignIn = "https://app.example.com/acme/projects/default/identities/agents/agent-1/edit?step=2"
+	testAgentSignIn = "https://app.example.com/acme/projects/default/identities/agent:agent-1/mcp-sign-in"
 	testAgentAccess = "https://app.example.com/acme/projects/default/identities/agent:agent-1/permissions"
 )
 

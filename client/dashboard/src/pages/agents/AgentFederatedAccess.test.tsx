@@ -4,6 +4,7 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
 import type { WorkloadAdmission } from "@gram/client/models/components/workloadadmission.js";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { AgentFederatedAccess } from "./AgentFederatedAccess";
 
@@ -41,11 +42,19 @@ vi.mock("@gram/client/react-query/updateWorkloadIssuer.js", () => ({
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: React.ReactNode }) => children,
 }));
+vi.mock("@/contexts/Sdk", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+}));
 vi.mock("sonner", () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-const agent = { id: "agent_1", name: "Release Bot" } as ManagedAgent;
+const agent = {
+  id: "agent_1",
+  name: "Release Bot",
+  permissions: { read: true, write: true, authorize: true, transfer: true },
+} as ManagedAgent;
 
 function admission(over: Partial<WorkloadAdmission> = {}): WorkloadAdmission {
   return {
@@ -68,13 +77,15 @@ function admission(over: Partial<WorkloadAdmission> = {}): WorkloadAdmission {
   } as WorkloadAdmission;
 }
 
-function renderPanel() {
+function renderPanel(subject: ManagedAgent = agent) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   const tree = () => (
     <QueryClientProvider client={client}>
-      <AgentFederatedAccess agent={agent} />
+      <MemoryRouter>
+        <AgentFederatedAccess agent={subject} />
+      </MemoryRouter>
     </QueryClientProvider>
   );
   const view = render(tree());
@@ -103,6 +114,26 @@ it("lists only the platforms admitted as this agent", () => {
   renderPanel();
   expect(screen.getByText("Claude Tag")).toBeTruthy();
   expect(screen.queryByText("Other")).toBeNull();
+});
+
+// The rule is changed in the setup flow's Agent sign-in step, which reads it
+// back and replaces it. Someone who may not change the agent is not offered it.
+it("links a rule to the step that changes it, for people who can", () => {
+  mocks.admissions = [admission()];
+  renderPanel();
+  expect(
+    screen
+      .getByRole("link", { name: "Change Claude Tag access" })
+      .getAttribute("href"),
+  ).toBe("/acme/projects/default/identities/agents/agent_1/edit?step=3");
+  cleanup();
+  renderPanel({
+    ...agent,
+    permissions: { ...agent.permissions, write: false },
+  });
+  expect(
+    screen.queryByRole("link", { name: "Change Claude Tag access" }),
+  ).toBeNull();
 });
 
 it("says so when no platform signs in as the agent", () => {
