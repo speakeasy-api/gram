@@ -124,7 +124,7 @@ var _ = Service("remoteSessions", func() {
 	})
 
 	Method("detachServerClientAssociation", func() {
-		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association (or records an exclusion for an unclaimed client bound to the server's issuer) and synchronizes the backfill-derived typed links. Administrator-owned typed links are untouched. Requires mcp:write on the server.")
+		Description("Remove one MCP server's association with an upstream OAuth client. The client and its associations with other servers are untouched. When the server is the only consumer of its user session issuer, the association follows the issuer's client binding: with upstream auth enforcement off, detach returns a conflict (409) and you must turn off User Identity on the server instead; with enforcement on, detach retires only the backfill-derived typed auth-client link and keeps the association. In this sole-consumer case, repeating detach returns not found (404). For other servers, detach removes the association and synchronizes the backfill-derived typed links; a client the server is not associated with returns not found (404). Administrator-owned typed links are untouched. Requires mcp:write on the server.")
 
 		Payload(func() {
 			Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
@@ -614,7 +614,7 @@ var ServerClientAssociation = Type("ServerClientAssociation", func() {
 
 var ListServerClientAssociationsResult = Type("ListServerClientAssociationsResult", func() {
 	Attribute("associations", ArrayOf(ServerClientAssociation), "The server's associated upstream OAuth clients, oldest first.")
-	Attribute("required_client_ids", ArrayOf(String), "The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are its associated clients, or when it has none, the bound clients no other server claims and it has not explicitly detached. Empty when the server requires no upstream sign-in.", func() {
+	Attribute("required_client_ids", ArrayOf(String), "The remote_session_client_id of each client bound to the server's user session issuer that its callers need to sign in through. These are exactly its associated clients. Empty when the server requires no upstream sign-in.", func() {
 		Elem(func() {
 			Format(FormatUUID)
 		})

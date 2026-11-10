@@ -295,8 +295,8 @@ func TestCommitAddingAServerIsNotBlockedByAnotherServersAgents(t *testing.T) {
 }
 
 // A server's callers need only the server's own clients: a sibling's client on
-// the issuer cannot refuse them, while a server with no association of its own
-// still needs every bound client, so it never calls upstream without one.
+// the issuer cannot refuse them, and a server with no association of its own
+// needs no bound client at all.
 func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T) {
 	t.Parallel()
 
@@ -341,14 +341,14 @@ func TestResolveServerAccessTokensRequiresOnlyTheServersOwnClients(t *testing.T)
 	require.NotContains(t, tokens, siblingProvider, "a sibling's client is never resolved for this server")
 	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: associated, Valid: true}))
 
-	// The sibling's client belongs to no server yet, so nothing says it is not
-	// this server's: it stays required rather than being skipped.
-	_, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
-	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a client nothing explains stays fail-closed")
+	// The sibling's client belongs to no server yet. Nothing records that it is
+	// this server's, so it is not required here either.
+	resolved, err = manager.ResolveServerAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, unassociated, false)
+	require.NoError(t, err)
+	require.Empty(t, resolved.Tokens, "a client no association names is never resolved for this server")
 	require.ErrorIs(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, issuer, subject, uuid.NullUUID{UUID: uuid.Nil, Valid: false}), remotesessions.ErrNoValidToken)
 
-	// Once another server claims it, this server has no upstream credential to
-	// require, as a server that turned off User Identity does not.
+	// Once another server claims it, this server still requires nothing.
 	sibling := createServerIdentityTargetOnIssuer(t, ctx, ti, "own-clients-sibling", issuer)
 	rows, err = upstreamclientsrepo.New(ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
 		OrganizationID:        organizationID,

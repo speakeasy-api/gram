@@ -3,7 +3,6 @@ package remotesessions
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -114,46 +113,6 @@ func (s *Service) ListServerClientAssociations(ctx context.Context, payload *gen
 	return &gen.ListServerClientAssociationsResult{Associations: associations, RequiredClientIds: requiredClientIDs}, nil
 }
 
-// errClientNotDetachable says a server has nothing to detach from a client: it
-// has no association with it, and either the client is not one it falls back to
-// needing or the detach is already on record.
-var errClientNotDetachable = errors.New("client is not detachable from this mcp server")
-
-// recordUnclaimedClientDetach records that a server gives up a client bound to
-// its issuer that it has no association with, returning the client's external
-// id. Only an unclaimed client qualifies, since that is the only kind the server
-// could still need without an association.
-func recordUnclaimedClientDetach(ctx context.Context, dbtx pgx.Tx, organizationID string, server mcpserversrepo.McpServer, clientID uuid.UUID) (string, error) {
-	if !server.UserSessionIssuerID.Valid {
-		return "", errClientNotDetachable
-	}
-	uses, err := repo.New(dbtx).DescribeBoundClientUse(ctx, repo.DescribeBoundClientUseParams{
-		McpServerID:            server.ID,
-		OrganizationID:         organizationID,
-		UserSessionIssuerID:    server.UserSessionIssuerID.UUID,
-		RemoteSessionClientIds: []uuid.UUID{clientID},
-	})
-	if err != nil {
-		return "", fmt.Errorf("describe bound client use: %w", err)
-	}
-	if len(uses) != 1 || !clientUnclaimed(uses[0]) {
-		return "", errClientNotDetachable
-	}
-	externalClientID, err := upstreamclientsrepo.New(dbtx).RecordMCPServerRemoteSessionClientDetach(ctx, upstreamclientsrepo.RecordMCPServerRemoteSessionClientDetachParams{
-		OrganizationID:        organizationID,
-		McpServerID:           server.ID,
-		ProjectID:             server.ProjectID,
-		RemoteSessionClientID: clientID,
-	})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return "", errClientNotDetachable
-	}
-	if err != nil {
-		return "", fmt.Errorf("record mcp server client detach: %w", err)
-	}
-	return externalClientID, nil
-}
-
 func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *gen.DetachServerClientAssociationPayload) error {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -242,7 +201,7 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 			break
 		}
 	}
-	if soleConsumer && !found {
+	if !found {
 		return oops.E(oops.CodeNotFound, nil, "MCP server is not associated with this client").LogWarn(ctx, logger)
 	}
 
@@ -278,22 +237,12 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 			return oops.E(oops.CodeNotFound, nil, "MCP server has no auth client from this association left to detach").LogWarn(ctx, logger)
 		}
 	} else {
-		if found {
-			if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
-				McpServerID:           serverID,
-				RemoteSessionClientID: clientID,
-				ProjectID:             *authCtx.ProjectID,
-			}); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
-			}
-		} else {
-			externalClientID, err = recordUnclaimedClientDetach(ctx, dbtx, authCtx.ActiveOrganizationID, server, clientID)
-			switch {
-			case errors.Is(err, errClientNotDetachable):
-				return oops.E(oops.CodeNotFound, err, "MCP server is not associated with this client").LogWarn(ctx, logger)
-			case err != nil:
-				return oops.E(oops.CodeUnexpected, err, "record MCP server client detach").LogError(ctx, logger)
-			}
+		if _, err := q.DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+			McpServerID:           serverID,
+			RemoteSessionClientID: clientID,
+			ProjectID:             *authCtx.ProjectID,
+		}); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
 		}
 
 		// The association is what the server's link to its typed auth client was

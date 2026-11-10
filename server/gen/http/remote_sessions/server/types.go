@@ -203,10 +203,8 @@ type ListServerClientAssociationsResponseBody struct {
 	// The server's associated upstream OAuth clients, oldest first.
 	Associations []*ServerClientAssociationResponseBody `form:"associations" json:"associations" xml:"associations"`
 	// The remote_session_client_id of each client bound to the server's user
-	// session issuer that its callers need to sign in through. These are its
-	// associated clients, or when it has none, the bound clients no other server
-	// claims and it has not explicitly detached. Empty when the server requires no
-	// upstream sign-in.
+	// session issuer that its callers need to sign in through. These are exactly
+	// its associated clients. Empty when the server requires no upstream sign-in.
 	RequiredClientIds []string `form:"required_client_ids" json:"required_client_ids" xml:"required_client_ids"`
 }
 

@@ -2842,14 +2842,6 @@ SELECT
       AND own.organization_id = $2::text
       AND own.deleted IS FALSE
   )::boolean AS associated_with_mcp_server,
-  EXISTS (
-    SELECT 1
-    FROM mcp_server_remote_session_clients AS detached
-    WHERE detached.mcp_server_id = $1::uuid
-      AND detached.remote_session_client_id = requested.client_id
-      AND detached.organization_id = $2::text
-      AND detached.deleted IS TRUE
-  )::boolean AS detached_from_mcp_server,
   ARRAY(
     SELECT a.mcp_server_id
     FROM mcp_server_remote_session_clients AS a
@@ -2927,7 +2919,6 @@ type DescribeBoundClientUseParams struct {
 type DescribeBoundClientUseRow struct {
 	RemoteSessionClientID   uuid.UUID
 	AssociatedWithMcpServer bool
-	DetachedFromMcpServer   bool
 	OtherMcpServerIds       []uuid.UUID
 	AssociationProviderIds  []uuid.UUID
 }
@@ -2937,10 +2928,6 @@ type DescribeBoundClientUseRow struct {
 //
 // associated_with_mcp_server: the configured server is associated with the
 // client.
-//
-// detached_from_mcp_server: an explicit detach of the client from the configured
-// server is on record, as a soft-deleted association. Automatic cleanup deletes
-// rows outright, so it never reads as one.
 //
 // other_mcp_server_ids: other live MCP servers of the organization associated
 // with the client that reach it through this issuer, as their own issuer, as
@@ -2969,7 +2956,6 @@ func (q *Queries) DescribeBoundClientUse(ctx context.Context, arg DescribeBoundC
 		if err := rows.Scan(
 			&i.RemoteSessionClientID,
 			&i.AssociatedWithMcpServer,
-			&i.DetachedFromMcpServer,
 			&i.OtherMcpServerIds,
 			&i.AssociationProviderIds,
 		); err != nil {
