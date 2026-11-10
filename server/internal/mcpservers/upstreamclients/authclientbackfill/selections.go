@@ -217,7 +217,7 @@ func runSelections(ctx context.Context, q *Queries, opts Options, size int32, wr
 	}
 	cursor := uuid.Nil
 	for {
-		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: cursor, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: size})
+		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: cursor, OnlyID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, PageSize: size, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 		if err != nil {
 			return fmt.Errorf("list selections: %w", err)
 		}
@@ -294,7 +294,7 @@ func mapSelection(ctx context.Context, q *Queries, opts Options, credential live
 			return false, "", fmt.Errorf("lock issuer binding of selection %s: %w", row.ID, err)
 		}
 	}
-	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1})
+	fresh, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{OrganizationID: opts.OrganizationID, Cursor: uuid.Nil, OnlyID: uuid.NullUUID{UUID: row.ID, Valid: true}, PageSize: 1, ScopeUserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
 	if err != nil {
 		return false, "", fmt.Errorf("reread selection %s: %w", row.ID, err)
 	}
@@ -336,12 +336,13 @@ func ReconcileUserSessionSelectionsInLockedTransaction(ctx context.Context, tx p
 		return errors.New("reconcile user session selections: no transaction or tenant scope")
 	}
 	q := New(tx)
-	opts := Options{OrganizationID: organizationID}
-	credential := liveCredential{issuer: issuerID}
+	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
+	credential := liveCredential{issuer: issuerID, class: ""}
 	cursor := uuid.Nil
 	for {
 		rows, err := q.ListSelectionMappings(ctx, ListSelectionMappingsParams{
 			OrganizationID: organizationID, Cursor: cursor, PageSize: defaultPageSize,
+			OnlyID:                   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			ScopeUserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
 		})
 		if err != nil {

@@ -709,6 +709,7 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			UserSessionIssuerID: target.ID, CredentialKind: upstreamclients.CredentialKindUserSession,
 			CredentialID: credentialID, Source: upstreamclients.SelectionSourceBackfill,
 			PickedMcpServerIds: []uuid.UUID{}, PickedClientIds: []uuid.UUID{},
+			PickedAuthClientIds: nil, ScopeMcpServerIds: nil,
 		}); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record issuer migration credential choices").LogError(ctx, logger)
 		}
