@@ -595,7 +595,7 @@ func TestRunTreatsAGatewayMemberItsSoleAssociationSettlesAsConfigured(t *testing
 
 // Existing outbound associations settle shared authorization server inference,
 // but not grants for an unrecorded client or a member with no live association.
-func TestRunLeavesAGatewayMemberConfigurationDoesNotSettleForConfiguration(t *testing.T) {
+func TestRunGatewayConfigurationAcceptsAssociationsAndRejectsUnrecordedGrants(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	gatewayIssuer := f.userIssuer()

@@ -583,16 +583,16 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 // detached; a grant for a client never associated still needs configuration.
 // This decides nothing new and writes nothing.
 func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
-	live := 0
+	associated := false
 	for _, row := range rows {
 		switch {
 		case row.PairLive:
-			live++
+			associated = true
 		case row.GrantMatch && !row.PairRecorded:
 			return result
 		}
 	}
-	if live > 0 {
+	if associated {
 		result.Outcome = GatewayOutcomeConfigured
 	}
 	return result

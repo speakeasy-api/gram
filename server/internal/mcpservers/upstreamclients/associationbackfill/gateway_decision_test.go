@@ -53,6 +53,11 @@ func TestDecideGatewayExistingOutboundAssociations(t *testing.T) {
 			outcome: GatewayOutcomeConfigured,
 		},
 		{
+			name:    "existing outbound association outweighs derived only candidates",
+			rows:    []ListGatewayAssociationCandidatesRow{row(false, false, true, true), row(false, true, false, false), row(false, true, false, false)},
+			outcome: GatewayOutcomeConfigured,
+		},
+		{
 			name:    "inbound bindings without outbound associations remain ambiguous",
 			rows:    []ListGatewayAssociationCandidatesRow{row(false, true, false, false), row(false, true, false, false)},
 			outcome: GatewayOutcomeAmbiguous,
