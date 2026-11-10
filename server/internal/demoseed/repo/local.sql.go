@@ -641,6 +641,10 @@ SET access_token_encrypted = $1::text,
     auto_refresh = TRUE,
     upstream_email = $6::text,
     resource = $7::text,
+    -- The shared seed holds a long re-check lease so the demo org never
+    -- presents its dummy token; these hold real fixture tokens that must
+    -- refresh, so the lease is released.
+    last_refresh_attempt_at = NULL,
     updated_at = clock_timestamp()
 WHERE id = $8::uuid AND remote_session_client_id = ANY($9::uuid[]) AND deleted IS FALSE
   AND EXISTS (

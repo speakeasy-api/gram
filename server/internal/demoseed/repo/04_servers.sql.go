@@ -131,8 +131,10 @@ type ServersInsertAttachmentClientParams struct {
 // The client sits under the Per-User OAuth Server's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
-// Reserved example endpoints, an invalid ciphertext and no refresh token
-// prevent this display fixture from becoming a usable upstream credential.
+// Reserved example endpoints and no refresh token keep this display fixture
+// from becoming a usable upstream credential while its dummy access token,
+// encrypted at seed time, reads as connected. A held re-check lease keeps the
+// idle re-check from presenting it anywhere.
 func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg ServersInsertAttachmentClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAttachmentClient,
 		arg.ID,
@@ -147,13 +149,13 @@ const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession 
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
+        $5::text, now() + $6::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes')
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years')
 `
 
 type ServersInsertAttachmentSessionParams struct {
@@ -161,6 +163,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	ExpiresIn             pgtype.Interval
 }
 
@@ -170,6 +173,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.ExpiresIn,
 	)
 	return err
@@ -198,8 +202,9 @@ type ServersInsertAuthClientParams struct {
 
 // Typed auth clients, as the upstream OAuth migration records them: the Per-User OAuth Server's
 // personal client over its OAuth registration, and one static credential
-// shared by the Shared or Own Token Server and the Per-User OAuth Server, so the server settings show a shared client
-// and a server offering two. Slack offers none.
+// shared by the Pass-Through Token Server and the Per-User OAuth Server, so
+// the server settings show a shared client and a server offering two. The
+// Service Account Server offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClient,
@@ -289,7 +294,7 @@ type ServersInsertAuthClientRoleGrantsParams struct {
 	BlockID      uuid.UUID
 }
 
-// Engineers may use the Shared or Own Token Server's shared token; Contractors are blocked from
+// Engineers may use the Pass-Through Token Server's shared token; Contractors are blocked from
 // it on every server that offers it. Cleared by id at the top of the seed.
 func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg ServersInsertAuthClientRoleGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClientRoleGrants,
@@ -683,7 +688,7 @@ type ServersInsertEngineeringEssentialsPluginParams struct {
 }
 
 // A hand-curated supplement gives Team Access a multiple-plugin example:
-// Engineer reaches the Shared or Own Token Server through both its role plugin and this one. Other
+// Engineer reaches the Pass-Through Token Server through both its role plugin and this one. Other
 // servers/roles keep their single-match and no-match examples.
 func (q *Queries) ServersInsertEngineeringEssentialsPlugin(ctx context.Context, arg ServersInsertEngineeringEssentialsPluginParams) (uuid.UUID, error) {
 	row := q.db.QueryRow(ctx, serversInsertEngineeringEssentialsPlugin, arg.OrgID, arg.ProjectID)
@@ -863,11 +868,11 @@ type ServersInsertGitHubContractorsBlockParams struct {
 	GithubServerID uuid.UUID
 }
 
-// Check Access scenarios on the Shared or Own Token Server. Contractors blocks connecting, which
+// Check Access scenarios on the Pass-Through Token Server. Contractors blocks connecting, which
 // wins over every other role's grant: Mateo (a contractor through the
 // directory) is blocked even though Engineer reaches every server, and his
 // own grant covering every server cannot outrank the block. Priya holds the
-// role too, but a grant made to her by name for the Shared or Own Token Server outranks it. The
+// role too, but a grant made to her by name for the Pass-Through Token Server outranks it. The
 // user grants are cleared by id at the top of the seed.
 func (q *Queries) ServersInsertGitHubContractorsBlock(ctx context.Context, arg ServersInsertGitHubContractorsBlockParams) error {
 	_, err := q.db.Exec(ctx, serversInsertGitHubContractorsBlock, arg.ID, arg.OrgID, arg.GithubServerID)
@@ -1685,12 +1690,11 @@ type ServersInsertRemoteMCPServersParams struct {
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
 // toolset-backed pair (the hosted toolsets' canonical wrappers below)
-// executes in-process, the remotes are proxied. The Per-User OAuth Server and
-// the Shared or Own Token Server name what they demonstrate; their upstream is
-// the MCP fixture (mcp-fixture/), at a reserved example.com host here and at
-// the real local fixture after `mise run seed` (local_mcp_fixture.go). Slack
-// uses its vendor's public endpoint. No credentials, and nothing here
-// connects on its own.
+// executes in-process, the remotes are proxied. Each server is named for the
+// configuration it tests. The remotes' upstream is the MCP fixture
+// (mcp-fixture/), at a reserved example.com host here and at the real local
+// fixture after `mise run seed` (local_mcp_fixture.go). No credentials, and
+// nothing here connects on its own.
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers,
 		arg.LinearID,
@@ -1734,7 +1738,7 @@ type ServersInsertRemovedGitHubMemberParams struct {
 	GithubServerID uuid.UUID
 }
 
-// The Shared or Own Token Server was a member until three days ago. Its dispatches are still in
+// The Pass-Through Token Server was a member until three days ago. Its dispatches are still in
 // ClickHouse (gwgone rows), so the Activity section can show that a removed
 // member drops out of Calls by member while the gateway totals keep them.
 func (q *Queries) ServersInsertRemovedGitHubMember(ctx context.Context, arg ServersInsertRemovedGitHubMemberParams) error {
@@ -1757,8 +1761,9 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
   AND s.project_id = $2::uuid
-  -- Of the hosted toolsets' wrappers, distribute Acme Support Tools and
-  -- Acme Ops; the partner and OAuth discovery toolsets stay out of plugins.
+  -- Of the hosted toolsets' wrappers, distribute the OpenAPI Server (API Key)
+  -- and the Read-Only Tool Subset; the server-specific sign-in and external
+  -- OAuth toolsets stay out of plugins.
   AND (s.id IS DISTINCT FROM s.toolset_id
        OR s.id IN ($3::uuid, $4::uuid))
   AND EXISTS (
@@ -1919,9 +1924,10 @@ type ServersInsertSignInExampleRemoteMCPServersParams struct {
 // Leave instructions NULL so Settings starts with the editable built-in
 // instructions, matching the gateway's initialize and server/discover text.
 // Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
-// project-scoped CIMD client, Slack carries one inert shared Service Account
-// credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
-// values are display fixtures only and cannot authenticate to any service.
+// project-scoped CIMD client, the Service Account Server carries one inert
+// shared credential, and the Pass-Through Token Server has no upstream
+// identity of its own (callers forward theirs locally). The demo values are
+// display fixtures only and cannot authenticate to any service.
 // The Auto-Configured OAuth Server: each caller signs in to their own
 // account once an admin sets up its sign-in from the server's page (Speakeasy
 // discovers the authorization server and registers a client then; the seed
@@ -1972,8 +1978,9 @@ type ServersInsertSupportDeskGrantsParams struct {
 }
 
 // Support Desk names its servers one by one, the MCP access tab's main
-// shape: Acme Support Tools with every tool (toolset-backed, so the grant
-// names the toolset), Slack only for tools annotated read-only.
+// shape: the OpenAPI Server (API Key) with every tool (toolset-backed, so the
+// grant names the toolset), the Service Account Server only for tools
+// annotated read-only.
 func (q *Queries) ServersInsertSupportDeskGrants(ctx context.Context, arg ServersInsertSupportDeskGrantsParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSupportDeskGrants, arg.OrgID, arg.Toolset1, arg.SlackServerID)
 	return err
@@ -2178,15 +2185,16 @@ const serversInsertValidatedSession = `-- name: ServersInsertValidatedSession :e
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['notes:read'], $5::bigint,
-        CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
-        NULLIF($6::text, ''), now() - make_interval(days => $8::int),
-        now() - make_interval(hours => $7::int))
+        $5::text, now() + interval '7 days', false,
+        ARRAY['notes:read'], $6::bigint,
+        CASE WHEN $7::text <> '' THEN now() - make_interval(hours => $8::int) END,
+        NULLIF($7::text, ''), now() - make_interval(days => $9::int),
+        now() - make_interval(hours => $8::int), now() + interval '10 years')
 `
 
 type ServersInsertValidatedSessionParams struct {
@@ -2194,6 +2202,7 @@ type ServersInsertValidatedSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	GrantGeneration       int64
 	Status                string
 	HoursAgo              int32
@@ -2202,8 +2211,11 @@ type ServersInsertValidatedSessionParams struct {
 
 // Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: an invalid ciphertext and
-// no refresh token. grant_generation above 1 records re-authorizations.
+// validation state. Inert like the session above: no refresh token, and a held
+// re-check lease, renewed by each reseed, keeps the idle re-check from
+// presenting the dummy token upstream and overwriting the seeded verdicts.
+// grant_generation above 1 records re-authorizations. The local seed swaps in
+// real fixture tokens and releases the lease (local_mcp_fixture.go).
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {
@@ -2212,6 +2224,7 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.GrantGeneration,
 		arg.Status,
 		arg.HoursAgo,
@@ -2244,7 +2257,7 @@ type ServersPickGatewayGitHubCredentialParams struct {
 	McpServerID   uuid.UUID
 }
 
-// Sets the organization gateway's seeded Shared or Own Token Server choices
+// Sets the organization gateway's seeded Pass-Through Token Server choices
 // to the caller's own token. The server offers two credentials, so a choice that names
 // neither resolves to no credential under enforcement.
 func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {

@@ -165,7 +165,7 @@ func (s *seeder) toolset4() uuid.UUID { return s.fixed("0000-4000-a000-000000005
 // supportServer and opsServer are the canonical MCP servers wrapping
 // toolsets 1 and 2 (a hosted toolset's wrapper shares the toolset's id).
 // They are the only servers over those toolsets: every grant, gateway
-// member, plugin, finding and telemetry row about Acme Support Tools or Acme
+// member, plugin, finding and telemetry row about OpenAPI Server (API Key) or Acme
 // Ops points at them.
 func (s *seeder) supportServer() uuid.UUID  { return s.toolset1() }
 func (s *seeder) opsServer() uuid.UUID      { return s.toolset2() }

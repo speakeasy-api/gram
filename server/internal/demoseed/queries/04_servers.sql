@@ -5,12 +5,11 @@
 -- MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 -- Two backends so the gateway's member table shows both classes: the
 -- toolset-backed pair (the hosted toolsets' canonical wrappers below)
--- executes in-process, the remotes are proxied. The Per-User OAuth Server and
--- the Shared or Own Token Server name what they demonstrate; their upstream is
--- the MCP fixture (mcp-fixture/), at a reserved example.com host here and at
--- the real local fixture after `mise run seed` (local_mcp_fixture.go). Slack
--- uses its vendor's public endpoint. No credentials, and nothing here
--- connects on its own.
+-- executes in-process, the remotes are proxied. Each server is named for the
+-- configuration it tests. The remotes' upstream is the MCP fixture
+-- (mcp-fixture/), at a reserved example.com host here and at the real local
+-- fixture after `mise run seed` (local_mcp_fixture.go). No credentials, and
+-- nothing here connects on its own.
 -- name: ServersInsertRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@linear_id::uuid, @project_id::uuid, 'Per-User OAuth Server', 'per-user-oauth',
@@ -92,11 +91,11 @@ FROM mcp_servers s
 JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
 WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
--- Check Access scenarios on the Shared or Own Token Server. Contractors blocks connecting, which
+-- Check Access scenarios on the Pass-Through Token Server. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
 -- directory) is blocked even though Engineer reaches every server, and his
 -- own grant covering every server cannot outrank the block. Priya holds the
--- role too, but a grant made to her by name for the Shared or Own Token Server outranks it. The
+-- role too, but a grant made to her by name for the Pass-Through Token Server outranks it. The
 -- user grants are cleared by id at the top of the seed.
 -- name: ServersInsertGitHubContractorsBlock :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
@@ -108,8 +107,9 @@ FROM organization_roles r
 WHERE r.organization_id = @org_id::text AND r.workos_slug = 'contractors';
 
 -- Support Desk names its servers one by one, the MCP access tab's main
--- shape: Acme Support Tools with every tool (toolset-backed, so the grant
--- names the toolset), Slack only for tools annotated read-only.
+-- shape: the OpenAPI Server (API Key) with every tool (toolset-backed, so the
+-- grant names the toolset), the Service Account Server only for tools
+-- annotated read-only.
 -- name: ServersInsertSupportDeskGrants :exec
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 SELECT @org_id::text, 'role:organization:' || r.id, 'mcp:connect', sel
@@ -149,8 +149,9 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
   AND s.project_id = @project_id::uuid
-  -- Of the hosted toolsets' wrappers, distribute Acme Support Tools and
-  -- Acme Ops; the partner and OAuth discovery toolsets stay out of plugins.
+  -- Of the hosted toolsets' wrappers, distribute the OpenAPI Server (API Key)
+  -- and the Read-Only Tool Subset; the server-specific sign-in and external
+  -- OAuth toolsets stay out of plugins.
   AND (s.id IS DISTINCT FROM s.toolset_id
        OR s.id IN (@support_server_id::uuid, @ops_server_id::uuid))
   AND EXISTS (
@@ -161,7 +162,7 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
       AND g.selectors->>'resource_id' = '*');
 
 -- A hand-curated supplement gives Team Access a multiple-plugin example:
--- Engineer reaches the Shared or Own Token Server through both its role plugin and this one. Other
+-- Engineer reaches the Pass-Through Token Server through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
@@ -182,9 +183,10 @@ WHERE project_id = @project_id::uuid AND slug = 'pass-through-token';
 -- Leave instructions NULL so Settings starts with the editable built-in
 -- instructions, matching the gateway's initialize and server/discover text.
 -- Remote MCP identity modes: the Per-User OAuth Server uses per-user OAuth through a
--- project-scoped CIMD client, Slack carries one inert shared Service Account
--- credential, and the Shared or Own Token Server intentionally has no upstream identity. The demo
--- values are display fixtures only and cannot authenticate to any service.
+-- project-scoped CIMD client, the Service Account Server carries one inert
+-- shared credential, and the Pass-Through Token Server has no upstream
+-- identity of its own (callers forward theirs locally). The demo values are
+-- display fixtures only and cannot authenticate to any service.
 -- The Auto-Configured OAuth Server: each caller signs in to their own
 -- account once an admin sets up its sign-in from the server's page (Speakeasy
 -- discovers the authorization server and registers a client then; the seed
@@ -361,7 +363,7 @@ INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
 INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
   (@id::uuid, @project_id::uuid, @meta_id::uuid, NULL, @slug::text);
 
--- The Shared or Own Token Server was a member until three days ago. Its dispatches are still in
+-- The Pass-Through Token Server was a member until three days ago. Its dispatches are still in
 -- ClickHouse (gwgone rows), so the Activity section can show that a removed
 -- member drops out of Calls by member while the gateway totals keep them.
 -- name: ServersInsertRemovedGitHubMember :exec
@@ -585,8 +587,10 @@ VALUES
 -- The client sits under the Per-User OAuth Server's own remote identity provider: every client
 -- bound to one user session issuer must share a remote issuer, or the
 -- mcp_servers.remote_session_issuer_id derivation above would come out NULL.
--- Reserved example endpoints, an invalid ciphertext and no refresh token
--- prevent this display fixture from becoming a usable upstream credential.
+-- Reserved example endpoints and no refresh token keep this display fixture
+-- from becoming a usable upstream credential while its dummy access token,
+-- encrypted at seed time, reads as connected. A held re-check lease keeps the
+-- idle re-check from presenting it anywhere.
 -- name: ServersInsertAttachmentClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -601,33 +605,37 @@ VALUES (@id::uuid, @project_id::uuid, @org_id::text,
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
+        @access_token_encrypted::text, now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes');
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years');
 
 -- Upstream sessions on the Per-User OAuth Server's CIMD client, one per last-validation outcome
 -- plus one never validated, so the admin server health page shows every
--- validation state. Inert like the session above: an invalid ciphertext and
--- no refresh token. grant_generation above 1 records re-authorizations.
+-- validation state. Inert like the session above: no refresh token, and a held
+-- re-check lease, renewed by each reseed, keeps the idle re-check from
+-- presenting the dummy token upstream and overwriting the seeded verdicts.
+-- grant_generation above 1 records re-authorizations. The local seed swaps in
+-- real fixture tokens and releases the lease (local_mcp_fixture.go).
 -- An empty status is the never-validated session (NULL status and
 -- last_validated_at).
 -- name: ServersInsertValidatedSession :exec
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        @access_token_encrypted::text, now() + interval '7 days', false,
         ARRAY['notes:read'], @grant_generation::bigint,
         CASE WHEN @status::text <> '' THEN now() - make_interval(hours => @hours_ago::int) END,
         NULLIF(@status::text, ''), now() - make_interval(days => @days_ago::int),
-        now() - make_interval(hours => @hours_ago::int));
+        now() - make_interval(hours => @hours_ago::int), now() + interval '10 years');
 
 -- Many principals can reference one exact human-owned session. Reconnecting
 -- must never silently replace these references with a different session.
@@ -772,8 +780,9 @@ VALUES
 
 -- Typed auth clients, as the upstream OAuth migration records them: the Per-User OAuth Server's
 -- personal client over its OAuth registration, and one static credential
--- shared by the Shared or Own Token Server and the Per-User OAuth Server, so the server settings show a shared client
--- and a server offering two. Slack offers none.
+-- shared by the Pass-Through Token Server and the Per-User OAuth Server, so
+-- the server settings show a shared client and a server offering two. The
+-- Service Account Server offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
@@ -809,7 +818,7 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
 
--- Engineers may use the Shared or Own Token Server's shared token; Contractors are blocked from
+-- Engineers may use the Pass-Through Token Server's shared token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
 -- name: ServersInsertAuthClientRoleGrants :exec
 INSERT INTO principal_grants (id, organization_id, principal_urn, scope, selectors)
@@ -855,7 +864,7 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
 
--- Sets the organization gateway's seeded Shared or Own Token Server choices
+-- Sets the organization gateway's seeded Pass-Through Token Server choices
 -- to the caller's own token. The server offers two credentials, so a choice that names
 -- neither resolves to no credential under enforcement.
 -- name: ServersPickGatewayGitHubCredential :execrows

@@ -956,7 +956,7 @@ func (s *seeder) chfDispatchedCalls(gateway, salt string, count int) []chfTeleme
 	return rows
 }
 
-// chfGatewayGoneCalls: dispatches to the Shared or Own Token Server from before it left the gateway
+// chfGatewayGoneCalls: dispatches to the Pass-Through Token Server from before it left the gateway
 // (its membership is soft-deleted in Postgres three days ago). They count
 // toward the gateway's dispatched-call totals but must not appear in Calls by
 // member.

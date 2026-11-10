@@ -100,7 +100,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 					matches++
 				}
 			}
-			require.Equal(t, expected, matches, "Shared or Own Token Server plugin matches for %s", role)
+			require.Equal(t, expected, matches, "Pass-Through Token Server plugin matches for %s", role)
 		}
 		if iteration == 0 {
 			firstMemberships = memberships

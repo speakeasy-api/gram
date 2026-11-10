@@ -46,6 +46,9 @@ type serversKillswitchOperation struct {
 }
 
 // seedServers: MCP servers, gateway endpoints, plugins, meta servers, remote sessions, killswitch.
+// demoInertAccessToken is the dummy upstream access token the inert demo sessions hold.
+const demoInertAccessToken = "demo-inert-access-token" //nolint:gosec // G101: a fixture placeholder, not a credential
+
 func (s *seeder) seedServers(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
@@ -415,8 +418,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	// client already holds that pair. Exact-session attachments use the main
 	// client, so the Per-User OAuth Server offers one OAuth client.
 	// Each seeded sign-in carries the choice its consent page would have
-	// recorded for every server it reaches: the Per-User OAuth Server through its main client,
-	// Slack with no upstream authentication.
+	// recorded for every server it reaches: the Per-User OAuth Server through
+	// its main client, the Service Account Server with no upstream
+	// authentication.
 	choices := []struct {
 		session int
 		server  string
@@ -475,6 +479,12 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		}
 	}
 
+	// Sealed with this environment's key so the inert sessions read as connected;
+	// the token only ever reaches the fixture's reserved example hosts.
+	dummyAccess, err := s.enc.Encrypt([]byte(demoInertAccessToken))
+	if err != nil {
+		return fmt.Errorf("seal demo access token: %w", err)
+	}
 	for _, account := range []struct {
 		key     string
 		person  int
@@ -484,7 +494,8 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		{key: "attachment-session-expired", person: 2, expires: -time.Hour},
 	} {
 		if err := s.q.ServersInsertAttachmentSession(ctx, repo.ServersInsertAttachmentSessionParams{
-			ID: s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
+			AccessTokenEncrypted: dummyAccess,
+			ID:                   s.det(account.key), UserID: user(account.person), UserSessionIssuerID: s.det("issuer-linear"),
 			RemoteSessionClientID: s.det("remote-identity-client-linear"), ExpiresIn: pgtype.Interval{Microseconds: account.expires.Microseconds(), Days: 0, Months: 0, Valid: true},
 		}); err != nil {
 			return fmt.Errorf("insert demo attachment session: %w", err)
@@ -502,6 +513,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 	for _, v := range validated {
 		if err := s.q.ServersInsertValidatedSession(ctx, repo.ServersInsertValidatedSessionParams{
+			AccessTokenEncrypted:  dummyAccess,
 			ID:                    s.det("validated-session-" + strconv.Itoa(int(v.n))),
 			UserID:                user(int(v.n)),
 			UserSessionIssuerID:   s.det("issuer-linear"),
@@ -677,10 +689,10 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 		McpServerID:   s.det("mcpserver-github"),
 	})
 	if err != nil {
-		return fmt.Errorf("pick demo gateway the Shared or Own Token Server credential: %w", err)
+		return fmt.Errorf("pick the demo gateway's Pass-Through Token Server credential: %w", err)
 	}
 	if picked != 3 {
-		return fmt.Errorf("pick demo gateway the Shared or Own Token Server credential: expected 3 choices, updated %d", picked)
+		return fmt.Errorf("pick the demo gateway's Pass-Through Token Server credential: expected 3 choices, updated %d", picked)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),

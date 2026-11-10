@@ -37,7 +37,7 @@ WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.user_session_issuer_id = us.user_session_issuer_id
   AND rs.subject_urn = b.attached_by_subject_id
   AND b.attached_by_subject_id = rs.subject_urn
-  AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
+  AND rs.access_token_encrypted <> ''
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
 
 -- name: PostflightIDSessionBindings :one
@@ -53,7 +53,7 @@ WHERE user_session_issuer_id IN
 SELECT count(*) FROM remote_sessions
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND deleted IS FALSE
-  AND access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT' AND refresh_token_encrypted IS NULL
+  AND access_token_encrypted <> '' AND refresh_token_encrypted IS NULL
   AND (validation_status IS NULL
        OR validation_status IN ('valid', 'rejected_by_member', 'inactive', 'unknown'));
 
@@ -128,7 +128,7 @@ WHERE project_id = @project_id::uuid
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
 -- Two upstream MCP issuers, two independent gateway issuers, and one
--- Connections issuer; the Shared or Own Token Server uses the organization workforce issuer.
+-- Connections issuer; the Pass-Through Token Server uses the organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -275,7 +275,7 @@ WHERE (SELECT count(*) FROM live) = 26
   );
 
 -- Count live choices outside the intended set: the Per-User OAuth Server through its main client,
--- Slack with no upstream authentication, the organization gateway's Shared or Own Token Server
+-- the Service Account Server with no upstream authentication, the organization gateway's Pass-Through Token Server
 -- choice of the caller's own token and its tunneled inventory choice, each on a
 -- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one

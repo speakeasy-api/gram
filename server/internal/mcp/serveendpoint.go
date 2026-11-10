@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -380,7 +381,8 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		return none, nil
 	}
 
-	var match, outage remotesessions.UpstreamToken
+	var match, held remotesessions.UpstreamToken
+	var heldIssuer uuid.UUID
 	found, nullResources := 0, 0
 	for issuerID, entry := range tokens {
 		if entry.CredentialOwner != remotesessions.CredentialOwnerSelf && entry.Resource == "" {
@@ -389,16 +391,18 @@ func routeUpstreamToken(ctx context.Context, logger *slog.Logger, tokens map[uui
 		if !upstreamTokenRoutes(issuerID, entry, want, backendIssuerID) {
 			continue
 		}
-		if entry.SessionUnavailable() {
-			outage = entry
+		if entry.HeldWithoutToken() {
+			if heldOutranks(entry, issuerID, held, heldIssuer) {
+				held, heldIssuer = entry, issuerID
+			}
 			continue
 		}
 		found++
 		match = entry
 	}
 	switch {
-	case found == 0 && outage.SessionUnavailable():
-		return none, outage.ClientCredentialErr
+	case found == 0 && held.HeldWithoutToken():
+		return none, held.ClientCredentialErr
 	case found == 1:
 		if err := match.ClientCredentialErr; err != nil {
 			return none, err
@@ -449,6 +453,19 @@ func upstreamTokenRoutes(issuerID uuid.UUID, entry remotesessions.UpstreamToken,
 			(entry.Resource == "" || grantRoutesToUpstream(entry.Resource, want, false))
 	}
 	return grantRoutesToUpstream(entry.Resource, want, false)
+}
+
+// heldOutranks reports whether held entry candidate, keyed under candidateIssuer,
+// answers instead of current, so the answer never depends on map order: an
+// outage, which a retry can clear, comes first, then the lower issuer id.
+func heldOutranks(candidate remotesessions.UpstreamToken, candidateIssuer uuid.UUID, current remotesessions.UpstreamToken, currentIssuer uuid.UUID) bool {
+	if !current.HeldWithoutToken() {
+		return true
+	}
+	if candidate.SessionUnavailable() != current.SessionUnavailable() {
+		return candidate.SessionUnavailable()
+	}
+	return bytes.Compare(candidateIssuer[:], currentIssuer[:]) < 0
 }
 
 // tunneledIssuerToken selects a tunneled backend's credential from the entry

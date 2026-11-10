@@ -57,21 +57,25 @@ const (
 
 // wireLocalMCPFixture rewires, in the local org only:
 //
-//   - the generated toolset servers (Acme Support Tools, Acme Ops, Acme
-//     Partner Gateway, Acme OAuth Discovery) to call the fixture's stub of
-//     the demo API, through a system environment;
+//   - the generated toolset servers (OpenAPI Server (API Key), Read-Only Tool
+//     Subset, Server-Specific Sign-In, External OAuth Server) to call the
+//     fixture's stub of the demo API, through a system environment, and the
+//     External OAuth Server's authorization server to the fixture's;
 //   - the Per-User OAuth Server: its URL, MCP Fixture OAuth provider,
 //     protected resource and OAuth client move from the shared seed's
 //     placeholder host (mcp-fixture.example.com) to the running fixture, and
 //     every live seeded sign-in holds real fixture tokens;
-//   - the Shared or Own Token Server: its URL points at the fixture's
-//     shared-token endpoint and its shared credential carries the checked-in
-//     shared token;
-//   - the Enterprise Sign-In (ID-JAG) Server, through the dev-idp
-//     (local_ema.go).
+//   - the Service Account Server: the fixture's shared-token endpoint, with
+//     the checked-in shared token as its static Authorization header;
+//   - the Pass-Through Token Server: the fixture's own-token endpoint, with
+//     the caller's X-Upstream-Token header forwarded;
+//   - the Auto-Configured OAuth Server: the fixture's second OAuth endpoint,
+//     left for an admin to set up;
+//   - the Tunnelled Private Server: the fixture daemon's tunnel agent key.
 //
-// The shared seed already gives these servers their names. The public demo
-// org keeps the placeholder host: prod cannot reach a developer's localhost.
+// The Enterprise Sign-In (ID-JAG) Server is wired by wireLocalEMA. The shared
+// seed already gives every server its name. The public demo org keeps the
+// placeholder hosts: prod cannot reach a developer's localhost.
 func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, opts LocalMCPFixtureOptions) error {
 	if opts.BaseURL == "" || opts.BaseURL == "unset" {
 		logger.InfoContext(ctx, "GRAM_MCP_FIXTURE_URL is not set; seeded servers stay display-only")
