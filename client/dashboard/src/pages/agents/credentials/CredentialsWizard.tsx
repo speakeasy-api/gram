@@ -1,5 +1,5 @@
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Input } from "@/components/ui/Input";
@@ -2129,9 +2129,9 @@ export function CredentialsWizard({
                   onClick={openPicker}
                 >
                   <Button.LeftIcon>
-                    <Pencil className="size-4" />
+                    <Plus className="size-4" />
                   </Button.LeftIcon>
-                  <Button.Text>Change servers</Button.Text>
+                  <Button.Text>Add servers</Button.Text>
                 </Button>
               ) : undefined
             }
@@ -2524,7 +2524,7 @@ export function CredentialsWizard({
           }}
         >
           <Dialog.Content className="max-h-[85vh] max-w-3xl overflow-y-auto">
-            <Dialog.Title className="sr-only">Change MCP servers</Dialog.Title>
+            <Dialog.Title className="sr-only">Add MCP servers</Dialog.Title>
             <Dialog.Description className="sr-only">
               Pick the MCP servers this agent calls. Continue saves them.
             </Dialog.Description>

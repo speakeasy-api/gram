@@ -3775,7 +3775,7 @@ describe("The MCP sign-in tab", () => {
   // Enabled once the stored servers are read into the selection.
   async function openPicker() {
     const change = await screen.findByRole("button", {
-      name: "Change servers",
+      name: "Add servers",
     });
     await waitFor(() =>
       expect((change as HTMLButtonElement).disabled).toBe(false),
@@ -3786,7 +3786,7 @@ describe("The MCP sign-in tab", () => {
   it("opens on the servers' sign-in, with no setup steps around it", async () => {
     tab();
     expect(
-      await screen.findByRole("button", { name: "Change servers" }),
+      await screen.findByRole("button", { name: "Add servers" }),
     ).toBeTruthy();
     // Each change saves as it is made, so there is nothing to press.
     expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
@@ -3802,7 +3802,7 @@ describe("The MCP sign-in tab", () => {
 
   it("opens on the sign-in view, with the picker closed", async () => {
     tab();
-    await screen.findByRole("button", { name: "Change servers" });
+    await screen.findByRole("button", { name: "Add servers" });
     expect(screen.queryByRole("heading", { name: "MCP Selection" })).toBeNull();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
@@ -3819,7 +3819,7 @@ describe("The MCP sign-in tab", () => {
         ?.grantId,
     ).toBe("grant_one");
     expect(mocks.renameAgent).not.toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Change servers" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Add servers" })).toBeTruthy();
   });
 
   it("drops a change abandoned with Cancel", async () => {
@@ -3827,7 +3827,7 @@ describe("The MCP sign-in tab", () => {
     await openPicker();
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    await screen.findByRole("button", { name: "Change servers" });
+    await screen.findByRole("button", { name: "Add servers" });
 
     await openPicker();
     expect(
