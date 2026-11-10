@@ -36,8 +36,10 @@ const (
 	// advertises exactly one of the issuer's clients' authorization servers.
 	OutcomeMetadataMatch Outcome = "metadata_match"
 
-	// OutcomeConfigured is a server on a shared issuer that already has an
-	// explicitly configured association and no further proven one.
+	// OutcomeConfigured is a server whose clients the backfill leaves to its
+	// configuration: one on a shared issuer that already has an explicitly
+	// configured association and no further proven one, or one with no live
+	// association that offers an OAuth client of its own.
 	OutcomeConfigured Outcome = "configured"
 
 	// OutcomeGrant is a server on a shared issuer for whose upstream exactly

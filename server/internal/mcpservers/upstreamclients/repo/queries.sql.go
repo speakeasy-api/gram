@@ -174,7 +174,7 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
     WHERE offer.mcp_server_id = s.id
       AND offer.source = 'admin'
       AND offer.deleted IS FALSE
-      AND offered.remote_session_client_id <> c.id
+      AND offered.remote_session_client_id IS DISTINCT FROM c.id
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
 RETURNING mcp_server_id
@@ -258,7 +258,7 @@ WHERE s.project_id = $2::uuid
          WHERE offer.mcp_server_id = s.id
            AND offer.source = 'admin'
            AND offer.deleted IS FALSE
-           AND offered.remote_session_client_id <> c.id
+           AND offered.remote_session_client_id IS DISTINCT FROM c.id
        ))
   AND NOT EXISTS (
     SELECT 1

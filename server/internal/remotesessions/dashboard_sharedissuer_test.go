@@ -193,8 +193,8 @@ func TestClientWritersLeaveADeletedServersClientOffTheSoleServerUnderEnforcement
 	}
 }
 
-// Reconcile is what captures without enforcement, so the capture for enforced
-// writers leaves a binding it has not seen alone.
+// Without enforcement CaptureSoleConsumers writes nothing, because Reconcile
+// already captures there.
 func TestCaptureSoleConsumersWritesNothingWithoutEnforcement(t *testing.T) {
 	t.Parallel()
 
@@ -314,4 +314,67 @@ func TestAttachUserSessionIssuerOffersBesideTheServersOwnOfferUnderEnforcement(t
 
 	require.Equal(t, []uuid.UUID{attachedClient}, associatedClients(t, ctx, ti.conn, projectID, shared.second))
 	require.Contains(t, offeredAuthClients(t, ctx, ti.conn, shared.second), authclientbackfill.OAuthClientID(orgID, attachedClient, authclientbackfill.TypeRemoteSession))
+}
+
+// An administrator's offer of a credential that is not an OAuth registration,
+// such as a static credential, is configuration of its own: neither capture
+// puts the issuer's client beside it after a rollback.
+func TestCapturesLeaveAServerWithAStaticCredentialOfferAloneAfterRollback(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		issuer      func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID
+		deleteFirst bool
+	}{
+		{name: "gateway capture", deleteFirst: false, issuer: func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+			t.Helper()
+			return seedOrganizationTierUserSessionIssuer(t, ctx, ti.conn, "static-org-issuer")
+		}},
+		{name: "sole-consumer capture", deleteFirst: true, issuer: func(t *testing.T, ctx context.Context, ti *testInstance) uuid.UUID {
+			t.Helper()
+			return createUserSessionIssuer(t, ctx, ti.conn, "static-project-issuer")
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti := newTestService(t)
+			orgID := activeOrganizationID(t, ctx)
+			projectID := projectIDFromContext(t, ctx)
+			enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+			shared := seedSharedIssuerOn(t, ctx, ti, "static", "", tc.issuer(t, ctx, ti))
+			fixtures := authclientbackfill.New(ti.conn)
+			staticID, err := fixtures.SeedAuthClientFixture(ctx, authclientbackfill.SeedAuthClientFixtureParams{
+				OrganizationID:        orgID,
+				ProjectID:             conv.ToNullUUID(projectID),
+				ClientType:            authz.AuthClientTypeStaticCredential,
+				Source:                "admin",
+				RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+			})
+			require.NoError(t, err)
+			require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientbackfill.SeedServerAuthClientLinkFixtureParams{
+				ProjectID:      projectID,
+				OrganizationID: orgID,
+				McpServerID:    shared.second,
+				AuthClientID:   staticID,
+				Source:         "admin",
+			}))
+			_, err = productfeaturesrepo.New(ti.conn).DeleteFeature(ctx, productfeaturesrepo.DeleteFeatureParams{
+				OrganizationID: orgID,
+				FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+			})
+			require.NoError(t, err)
+			if tc.deleteFirst {
+				_, err = mcpserversrepo.New(ti.conn).DeleteMCPServer(ctx, mcpserversrepo.DeleteMCPServerParams{ID: shared.first, ProjectID: projectID})
+				require.NoError(t, err)
+			}
+
+			require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, orgID, projectID, []uuid.UUID{shared.userIssuerID}))
+
+			require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, shared.second))
+			require.Equal(t, []uuid.UUID{staticID}, offeredAuthClients(t, ctx, ti.conn, shared.second))
+		})
+	}
 }

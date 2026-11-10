@@ -302,7 +302,10 @@ type DeleteResult struct {
 	OrphanedCredentials []remotesessions.RevokedCredentials
 }
 
-// Delete tombstones a deleted toolset's canonical wrapper.
+// Delete tombstones a deleted toolset's canonical wrapper. When the wrapper was
+// the last user of its project user session issuer, the issuer is released
+// with it (see lifecycle.ReleaseUnownedIssuer), and the grants it took with it
+// are returned in the result for revocation once the transaction commits.
 func Delete(ctx context.Context, tx pgx.Tx, logger *slog.Logger, tracerProvider trace.TracerProvider, auditLogger *audit.Logger, revoker *remotesessions.UpstreamRevoker, actor Actor, toolset toolsetsrepo.Toolset) (DeleteResult, error) {
 	if auditLogger == nil || !tombstone.ActorPresent(ctx, actor.UserID) {
 		return DeleteResult{}, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")

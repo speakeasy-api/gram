@@ -1060,6 +1060,22 @@ WHERE link.remote_session_client_id = c.id
   AND c.id = @remote_session_client_id
   AND c.project_id = @project_id;
 
+-- name: ListServerProjectsOnClientIssuers :many
+-- Each live project, in any organization, with a live MCP server on a user
+-- session issuer the client is bound to, with that issuer. A writer reads it
+-- before it deletes the client's bindings, so that afterwards it can re-derive
+-- the upstream issuer of servers that take it from those bindings.
+SELECT DISTINCT p.organization_id, s.project_id, link.user_session_issuer_id
+FROM remote_session_client_user_session_issuers AS link
+JOIN mcp_servers AS s
+  ON s.user_session_issuer_id = link.user_session_issuer_id
+ AND s.deleted IS FALSE
+JOIN projects AS p
+  ON p.id = s.project_id
+ AND p.deleted IS FALSE
+WHERE link.remote_session_client_id = @remote_session_client_id
+ORDER BY p.organization_id, s.project_id, link.user_session_issuer_id;
+
 -- name: DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient :exec
 -- Removes every user session issuer binding of a client the caller has just
 -- soft-deleted, in any tenant: the client row's deletion is the authorization,

@@ -77,8 +77,13 @@ func RequireScope(locked, projects []uuid.UUID) error {
 // writer whose change reaches every one of them: one that changes which
 // organization-level issuers are live decides whether the organization gateway
 // fronts each server. Call it before the transaction's first row lock or
-// mutation.
+// mutation, and before any shared gateway-reach lock: it takes that lock
+// exclusively first, so no server gains a project between discovery and the
+// writer scope.
 func LockOrganizationScope(ctx context.Context, tx pgx.Tx, organizationID string) ([]uuid.UUID, error) {
+	if err := authclientbackfill.New(tx).LockEMAGatewayReachWriter(ctx, organizationID); err != nil {
+		return nil, fmt.Errorf("lock organization gateway reach: %w", err)
+	}
 	projects, err := repo.New(tx).ListOrganizationProjectsWithServers(ctx, organizationID)
 	if err != nil {
 		return nil, fmt.Errorf("list organization projects: %w", err)

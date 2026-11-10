@@ -1336,6 +1336,10 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "delete global remote session client").LogError(ctx, logger)
 	}
 
+	bindingServers, err := ReadClientBindingServers(ctx, dbtx, deleted.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read servers on the deleted client's issuers").LogError(ctx, logger)
+	}
 	if err := txRepo.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "delete user session issuer attachments for deleted client").LogError(ctx, logger)
 	}
@@ -1352,6 +1356,9 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, affected[organizationID].servers...); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
 		}
+	}
+	if err := bindingServers.Derive(ctx, dbtx); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "derive upstream issuer of the global client's servers").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {

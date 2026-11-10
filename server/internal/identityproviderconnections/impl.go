@@ -745,12 +745,21 @@ func (s *Service) abandonConnection(ctx context.Context, logger *slog.Logger, or
 			logger.ErrorContext(ctx, "failed to tombstone client of abandoned connection", attr.SlogError(err))
 			return
 		}
+		bindingServers, err := remotesessions.ReadClientBindingServers(cleanupCtx, dbtx, managed.ClientRowID)
+		if err != nil {
+			logger.ErrorContext(ctx, "failed to read servers on abandoned connection client's issuers", attr.SlogError(err))
+			return
+		}
 		if err := rq.DeleteUserSessionIssuerAttachmentsForDeletedRemoteSessionClient(cleanupCtx, managed.ClientRowID); err != nil {
 			logger.ErrorContext(ctx, "failed to unbind client of abandoned connection", attr.SlogError(err))
 			return
 		}
 		if err := associations.PruneInLockedTransaction(cleanupCtx, dbtx); err != nil {
 			logger.ErrorContext(ctx, "failed to prune associations of abandoned connection client", attr.SlogError(err))
+			return
+		}
+		if err := bindingServers.Derive(cleanupCtx, dbtx); err != nil {
+			logger.ErrorContext(ctx, "failed to derive upstream issuer of abandoned connection client's servers", attr.SlogError(err))
 			return
 		}
 		if managed.JSONWebKeySetID.Valid {
