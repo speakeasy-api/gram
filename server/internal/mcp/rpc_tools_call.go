@@ -308,6 +308,7 @@ func handleToolsCall(
 			Sent:            nil,
 			GrantFailure:    "",
 			CallerVariables: nil,
+			ServerVariable:  "",
 			Challenges:      nil,
 		},
 	}
