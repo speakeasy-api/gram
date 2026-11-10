@@ -744,6 +744,10 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			platformFixture, err := platformMCPLocalFixtureConfigFromCLI(serviceEnv, c.String("server-url"))
 			if err != nil {
@@ -2057,8 +2061,9 @@ func newStartCommand() *cli.Command {
 						CustomDomainID: uuid.NullUUID{UUID: customDomainID, Valid: true},
 					})
 				},
-				c.String("custom-domain-cname"),
+				customDomainCNAMEFromCLI(c),
 				customDomainARecords,
+				customDomainTargetSuffix,
 			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
 			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
@@ -2241,7 +2246,7 @@ func newStartCommand() *cli.Command {
 						OpenRouter:                     openRouter,
 						OpenRouterSpend:                openRouter,
 						K8sClient:                      k8sClient,
-						ExpectedTargetCNAME:            c.String("custom-domain-cname"),
+						ExpectedTargetCNAME:            customDomainCNAMEFromCLI(c),
 						ExpectedARecords:               customDomainARecords,
 						GitHubEvidenceToken:            c.String("github-evidence-token"),
 						SiteURL:                        siteURL,
