@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -282,6 +283,34 @@ func TestSharedWorkloadGrant_InferenceRecordsUnadmittedSubject(t *testing.T) {
 	requireWorkloadGrantRefused(t, exchangeWorkloadInference(t, f, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims)))
 	requireSharedWorkloadRow(t, f, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted), stranger)
 	require.Len(t, rec.Rows(), 2)
+}
+
+// An inference grant checks its project only after the assertion, so a refused project is recorded.
+func TestSharedWorkloadGrant_InferenceRecordsProjectOutsideIssuer(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	issuerURL := f.sharedIssuer(t)
+	enableWorkloadInference(t, f)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	exchange := func(assertion string, projectID uuid.UUID) *httptest.ResponseRecorder {
+		return sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), url.Values{
+			"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}, "resource": {mcp.InferenceResource}, "project_id": {projectID.String()},
+		})
+	}
+
+	w := exchange(f.assertion(t, issuerURL), uuid.New())
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeResourceMismatch)
+	requireSharedWorkloadRow(t, f, row, f.subject)
+	require.Equal(t, "project_outside_issuer", row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+
+	requireWorkloadGrantRefused(t, exchange(forgeSignature(t, f.assertion(t, issuerURL)), uuid.New()))
+	require.Len(t, rec.Rows(), 1, "an unverified assertion writes no row and learns nothing about the project")
+	require.Empty(t, f.workloadSessions(t))
 }
 
 func TestSharedWorkloadGrant_PlatformRecordsRefusals(t *testing.T) {
