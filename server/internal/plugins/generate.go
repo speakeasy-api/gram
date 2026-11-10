@@ -444,6 +444,13 @@ const (
 //go:embed platform_mcp_skills/*/SKILL.md
 var platformMCPSkillsFS embed.FS
 
+// platformMCPClaudeIcon is the Speakeasy mark the Claude plugin directory uses
+// as the listing icon. The directory reads .claude-plugin/icon.png and wants a
+// square PNG of 512 to 2048 px under 2 MB.
+//
+//go:embed platform_mcp_assets/icon.png
+var platformMCPClaudeIcon []byte
+
 // PluginMCPFingerprint returns one plugin's entry of publishMCPFingerprints without
 // generating the rest of the project: the fingerprint a publish would record
 // for this plugin's MCP files under cfg.
@@ -3349,6 +3356,7 @@ func generatePlatformMCPPackage(cfg GenerateConfig, platformURL string) (map[str
 		return nil, fmt.Errorf("marshal Platform MCP plugin.json: %w", err)
 	}
 	files[".claude-plugin/plugin.json"] = meta
+	files[".claude-plugin/icon.png"] = bytes.Clone(platformMCPClaudeIcon)
 
 	mcpConfig, err := marshalJSON(claudeMCPConfig{MCPServers: map[string]claudeMCPServer{
 		platformMCPServerName: {

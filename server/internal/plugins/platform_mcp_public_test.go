@@ -1,7 +1,10 @@
 package plugins
 
 import (
+	"bytes"
 	"encoding/json"
+	"image"
+	_ "image/png"
 	"strings"
 	"testing"
 
@@ -96,6 +99,17 @@ func TestPublicPlatformMCPFiles(t *testing.T) {
 	var meta claudePluginMeta
 	require.NoError(t, json.Unmarshal(files["speakeasy/.claude-plugin/plugin.json"], &meta))
 	require.Equal(t, "0."+platformMCPGeneratorVersion+".17", meta.Version, "the CI counter must reach the manifest so installs refresh")
+
+	// The Claude plugin directory warns when the listing has no icon. It reads
+	// .claude-plugin/icon.png: a square PNG, 512 to 2048 px, under 2 MB.
+	icon := files["speakeasy/.claude-plugin/icon.png"]
+	require.Less(t, len(icon), 2<<20)
+	iconConfig, iconFormat, err := image.DecodeConfig(bytes.NewReader(icon))
+	require.NoError(t, err)
+	require.Equal(t, "png", iconFormat)
+	require.Equal(t, iconConfig.Width, iconConfig.Height)
+	require.GreaterOrEqual(t, iconConfig.Width, 512)
+	require.LessOrEqual(t, iconConfig.Width, 2048)
 }
 
 // The public repository is world-readable, so nothing org-derived or secret may
