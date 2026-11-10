@@ -1327,3 +1327,15 @@ func TestShutdownAndWait_ASmallBudgetStillDrains(t *testing.T) {
 	require.Equal(t, int64(5), conn.rows.Load())
 	require.Zero(t, recorder.droppedTotal(t))
 }
+
+// A row its caller knows won't be stored stays out of the steps metric.
+func TestRecord_UnstoredRowIsNotCountedAsAStep(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorder(t, conn, testConfig())
+	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient, Unstored())
+	require.Zero(t, stepsCounted(t, recorder))
+	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient)
+	require.Equal(t, int64(1), stepsCounted(t, recorder))
+}

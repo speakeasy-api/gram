@@ -16,6 +16,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -281,7 +283,33 @@ func TestInvalidClientHappened_LogsOffSkipsTheBindingLookup(t *testing.T) {
 	s := &RefreshService{connections: mcpconnectionattemptstest.NewLogsOff(t).Recorder}
 	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
 
-	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession()), "the steps metric keeps the code refreshHappened chose")
+	what, stored := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
+	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, what)
+	require.False(t, stored, "an unchecked code stays out of the steps metric")
+}
+
+// A logs-off refresh row is marked unstored, so the steps metric never counts its unchecked code.
+func TestRecordRefresh_LogsOffInvalidClientIsNotCountedAsAStep(t *testing.T) {
+	t.Parallel()
+	reader := sdkmetric.NewManualReader()
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), nil, func(context.Context, string) (bool, error) { return false, nil })
+	t.Cleanup(func() { _ = recorder.ShutdownAndWait(context.WithoutCancel(t.Context())) })
+	s := &RefreshService{connections: recorder}
+	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
+	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerRegistrationEndpoint: pgtype.Text{String: "https://idp.example.com/register", Valid: true}}
+	what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, client, nil)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, what)
+
+	s.recordRefresh(t.Context(), RefreshIn(scope), boundSession(), client, remotesessionmetrics.RefreshTriggerRequest, remotesessionmetrics.RefreshOutcomeInvalidClient, nil)
+
+	var collected metricdata.ResourceMetrics
+	require.NoError(t, reader.Collect(t.Context(), &collected))
+	for _, sm := range collected.ScopeMetrics {
+		for _, m := range sm.Metrics {
+			require.NotEqual(t, "mcp.connection.steps", m.Name, "no step was counted")
+		}
+	}
 }
 
 // A database that accepts and never answers holds the refresh only for the lookup's bound.
@@ -291,10 +319,10 @@ func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T)
 	scope := mcpconnectionattempts.ProviderSessionScope("org-stalled", uuid.New(), mcpconnectionattempts.AppDCR)
 
 	started := time.Now()
-	what := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
+	what, _ := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
 
 	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "an unknown binding never recommends re-registration")
-	require.Less(t, time.Since(started), 2*emaBindingLookupTimeout)
+	require.Less(t, time.Since(started), 3*time.Second, "well under the old 5 second wait")
 }
 
 // A cancelled request must not read as logs off: the cached feature check answers false then.
@@ -306,5 +334,6 @@ func TestInvalidClientHappened_ACancelledRequestStillChecksLogs(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
-	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, s.invalidClientHappened(ctx, RefreshIn(scope), boundSession()), "logs read as on, so the lookup ran and timed out")
+	what, _ := s.invalidClientHappened(ctx, RefreshIn(scope), boundSession())
+	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "logs read as on, so the lookup ran and timed out")
 }

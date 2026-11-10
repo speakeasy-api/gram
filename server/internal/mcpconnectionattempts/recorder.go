@@ -122,6 +122,12 @@ func Grant(grantType string) Option {
 	}}
 }
 
+// Unstored marks a row whose caller found, through Stores, that it won't be stored. The
+// steps metric then leaves it out, as it would any row the writer drops for logs off.
+func Unstored() Option {
+	return Option{apply: func(row *Row) { row.unstored = true }}
+}
+
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
@@ -219,6 +225,9 @@ type Row struct {
 
 	// client waits here for the writer to read it. It is never stored or logged.
 	client requestClient
+
+	// unstored marks a row its caller knows won't be stored, so the steps metric skips it.
+	unstored bool
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -295,6 +304,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		Repeats:               0,
 		DeviceKey:             "",
 		client:                requestClient{present: false, userAgent: "", forwardedFor: "", appFamily: attempt.scope.appFamily, reported: nil},
+		unstored:              false,
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -919,7 +929,7 @@ func (r *Recorder) insert(rows []Row) bool {
 }
 
 func (r *Recorder) countStep(ctx context.Context, row Row) {
-	if r.steps == nil {
+	if r.steps == nil || row.unstored {
 		return
 	}
 	r.steps.Add(ctx, 1, metric.WithAttributes(
