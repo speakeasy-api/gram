@@ -72,6 +72,17 @@ sharing keep working:
 agent cannot create the separate registration the dashboard offers instead,
 because new credentials and their secrets are created in the dashboard. A
 refusal would remove the outcome without giving the agent another way to it.
+
+No Platform MCP tool creates a sign-in from a template. `template_client_id`
+puts a stored client secret into a new registration, so a tool for it would be
+the first Platform MCP operation that creates credential material. That needs
+the mutation contract the removal tool above also lacks: a preview of the exact
+stored registration and what is copied from it, live authorization for the
+project and actor, explicit confirmation, replay protection so a retried call
+does not leave a second copy of the secret, atomic audit, and a post-write
+read. A managed assistant must not gain it by being able to use a credential.
+Until that contract exists, an independent sign-in is created in the
+dashboard, where the administrator reviews the copied settings before saving.
 Sharing shared credentials (service accounts, stored and caller-supplied
 headers) is not affected anywhere.
 

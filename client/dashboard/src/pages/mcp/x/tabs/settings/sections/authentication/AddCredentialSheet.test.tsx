@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   createDocumentSignIn: vi.fn(),
   deleteSignIn: vi.fn(),
   pickableIssuers: [] as unknown[],
+  createOptions: null as { onError?: (error: Error) => void } | null,
   clientPages: [] as unknown[][],
   registrationsFailed: false,
   registrations: [] as unknown[],
@@ -100,10 +101,12 @@ vi.mock("@gram/client/react-query/attachAuthClientToMcpServer.js", () => ({
 }));
 
 vi.mock("@gram/client/react-query/createAuthClient.js", () => ({
-  useCreateAuthClientMutation: () => ({
-    mutate: mocks.create,
-    isPending: false,
-  }),
+  useCreateAuthClientMutation: (options: {
+    onError?: (error: Error) => void;
+  }) => {
+    mocks.createOptions = options;
+    return { mutate: mocks.create, isPending: false };
+  },
 }));
 
 vi.mock("@/lib/remote-identity", async (importOriginal) => ({
@@ -878,6 +881,10 @@ describe("AddCredentialSheet", () => {
       ["a shared credential", { credentialOwner: "self" }],
       ["one the provider rejected", { upstreamRejectedAt: new Date() }],
       [
+        "one an identity provider connection manages",
+        { identityProviderConnectionId: "connection-1" },
+      ],
+      [
         "one that signs with a key set",
         { tokenEndpointAuthMethod: "private_key_jwt" },
       ],
@@ -910,9 +917,9 @@ describe("AddCredentialSheet", () => {
       renderSheet();
       startFromExisting();
 
-      // The credential save fails: the mutation never reports success.
       add();
       await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(1));
+      act(() => mocks.createOptions?.onError?.(new Error("save refused")));
       add();
       await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
       expect(mocks.createSignIn).toHaveBeenCalledTimes(1);
@@ -923,6 +930,22 @@ describe("AddCredentialSheet", () => {
       expect(mocks.deleteSignIn).not.toHaveBeenCalledWith({
         id: "stored-sign-in",
       });
+    });
+
+    it("asks for a secret when a method that sends one has none to copy", () => {
+      setup();
+      renderSheet();
+      startFromExisting();
+      const submit = () =>
+        screen.getByRole("button", { name: "Add credential" });
+      expect(submit().hasAttribute("disabled")).toBe(false);
+
+      fireEvent.change(screen.getByPlaceholderText("client_abc123"), {
+        target: { value: "another-app" },
+      });
+
+      expect(submit().hasAttribute("disabled")).toBe(true);
+      expect(screen.getByText(/Enter the client secret/)).toBeTruthy();
     });
 
     it("creates nothing when the sign-in cannot be made", async () => {

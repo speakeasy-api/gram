@@ -41,6 +41,8 @@ const PREFERRED_AUTH_METHODS = [
 type PreferredAuthMethod = (typeof PREFERRED_AUTH_METHODS)[number];
 
 /** The most preferred method the issuer advertises, or undefined for none. */
+export type CopyableAuthMethod = PreferredAuthMethod;
+
 function firstPreferredAuthMethod(
   supported: readonly string[],
 ): PreferredAuthMethod | undefined {
@@ -84,6 +86,7 @@ type TemplateCandidate = {
   upstreamRejectedAt?: Date | undefined;
   clientIdMetadataUri?: string | undefined;
   tokenEndpointAuthMethod?: string | undefined;
+  identityProviderConnectionId?: string | undefined;
 };
 
 /**
@@ -91,8 +94,9 @@ type TemplateCandidate = {
  * the server's refusals so the rest stay out of a list rather than failing at
  * Save. A client Speakeasy hosts a metadata document for has no credentials to
  * copy and is registered again, which needs the provider to still support it.
- * A shared credential, one the provider rejected, and one that signs with a key
- * set registered for its own record cannot stand in a second record.
+ * A shared credential, one the provider rejected, one an identity provider
+ * connection manages, and one that signs with a key set registered for its own
+ * record cannot stand in a second record.
  */
 export function usableAsClientTemplate(
   candidate: TemplateCandidate,
@@ -100,6 +104,8 @@ export function usableAsClientTemplate(
 ): boolean {
   if (candidate.credentialOwner !== "subject") return false;
   if (candidate.upstreamRejectedAt) return false;
+  // Its registration belongs to the connection that manages it.
+  if (candidate.identityProviderConnectionId) return false;
   if (candidate.clientIdMetadataUri) return metadataDocumentSupported;
   // The SDK enum does not list private_key_jwt, but the server stores it.
   return candidate.tokenEndpointAuthMethod !== "private_key_jwt";

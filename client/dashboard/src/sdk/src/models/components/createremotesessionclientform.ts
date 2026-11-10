@@ -52,7 +52,7 @@ export type CreateRemoteSessionClientFormTokenEndpointAuthMethod = ClosedEnum<
 >;
 
 /**
- * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+ * Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.
  */
 export type CreateRemoteSessionClientForm = {
   /**
@@ -92,7 +92,7 @@ export type CreateRemoteSessionClientForm = {
    */
   scope?: Array<string> | undefined;
   /**
-   * An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.
+   * An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.
    */
   templateClientId?: string | undefined;
   /**

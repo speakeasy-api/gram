@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -39,8 +41,10 @@ type clientTemplate struct {
 }
 
 // loadClientTemplate reads the template a new client of issuerID with
-// clientID is created from, as visible to the project. A refusal is an
-// *IdentityError whose message is safe to show the caller.
+// clientID is created from, as visible to the project, and share-locks its
+// row: inside a transaction a rotated or rejected template cannot be copied
+// stale. A refusal is an *IdentityError whose message is safe to show the
+// caller.
 //
 // The stored secret belongs to one upstream registration, so it is only
 // handed to a client with the template's own issuer and client_id. Templates
@@ -55,11 +59,14 @@ type clientTemplate struct {
 //   - a client managed by an identity provider connection, whose secret
 //     belongs to that connection;
 //   - a client the issuer has rejected, whose credentials no longer work.
+//
+// A template whose stored secret has expired is refused by requireSecret,
+// unless the caller supplies a secret of its own.
 func loadClientTemplate(ctx context.Context, q *repo.Queries, projectID uuid.UUID, organizationID string, templateID, issuerID uuid.UUID, clientID string) (clientTemplate, error) {
-	row, err := q.GetRemoteSessionClientByID(ctx, repo.GetRemoteSessionClientByIDParams{
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
+	source, err := q.LockRemoteSessionClientTemplate(ctx, repo.LockRemoteSessionClientTemplateParams{
 		ID:             templateID,
+		ProjectID:      projectID,
+		OrganizationID: conv.ToPGText(organizationID),
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return clientTemplate{}, identityRefusal(ErrIdentityNotFound, err, "template remote session client not found")
@@ -67,7 +74,6 @@ func loadClientTemplate(ctx context.Context, q *repo.Queries, projectID uuid.UUI
 	if err != nil {
 		return clientTemplate{}, fmt.Errorf("get template remote session client: %w", err)
 	}
-	source := row.RemoteSessionClient
 
 	switch {
 	case source.RemoteSessionIssuerID != issuerID:
@@ -96,10 +102,17 @@ func loadClientTemplate(ctx context.Context, q *repo.Queries, projectID uuid.UUI
 	}, nil
 }
 
-// requireSecret refuses a secret-based token endpoint method when
-// neither the caller nor the template supplies a secret.
+// requireSecret refuses a copy that could not authenticate: a stored secret
+// that has expired, or a secret-based token endpoint method when neither the
+// caller nor the template supplies a secret.
 func (t clientTemplate) requireSecret(method string, suppliedSecret bool) error {
-	if suppliedSecret || t.secretEncrypted.Valid {
+	if suppliedSecret {
+		return nil
+	}
+	if t.secretEncrypted.Valid {
+		if t.clientSecretExpiresAt.Valid && !t.clientSecretExpiresAt.Time.After(time.Now()) {
+			return identityRefusal(ErrIdentityInvalid, nil, "the template client's stored secret has expired; enter a current client_secret instead of copying it")
+		}
 		return nil
 	}
 	if method == string(TokenEndpointAuthMethodBasic) || method == string(TokenEndpointAuthMethodPost) {

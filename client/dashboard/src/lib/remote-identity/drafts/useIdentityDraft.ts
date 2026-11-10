@@ -22,6 +22,7 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   advertisedScopes,
+  type CopyableAuthMethod,
   copyableAuthMethod,
   normalizeScopes,
   serverIdentityAuthMethod,
@@ -331,6 +332,15 @@ export type UserIdentityDraft = {
    * ID is still its own and no replacement secret was typed.
    */
   copiesSecret: boolean;
+  /** Audience the new client carries over from the starting client, editable. */
+  startingAudience: string;
+  setStartingAudience: (value: string) => void;
+  /**
+   * Token endpoint method the new client carries over; "" lets the server
+   * decide from whether it holds a secret.
+   */
+  startingAuthMethod: CopyableAuthMethod | "";
+  setStartingAuthMethod: (value: CopyableAuthMethod | "") => void;
 
   /** The provider supports both CIMD and DCR, so the operator may pick one. */
   methodChoiceAvailable: boolean;
@@ -404,6 +414,10 @@ export function useUserIdentityDraft({
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [scopes, setScopes] = useState<string[]>([]);
+  const [startingAudience, setStartingAudience] = useState("");
+  const [startingAuthMethod, setStartingAuthMethod] = useState<
+    CopyableAuthMethod | ""
+  >("");
   const [localStatus, setLocalStatus] = useState<UserIdentityStatus>({
     kind: "idle",
   });
@@ -416,6 +430,8 @@ export function useUserIdentityDraft({
     setClientId("");
     setClientSecret("");
     setScopes([]);
+    setStartingAudience("");
+    setStartingAuthMethod("");
     setLocalStatus({ kind: "idle" });
   };
 
@@ -1003,11 +1019,12 @@ export function useUserIdentityDraft({
           draft?.tokenEndpointAuthMethodsSupported ??
           [],
       );
-      if (copiesSecret) {
-        // The secret stays the starting client's, so its method does too.
-        tokenEndpointAuthMethod = copyableAuthMethod(
-          template?.tokenEndpointAuthMethod,
-        );
+      if (template && !template.clientIdMetadataUri && startingAuthMethod) {
+        // The method the operator reviewed for the new client.
+        tokenEndpointAuthMethod = startingAuthMethod;
+      } else if (copiesSecret) {
+        // The server decides from the secret it copies.
+        tokenEndpointAuthMethod = undefined;
       } else if (manualNeeded && !secret) {
         // A manual client without a secret is a public client; naming a
         // secret-based method for it is refused by the server.
@@ -1020,7 +1037,7 @@ export function useUserIdentityDraft({
         // callback from. The secret never passes through the browser.
         templateClientId: sameRegistration ? template?.id : undefined,
         scope: requestedScopes.length > 0 ? requestedScopes : undefined,
-        audience: template?.audience || undefined,
+        audience: template ? startingAudience.trim() || undefined : undefined,
         tokenEndpointAuthMethod,
       };
 
@@ -1222,6 +1239,8 @@ export function useUserIdentityDraft({
         setClientId("");
         setClientSecret("");
         setScopes([]);
+        setStartingAudience("");
+        setStartingAuthMethod("");
       }
       setChoicePick(next);
       setLocalStatus({ kind: "idle" });
@@ -1239,9 +1258,17 @@ export function useUserIdentityDraft({
       // Never a stored or masked secret: blank asks the server to copy it.
       setClientSecret("");
       setScopes(normalizeScopes(picked.scope ?? []));
+      setStartingAudience(picked.audience ?? "");
+      setStartingAuthMethod(
+        copyableAuthMethod(picked.tokenEndpointAuthMethod) ?? "",
+      );
       setLocalStatus({ kind: "idle" });
     },
     copiesSecret,
+    startingAudience,
+    setStartingAudience,
+    startingAuthMethod,
+    setStartingAuthMethod,
 
     methodChoiceAvailable,
     registrationMethod,

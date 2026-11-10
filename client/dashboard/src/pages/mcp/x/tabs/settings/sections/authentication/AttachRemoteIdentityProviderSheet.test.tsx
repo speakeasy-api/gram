@@ -514,6 +514,50 @@ describe("AttachRemoteIdentityProviderSheet", () => {
       expect(mocks.attachClient).not.toHaveBeenCalled();
     });
 
+    it("clears a starting client's settings when the authorization server changes", async () => {
+      const other = {
+        id: "provider-other",
+        slug: "other",
+        name: "Other provider",
+        issuer: "https://other.example.test",
+      };
+      mocks.issuersPage.mockReturnValue([provider, other]);
+      mocks.issuerById.mockImplementation((id: string) =>
+        id === other.id ? other : provider,
+      );
+      mocks.issuerClients.mockReturnValue([stored]);
+      renderSheet();
+      fireEvent.click(screen.getByText("Choose an authorization server…"));
+      fireEvent.click(
+        screen.getByText("Catalog provider — https://catalog.example.test"),
+      );
+      await waitFor(() =>
+        expect(
+          (screen.getByPlaceholderText("client_abc123") as HTMLInputElement)
+            .value,
+        ).toBe("stored-app"),
+      );
+
+      // The other server has no client to start from.
+      mocks.issuerClients.mockReturnValue([]);
+      fireEvent.click(screen.getAllByRole("combobox")[0] as HTMLElement);
+      fireEvent.click(
+        screen.getByText("Other provider — https://other.example.test"),
+      );
+
+      await waitFor(() =>
+        expect(
+          (screen.getByPlaceholderText("client_abc123") as HTMLInputElement)
+            .value,
+        ).toBe(""),
+      );
+      expect(
+        screen
+          .getByRole("button", { name: "Attach Authorization Server" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+    });
+
     it("offers only the from-scratch form when no stored client can be a starting point", () => {
       pickProvider([{ ...stored, credentialOwner: "self" }]);
 

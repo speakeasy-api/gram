@@ -568,7 +568,8 @@ type ServerIdentityClientConfiguration struct {
 	// associations are not copied, and the template is unchanged. Refused for a
 	// client metadata document client, a private_key_jwt client, a
 	// credential_owner self client, a client managed by an identity provider
-	// connection, and a client the issuer has rejected.
+	// connection, a client the issuer has rejected, and a template whose stored
+	// secret has expired unless client_secret is supplied.
 	TemplateClientID *string
 	// How the client authenticates at the provider token endpoint, or the
 	// preferred method for DCR.

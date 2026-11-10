@@ -641,26 +641,31 @@ export function AttachRemoteIdentityProviderSheet({
     setSelectedClientId("");
   }, [selectedIssuerId, mode]);
 
-  // Fill the form from the client the new one starts from, for review. Only
-  // what the listing returns is copied here; the secret field stays blank.
+  // The client fields follow the client the new one starts from: filled from
+  // it for review, and emptied when the issuer changes or it goes away, so a
+  // previous registration's settings never stay behind as if typed. Only what
+  // the listing returns is copied here; the secret field stays blank.
   const startingClient =
     effectiveClientMode === "select" ? selectedClient : undefined;
   const startingClientKey = startingClient?.id ?? "";
   useEffect(() => {
-    if (!startingClient) return;
     setClientId(
-      startingClient.clientIdMetadataUri ? "" : startingClient.clientId,
+      !startingClient || startingClient.clientIdMetadataUri
+        ? ""
+        : startingClient.clientId,
     );
     setClientSecret("");
     setTokenEndpointAuthMethod(
-      copyableAuthMethod(startingClient.tokenEndpointAuthMethod) ?? "",
+      copyableAuthMethod(startingClient?.tokenEndpointAuthMethod) ?? "",
     );
-    setScopeOverride(startingClient.scope?.join(", ") ?? "");
-    setAudienceOverride(startingClient.audience ?? "");
-    // Keyed by the pick alone: a refetch of the same client must not discard
-    // the operator's edits.
+    setScopeOverride(
+      (startingClient ? startingClient.scope : initialScopes)?.join(", ") ?? "",
+    );
+    setAudienceOverride(startingClient?.audience ?? "");
+    // Keyed by the issuer and the pick alone: a refetch of the same client
+    // must not discard the operator's edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startingClientKey]);
+  }, [selectedIssuerId, mode, startingClientKey]);
 
   // Leaving a starting client behind must not leave its settings posing as
   // typed ones.

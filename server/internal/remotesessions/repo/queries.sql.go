@@ -12585,6 +12585,65 @@ func (q *Queries) LockRemoteSessionClientForSessionWrite(ctx context.Context, id
 	return id_2, err
 }
 
+const lockRemoteSessionClientTemplate = `-- name: LockRemoteSessionClientTemplate :one
+SELECT c.id, c.project_id, c.organization_id, c.attachment_scope, c.remote_session_issuer_id, c.client_id, c.client_secret_encrypted, c.client_id_issued_at, c.client_secret_expires_at, c.token_endpoint_auth_method, c.json_web_key_set_id, c.scope, c.grant_types, c.audience, c.token_endpoint_auth_audience_format, c.client_id_metadata_uri, c.legacy_callback_url, c.callback_base_url, c.resource_identifier, c.resource_name, c.resource_documentation, c.resource_policy_uri, c.resource_tos_uri, c.upstream_rejected_at, c.identity_provider_connection_id, c.credential_owner, c.display_name, c.forward_client_name, c.created_at, c.updated_at, c.deleted_at, c.deleted
+FROM remote_session_clients AS c
+WHERE c.id = $1
+  AND (c.project_id = $2::uuid OR (c.project_id IS NULL AND c.organization_id = $3))
+  AND c.deleted IS FALSE
+FOR SHARE
+`
+
+type LockRemoteSessionClientTemplateParams struct {
+	ID             uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID pgtype.Text
+}
+
+// Reads the client a new client is created from, holding it against a
+// concurrent secret rotation, re-registration or rejection until the copy
+// commits. FOR SHARE lets other copies and foreign-key checks proceed. Same
+// visibility as GetRemoteSessionClientByID.
+func (q *Queries) LockRemoteSessionClientTemplate(ctx context.Context, arg LockRemoteSessionClientTemplateParams) (RemoteSessionClient, error) {
+	row := q.db.QueryRow(ctx, lockRemoteSessionClientTemplate, arg.ID, arg.ProjectID, arg.OrganizationID)
+	var i RemoteSessionClient
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.OrganizationID,
+		&i.AttachmentScope,
+		&i.RemoteSessionIssuerID,
+		&i.ClientID,
+		&i.ClientSecretEncrypted,
+		&i.ClientIDIssuedAt,
+		&i.ClientSecretExpiresAt,
+		&i.TokenEndpointAuthMethod,
+		&i.JsonWebKeySetID,
+		&i.Scope,
+		&i.GrantTypes,
+		&i.Audience,
+		&i.TokenEndpointAuthAudienceFormat,
+		&i.ClientIDMetadataUri,
+		&i.LegacyCallbackUrl,
+		&i.CallbackBaseUrl,
+		&i.ResourceIdentifier,
+		&i.ResourceName,
+		&i.ResourceDocumentation,
+		&i.ResourcePolicyUri,
+		&i.ResourceTosUri,
+		&i.UpstreamRejectedAt,
+		&i.IdentityProviderConnectionID,
+		&i.CredentialOwner,
+		&i.DisplayName,
+		&i.ForwardClientName,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockRemoteSessionClientUserSessionIssuerLink = `-- name: LockRemoteSessionClientUserSessionIssuerLink :exec
 SELECT 1
 FROM remote_session_client_user_session_issuers

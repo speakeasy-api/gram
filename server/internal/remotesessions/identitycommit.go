@@ -1758,8 +1758,9 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 	secretExpiresAt := credentials.SecretExpiresAt
 	legacyCallbackURL := false
 	if credentials.TemplateClientID.Valid {
-		// Read again under the commit's locks: the row copied is the one stored
-		// now, and a template that stopped qualifying since Preflight is refused.
+		// Read again and share-lock the row for the rest of the transaction:
+		// the copy is of the row stored now, and a template that stopped
+		// qualifying since Preflight is refused.
 		template, err := c.loadTemplate(ctx, tx.q, credentials)
 		if err != nil {
 			return repo.RemoteSessionClient{}, err

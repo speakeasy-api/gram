@@ -1118,6 +1118,27 @@ describe("RemoteMcpIdentitySectionBody", () => {
       expect(committed().clientConfiguration.templateClientId).toBeUndefined();
     });
 
+    it("lets the operator review and change the copied audience and auth method", async () => {
+      connectClient();
+      withStored(stored());
+      const { result } = startFrom("stored-client");
+      expect(result.current).toMatchObject({
+        startingAudience: "https://api.example.test",
+        startingAuthMethod: "client_secret_post",
+      });
+      act(() => {
+        result.current.setStartingAudience("");
+        result.current.setStartingAuthMethod("client_secret_basic");
+      });
+      await act(async () => expect(await result.current.save()).toBe(true));
+
+      expect(committed().clientConfiguration).toMatchObject({
+        templateClientId: "stored-client",
+        tokenEndpointAuthMethod: "client_secret_basic",
+      });
+      expect(committed().clientConfiguration.audience).toBeUndefined();
+    });
+
     it("registers a hosted document client again instead of copying it", async () => {
       autoConfigurableProvider();
       withStored(
@@ -1146,6 +1167,10 @@ describe("RemoteMcpIdentitySectionBody", () => {
     it.each([
       ["a shared credential", { credentialOwner: "self" }],
       ["one the provider rejected", { upstreamRejectedAt: new Date(0) }],
+      [
+        "one an identity provider connection manages",
+        { identityProviderConnectionId: "connection-1" },
+      ],
       [
         "one that signs with a key set",
         { tokenEndpointAuthMethod: "private_key_jwt" },

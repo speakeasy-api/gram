@@ -203,6 +203,8 @@ export function AddCredentialSheet({
   const pending = attach.isPending || create.isPending || makingSignIn;
 
   const close = () => {
+    // A save in flight may be about to use the sign-in made for it.
+    if (pending) return;
     discardMadeSignIn();
     onOpenChange(false);
   };

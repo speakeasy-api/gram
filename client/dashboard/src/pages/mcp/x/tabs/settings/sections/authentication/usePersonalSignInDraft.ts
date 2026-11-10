@@ -179,6 +179,22 @@ export function usePersonalSignInDraft({
   } else if (clientType === "manual" && !clientId.trim()) {
     problem = "Enter the client ID.";
   }
+  // A method that sends a secret needs one: typed, or the stored one the
+  // server copies for the same registration.
+  const typesCredentials =
+    source === "existing"
+      ? !!starting && !startsFromDocument
+      : clientType === "manual";
+  if (
+    !problem &&
+    typesCredentials &&
+    (authMethod === "client_secret_basic" ||
+      authMethod === "client_secret_post") &&
+    !clientSecret.trim() &&
+    !sameRegistration
+  ) {
+    problem = "Enter the client secret, or choose an auth method without one.";
+  }
 
   const signature = JSON.stringify([
     source,

@@ -230,6 +230,9 @@ func TestCommitServerIdentityConfigurationRefusesUnusableTemplates(t *testing.T)
 		p.TokenEndpointAuthMethod = conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodNone))
 	})
 
+	expired := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
+		p.ClientSecretExpiresAt = conv.ToPGTimestamptz(time.Now().UTC().Add(-time.Hour))
+	})
 	keySigned := createTemplateClient(t, ctx, ti, providerID, func(p *repo.CreateRemoteSessionClientParams) {
 		p.TokenEndpointAuthMethod = conv.ToPGText(string(remotesessions.TokenEndpointAuthMethodPrivateKeyJWT))
 		p.JsonWebKeySetID = uuid.NullUUID{UUID: createJsonWebKeySet(t, ctx, ti.conn, organizationID, "refusal-key-set"), Valid: true}
@@ -284,6 +287,13 @@ func TestCommitServerIdentityConfigurationRefusesUnusableTemplates(t *testing.T)
 			code: oops.CodeBadRequest,
 		},
 		{
+			name: "a stored secret that has expired",
+			mutate: func(p *sessionsgen.CommitServerIdentityConfigurationPayload) {
+				p.ClientConfiguration.TemplateClientID = conv.PtrEmpty(expired.ID.String())
+			},
+			code: oops.CodeBadRequest,
+		},
+		{
 			name: "a client that signs in with a key set",
 			mutate: func(p *sessionsgen.CommitServerIdentityConfigurationPayload) {
 				p.ClientConfiguration.TemplateClientID = conv.PtrEmpty(keySigned.ID.String())
@@ -314,7 +324,7 @@ func TestCommitServerIdentityConfigurationRefusesUnusableTemplates(t *testing.T)
 			code: oops.CodeBadRequest,
 		},
 	}
-	templates := []uuid.UUID{usable.ID, rejected.ID, document.ID, serviceAccount.ID, public.ID, keySigned.ID}
+	templates := []uuid.UUID{usable.ID, rejected.ID, document.ID, serviceAccount.ID, public.ID, keySigned.ID, expired.ID}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -64234,7 +64234,7 @@ paths:
                 name: AttachUserSessionIssuer
     /rpc/remoteSessionClients.create:
         post:
-            description: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.
+            description: 'Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client''s upstream registration: the server copies that client''s secret and callback into the new record, and neither is returned to the caller.'
             operationId: createRemoteSessionClient
             parameters:
                 - allowEmptyValue: true
@@ -105697,7 +105697,7 @@ components:
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
                 template_client_id:
                     type: string
-                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.'
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
                     format: uuid
                 token_endpoint_auth_audience_format:
                     type: string
@@ -105719,7 +105719,7 @@ components:
                         type: string
                         format: uuid
                     description: The user_session_issuers to attach this client to via the join table. Omit or pass an empty array to create a standalone client with no attachments.
-            description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer.
+            description: Form for creating a remote_session_client. Caller supplies client_id (and optional client_secret) obtained out-of-band from the upstream issuer, or names a stored client in template_client_id whose secret and callback the server copies without returning them.
             required:
                 - remote_session_issuer_id
                 - client_id
@@ -123008,6 +123008,10 @@ components:
                     type: string
                     description: The remote_session_client id.
                     format: uuid
+                identity_provider_connection_id:
+                    type: string
+                    description: The identity provider connection that manages this client. Null for a client administrators manage directly. A managed client is changed through its connection and cannot be duplicated or used as a template.
+                    format: uuid
                 json_web_key_set_id:
                     type: string
                     description: The organization JSON Web Key Set attached to this client, set on create or through attachKeySet and detachKeySet. Null when no key set is attached.
@@ -127421,7 +127425,7 @@ components:
                     description: Each value must be an RFC 6749 scope token.
                 template_client_id:
                     type: string
-                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.'
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, a client the issuer has rejected, and a template whose stored secret has expired unless client_secret is supplied.'
                     format: uuid
                 token_endpoint_auth_method:
                     type: string

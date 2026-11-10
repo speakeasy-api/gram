@@ -778,6 +778,7 @@ function StartingClientFields({
             disabled={disabled}
             providerName={providerName}
           />
+          <StartingAudienceField draft={draft} disabled={disabled} />
         </div>
       ) : starting ? (
         <ManualCredentialsFields
@@ -881,6 +882,78 @@ function ScopeField({
   );
 }
 
+/** The audience a client started from a stored one carries over, for review. */
+function StartingAudienceField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <>
+      <Text small className="block font-medium">
+        Audience
+      </Text>
+      <Input
+        value={draft.startingAudience}
+        onChange={draft.setStartingAudience}
+        placeholder="None"
+        disabled={disabled}
+        aria-label="Audience"
+        noAutofill
+      />
+      <Text muted small className="block">
+        Sent with sign-in and token requests. Leave blank to send none.
+      </Text>
+    </>
+  );
+}
+
+const STARTING_AUTH_METHOD_DEFAULT = "default";
+
+/** How a client started from a stored one authenticates, for review. */
+function StartingAuthMethodField({
+  draft,
+  disabled,
+}: {
+  draft: UserIdentityDraft;
+  disabled: boolean;
+}): JSX.Element {
+  return (
+    <>
+      <Text small className="block font-medium">
+        Token endpoint auth method
+      </Text>
+      <Select
+        value={draft.startingAuthMethod || STARTING_AUTH_METHOD_DEFAULT}
+        onValueChange={(value) =>
+          draft.setStartingAuthMethod(
+            value === STARTING_AUTH_METHOD_DEFAULT
+              ? ""
+              : (value as UserIdentityDraft["startingAuthMethod"]),
+          )
+        }
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label="Token endpoint auth method">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={STARTING_AUTH_METHOD_DEFAULT}>
+            Decided from the secret
+          </SelectItem>
+          <SelectItem value="client_secret_basic">
+            client_secret_basic
+          </SelectItem>
+          <SelectItem value="client_secret_post">client_secret_post</SelectItem>
+          <SelectItem value="none">none</SelectItem>
+        </SelectContent>
+      </Select>
+    </>
+  );
+}
+
 function ManualCredentialsFields({
   draft,
   disabled,
@@ -951,6 +1024,12 @@ function ManualCredentialsFields({
           disabled={disabled}
           providerName={providerName}
         />
+        {startingClientId !== undefined ? (
+          <>
+            <StartingAudienceField draft={draft} disabled={disabled} />
+            <StartingAuthMethodField draft={draft} disabled={disabled} />
+          </>
+        ) : null}
       </AdvancedOptions>
       {registrationGuideUrl ? (
         <Button variant="secondary" size="sm" asChild>

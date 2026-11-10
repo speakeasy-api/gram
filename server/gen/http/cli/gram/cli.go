@@ -25267,7 +25267,7 @@ func remoteSessionClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    prepare-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 	fmt.Fprintln(os.Stderr, `    read-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
 	fmt.Fprintln(os.Stderr, `    unlink-ema: Explicit, tenant-scoped identity-chaining configuration. Mutations require project-write authorization; reads require project-read authorization. Does not exchange tokens or establish provider verification, trust, consent, or user access.`)
-	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
+	fmt.Fprintln(os.Stderr, `    create-remote-session-client: Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client's upstream registration: the server copies that client's secret and callback into the new record, and neither is returned to the caller.`)
 	fmt.Fprintln(os.Stderr, `    create-cimd: Register a remote_session_client in Client ID Metadata Document (CIMD) mode. Speakeasy generates the client_id (the URL of a hosted client metadata document) and serves the document publicly; the client carries no secret and authenticates with token_endpoint_auth_method=none. The owning issuer must advertise client_id_metadata_document_supported.`)
 	fmt.Fprintln(os.Stderr, `    update-remote-session-client: Rotate the client_secret or change the non-issuer settings on an existing remote_session_client. Issuer attachments are managed via attachUserSessionIssuer / detachUserSessionIssuer.`)
 	fmt.Fprintln(os.Stderr, `    attach-user-session-issuer: Attach a user_session_issuer to a remote_session_client by recording the binding in the join table. Rejected when another client is already bound to the same user_session_issuer for this client's remote_session_issuer.`)
@@ -25365,7 +25365,7 @@ func remoteSessionClientsCreateRemoteSessionClientUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer.`)
+	fmt.Fprintln(os.Stderr, `Register a remote_session_client by supplying a client_id and optional client_secret obtained out-of-band from the upstream issuer. With template_client_id, the new client instead reuses a stored client's upstream registration: the server copies that client's secret and callback into the new record, and neither is returned to the caller.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
