@@ -30,6 +30,8 @@ const (
 	serverKindToolset          = "toolset"
 	serverKindProviderSession  = "provider_session"
 	serverKindIdentityProvider = "identity_provider"
+
+	serverKindAuthorizationServer = "authorization_server"
 )
 
 // maxProviderHostBytes is the DNS limit on a host name plus room for a port.
@@ -131,6 +133,13 @@ func ProviderSessionScope(organizationID string, projectID uuid.UUID, app App) S
 // provider and no server or project, such as renewing a company sign-in.
 func IdentityProviderScope(organizationID string, app App) Scope {
 	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key}
+}
+
+// AuthorizationServerScope is an attempt on a shared authorization server, which serves every MCP
+// server of its issuer and reaches no one of them. server_id is the issuer; projectID is the
+// issuer's project, or uuid.Nil for an organization issuer.
+func AuthorizationServerScope(organizationID string, projectID, issuerID uuid.UUID, app App) Scope {
+	return Scope{organizationID, projectID, serverKindAuthorizationServer, issuerID, app.key}
 }
 
 // projectScope refuses a nil project, so a row can't lose its project by mistake.

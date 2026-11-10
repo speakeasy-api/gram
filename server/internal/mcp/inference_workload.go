@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -76,7 +77,14 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	// The target project has been checked against the authorization server tenancy.
 	// Use it for project-tier admission, including organization-owned issuers.
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
+	if err != nil && !presented.signatureVerified {
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
+	}
+	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	t := s.trackSharedWorkloadGrant(r, issuer, presented, subject)
+	defer t.Finish(ctx)
 	if err != nil {
+		refuseWorkloadGrantRow(ctx, t, err)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	// This new audience has no legacy consumers. Its inference-only ceiling
@@ -85,16 +93,16 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	version := runtimepolicy.InferenceIssuedPolicyVersion
 	grants, err := encodeInferenceWorkloadPolicy(projectID, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
 	credential := workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
-	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
 	// no project_id). Persist the exact target in the immutable resource and
 	// ceiling so completion never takes tenancy from caller headers.
 	session.Resource = InferenceResource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, tracker: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, tracker: t, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // AuthorizeWorkloadInference implements the completion-only authentication

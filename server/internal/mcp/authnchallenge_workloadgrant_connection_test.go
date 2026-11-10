@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/replay"
 )
@@ -220,4 +221,97 @@ func TestWorkloadAssertionGrant_RecordsReplayStoreOutage(t *testing.T) {
 
 	requireWorkloadGrantRefused(t, f.exchange(t, forgeSignature(t, f.assertion(t, f.advertisedIssuer)), f.resource))
 	require.Len(t, rec.Rows(), 1, "a forged signature writes no row")
+}
+
+// requireSharedWorkloadRow checks a row a shared authorization server wrote: it names the
+// issuer, not one MCP server, and the issuer's project.
+func requireSharedWorkloadRow(t *testing.T, f workloadGrantFixture, row mcpconnectionattempts.Row, subject string) {
+	t.Helper()
+
+	require.Equal(t, "authorization_server", row.ServerKind)
+	require.Equal(t, f.fx.target.UserSessionIssuerID.String(), row.ServerID)
+	require.Equal(t, f.fx.target.UserSessionIssuerID.String(), row.UserSessionIssuerID)
+	require.Equal(t, f.fx.orgID, row.OrganizationID)
+	require.Equal(t, f.fx.target.ProjectID, row.ProjectID)
+	require.Equal(t, oauthwire.GrantTypeJWTBearer, row.GrantType)
+	require.Equal(t, mcpconnectionattempts.AppWorkload.String(), row.AppKey)
+	require.Equal(t, urn.NewWorkloadSubject(f.issuerID, subject).String(), row.SubjectURN)
+}
+
+// A workload grant at a shared authorization server is recorded as on a per-server one.
+func TestSharedWorkloadGrant_RecordsSignInAndUnadmittedSubject(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	issuerURL := f.sharedIssuer(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	issuerID := f.fx.target.UserSessionIssuerID.String()
+
+	w := sharedToken(t, t.Context(), f.ti, issuerID, issuerWorkloadForm(f.assertion(t, issuerURL)))
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn)
+	requireSharedWorkloadRow(t, f, row, f.subject)
+	require.NotEmpty(t, row.UserSessionID)
+
+	const stranger = "repo:someone-else/app:ref:refs/heads/main"
+	claims := oauthtest.WorkloadClaims(f.issuer, stranger, issuerURL)
+	requireWorkloadGrantRefused(t, sharedToken(t, t.Context(), f.ti, issuerID, issuerWorkloadForm(oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims))))
+	row = rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted)
+	requireSharedWorkloadRow(t, f, row, stranger)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+
+	requireWorkloadGrantRefused(t, sharedToken(t, t.Context(), f.ti, issuerID, issuerWorkloadForm(forgeSignature(t, f.assertion(t, issuerURL)))))
+	require.Len(t, rec.Rows(), 2, "a forged signature writes no row")
+}
+
+func TestSharedWorkloadGrant_InferenceRecordsUnadmittedSubject(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	issuerURL := f.sharedIssuer(t)
+	enableWorkloadInference(t, f)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+
+	require.Equal(t, http.StatusOK, exchangeWorkloadInference(t, f, f.assertion(t, issuerURL)).Code)
+	requireSharedWorkloadRow(t, f, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn), f.subject)
+
+	const stranger = "repo:someone-else/app:ref:refs/heads/main"
+	claims := oauthtest.WorkloadClaims(f.issuer, stranger, issuerURL)
+	requireWorkloadGrantRefused(t, exchangeWorkloadInference(t, f, oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims)))
+	requireSharedWorkloadRow(t, f, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted), stranger)
+	require.Len(t, rec.Rows(), 2)
+}
+
+func TestSharedWorkloadGrant_PlatformRecordsRefusals(t *testing.T) {
+	t.Parallel()
+
+	f := newWorkloadGrantFixture(t)
+	issuerURL := f.sharedIssuer(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	resource := platformtools.PlatformToolsetURL(f.ti.serverURL, platformtools.AssistantsPlatformToolsetSlug)
+	exchange := func(assertion string, projectID uuid.UUID) *httptest.ResponseRecorder {
+		return sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), url.Values{
+			"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}, "resource": {resource}, "project_id": {projectID.String()},
+		})
+	}
+
+	platformWorkloadToken(t, f, issuerURL, platformtools.AssistantsPlatformToolsetSlug)
+	requireSharedWorkloadRow(t, f, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultSignedIn), f.subject)
+
+	const stranger = "repo:someone-else/app:ref:refs/heads/main"
+	claims := oauthtest.WorkloadClaims(f.issuer, stranger, issuerURL)
+	requireWorkloadGrantRefused(t, exchange(oauthtest.MintWorkloadAssertion(t, f.issuer, "JWT", claims), f.fx.target.ProjectID))
+	requireSharedWorkloadRow(t, f, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeSubjectNotAdmitted), stranger)
+
+	// The requested project is never the row's: it is checked only after the assertion.
+	w := exchange(f.assertion(t, issuerURL), uuid.New())
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeResourceMismatch)
+	requireSharedWorkloadRow(t, f, row, f.subject)
+	require.Equal(t, "project_outside_issuer", row.SubReason)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+	require.Len(t, rec.Rows(), 3)
 }

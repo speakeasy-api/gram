@@ -447,18 +447,12 @@ func (s *Service) handleWorkloadAssertionGrant(
 	}
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, endpoint.workloadTenancy(), []string{urls.Issuer, urls.Token}, assertion)
 	if err != nil && !presented.signatureVerified {
-		reason := "workload_grant_failed"
-		if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
-			reason = refusal.reason
-		}
-		s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+reason)
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
 	}
 
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppWorkload), mcpconnectionattempts.StepInboundToken,
-		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
-		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID), mcpconnectionattempts.Subject(&subject))
+		workloadGrantRowOptions(r, endpoint.UserSessionIssuerID, presented, subject)...)
 	defer t.Finish(ctx)
 	if err != nil {
 		refuseWorkloadGrantRow(ctx, t, err)
@@ -520,6 +514,35 @@ func (s *Service) handleWorkloadAssertionGrant(
 			audience:            canonicalResource,
 		}, subject, credential),
 	})
+}
+
+// refuseUnverifiedWorkloadGrant answers a workload grant refused before its assertion's signature
+// verified. Nothing proves a real workload yet, so the refusal is a metric, never a row.
+func (s *Service) refuseUnverifiedWorkloadGrant(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, presented presentedWorkload, err error) error {
+	reason := "workload_grant_failed"
+	if refusal, ok := errors.AsType[*workloadGrantError](err); ok {
+		reason = refusal.reason
+	}
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, "token_"+reason)
+	return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+}
+
+// workloadGrantRowOptions describe a workload grant whose assertion's signature verified. Anyone
+// can mint new subjects at a public issuer, so its refusals fold per workload issuer.
+func workloadGrantRowOptions(r *http.Request, userSessionIssuerID uuid.UUID, presented presentedWorkload, subject urn.SessionSubject) []mcpconnectionattempts.Option {
+	return []mcpconnectionattempts.Option{
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeJWTBearer),
+		mcpconnectionattempts.UserSessionIssuer(userSessionIssuerID), mcpconnectionattempts.Subject(&subject),
+		mcpconnectionattempts.FoldRefusedSubjects("workload_issuer:" + presented.issuerID.String()),
+	}
+}
+
+// trackSharedWorkloadGrant follows a verified workload grant at a shared authorization server,
+// which serves every MCP server of its issuer, so its row names the issuer and no one server.
+func (s *Service) trackSharedWorkloadGrant(r *http.Request, issuer *sharedIssuer, presented presentedWorkload, subject urn.SessionSubject) *mcpconnectionattempts.Tracker {
+	shared := issuer.authorizationServer
+	scope := mcpconnectionattempts.AuthorizationServerScope(issuer.organizationID, shared.projectID, shared.issuerID, mcpconnectionattempts.AppWorkload)
+	return s.connections.Track(scope, mcpconnectionattempts.StepInboundToken, workloadGrantRowOptions(r, shared.issuerID, presented, subject)...)
 }
 
 // refuseUnservedWorkloadGrant refuses a workload grant the deployment does

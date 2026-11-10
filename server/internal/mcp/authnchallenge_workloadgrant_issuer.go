@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -64,17 +65,26 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		UserSessionIssuerID: shared.issuerID,
 	}
 	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, tenancy, []string{urls.Issuer, urls.Token}, assertion)
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	if err != nil && !presented.signatureVerified {
+		return s.refuseUnverifiedWorkloadGrant(ctx, w, logger, presented, err)
 	}
 
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
+	t := s.trackSharedWorkloadGrant(r, issuer, presented, subject)
+	defer t.Finish(ctx)
+	if err != nil {
+		refuseWorkloadGrantRow(ctx, t, err)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
 	if _, _, err := subject.Workload(); err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("assertion_subject_invalid", err))
+		refusal := refuseWorkloadGrant("assertion_subject_invalid", err)
+		refuseWorkloadGrantRow(ctx, t, refusal)
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refusal)
 	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	delegatedGrants, err := encodeIssuerWorkloadSessionPolicy(shared.projectID, version)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "encode issuer workload session policy").LogError(ctx, logger)
 	}
 	// The same check the MCP side applies to the stored row, so a session it
@@ -85,6 +95,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		delegatedGrants, pgtype.Int4{Int32: int32(version), Valid: true},
 	)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "validate issuer workload session policy").LogError(ctx, logger)
 	}
 
@@ -93,7 +104,7 @@ func (s *Service) handleIssuerWorkloadAssertionGrant(ctx context.Context, w http
 		projectID = &shared.projectID
 	}
 	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{
-		client: nil, beforeCommit: nil, tracker: nil,
+		client: nil, beforeCommit: nil, tracker: t,
 		presented:  presented,
 		credential: credential,
 		projectID:  projectID,
