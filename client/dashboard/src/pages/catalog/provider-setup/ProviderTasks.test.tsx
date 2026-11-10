@@ -4,7 +4,13 @@ import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { initialState, reduce, validate, type State, type Action } from "./state";
+import {
+  initialState,
+  reduce,
+  validate,
+  type State,
+  type Action,
+} from "./state";
 import { SetupContext } from "./setup-context";
 import { ProviderTask } from "./ProviderTasks";
 

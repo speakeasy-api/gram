@@ -165,7 +165,6 @@ export function useProviderConnection(
             tokenEndpoint: "https://snowflake.invalid/oauth/token-request",
           })
         : providers[providerKey];
-
   const name = config.name;
   const access = s.values.access;
   const requestedScopes = useMemo(
@@ -286,7 +285,11 @@ export function useProviderConnection(
     server.remoteMcpServerId,
     server.environmentId,
     server.updatedAt,
-    ...(configurableSource ? [config.issuer] : []),
+    ...(providerKey === "salesforce"
+      ? [config.issuer]
+      : configurableSource
+        ? [config.issuer, source?.url, source?.instanceUrl]
+        : []),
   ]);
   const currentTarget = useRef(targetKey);
   const observedClient = useRef<string | null>(null);
@@ -487,70 +490,71 @@ export function useProviderConnection(
         url: upstream.url,
         instanceUrl: currentInstance,
       };
-      registerRollback?.(async () => {
-        if (generation.current !== run) throw new ConfigurationChanged();
-        const latestTarget = await sdk.mcpServers.get({ id: server.id });
-        const latestRemote = await sdk.remoteMcp.getServer({ id });
-        const latestHeaders = await sdk.remoteMcp.listServerHeaders({
-          remoteMcpServerId: id,
-        });
-        const latestInstance = salesforceInstanceConfiguration(
-          latestHeaders.headers,
-        );
-        const latestLinks = await sdk.mcpServers.list();
-        const applied = appliedSource.current;
-        if (
-          generation.current !== run ||
-          latestLinks.mcpServers.some(
-            (item) => item.id !== server.id && item.remoteMcpServerId === id,
-          ) ||
-          latestTarget.remoteMcpServerId !== id ||
-          latestTarget.environmentId !== server.environmentId ||
-          !applied ||
-          latestRemote.url !== applied.url ||
-          latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
-        )
-          throw new ConfigurationChanged();
-        if (latestRemote.url !== originalSource.url) {
-          await sdk.remoteMcp.updateServer({
-            updateServerForm: { id, url: originalSource.url },
+      if (providerKey === "salesforce")
+        registerRollback?.(async () => {
+          if (generation.current !== run) throw new ConfigurationChanged();
+          const latestTarget = await sdk.mcpServers.get({ id: server.id });
+          const latestRemote = await sdk.remoteMcp.getServer({ id });
+          const latestHeaders = await sdk.remoteMcp.listServerHeaders({
+            remoteMcpServerId: id,
           });
-          appliedSource.current = {
-            ...appliedSource.current!,
-            url: originalSource.url,
-          };
-        }
-        if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
-          if (instance) {
-            const form = {
-              name: instance.name,
-              description: instance.description,
-              value: instance.value,
-              isRequired: instance.isRequired,
-              isSecret: false,
-            };
-            if (latestInstance.header)
-              await sdk.remoteMcp.updateServerHeader({
-                updateServerHeaderForm: {
-                  ...form,
-                  id: latestInstance.header.id,
-                },
-              });
-            else
-              await sdk.remoteMcp.createServerHeader({
-                createServerHeaderForm: { ...form, remoteMcpServerId: id },
-              });
-          } else if (latestInstance.header)
-            await sdk.remoteMcp.deleteServerHeader({
-              id: latestInstance.header.id,
+          const latestInstance = salesforceInstanceConfiguration(
+            latestHeaders.headers,
+          );
+          const latestLinks = await sdk.mcpServers.list();
+          const applied = appliedSource.current;
+          if (
+            generation.current !== run ||
+            latestLinks.mcpServers.some(
+              (item) => item.id !== server.id && item.remoteMcpServerId === id,
+            ) ||
+            latestTarget.remoteMcpServerId !== id ||
+            latestTarget.environmentId !== server.environmentId ||
+            !applied ||
+            latestRemote.url !== applied.url ||
+            latestInstance.instanceUrl !== (applied.instanceUrl ?? "")
+          )
+            throw new ConfigurationChanged();
+          if (latestRemote.url !== originalSource.url) {
+            await sdk.remoteMcp.updateServer({
+              updateServerForm: { id, url: originalSource.url },
             });
-        }
-        appliedSource.current = originalSource;
-        dispatch({
-          type: "connection",
-          sourceFingerprint: providerSourceFingerprint(id, originalSource),
+            appliedSource.current = {
+              ...appliedSource.current!,
+              url: originalSource.url,
+            };
+          }
+          if (latestInstance.instanceUrl !== originalSource.instanceUrl) {
+            if (instance) {
+              const form = {
+                name: instance.name,
+                description: instance.description,
+                value: instance.value,
+                isRequired: instance.isRequired,
+                isSecret: false,
+              };
+              if (latestInstance.header)
+                await sdk.remoteMcp.updateServerHeader({
+                  updateServerHeaderForm: {
+                    ...form,
+                    id: latestInstance.header.id,
+                  },
+                });
+              else
+                await sdk.remoteMcp.createServerHeader({
+                  createServerHeaderForm: { ...form, remoteMcpServerId: id },
+                });
+            } else if (latestInstance.header)
+              await sdk.remoteMcp.deleteServerHeader({
+                id: latestInstance.header.id,
+              });
+          }
+          appliedSource.current = originalSource;
+          dispatch({
+            type: "connection",
+            sourceFingerprint: providerSourceFingerprint(id, originalSource),
+          });
         });
-      });
       if (changeInstance) {
         if (selectedInstance) {
           const form = {

@@ -418,5 +418,3 @@ it("allows Salesforce installation instructions but disables Continue at the sup
   await user.click(screen.getByRole("button", { name: "Back" }));
   expect(next().disabled).toBe(false);
 });
-
-

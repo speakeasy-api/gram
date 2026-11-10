@@ -468,8 +468,8 @@ export function ProviderTask({
   const { s } = useSetup();
   if (s.step === "begin") return <Plan />;
   if (s.step === "credentials") return <Credentials />;
-  if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "snowflake") return <SnowflakeTask />;
+  if (s.provider === "salesforce") return <SalesforceTask />;
   if (s.provider === "github") return <GitHubTask />;
   return <SlackTask serverName={serverName} />;
 }

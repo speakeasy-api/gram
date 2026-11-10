@@ -401,8 +401,8 @@ export function useRemoteMcpInstallWorkflow({
   serverNameSuffix = "",
   offerGuardrails = false,
   beforeInstall,
-  initialConfiguration,
   deferSetup,
+  initialConfiguration,
 }: UseRemoteMcpInstallWorkflowOptions): RemoteMcpInstallWorkflow {
   const client = useSdkClient();
   const detectorMode = useDetectorMode();

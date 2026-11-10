@@ -1998,9 +1998,9 @@ describe("Salesforce review recovery", () => {
       expect(result.current.recovery).toBe("settings");
       expect(mocks.commit).not.toHaveBeenCalled();
       expect(mocks.updateRemote).not.toHaveBeenCalled();
-      },
-    );
-  });
+    },
+  );
+});
 
 describe("Snowflake shared actions", () => {
   const oldUrl =

@@ -59,7 +59,10 @@ vi.mock("@/routes", () => ({
     },
   }),
 }));
-vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
+  useQueryClient: () => ({}),
+}));
 vi.mock("@gram/client/react-query/metaMcpMembers", () => ({
   invalidateAllMetaMcpMembers: vi.fn().mockResolvedValue(undefined),
 }));
