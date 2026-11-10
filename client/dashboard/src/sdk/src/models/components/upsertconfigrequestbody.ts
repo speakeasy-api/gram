@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpsertConfigRequestBody = {
   /**
-   * Provider API key. Stored encrypted at rest; never returned on reads.
+   * Provider API key. For gemini_compliance, JSON with service_account (a Google service account JSON object) delegated_user (a Workspace administrator email), and org_unit_id (the Google Workspace root organizational unit ID for organization-wide coverage). Stored encrypted at rest; never returned on reads.
    */
   apiKey: string;
   /**
@@ -19,11 +19,11 @@ export type UpsertConfigRequestBody = {
    */
   enabled: boolean;
   /**
-   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).
+   * Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID), and gemini_compliance (existing Google Vault matter UUID).
    */
   externalOrganizationId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
    */
   provider: string;
 };

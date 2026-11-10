@@ -12,6 +12,42 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activityCountGeminiComplianceMessages = `-- name: ActivityCountGeminiComplianceMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1::uuid AND chat_id = $2::uuid
+  AND source = 'gemini' AND role IN ('user', 'assistant')
+`
+
+type ActivityCountGeminiComplianceMessagesParams struct {
+	ProjectID uuid.UUID
+	ChatID    uuid.UUID
+}
+
+func (q *Queries) ActivityCountGeminiComplianceMessages(ctx context.Context, arg ActivityCountGeminiComplianceMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountGeminiComplianceMessages, arg.ProjectID, arg.ChatID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const activityCountSafeGeminiComplianceConfig = `-- name: ActivityCountSafeGeminiComplianceConfig :one
+SELECT count(*) FROM ai_integration_configs
+WHERE organization_id = $1 AND project_id = $2
+  AND provider = 'gemini_compliance' AND NOT enabled AND api_key_encrypted = ''
+`
+
+type ActivityCountSafeGeminiComplianceConfigParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ActivityCountSafeGeminiComplianceConfig(ctx context.Context, arg ActivityCountSafeGeminiComplianceConfigParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountSafeGeminiComplianceConfig, arg.OrganizationID, arg.ProjectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const activityCountSignalMessages = `-- name: ActivityCountSignalMessages :one
 SELECT count(*) FROM chat_messages
 WHERE project_id = $1 AND id = ANY($2::uuid[]) AND capture_kind = 'original'
@@ -48,6 +84,16 @@ DELETE FROM audit_logs WHERE organization_id = $1
 // rules, and Explore widgets. Every tenant identifier is a parameter.
 func (q *Queries) ActivityDeleteAuditLogs(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, activityDeleteAuditLogs, organizationID)
+	return err
+}
+
+const activityDeleteGeminiComplianceConfig = `-- name: ActivityDeleteGeminiComplianceConfig :exec
+DELETE FROM ai_integration_configs WHERE organization_id = $1 AND provider = 'gemini_compliance'
+`
+
+// No real credentials and no polling: this is a paused setup example.
+func (q *Queries) ActivityDeleteGeminiComplianceConfig(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, activityDeleteGeminiComplianceConfig, organizationID)
 	return err
 }
 
@@ -290,6 +336,28 @@ func (q *Queries) ActivityInsertClaudeTagSessionLink(ctx context.Context, arg Ac
 		arg.OrganizationID,
 		arg.ParentChatID,
 		arg.ChildChatID,
+	)
+	return err
+}
+
+const activityInsertGeminiComplianceConfig = `-- name: ActivityInsertGeminiComplianceConfig :exec
+INSERT INTO ai_integration_configs (id, organization_id, project_id, provider, api_key_encrypted, external_organization_id, enabled)
+VALUES ($1, $2, $3, 'gemini_compliance', '', $4, false)
+`
+
+type ActivityInsertGeminiComplianceConfigParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	MatterID       pgtype.Text
+}
+
+func (q *Queries) ActivityInsertGeminiComplianceConfig(ctx context.Context, arg ActivityInsertGeminiComplianceConfigParams) error {
+	_, err := q.db.Exec(ctx, activityInsertGeminiComplianceConfig,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.MatterID,
 	)
 	return err
 }

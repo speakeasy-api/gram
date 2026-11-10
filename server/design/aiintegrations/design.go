@@ -12,7 +12,7 @@ var Config = Type("AIIntegrationConfig", func() {
 	Required("organization_id", "provider", "enabled", "has_api_key")
 	Attribute("id", String, "Config ID. Omitted when no config is set for the provider.")
 	Attribute("organization_id", String, "Organization the config belongs to.")
-	Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+	Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 	Attribute("project_id", String, "Project used as the telemetry write target. Omitted when no config is set.")
 	Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID); omitted for providers that do not need one.")
 	Attribute("billing_mode", String, "How the provider org is billed: 'metered' (pay-per-token; dashboard cost is real spend), 'flat_rate' (subscription seats; cost is an estimate), or 'unknown'. Empty/omitted when not declared.")
@@ -162,7 +162,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 			Required("provider")
 		})
 
@@ -192,9 +192,9 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
-			Attribute("api_key", String, "Provider API key. Stored encrypted at rest; never returned on reads.")
-			Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID).")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
+			Attribute("api_key", String, "Provider API key. For gemini_compliance, JSON with service_account (a Google service account JSON object) delegated_user (a Workspace administrator email), and org_unit_id (the Google Workspace root organizational unit ID for organization-wide coverage). Stored encrypted at rest; never returned on reads.")
+			Attribute("external_organization_id", String, "Provider scope identifier. Required for anthropic_compliance and codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace UUID), and gemini_compliance (existing Google Vault matter UUID).")
 			Attribute("billing_mode", String, "How the provider org is billed: 'metered', 'flat_rate', or 'unknown'. Free-form; omit to leave the existing value unchanged.")
 			Attribute("enabled", Boolean, "Whether the integration should be active.")
 			Required("provider", "api_key", "enabled")
@@ -225,7 +225,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 			Required("provider")
 		})
 
@@ -254,7 +254,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 			Required("provider")
 		})
 
@@ -284,7 +284,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 			Attribute("schedule", String, "Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).")
 			Attribute("enabled", Boolean, "Whether the schedule should be polled.")
 			Required("provider", "schedule", "enabled")
@@ -315,7 +315,7 @@ var _ = Service("aiIntegrations", func() {
 		Payload(func() {
 			security.ByKeyPayload()
 			security.SessionPayload()
-			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.")
+			Attribute("provider", String, "AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.")
 			Attribute("schedule", String, "Schedule identifier (e.g. cursor, anthropic_compliance, anthropic_analytics_usage).")
 			Required("provider", "schedule")
 		})

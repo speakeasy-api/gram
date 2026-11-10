@@ -2,6 +2,11 @@ package aiintegrations
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"testing"
 	"time"
@@ -704,4 +709,61 @@ func TestRecordSchedulePollFailureRejectsAMissingSchedule(t *testing.T) {
 	require.ErrorContains(t, err, "no "+ScheduleCodexCloudSessions+" schedule")
 
 	require.NoError(t, store.RecordSchedulePollFailure(ctx, result.Row.ID, ScheduleCursor, time.Now().UTC(), errors.New("boom"), 1))
+}
+
+func TestGeminiProviderRegistration(t *testing.T) {
+	t.Parallel()
+	provider, err := normalizeProvider(" GEMINI_COMPLIANCE ")
+	require.NoError(t, err)
+	require.Equal(t, ProviderGeminiCompliance, provider)
+	require.Equal(t, []syncSchedule{{schedule: ScheduleGeminiCompliance, kind: SyncKindCursor}}, syncSchedulesFor(provider))
+	require.Equal(t, streamInfo{name: StreamGeminiConversations, kind: StreamKindEvents}, streamForSchedule(ScheduleGeminiCompliance))
+	require.True(t, providerRequiresExternalOrganizationID(provider))
+	require.Equal(t, 30*24*time.Hour, initialPollLookbackForProvider(provider))
+	require.Equal(t, time.Hour, pollIntervalForSchedule(ScheduleGeminiCompliance))
+}
+
+func TestGeminiCredentialsRejectMalformedWrapper(t *testing.T) {
+	t.Parallel()
+	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	for _, key := range []string{"not json", `{}`, `{"service_account":{},"delegated_user":"admin@example.com"}`, `{"service_account":"not an object","delegated_user":"admin@example.com"}`} {
+		err := validateGeminiCredentials(key, &matterID)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "valid Gemini Vault credential JSON")
+		require.NotContains(t, err.Error(), key)
+	}
+}
+
+func geminiTestCredentials(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privateKey, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	raw, err := json.Marshal(map[string]any{
+		"service_account": map[string]string{"type": "service_account", "client_email": "service@example.com", "private_key": string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privateKey})), "token_uri": "https://oauth2.googleapis.com/token"},
+		"delegated_user":  "admin@example.com",
+		"org_unit_id":     "root-unit-placeholder",
+	})
+	require.NoError(t, err)
+	return string(raw)
+}
+
+func TestGeminiPollSuccessPreservesPendingWatermarkAndHourlyCadence(t *testing.T) {
+	t.Parallel()
+	ctx, conn, store, orgID := newStoreTestDB(t)
+	matterID := "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+	created := upsertConfigWithTx(t, ctx, conn, store, orgID, ProviderGeminiCompliance, geminiTestCredentials(t), true, true, &matterID, nil)
+	require.Equal(t, map[string]string{ScheduleGeminiCompliance: SyncKindCursor}, listSyncSchedules(t, ctx, conn, created.Config.ID))
+	watermark := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	pollTime := watermark.Add(30 * 24 * time.Hour)
+	const cursor = `{"export_id":"export-placeholder"}`
+	require.NoError(t, store.RecordGeminiPollSuccess(ctx, created.Config.SyncID, watermark, cursor, pollTime))
+	cfg, _, err := store.GetUsagePollConfigBySyncID(ctx, created.Config.SyncID)
+	require.NoError(t, err)
+	require.Equal(t, watermark, cfg.PollWatermarkAt)
+	require.WithinDuration(t, pollTime.Add(time.Hour), cfg.NextPollAfter, time.Microsecond)
+	require.JSONEq(t, cursor, cfg.LastCursor)
+	require.Error(t, validateGeminiCredentials(geminiTestCredentials(t), nil))
+	require.Error(t, validateGeminiCredentials(geminiTestCredentials(t), conv.PtrEmpty("not-a-uuid")))
 }

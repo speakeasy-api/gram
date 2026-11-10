@@ -128,3 +128,90 @@ When adding a provider:
 4. Add provider-specific polling inside the activity layer.
 5. Emit telemetry with the shared `gen_ai.usage.*` attributes where possible.
 6. Store provider-specific fields under a provider namespace, such as `cursor.*`.
+
+## Gemini app compliance import (Google Vault)
+
+`gemini_compliance` imports managed `gemini.google.com` text transcripts through
+Google Vault. It does not import Gemini API/Vertex AI traffic, Workspace side-panel
+conversations, attachments, media, or token/cost estimates.
+
+Configure an existing **open Vault matter UUID** as `external_organization_id`.
+The encrypted `api_key` field holds this JSON wrapper:
+
+```json
+{
+  "service_account": { "type": "service_account", "...": "complete Google service-account JSON key" },
+  "delegated_user": "admin@example.com",
+  "org_unit_id": "<ROOT_ORGANIZATIONAL_UNIT_ID>"
+}
+```
+
+All three fields are required. Enable the Vault API and authorize the service
+account's client ID for domain-wide delegation with both
+`https://www.googleapis.com/auth/ediscovery` and
+`https://www.googleapis.com/auth/devstorage.read_only`. The delegated admin needs
+Vault licensing, access to the matter, and search/export privileges for the selected
+organizational unit. Select the root organizational unit for organization-wide
+coverage: Vault documents `ENTIRE_ORG` as Gmail-only, so the importer uses an
+explicit `ORG_UNIT` query. Saving probes the matter, not a full export; successful
+save does not prove export/download authorization. Credentials never leave through
+read APIs or error bodies.
+
+### Export lifecycle and guarantees
+
+- Reuses the existing integration polling workflow, with one hourly activity per
+  connected schedule and no workflows/timers per message. Incremental Temporal cost
+  is approximately 720 child starts + 720 activities/month per enabled organization
+  per namespace, plus retries; no new fleet-wide schedule is introduced.
+- First sync starts 30 UTC days before connection, imports one completed UTC-day
+  window at a time, and includes a 48-hour overlap. Once caught up, each export
+  rechecks the latest two completed days. Current-day chats appear after UTC
+  midnight; Google indexing lag beyond the overlap is not a completeness guarantee.
+- A versioned cursor checkpoints the export ID, exact query window, completed-date
+  watermark, and sequence. Deterministic names recover a lost create response;
+  pending jobs resume across activity retries and process restarts. Export polling
+  is scheduled from wall-clock time, never the historical/pending watermark.
+  A periodic activity heartbeat also covers long downloads and archive parsing.
+- Downloads all returned artifacts through authenticated, fixed-host, bounded
+  requests. ZIP/XML complexity and total expanded size are bounded. Counts and
+  error reports are validated before any transcript callbacks. Empty windows need
+  explicit successful zero-count evidence; unknown or partial content fails closed.
+- Failed jobs and source-reported partial exports are deleted after surfacing an
+  error so retry recreates the same window. Expired jobs are recreated without
+  skipping progress. Local parse/write failures retain the remote export for
+  replay. Successful remote artifacts expire according to Google's 15-day policy.
+- Messages go through `ChatMessageWriter.WriteExternal`, including normal outbox
+  publication. Stable owner/conversation/turn/role identities deduplicate overlaps
+  and replay; unresolved owners preserve their observed email without inventing
+  a connected user. Transcripts carry source `gemini`, provider `google`, model,
+  timestamp, and zero unreported usage. Turn visitation is chronological and
+  archive-order independent; conversation creation uses the earliest observed
+  turn while title/last-activity metadata reflect the latest observed turn.
+  Identical text turns with identical
+  timestamps and no exported request ID cannot be distinguished.
+
+### Export format validation
+
+The conversation parser has been checked locally against a real Google Vault XML
+export. It supports `GeminiUserConversationHistory/User/Email`, conversation and
+turn wrappers, `Prompt/Text`, `PrimaryResponse/{ResponseId,Text}`, request/parent
+IDs, model version, and timestamps. The local input stays outside the repository;
+committed regression fixtures reproduce only its structure with synthetic values.
+Legacy flat element variants remain supported.
+
+Google does not publish an XML schema or concrete XML example on the referenced
+export-contents page. Unknown rich content is rejected without advancing progress.
+Conversation-XML verification is separate from validating a complete export's
+count/error reports and an authenticated API export/download cycle. Unsupported
+layouts require a parser update, not skipping the file.
+
+Sources: [Query](https://developers.google.com/workspace/vault/reference/rest/v1/Query),
+[exports](https://developers.google.com/workspace/vault/guides/exports),
+[Gemini export contents](https://knowledge.workspace.google.com/vault/exports/vault-export-contents).
+
+Platform MCP assessment: existing tools do not manage organization-level AI
+integration secrets; this provider does not change a current MCP contract. Setup
+remains in the audited organization-admin API/dashboard rather than introducing
+an unrelated project-scoped secret-provisioning tool. Command K keeps the existing
+AI Integrations page action; fixed provider entries have no separately named
+resource detail route to index.

@@ -27,6 +27,7 @@ export type AIIntegrationProvider = {
   providerId: AgentProviderId;
   apiKeyLabel: string;
   apiKeyPlaceholder: string;
+  apiKeyMultiline?: boolean;
   requiresOrganizationId: boolean;
   organizationIdLabel?: string;
   organizationIdPlaceholder?: string;
@@ -358,9 +359,66 @@ const CHATGPT_AI_INTEGRATION: AIIntegrationProvider = {
   ),
 };
 
+const GEMINI_AI_INTEGRATION: AIIntegrationProvider = {
+  provider: "gemini_compliance",
+  name: "Gemini Conversations",
+  description:
+    "Import Gemini text chats through Google Vault batch exports for security review.",
+  schedules: [
+    {
+      schedule: "gemini_compliance",
+      name: "Conversation messages",
+      description:
+        "Imports retained Gemini text chats from Google Vault exports.",
+      cadence: "Hourly",
+      kind: "events",
+      signal: "gemini.conversations",
+      destination: { label: "Agent Sessions", path: "agent-sessions" },
+    },
+  ],
+  onboardingDescription:
+    "Connect Google Vault to import retained Gemini text chats. Exports run in batches, not in real time.",
+  setupGuide: {
+    steps: [
+      {
+        title: "Prepare Google Vault",
+        description:
+          "Enable the Google Vault API in your Google Cloud project. Create or select an existing Vault matter and copy its UUID. Configure retention rules that preserve the Gemini conversations you need to review. Copy the organizational-unit ID for the export scope; use the root organizational-unit ID to cover the whole organization.",
+        helpLink: {
+          url: "https://vault.google.com/",
+          linkLabel: "Google Vault",
+          sentence: "Open {LINK} to find your matter ID",
+        },
+      },
+      {
+        title: "Configure a delegated service account",
+        description:
+          "Create a Google service account with domain-wide delegation. In the Workspace Admin console, authorize its client ID for https://www.googleapis.com/auth/ediscovery and https://www.googleapis.com/auth/devstorage.read_only. Delegate to a Vault-licensed administrator with access to the matter and permission to search and export Gemini data.",
+      },
+      {
+        title: "Paste credentials and the matter ID",
+        description:
+          'Download the service account JSON key. Wrap the entire JSON object as {"service_account": <service account JSON object>, "delegated_user": "admin@example.com", "org_unit_id": "id:..."}, then paste the wrapper and your existing Vault matter UUID below. All three wrapper fields are required. Speakeasy imports text chats from completed UTC days, initially looking back 30 days; exports are not real-time and availability depends on retention.',
+        showsForm: true,
+      },
+    ],
+  },
+  providerId: "gemini",
+  apiKeyLabel: "Delegated service account JSON",
+  apiKeyPlaceholder:
+    '{"service_account": {…}, "delegated_user": "admin@example.com", "org_unit_id": "id:..."}',
+  apiKeyMultiline: true,
+  requiresOrganizationId: true,
+  organizationIdLabel: "Vault matter ID",
+  organizationIdPlaceholder: "00000000-0000-0000-0000-000000000000",
+  helpText:
+    "Include service_account, delegated_user, and org_unit_id in the JSON wrapper. Credentials are hidden and cleared when you close this panel.",
+};
+
 export const AI_INTEGRATION_PROVIDERS: AIIntegrationProvider[] = [
   CURSOR_AI_INTEGRATION,
   ANTHROPIC_AI_INTEGRATION,
   CODEX_AI_INTEGRATION,
   CHATGPT_AI_INTEGRATION,
+  GEMINI_AI_INTEGRATION,
 ];

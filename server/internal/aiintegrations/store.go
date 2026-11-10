@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 const (
@@ -33,6 +34,7 @@ const (
 	// are served per ChatGPT workspace (UUID), so each config carries the id
 	// its scope needs in external_organization_id.
 	ProviderChatGPTCompliance = "chatgpt_compliance"
+	ProviderGeminiCompliance  = "gemini_compliance"
 )
 
 var (
@@ -54,6 +56,7 @@ const (
 	ScheduleAnthropicAnalyticsCost  = "anthropic_analytics_cost"
 	ScheduleCodexCompliance         = ProviderCodexCompliance
 	ScheduleChatGPTCompliance       = ProviderChatGPTCompliance
+	ScheduleGeminiCompliance        = ProviderGeminiCompliance
 	// ScheduleCodexCloudSessions imports Codex cloud task transcripts
 	// (CODEX_LOG files) — a second schedule on the chatgpt_compliance config,
 	// which owns the workspace scope both feeds are served under.
@@ -95,7 +98,8 @@ const (
 	// chatgpt.chat.message carries ChatGPT (web/desktop) conversation
 	// messages from the Compliance Logs Platform CONVERSATION_MESSAGE feed —
 	// discrete activity events like claude.chat.message, not metrics.
-	StreamChatGPTChatMessage = "chatgpt.chat.message"
+	StreamChatGPTChatMessage  = "chatgpt.chat.message"
+	StreamGeminiConversations = "gemini.conversations"
 	// codex.cloud.chat.message carries Codex cloud task transcripts (web
 	// tasks; GitHub code review has no CODEX_LOG presence) from the
 	// Compliance Logs Platform CODEX_LOG feed — discrete activity events.
@@ -126,6 +130,8 @@ func streamForSchedule(schedule string) streamInfo {
 		return streamInfo{name: StreamClaudeChatCostUSD, kind: StreamKindMetrics}
 	case ScheduleCodexCompliance:
 		return streamInfo{name: StreamCodexCostUSD, kind: StreamKindMetrics}
+	case ScheduleGeminiCompliance:
+		return streamInfo{name: StreamGeminiConversations, kind: StreamKindEvents}
 	case ScheduleChatGPTCompliance:
 		return streamInfo{name: StreamChatGPTChatMessage, kind: StreamKindEvents}
 	case ScheduleCodexCloudSessions:
@@ -150,6 +156,8 @@ func providerSyncSchedule(provider string) syncSchedule {
 		return syncSchedule{schedule: ScheduleAnthropicCompliance, kind: SyncKindCursor}
 	case ProviderCodexCompliance:
 		return syncSchedule{schedule: ScheduleCodexCompliance, kind: SyncKindTime}
+	case ProviderGeminiCompliance:
+		return syncSchedule{schedule: ScheduleGeminiCompliance, kind: SyncKindCursor}
 	case ProviderChatGPTCompliance:
 		return syncSchedule{schedule: ScheduleChatGPTCompliance, kind: SyncKindTime}
 	default:
@@ -223,7 +231,7 @@ func initialPollLookbackForProvider(provider string) time.Duration {
 	if provider == ProviderCodexCompliance {
 		return codexComplianceInitialLookback
 	}
-	if provider == ProviderChatGPTCompliance {
+	if provider == ProviderChatGPTCompliance || provider == ProviderGeminiCompliance {
 		return chatgptComplianceInitialLookback
 	}
 	return initialUsagePollLookback
@@ -318,7 +326,7 @@ func normalizeProvider(provider string) (string, error) {
 		return "", oops.E(oops.CodeInvalid, nil, "provider is required")
 	}
 	switch provider {
-	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance:
+	case ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance, ProviderGeminiCompliance:
 	default:
 		return "", oops.E(oops.CodeInvalid, nil, "unsupported ai integration provider: %s", provider)
 	}
@@ -373,6 +381,14 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 			return UpsertResult{}, oops.E(oops.CodeInvalid, nil, "external_organization_id must be a ChatGPT workspace UUID for %s", provider)
 		}
 		externalOrganizationID = &trimmedWorkspaceID
+	}
+
+	if provider == ProviderGeminiCompliance {
+		if err := validateGeminiCredentials(apiKey, externalOrganizationID); err != nil {
+			return UpsertResult{}, err
+		}
+		trimmed := strings.TrimSpace(*externalOrganizationID)
+		externalOrganizationID = &trimmed
 	}
 
 	q := repo.New(dbtx)
@@ -550,7 +566,7 @@ func (s *Store) upsertWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, 
 }
 
 func providerRequiresExternalOrganizationID(provider string) bool {
-	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance || provider == ProviderChatGPTCompliance
+	return provider == ProviderAnthropicCompliance || provider == ProviderCodexCompliance || provider == ProviderChatGPTCompliance || provider == ProviderGeminiCompliance
 }
 
 func (s *Store) softDeleteWithTx(ctx context.Context, dbtx repo.DBTX, orgID string, provider string) error {
@@ -634,7 +650,7 @@ func (s *Store) ListUsagePollCandidates(ctx context.Context, pollDueBefore time.
 func (s *Store) ensureActiveSyncSchedules(ctx context.Context) error {
 	err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
 		q := repo.New(tx)
-		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance} {
+		for _, provider := range []string{ProviderCursor, ProviderAnthropicCompliance, ProviderCodexCompliance, ProviderChatGPTCompliance, ProviderGeminiCompliance} {
 			for _, sched := range syncSchedulesFor(provider) {
 				// Same initial watermark policy as upsertWithTx: epoch for
 				// time-kind schedules, now for cursor-kind ones.
@@ -799,6 +815,20 @@ func (s *Store) RecordUsagePollSuccess(ctx context.Context, syncID uuid.UUID, sc
 		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
 	}); err != nil {
 		return fmt.Errorf("record ai integration usage poll success: %w", err)
+	}
+	return nil
+}
+
+// RecordGeminiPollSuccess checkpoints the last fully imported date independently
+// of the wall clock used to schedule the next Vault export status check.
+func (s *Store) RecordGeminiPollSuccess(ctx context.Context, syncID uuid.UUID, watermark time.Time, lastCursor string, pollTime time.Time) error {
+	if err := s.repo.RecordUsagePollSuccess(ctx, repo.RecordUsagePollSuccessParams{
+		SyncID:          syncID,
+		PollWatermarkAt: conv.ToPGTimestamptz(watermark),
+		NextPollAfter:   conv.ToPGTimestamptz(pollTime.UTC().Add(pollIntervalForSchedule(ScheduleGeminiCompliance))),
+		LastCursorID:    conv.ToPGTextEmpty(lastCursor),
+	}); err != nil {
+		return fmt.Errorf("record Gemini poll success: %w", err)
 	}
 	return nil
 }
@@ -1246,4 +1276,14 @@ func emptyConfig(orgID string, provider string) Config {
 		CreatedAt:              time.Time{},
 		UpdatedAt:              time.Time{},
 	}
+}
+
+func validateGeminiCredentials(apiKey string, matterID *string) error {
+	if _, err := geminivault.ParseCredentials(apiKey); err != nil {
+		return oops.E(oops.CodeInvalid, nil, "api_key must be valid Gemini Vault credential JSON containing a service_account object with a valid RSA private key and Google token endpoint, plus delegated_user and org_unit_id")
+	}
+	if matterID == nil || !chatgptWorkspaceIDPattern.MatchString(strings.TrimSpace(*matterID)) {
+		return oops.E(oops.CodeInvalid, nil, "external_organization_id must be an existing Google Vault matter UUID")
+	}
+	return nil
 }

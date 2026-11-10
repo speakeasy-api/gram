@@ -70,7 +70,8 @@ type AIIntegrationConfig struct {
 	// Organization the config belongs to.
 	OrganizationID string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Project used as the telemetry write target. Omitted when no config is set.
 	ProjectID *string
@@ -168,7 +169,8 @@ type DeleteConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 }
 
@@ -185,7 +187,8 @@ type GetConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 }
 
@@ -206,7 +209,8 @@ type ListSchedulesPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 }
 
@@ -216,7 +220,8 @@ type RetrySchedulePayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -229,7 +234,8 @@ type SetScheduleEnabledPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
 	// Schedule identifier (e.g. cursor, anthropic_compliance,
 	// anthropic_analytics_usage).
@@ -255,13 +261,18 @@ type UpsertConfigPayload struct {
 	ApikeyToken  *string
 	SessionToken *string
 	// AI provider identifier. Supported values include cursor,
-	// anthropic_compliance, codex_compliance, and chatgpt_compliance.
+	// anthropic_compliance, codex_compliance, chatgpt_compliance, and
+	// gemini_compliance.
 	Provider string
-	// Provider API key. Stored encrypted at rest; never returned on reads.
+	// Provider API key. For gemini_compliance, JSON with service_account (a Google
+	// service account JSON object) delegated_user (a Workspace administrator
+	// email), and org_unit_id (the Google Workspace root organizational unit ID
+	// for organization-wide coverage). Stored encrypted at rest; never returned on
+	// reads.
 	APIKey string
 	// Provider scope identifier. Required for anthropic_compliance and
 	// codex_compliance (organization id) and chatgpt_compliance (ChatGPT workspace
-	// UUID).
+	// UUID), and gemini_compliance (existing Google Vault matter UUID).
 	ExternalOrganizationID *string
 	// How the provider org is billed: 'metered', 'flat_rate', or 'unknown'.
 	// Free-form; omit to leave the existing value unchanged.

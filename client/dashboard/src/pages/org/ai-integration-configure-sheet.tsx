@@ -1,4 +1,5 @@
 import { RequireScope } from "@/components/require-scope";
+import { AIIntegrationCredentialInput } from "./ai-integration-credential-input";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import {
@@ -90,7 +91,13 @@ export function ConfigureSheet({
   };
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
+    <Sheet
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen && provider.apiKeyMultiline) form.setApiKey("");
+        onOpenChange(nextOpen);
+      }}
+    >
       <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
         <SheetHeader>
           <SheetTitle>
@@ -104,14 +111,12 @@ export function ConfigureSheet({
         <Stack gap={4} className="px-4">
           <Stack gap={2}>
             <Label htmlFor={apiKeyFieldId}>{provider.apiKeyLabel}</Label>
-            <Input
+            <AIIntegrationCredentialInput
               id={apiKeyFieldId}
-              placeholder={
-                form.hasSavedKey ? "•••••• (saved)" : provider.apiKeyPlaceholder
-              }
+              provider={provider}
               value={form.apiKey}
               onChange={form.setApiKey}
-              type="password"
+              hasSavedKey={form.hasSavedKey}
               disabled={form.isLoading || form.isMutating}
             />
             {provider.helpText ? (

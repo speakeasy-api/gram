@@ -65,7 +65,11 @@ export function useAIIntegrationConfigForm(
         options.onSaveSuccess?.();
       },
       onError: (err) => {
-        toast.error(`Failed to save AI integration: ${err.message}`);
+        toast.error(
+          provider.apiKeyMultiline
+            ? "Failed to save AI integration. Check your credentials and permissions."
+            : `Failed to save AI integration: ${err.message}`,
+        );
       },
     });
   const { mutate: deleteConfig, status: deleteStatus } =

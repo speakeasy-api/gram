@@ -153,6 +153,12 @@ func (s *Service) UpsertConfig(ctx context.Context, payload *gen.UpsertConfigPay
 	externalOrgChanged := beforeRow != nil &&
 		conv.PtrValOr(externalOrganizationID, "") != conv.PtrValOr(before.ExternalOrganizationID, "")
 
+	if provider == ProviderGeminiCompliance {
+		if err := validateGeminiCredentials(apiKey, externalOrganizationID); err != nil {
+			return nil, err
+		}
+	}
+
 	// billing_mode is admin-declared and independent of the API key. Omit it to
 	// preserve the existing value (settings-only updates and key rotations must
 	// not wipe a declared mode).

@@ -15,10 +15,12 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 const (
@@ -367,4 +369,28 @@ func TestCredentialProbesAskForASingleRecord(t *testing.T) {
 			)
 		}
 	})
+}
+
+func TestGeminiCredentialRejectionMessages(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		status int
+		code   oops.Code
+	}{
+		{401, oops.CodeUnauthorized}, {403, oops.CodeForbidden}, {404, oops.CodeInvalid},
+	} {
+		cause := &geminivault.HTTPError{StatusCode: test.status}
+		status, rejected := providerRejectedCredentials(cause)
+		require.True(t, rejected)
+		require.Equal(t, test.status, status)
+		err := credentialRejectionError(ScheduleGeminiCompliance, cause)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, test.code, shareable.Code)
+		require.Contains(t, shareable.Error(), "Google Vault")
+	}
+	for _, status := range []int{429, 500} {
+		_, rejected := providerRejectedCredentials(&geminivault.HTTPError{StatusCode: status})
+		require.False(t, rejected)
+	}
 }

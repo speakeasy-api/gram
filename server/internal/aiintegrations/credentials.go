@@ -16,6 +16,7 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 const (
@@ -127,6 +128,15 @@ func (v *CredentialVerifier) probe(ctx context.Context, schedule string, creds C
 	since := now.Add(-credentialProbeLookback)
 
 	switch schedule {
+	case ScheduleGeminiCompliance:
+		if creds.ExternalOrganizationID == nil {
+			return nil
+		}
+		client, err := geminivault.NewClient(creds.APIKey, *creds.ExternalOrganizationID, v.guardian)
+		if err != nil {
+			return fmt.Errorf("create Gemini Vault credential probe client: %w", err)
+		}
+		return client.GetMatter(ctx) //nolint:wrapcheck // preserve typed provider status for rejection classification.
 	case ScheduleCursor:
 		client := cursorapi.New(v.guardian,
 			cursorapi.WithAPIKey(creds.APIKey),
@@ -227,6 +237,9 @@ func listLogsProbe(ctx context.Context, client *codexapi.Client, eventType strin
 // request-shaped complaint is about the probe, not the credentials.
 func providerRejectedCredentials(err error) (int, bool) {
 	status := 0
+	if providerErr, ok := errors.AsType[*geminivault.HTTPError](err); ok {
+		status = providerErr.StatusCode
+	}
 	if cursorErr, ok := errors.AsType[*cursorapi.HTTPError](err); ok {
 		status = cursorErr.StatusCode
 	}
@@ -249,5 +262,18 @@ func providerRejectedCredentials(err error) (int, bool) {
 // with. The provider's own text names the API, the status and usually the
 // missing entitlement — what the user needs to fix the key.
 func credentialRejectionError(schedule string, cause error) error {
+	if schedule == ScheduleGeminiCompliance {
+		if providerErr, ok := errors.AsType[*geminivault.HTTPError](cause); ok {
+			switch providerErr.StatusCode {
+			case 401:
+				return oops.E(oops.CodeUnauthorized, cause, "Google Vault rejected the service account credentials")
+			case 403:
+				return oops.E(oops.CodeForbidden, cause, "Google Vault access denied; check domain-wide delegation, delegated user permissions, and matter access")
+			default:
+				return oops.E(oops.CodeInvalid, cause, "Google Vault rejected the configured matter; check the matter UUID and delegated user access")
+			}
+		}
+	}
+
 	return oops.E(oops.CodeInvalid, cause, "%s", fmt.Sprintf("provider rejected these credentials for the %s sync: %s", schedule, cause.Error()))
 }

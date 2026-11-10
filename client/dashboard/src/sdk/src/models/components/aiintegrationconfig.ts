@@ -80,7 +80,7 @@ export type AIIntegrationConfig = {
    */
   projectId?: string | undefined;
   /**
-   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, and chatgpt_compliance.
+   * AI provider identifier. Supported values include cursor, anthropic_compliance, codex_compliance, chatgpt_compliance, and gemini_compliance.
    */
   provider: string;
   /**

@@ -21,6 +21,7 @@ import (
 	anthropicapi "github.com/speakeasy-api/gram/server/internal/thirdparty/anthropic"
 	codexapi "github.com/speakeasy-api/gram/server/internal/thirdparty/codex"
 	cursorapi "github.com/speakeasy-api/gram/server/internal/thirdparty/cursor"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/geminivault"
 )
 
 func TestPollAIDataInputRoundTripsThroughTemporal(t *testing.T) {
@@ -537,4 +538,29 @@ func TestAIUsagePollFailureDetailsMarshalToJSON(t *testing.T) {
 	stages, ok := decoded["stages"].([]any)
 	require.True(t, ok)
 	require.Len(t, stages, 1)
+}
+
+func TestGeminiPollProviderErrors(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		status int
+		code   oops.Code
+	}{
+		{400, oops.CodeInvalid}, {401, oops.CodeUnauthorized}, {403, oops.CodeForbidden}, {404, oops.CodeNotFound}, {422, oops.CodeInvalid},
+	} {
+		cause := fmt.Errorf("read Vault: %w", &geminivault.HTTPError{StatusCode: test.status})
+		require.True(t, pollRejectedByProvider(cause))
+		require.False(t, pollProviderUnavailable(cause))
+		err := shareablePollError(aiintegrations.ScheduleGeminiCompliance, cause)
+		var shareable *oops.ShareableError
+		require.ErrorAs(t, err, &shareable)
+		require.Equal(t, test.code, shareable.Code)
+		require.Contains(t, shareable.Error(), "Google Vault")
+	}
+	for _, status := range []int{429, 500, 503} {
+		cause := &geminivault.HTTPError{StatusCode: status}
+		require.False(t, pollRejectedByProvider(cause))
+		require.True(t, pollProviderUnavailable(cause))
+		require.Equal(t, status, pollUnavailableHTTPStatus(cause))
+	}
 }
