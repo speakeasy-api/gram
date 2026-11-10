@@ -207,14 +207,18 @@ func (s *Service) GetServerIdentityImpact(ctx context.Context, payload *gen.GetS
 			}
 		}
 	}
-	if !dedicate {
-		err := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change)
-		switch {
-		case mayDedicate && errors.Is(err, errClientServesOtherServer):
-			dedicate = true
-		case err != nil:
-			return nil, identityOopsError(err, "preview identity change").LogError(ctx, logger)
+	planErr := s.planIdentityChange(ctx, q, projectID, orgID, userIssuerID, targetID.UUID, !userIssuer.ProjectID.Valid, orgAdmin, payload.Change, providerID, clientID, &change)
+	switch {
+	case dedicate:
+		// The move leaves this issuer's bindings alone, so only what is wrong
+		// with the chosen provider or client still refuses the save.
+		if errors.Is(planErr, ErrIdentityNotFound) || errors.Is(planErr, ErrIdentityInvalid) {
+			return nil, identityOopsError(planErr, "preview identity change").LogError(ctx, logger)
 		}
+	case mayDedicate && errors.Is(planErr, errClientServesOtherServer):
+		dedicate = true
+	case planErr != nil:
+		return nil, identityOopsError(planErr, "preview identity change").LogError(ctx, logger)
 	}
 	if dedicate {
 		if userIssuer.TrustedRemoteSessionIssuerID.Valid {

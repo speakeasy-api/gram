@@ -394,6 +394,12 @@ func TestGetServerIdentityImpactForADedicatedIssuer(t *testing.T) {
 		result, err = ti.service.GetServerIdentityImpact(ctx, preview)
 		require.NoError(t, err)
 		require.NotNil(t, result.DedicatedIssuer)
+
+		// A client the save could not link is refused here as well.
+		missing := uuid.New()
+		preview.ClientID = conv.PtrEmpty(missing.String())
+		_, err = ti.service.GetServerIdentityImpact(ctx, preview)
+		requireOopsCode(t, err, oops.CodeNotFound)
 	})
 
 	t.Run("needs project write, as the save does", func(t *testing.T) {

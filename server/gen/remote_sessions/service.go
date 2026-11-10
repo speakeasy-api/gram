@@ -74,9 +74,10 @@ type Service interface {
 	// that touches an organization-level client on an organization-level issuer,
 	// is refused here too. With dedicated_issuer, a replace the issuer cannot take
 	// because another MCP server signs in through its client is previewed as
-	// moving mcp_server_id to a new issuer of its own. Requires mcp:write on
-	// mcp_server_id when given, otherwise project:write. Servers the caller cannot
-	// read are counted in hidden_server_count and never named.
+	// moving mcp_server_id to a new issuer of its own, which also requires
+	// project:write. Requires mcp:write on mcp_server_id when given, otherwise
+	// project:write. Servers the caller cannot read are counted in
+	// hidden_server_count and never named.
 	GetServerIdentityImpact(context.Context, *GetServerIdentityImpactPayload) (res *ServerIdentityImpactResult, err error)
 	// List the upstream OAuth clients an MCP server is associated with. An
 	// association is a per-server configuration fact: one client can serve several
