@@ -183,6 +183,20 @@ func (d memberDial) upstreamCredential() remotemcp.UpstreamCredentialSent {
 	return remotemcp.UpstreamCredentialSent{Attached: !d.anonymous, Self: d.clientCredential, Configured: d.configuredHeaders}
 }
 
+// sentCredential is what of the dialed credentials the final request to the member still carried.
+func (d memberDial) sentCredential(answer memberRejection) remotemcp.UpstreamCredentialSent {
+	return remotemcp.SentCredential(answer.authorizationSent, answer.configuredSent, !d.anonymous, d.clientCredential)
+}
+
+// memberSendsConfiguredCredential reports an admin-set credential among the headers a member's
+// build sends. Build drops the server's credential headers once the client's headers are selected.
+func memberSendsConfiguredCredential(headers []remotemcp_repo.RemoteMcpServerHeader, clientHeaders []proxy.ConfiguredHeader, clientSelected bool) bool {
+	if clientSelected {
+		return remotemcp.HasConfiguredCredential(clientHeaders)
+	}
+	return serverHeadersHaveCredential(headers)
+}
+
 func memberSessionKey(route any, token string) string {
 	encoded, _ := json.Marshal([]any{route, token})
 	sum := sha256.Sum256(encoded)
@@ -419,14 +433,17 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", terr
 		}
 		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()), s.memberConnectionOption(ctx, &gate, member)}
-		if member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders()) {
-			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
+		clientSelected := member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders())
+		var clientHeaders []proxy.ConfiguredHeader
+		if clientSelected {
+			clientHeaders = member.authClient.headers
+			options = append(options, remotemcp.WithAuthClientHeaders(clientHeaders))
 		}
 		var authHeaders []proxy.ConfiguredHeader
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: serverHeadersHaveCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, fix: nil, oauthSignIn: agentOAuthSignIn(member, tokens), sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: memberSendsConfiguredCredential(headers, clientHeaders, clientSelected), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
