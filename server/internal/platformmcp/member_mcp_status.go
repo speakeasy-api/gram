@@ -75,13 +75,13 @@ type GetMyMCPConnectionStatusOutput struct {
 }
 
 type memberMCPStatusTarget struct {
-	projectID             uuid.UUID
-	mcpID                 uuid.UUID
-	name                  string
-	endpointSlug          string
-	canRead               bool
-	canConnect            bool
-	userSessionIssuerID   uuid.UUID
+	projectID           uuid.UUID
+	mcpID               uuid.UUID
+	name                string
+	endpointSlug        string
+	canRead             bool
+	canConnect          bool
+	userSessionIssuerID uuid.UUID
 	// remoteSessionIssuerID is the one provider the server's live client
 	// associations name, or uuid.Nil when they name none or several.
 	remoteSessionIssuerID uuid.UUID
