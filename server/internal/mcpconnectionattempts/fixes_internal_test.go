@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/audit"
 )
 
 // touchedOnlyFixes are the admin-fixable reasons left out of adminFixes, and why. A
@@ -63,5 +65,23 @@ func TestEveryAdminReasonIsDecided(t *testing.T) {
 		_, fixed := adminFixes[reason]
 		_, touched := touchedOnlyFixes[reason]
 		require.True(t, fixed || touched, "%s is admin-fixable: add it to adminFixes or touchedOnlyFixes", reason)
+	}
+}
+
+func TestEveryAdminFixActionCountsAsAChange(t *testing.T) {
+	t.Parallel()
+	for reason, fix := range adminFixes {
+		for _, a := range fix.changes {
+			require.True(t, IsConfigChange(a.Action), "%s credits %s", reason, a.Action)
+		}
+	}
+	for _, action := range []audit.Action{
+		audit.ActionAccessChallengeResolve,
+		audit.ActionKillswitchDeactivate,
+		audit.ActionKillswitchExpire,
+		audit.ActionOrganizationPaygActivated,
+		audit.ActionWorkloadAdmissionAdmit,
+	} {
+		require.True(t, IsConfigChange(string(action)), action)
 	}
 }

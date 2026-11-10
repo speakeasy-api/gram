@@ -44,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	deploymentsrepo "github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -66,6 +67,7 @@ import (
 
 type Service struct {
 	catalogPromotion     *catalogpromotion.Service
+	providerHealth       *mcpconnectionattempts.ProviderHealth
 	registry             *mcpregistry.Service
 	remoteSessions       *remotesessions.Service
 	assets               *assets.Service
@@ -259,7 +261,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{catalogPromotion: nil, providerHealth: nil, projectRedeployer: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,

@@ -832,6 +832,7 @@ const (
 	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
 	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
 	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionProviderKey             = attribute.Key("gram.connection.provider")
 	ConnectionStepKey                 = attribute.Key("gram.connection.step")
 	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
@@ -3179,6 +3180,7 @@ func SlogConnectionDropReason(v string) slog.Attr {
 }
 
 func ConnectionOutcome(v string) attribute.KeyValue  { return ConnectionOutcomeKey.String(v) }
+func ConnectionProvider(v string) attribute.KeyValue { return ConnectionProviderKey.String(v) }
 func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
 func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
 func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
