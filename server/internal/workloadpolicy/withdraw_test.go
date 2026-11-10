@@ -38,6 +38,7 @@ func TestWithdrawSubject_StopsItAuthenticatingAndClearsItsAgent(t *testing.T) {
 		ID:               policy.Admissions[0].ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, "organization", after.WithdrawnTier)
 	require.Empty(t, after.Admissions)
 	// The issuer survives its subject: withdrawing one machine is not a reason
 	// to stop trusting the platform that vouched for it.
@@ -248,6 +249,7 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 		ID:               orgTier.Admissions[0].ID,
 	})
 	require.NoError(t, err)
+	require.Equal(t, "organization", after.WithdrawnTier)
 
 	// The surviving admission must keep its agent. Without it the workload
 	// authenticates and is then refused for having no agent, which reads as a
@@ -277,6 +279,41 @@ func TestWithdrawSubject_LeavesTheOtherTiersAgentInPlace(t *testing.T) {
 // withdrawable by supplying its UUID. GetWorkloadIssuer and SoftDeleteWorkloadIssuer
 // once scoped on organization alone, which made a row the caller could not observe
 // a row it could destroy.
+func TestWithdrawSubject_NamesTheProjectTier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	ctx = asAPIKey(t, ctx)
+
+	registerAnthropic(t, ctx, ti, true)
+	agentID := newAgent(t, ctx, ti, "claude-tag-poc")
+
+	projectTier, err := ti.service.AdmitSubject(ctx, &gen.AdmitSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		Issuer:           anthropicIssuer,
+		Subject:          channelOne,
+		MatchKind:        string(workloadidentity.MatchKindExact),
+		Name:             nil,
+		Tags:             nil,
+		AgentID:          agentID.String(),
+		ProjectScoped:    true,
+	})
+	require.NoError(t, err)
+	require.Len(t, projectTier.Admissions, 1)
+	require.Equal(t, ti.projectID.String(), projectTier.Admissions[0].ProjectID)
+
+	after, err := ti.service.WithdrawSubject(ctx, &gen.WithdrawSubjectPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		ID:               projectTier.Admissions[0].ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "project", after.WithdrawnTier)
+	require.Empty(t, after.Admissions)
+}
+
 func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

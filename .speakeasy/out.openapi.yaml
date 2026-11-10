@@ -87234,7 +87234,7 @@ paths:
         name: WithdrawWorkloadIssuer
   /rpc/workloadIdentities.withdrawSubject:
     delete:
-      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. Requires workload:write.
+      description: Withdraw an admitted subject and its agent assignment, stopping it authenticating. A subject can be admitted at the organization and in a project independently; withdrawing one leaves the other in force, and the result names the tier removed. Requires workload:write.
       operationId: withdrawWorkloadSubject
       parameters:
         - allowEmptyValue: true
@@ -87272,7 +87272,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkloadIdentityPolicy'
+                $ref: '#/components/schemas/WithdrawnWorkloadSubjectPolicy'
           description: OK response.
         "400":
           content:
@@ -124643,6 +124643,30 @@ components:
       required:
         - id
         - name
+    WithdrawnWorkloadSubjectPolicy:
+      type: object
+      properties:
+        admissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadAdmission'
+          description: Admitted subjects.
+        issuers:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkloadIssuer'
+          description: Trusted issuers, organization tier first.
+        withdrawn_tier:
+          type: string
+          description: 'The tier of the admission that was withdrawn: organization or project.'
+          enum:
+            - organization
+            - project
+      description: The whole trust policy after a subject was withdrawn, with the tier the withdrawn admission belonged to. The same subject may still be admitted at the other tier, which the admissions list shows.
+      required:
+        - withdrawn_tier
+        - issuers
+        - admissions
     WorkOSDomainVerificationIntentOptions:
       type: object
       properties:

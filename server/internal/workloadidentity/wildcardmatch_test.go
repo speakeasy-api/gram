@@ -317,6 +317,50 @@ func TestValidateSubjectRule(t *testing.T) {
 	}
 }
 
+func TestValidateSubjectRule_URISubjects(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		kind    workloadidentity.MatchKind
+		subject string
+		wantErr error
+	}{
+		{name: "a Claude Tag agent subject is accepted", kind: workloadidentity.MatchKindExact, subject: channelOne, wantErr: nil},
+		{name: "the Claude Tag wildcard rule is accepted", kind: workloadidentity.MatchKindWildcard, subject: fleetRule, wantErr: nil},
+		{name: "a SPIFFE ID is accepted", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example/ns/prod/sa/api", wantErr: nil},
+
+		// A stem is a leading portion of an identifier, so it may stop inside
+		// the trust domain.
+		{name: "a stem that stops inside the trust domain is accepted", kind: workloadidentity.MatchKindWildcard, subject: "wimse://td.exa*", wantErr: nil},
+
+		// Other formats stay opaque.
+		{name: "a Kubernetes subject stays opaque", kind: workloadidentity.MatchKindExact, subject: "system:serviceaccount:pr-review:review-agent", wantErr: nil},
+		{name: "a GitHub Actions subject stays opaque", kind: workloadidentity.MatchKindExact, subject: "repo:acme/deploy:ref:refs/heads/main", wantErr: nil},
+
+		{name: "a query is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://td.example/a?x=1", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "an empty query marker is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://td.example/a?", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "a fragment is refused", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example/a#b", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "a port is refused", kind: workloadidentity.MatchKindExact, subject: "spiffe://td.example:8443/a", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "user information is refused", kind: workloadidentity.MatchKindExact, subject: "wimse://admin@td.example/a", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "an empty trust domain is refused", kind: workloadidentity.MatchKindExact, subject: "wimse:///a", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "a missing authority is refused", kind: workloadidentity.MatchKindExact, subject: "wimse:td.example/a", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "the scheme is matched case-insensitively", kind: workloadidentity.MatchKindExact, subject: "SPIFFE://td.example:8443/a", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "a stem without a trust domain is refused", kind: workloadidentity.MatchKindWildcard, subject: "wimse://*", wantErr: workloadidentity.ErrURISubjectMalformed},
+		{name: "a stem with a port is refused", kind: workloadidentity.MatchKindWildcard, subject: "spiffe://td.example:*", wantErr: workloadidentity.ErrURISubjectMalformed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := workloadidentity.ValidateSubjectRule(tc.kind, tc.subject, true)
+			if tc.wantErr == nil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tc.wantErr)
+		})
+	}
+}
+
 func TestWildcardStem(t *testing.T) {
 	t.Parallel()
 

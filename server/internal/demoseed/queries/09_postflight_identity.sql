@@ -486,6 +486,9 @@ WHERE CASE match_kind
   -- the author wanted a wildcard and instead stored a literal matching
   -- nothing at all.
   WHEN 'exact' THEN subject LIKE '%*%'
+    -- A wimse:// or spiffe:// subject needs a trust domain and no user
+    -- information, port, query or fragment.
+    OR (subject ~* '^(wimse|spiffe):' AND subject !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$')
   WHEN 'wildcard' THEN
     -- Enforced on read, so clearing the issuer flag is a kill switch. A rule
     -- written under an issuer that forbids wildcards is already inert.
@@ -496,6 +499,9 @@ WHERE CASE match_kind
     OR subject NOT LIKE '%*'
     OR left(subject, length(subject) - 1) = ''
     OR left(subject, length(subject) - 1) LIKE '%*%'
+    -- The same identifier syntax, checked on the stem as far as it goes.
+    OR (left(subject, length(subject) - 1) ~* '^(wimse|spiffe):'
+      AND left(subject, length(subject) - 1) !~* '^(wimse|spiffe)://[^/?#@:]+(/[^?#]*)?$')
   ELSE TRUE
 END;
 
