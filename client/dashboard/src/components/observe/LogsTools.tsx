@@ -14,8 +14,8 @@ import {
   GatewayDispatchLink,
   GatewayTargetLink,
 } from "@/components/observe/GatewayDispatchLink";
+import type { FilterChip } from "@/components/observe/ObserveFilterBar";
 import {
-  FilterChip,
   type ObserveStatusFilterValue,
   type ObserveTypeFilterValue,
 } from "@/components/observe/ObserveFilterBar";

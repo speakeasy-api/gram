@@ -1,8 +1,8 @@
 // TODO: https://linear.app/speakeasy/issue/SXF-170/table-component
 import { Spinner } from "@/components/ui/Spinner";
+import type { PropsWithChildren } from "react";
 import React, {
   forwardRef,
-  PropsWithChildren,
   type ReactNode,
   useCallback,
   useMemo,

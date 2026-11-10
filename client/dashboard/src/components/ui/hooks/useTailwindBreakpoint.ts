@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { Breakpoint } from "@/components/ui/lib/types";
+import type { Breakpoint } from "@/components/ui/lib/types";
 import debounce from "@/components/ui/lib/debounce";
 
 // Matches Tailwind's default breakpoints.

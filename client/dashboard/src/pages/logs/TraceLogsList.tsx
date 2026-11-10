@@ -1,5 +1,5 @@
 import { traceLogsQueryOptions } from "./traceLogsQuery";
-import { ReactElement } from "react";
+import type { ReactElement } from "react";
 import { cn } from "@/lib/utils";
 import type { TelemetryLogRecord } from "@gram/client/models/components/telemetrylogrecord.js";
 import type { ToolUsageTraceLogGroup } from "@gram/client/models/components/toolusagetraceloggroup.js";

@@ -2,7 +2,7 @@ import { ResourceListPage } from "@/components/page-templates";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
 import { HumanizeDateTime } from "@/lib/dates";
-import { Key } from "@gram/client/models/components/key.js";
+import type { Key } from "@gram/client/models/components/key.js";
 import {
   invalidateListAPIKeys,
   useListAPIKeysSuspense,
@@ -10,7 +10,8 @@ import {
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
-import { Column, Table } from "@/components/ui/Table";
+import type { Column } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useOrganization } from "@/contexts/Auth";

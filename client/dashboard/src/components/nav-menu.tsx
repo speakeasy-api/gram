@@ -5,14 +5,15 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/Collapsible";
 import { cn } from "@/lib/utils";
-import { AppRoute } from "@/routes";
+import type { AppRoute } from "@/routes";
 import { ChevronRightIcon } from "lucide-react";
 import { motion } from "motion/react";
 import React from "react";
 import { Link } from "react-router";
 import { ProductTierBadge } from "./product-tier-badge";
 import { stageLabel, stageTextClass } from "./release-stage";
-import { ReleaseStage, ReleaseStageBadge } from "./release-stage-badge";
+import type { ReleaseStage } from "./release-stage-badge";
+import { ReleaseStageBadge } from "./release-stage-badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 
