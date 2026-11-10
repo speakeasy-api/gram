@@ -239,8 +239,11 @@ func (s *Service) probeRemoteSession(
 		tokenProjectID uuid.UUID
 		usable         bool
 	)
+	// Only the client being checked resolves: another client the issuer binds,
+	// even one for the same authorization server, says nothing about this one.
+	checked := map[uuid.UUID]bool{client.ID: true}
 	for _, projectID := range tokenProjectIDs {
-		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		resolved, rerr := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, checked, true)
 		if verifyHitStoreOutage(ctx, rerr) {
 			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
 			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
@@ -279,9 +282,17 @@ func (s *Service) probeRemoteSession(
 		logger.InfoContext(ctx, "new remote grant not verified: credential changed before probe")
 		return nil
 	}
-	// Route the complete credential set, just as serving does. The target resolver
-	// separately proves that this card is the credential selected for the target.
-	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
+	// The target resolver proves that this card is the credential selected for
+	// the target. A gateway member's dispatch routes from the member's own
+	// credential set, so the check reads the same set to refuse what dispatch
+	// would refuse.
+	memberTokens := func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+		if resolvesByAssociation(member) {
+			return s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, attribution, member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
+		}
+		return s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, attribution, tokenProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	}
+	probeCtx, target, err := s.resolveValidationTarget(ctx, logger, endpoint, challengeState, client, tokens, memberTokens)
 	switch {
 	case errors.Is(err, errRemoteSessionUnroutable):
 		return oops.E(oops.CodeBadRequest, err, "This connection is not used by any server behind this endpoint, so it cannot be verified.").LogWarn(ctx, logger)
@@ -482,6 +493,7 @@ func (s *Service) resolveValidationTarget(
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 ) (context.Context, validationTarget, error) {
 	var none validationTarget
 	subject := *challengeState.Subject
@@ -495,7 +507,7 @@ func (s *Service) resolveValidationTarget(
 
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, sessionID, subject)
+		return s.metaValidationTarget(ctx, logger, endpoint, client, tokens, memberTokens, sessionID, subject)
 	case endpoint.McpServerID.Valid:
 		return s.standaloneValidationTarget(ctx, logger, endpoint, challengeState, client, tokens)
 	default:
@@ -510,6 +522,7 @@ func (s *Service) metaValidationTarget(
 	endpoint *ResolvedMcpEndpoint,
 	client remotesessions.Client,
 	tokens map[uuid.UUID]remotesessions.UpstreamToken,
+	memberTokens func(context.Context, metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error),
 	sessionID string,
 	subject urn.SessionSubject,
 ) (context.Context, validationTarget, error) {
@@ -632,9 +645,14 @@ func (s *Service) metaValidationTarget(
 	if dial.anonymous {
 		return ctx, none, errRemoteSessionUnroutable
 	}
-	// The dial proves this card matches the actual backend. Check the complete
-	// set for ambiguity without loading and authorizing that backend twice.
-	if _, err := routeMetaMemberToken(tokens, member, entry.Resource); err != nil {
+	// The dial proves this card matches the actual backend. Check the member's
+	// own credential set for ambiguity without loading and authorizing that
+	// backend twice.
+	routable, err := memberTokens(ctx, member)
+	if err != nil {
+		return ctx, none, fmt.Errorf("resolve member credentials for validation: %w", err)
+	}
+	if _, err := routeMetaMemberToken(routable, member, entry.Resource); err != nil {
 		return ctx, none, fmt.Errorf("%w: %w", errRemoteSessionUnroutable, err)
 	}
 	return ctx, validationTarget{name: name, build: probeProxyBuilder(dial.build), tunnelID: member.tunneledServerID, memberID: member.serverID, setupFailed: false}, nil

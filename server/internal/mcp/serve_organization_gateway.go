@@ -367,21 +367,29 @@ func (s *Service) organizationGatewayRows(ctx context.Context, organization orgs
 // gatewayAvailability is orggateway.Availability or one of its variants.
 type gatewayAvailability func(context.Context, usersessionsrepo.DBTX, orgsrepo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)
 
-// projectTokenCache resolves a derived gateway's upstream credentials one
-// member project at a time, on first use, and keeps them for the rest of the
-// request.
+// projectTokenCache resolves a derived gateway's upstream credentials on
+// first use and keeps them for the rest of the request: one member at a time
+// for a proxied member with associated clients, one member project at a time
+// for any other member.
+//
+// A proxied member resolves only the clients associated with it. The issuer
+// binds clients for every server that signs in through it, possibly several
+// for one authorization server, and a member's credential is decided by its
+// associations, not by which clients happen to share its issuer.
 //
 // Remote session clients are bound per project: two projects may each bind
 // their own client for one authorization server to the same organization
 // issuer, so one organization-wide token map could not say which client's
-// token belongs to which member. Resolving per project gives each member
-// exactly the clients its own project, its organization, and the platform
-// bind, which is what the member would get on its own endpoint.
+// token belongs to which member. Resolving per project gives a member with no
+// associations exactly the clients its own project, its organization, and
+// the platform bind, which is what the member would get on its own endpoint.
 type projectTokenCache struct {
-	resolve func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error)
+	resolve       func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error)
+	resolveMember func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error)
 
 	mu        sync.Mutex
 	byProject map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken
+	byMember  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken
 }
 
 func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
@@ -399,6 +407,32 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 	return tokens, nil
 }
 
+// getMember resolves a proxied member's credentials from its associated
+// clients alone.
+func (c *projectTokenCache) getMember(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	if tokens, ok := c.byMember[member.serverID]; ok {
+		return tokens, nil
+	}
+	tokens, err := c.resolveMember(ctx, member)
+	if err != nil {
+		return nil, err
+	}
+	if c.byMember == nil {
+		c.byMember = map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{}
+	}
+	c.byMember[member.serverID] = tokens
+	return tokens, nil
+}
+
+// resolvesByAssociation reports whether a member's credentials come from its
+// associated clients alone: a proxied member with at least one association.
+func resolvesByAssociation(member metaMember) bool {
+	return member.backend == metaMemberBackendProxied && len(member.associatedClients) > 0
+}
+
 // newOrganizationGatewayTokens resolves upstream credentials for the
 // authenticated subject the way a member's own endpoint would: partially,
 // so a member whose provider is not connected degrades on its own. A stored
@@ -413,8 +447,16 @@ func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *Resolv
 			}
 			return tokens, nil
 		},
+		resolveMember: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			tokens, err := s.remoteChallengeMgr.ResolveAssociatedAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), member.projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, member.associatedClients, true)
+			if err != nil {
+				return nil, oops.E(oops.CodeUnexpected, err, "resolve member remote session").LogError(ctx, s.logger)
+			}
+			return tokens, nil
+		},
 		mu:        sync.Mutex{},
 		byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
+		byMember:  map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{},
 	}
 }
 
@@ -428,6 +470,13 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	}
 	if g.projectTokens == nil {
 		return g.tokens, nil
+	}
+	if resolvesByAssociation(member) {
+		tokens, err := g.projectTokens.getMember(ctx, member)
+		if err != nil {
+			return nil, memberCredentialLoadError(member, err)
+		}
+		return tokens, nil
 	}
 	tokens, err := g.projectTokens.get(ctx, member.projectID)
 	if err != nil {
