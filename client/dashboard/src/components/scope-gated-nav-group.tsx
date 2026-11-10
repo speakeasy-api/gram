@@ -56,8 +56,15 @@ export function ScopeGatedNavGroup({
   const { hasAnyScope } = useRBAC();
 
   const visible = visibleNavEntries(items, hasAnyScope);
+  const stable = visible.filter((entry) => !entry.item.stage);
+  const sections = STAGE_ORDER.map((sectionStage) => ({
+    sectionStage,
+    entries: visible.filter((entry) => entry.item.stage === sectionStage),
+  })).filter((section) => section.entries.length > 0);
 
-  const first = visible[0];
+  // The header links to the top row as rendered: stable items first, then
+  // each stage section in order.
+  const first = stable[0] ?? sections[0]?.entries[0];
   if (!first) return null;
 
   return (
@@ -68,33 +75,25 @@ export function ScopeGatedNavGroup({
       stage={stage}
       activeStage={visible.find((entry) => entry.item.active)?.item.stage}
     >
-      {visible
-        .filter((entry) => !entry.item.stage)
-        .map((entry) => (
-          <CollapsibleNavItem
-            key={entry.item.url}
-            item={entry.item}
-            label={entry.label}
-          />
-        ))}
-      {STAGE_ORDER.map((sectionStage) => {
-        const staged = visible.filter(
-          (entry) => entry.item.stage === sectionStage,
-        );
-        if (staged.length === 0) return null;
-        return (
-          <ReleaseStageNavSection key={sectionStage} stage={sectionStage}>
-            {staged.map((entry) => (
-              <CollapsibleNavItem
-                key={entry.item.url}
-                item={entry.item}
-                label={entry.label}
-                stageSection={sectionStage}
-              />
-            ))}
-          </ReleaseStageNavSection>
-        );
-      })}
+      {stable.map((entry) => (
+        <CollapsibleNavItem
+          key={entry.item.url}
+          item={entry.item}
+          label={entry.label}
+        />
+      ))}
+      {sections.map(({ sectionStage, entries }) => (
+        <ReleaseStageNavSection key={sectionStage} stage={sectionStage}>
+          {entries.map((entry) => (
+            <CollapsibleNavItem
+              key={entry.item.url}
+              item={entry.item}
+              label={entry.label}
+              stageSection={sectionStage}
+            />
+          ))}
+        </ReleaseStageNavSection>
+      ))}
     </CollapsibleNavGroup>
   );
 }
