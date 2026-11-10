@@ -3459,7 +3459,23 @@ WHERE registration.mcp_server_id = $1
   AND registration.project_id = $3
   AND registration.status = 'registered'
   AND registration.deleted IS FALSE
-  AND server.remote_session_issuer_id IS NULL
+  AND cardinality(ARRAY(
+      -- The distinct live providers the server's live client associations name.
+      SELECT DISTINCT c.remote_session_issuer_id
+      FROM mcp_server_remote_session_clients AS a
+      JOIN remote_session_clients AS c
+        ON c.id = a.remote_session_client_id
+       AND c.deleted IS FALSE
+       AND (c.project_id = a.project_id
+            OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = a.organization_id)))
+      JOIN remote_session_issuers AS provider
+        ON provider.id = c.remote_session_issuer_id
+       AND provider.deleted IS FALSE
+       AND (provider.project_id = a.project_id
+            OR (provider.project_id IS NULL AND (provider.organization_id IS NULL OR provider.organization_id = a.organization_id)))
+      WHERE a.mcp_server_id = server.id
+        AND a.deleted IS FALSE
+  )::uuid[]) = 0
 ORDER BY registration.id
 LIMIT 1
 `
