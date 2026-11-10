@@ -19,13 +19,17 @@ import (
 // hour, across every organization, with its own last seven closed days. It is
 // computed when asked and stored nowhere. Only ended attempts count, in the window as
 // in the baseline, so a provider fault someone is still retrying is not yet a failure.
-// The demo organization is left out of both. Customer outage messages can later
+// The demo organization is left out of both. Status reads provider-side failure codes
+// only, so an outage that only leaves people abandoned on the provider's sign-in page
+// is not detected; abandons are reported per step but not judged. Customer outage messages can later
 // make a status-only read (Window: OutageWindow, TrendDays: 0) behind a short cache;
 // until then only staff see it.
 
 const (
-	// OutageWindow is the recent stretch judged: long enough to hold a few attempts
-	// at today's volume, short enough that an outage shows within the hour.
+	// OutageWindow is the recent stretch judged: attempts that ended in it. An attempt
+	// with a final row ends then; one that stops without one ends when its live window
+	// does, so a failure on an in-attempt step reaches status one to two hours after it
+	// happened. Counting live rows instead would read retried faults as outages.
 	OutageWindow = time.Hour
 
 	// OutageBaseline is the provider's own past the window is compared with, so a
@@ -258,14 +262,86 @@ func newProviderTally() *providerTally {
 type providerAttempt struct {
 	AttemptSummary
 
+	// EndingProvider is the provider on the row that decided how the attempt ended, empty when that row names none.
+	EndingProvider string `ch:"ending_provider"`
+
+	// AttributedProvider is the provider on the row that decided how the attempt
+	// ended, else its earliest provider, so a gateway attempt that checks several
+	// members is counted against the member that failed.
+	AttributedProvider string `ch:"attributed_provider"`
+
 	// ReconnectLoop says a needs-sign-in or rejected row came after a provider sign-in.
 	ReconnectLoop bool `ch:"reconnect_loop"`
 }
 
-// providerAttemptColumns adds the reconnect loop to the ending columns.
-const providerAttemptColumns = attemptEndingColumns + `,
-	toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
-		AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop`
+// providerAttemptsQuery reduces each attempt that started in a range and reached a
+// provider; filter narrows it after the reduction. The ending row is picked with the
+// same tie-breaks as the ending columns.
+func providerAttemptsQuery(filter string) string {
+	return `
+	SELECT` + attemptEndingColumns + `,
+		toString(if(countIf(is_final) > 0,
+			argMinIf(provider_host, (event_time, step, outcome, reason), is_final),
+			argMax(provider_host, (event_time, step, reason)))) AS ending_provider,
+		if(ending_provider != '', ending_provider, provider) AS attributed_provider,
+		toBool(countIf(step = 'provider_sign_in' AND step_result = 'signed_in') > 0
+			AND maxIf(event_time, reason IN ('rejected_by_member', 'needs_sign_in')) > minIf(event_time, step = 'provider_sign_in' AND step_result = 'signed_in')) AS reconnect_loop
+	FROM ` + eventsTable + `
+	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
+		AND NOT has(?, organization_id)
+	GROUP BY organization_id, attempt_id
+	HAVING attributed_provider != ''` + filter
+}
+
+// providerDetailsQuery groups attempts that ended in a range by provider and ending,
+// with End's rules: the final row decides; otherwise, once the live window is over,
+// the last row's reason means failed (blocked or declined for those codes) and no
+// reason means abandoned. The range keeps only attempts whose live window is over.
+func providerDetailsQuery(filter string) string {
+	return `
+	SELECT attributed_provider AS detail_provider,
+		multiIf(has_final, final_outcome, last_reason = '', 'abandoned', has(?, last_reason), 'not_failed', 'failed') AS detail_outcome,
+		if(has_final, final_step, last_step) AS detail_step,
+		if(has_final, final_reason, last_reason) AS detail_reason,
+		sum(weight) AS detail_attempts,
+		sumIf(weight, reconnect_loop) AS detail_loops
+	FROM (` + providerAttemptsQuery(filter) + `)
+	WHERE if(has_final, final_at, started_at + toIntervalSecond(?)) BETWEEN fromUnixTimestamp64Nano(?) AND fromUnixTimestamp64Nano(?)
+	GROUP BY detail_provider, detail_outcome, detail_step, detail_reason`
+}
+
+// providerDetail is one row of providerDetailsQuery.
+type providerDetail struct {
+	// Provider is the raw attributed host.
+	Provider string `ch:"detail_provider"`
+
+	// Outcome is how the attempts ended.
+	Outcome string `ch:"detail_outcome"`
+
+	// Step is where they ended.
+	Step string `ch:"detail_step"`
+
+	// Reason is the ending reason.
+	Reason string `ch:"detail_reason"`
+
+	// Attempts is their weight.
+	Attempts uint64 `ch:"detail_attempts"`
+
+	// Loops is the weight of reconnect loops among them.
+	Loops uint64 `ch:"detail_loops"`
+}
+
+// notFailedReasons are codes that end an attempt without a final row as blocked or declined, not failed.
+func notFailedReasons() []string {
+	var codes []string
+	for code, meaning := range catalog {
+		if meaning.Outcome == OutcomeBlocked || meaning.Outcome == OutcomeDeclined {
+			codes = append(codes, code)
+		}
+	}
+	slices.Sort(codes)
+	return codes
+}
 
 // Read returns each provider's health, busiest in the last hour first. Organizations stay counts.
 // A status-only caller passes Window: OutageWindow and TrendDays: 0.
@@ -291,14 +367,6 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		"max_memory_usage":   providerHealthReadMemoryBytes,
 	}))
 
-	// Attempts fall in a window by when they ended, so the scan reaches back one
-	// live window further for attempts that started earlier and ended inside it.
-	statusFrom := now.Add(-OutageWindow)
-	detailFrom := now.Add(-query.Window)
-	if statusFrom.Before(detailFrom) {
-		detailFrom = statusFrom
-	}
-	scanFrom := detailFrom.Add(-AttemptLiveWindow).UnixNano()
 	// Every known provider is reported, quiet when it has no rows, so silence is visible.
 	tallies := map[string]*providerTally{}
 	if query.Provider != "" {
@@ -316,41 +384,23 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 		}
 		return t
 	}
-
-	providerFilter, args := "", []any{scanFrom, now.UnixNano(), ExcludedOrganizations()}
-	// other is every unlisted host, so only a known host is pushed down.
-	if query.Provider != "" && query.Provider != LabelOther {
-		providerFilter, args = " AND provider = ?", append(args, query.Provider)
-	}
-	rows, err := h.conn.Query(ctx, `SELECT`+providerAttemptColumns+` FROM `+eventsTable+`
-	WHERE attempt_started_at >= fromUnixTimestamp64Nano(?) AND attempt_started_at < fromUnixTimestamp64Nano(?)
-		AND NOT has(?, organization_id)
-	GROUP BY organization_id, attempt_id
-	HAVING provider != ''`+providerFilter, args...)
-	if err != nil {
-		return nil, fmt.Errorf("query provider attempts: %w", err)
-	}
-	defer o11y.NoLogDefer(func() error { return rows.Close() })
-	for rows.Next() {
-		var a providerAttempt
-		if err := rows.ScanStruct(&a); err != nil {
-			return nil, fmt.Errorf("scan provider attempt: %w", err)
-		}
-		provider := ProviderLabel(a.ProviderHost)
-		if query.Provider != "" && provider != query.Provider {
-			continue
-		}
-		tally(provider).add(a, now, statusFrom, detailFrom)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read provider attempts: %w", err)
+	keep := func(host string) (string, bool) {
+		provider := ProviderLabel(host)
+		return provider, query.Provider == "" || provider == query.Provider
 	}
 
+	if err := h.readStatus(ctx, now, query.Provider, keep, tally); err != nil {
+		return nil, err
+	}
+	if err := h.readDetails(ctx, now, now.Add(-query.Window), query.Provider, keep, tally); err != nil {
+		return nil, err
+	}
 	if err := h.readBaseline(ctx, now, query.Provider, tally); err != nil {
 		return nil, err
 	}
 	var daily map[string][]ProviderDay
 	if query.TrendDays > 0 {
+		var err error
 		daily, err = h.readDaily(ctx, now, query)
 		if err != nil {
 			return nil, err
@@ -370,6 +420,75 @@ func (h *ProviderHealth) read(ctx context.Context, query ProviderHealthQuery) ([
 	return reports, nil
 }
 
+// providerFilter pushes a known provider down. other is every unlisted host, so it is filtered after.
+func providerFilter(provider string, args []any) (string, []any) {
+	if provider == "" || provider == LabelOther {
+		return "", args
+	}
+	return " AND attributed_provider = ?", append(args, provider)
+}
+
+// readStatus counts the attempts that ended in the last OutageWindow, per attempt so
+// organizations can be counted. It scans one live window further back, for attempts
+// that started earlier and ended inside it.
+func (h *ProviderHealth) readStatus(ctx context.Context, now time.Time, provider string, keep func(string) (string, bool), tally func(string) *providerTally) error {
+	statusFrom := now.Add(-OutageWindow)
+	filter, args := providerFilter(provider, []any{statusFrom.Add(-AttemptLiveWindow).UnixNano(), now.UnixNano(), ExcludedOrganizations()})
+	rows, err := h.conn.Query(ctx, providerAttemptsQuery(filter), args...)
+	if err != nil {
+		return fmt.Errorf("query provider status: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+	for rows.Next() {
+		var a providerAttempt
+		if err := rows.ScanStruct(&a); err != nil {
+			return fmt.Errorf("scan provider attempt: %w", err)
+		}
+		if label, ok := keep(a.AttributedProvider); ok {
+			tally(label).add(a, now, statusFrom)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read provider status: %w", err)
+	}
+	return nil
+}
+
+// readDetails adds failures, abandons and reconnect loops for attempts that ended
+// in the detail window, grouped in ClickHouse.
+func (h *ProviderHealth) readDetails(ctx context.Context, now, detailFrom time.Time, provider string, keep func(string) (string, bool), tally func(string) *providerTally) error {
+	filter, args := providerFilter(provider, []any{notFailedReasons(), detailFrom.Add(-AttemptLiveWindow).UnixNano(), now.UnixNano(), ExcludedOrganizations()})
+	args = append(args, int64(AttemptLiveWindow/time.Second), detailFrom.UnixNano(), now.UnixNano())
+	rows, err := h.conn.Query(ctx, providerDetailsQuery(filter), args...)
+	if err != nil {
+		return fmt.Errorf("query provider details: %w", err)
+	}
+	defer o11y.NoLogDefer(func() error { return rows.Close() })
+	for rows.Next() {
+		var d providerDetail
+		if err := rows.ScanStruct(&d); err != nil {
+			return fmt.Errorf("scan provider detail: %w", err)
+		}
+		label, ok := keep(d.Provider)
+		if !ok {
+			continue
+		}
+		t := tally(label)
+		t.loops += d.Loops
+		switch Outcome(d.Outcome) {
+		case OutcomeFailed:
+			t.failures[[2]string{d.Step, d.Reason}] += d.Attempts
+		case OutcomeAbandoned:
+			t.abandoned[d.Step] += d.Attempts
+		case OutcomeConnected, OutcomeBlocked, OutcomeDeclined:
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("read provider details: %w", err)
+	}
+	return nil
+}
+
 // endedAt is when an attempt ended: its final row, or the end of its live window.
 // The daily baseline counts attempts by the day they started, so an attempt that
 // starts just before midnight UTC can land on a different day there than here.
@@ -380,31 +499,18 @@ func (a providerAttempt) endedAt() time.Time {
 	return a.StartedAt.Add(AttemptLiveWindow)
 }
 
-// add counts one attempt that ended in the detail window. A live attempt can
-// still recover, so it is left out until it ends.
-func (t *providerTally) add(a providerAttempt, now, statusFrom, detailFrom time.Time) {
+// add counts one attempt that ended in the status window. A live attempt can still
+// recover, so it is left out until it ends.
+func (t *providerTally) add(a providerAttempt, now, statusFrom time.Time) {
 	ended := a.endedAt()
-	if ended.After(now) || ended.Before(detailFrom) {
+	if ended.After(now) || ended.Before(statusFrom) {
 		return
 	}
 	weight := max(a.Weight, 1)
-	ending := a.End(now)
-	if !ended.Before(statusFrom) {
-		t.counts.Attempts += weight
-		if meaning, ok := MeaningOf(ending.Reason); ok && meaning.WhoFixes == WhoProvider {
-			t.counts.Failures += weight
-			t.organizations[a.OrganizationID] = struct{}{}
-		}
-	}
-	switch ending.Outcome {
-	case OutcomeAbandoned:
-		t.abandoned[ending.Step] += weight
-	case OutcomeFailed:
-		t.failures[[2]string{ending.Step, ending.Reason}] += weight
-	case OutcomeConnected, OutcomeBlocked, OutcomeDeclined:
-	}
-	if a.ReconnectLoop {
-		t.loops += weight
+	t.counts.Attempts += weight
+	if meaning, ok := MeaningOf(a.End(now).Reason); ok && meaning.WhoFixes == WhoProvider {
+		t.counts.Failures += weight
+		t.organizations[a.OrganizationID] = struct{}{}
 	}
 }
 

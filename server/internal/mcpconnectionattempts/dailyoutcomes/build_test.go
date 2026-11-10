@@ -443,5 +443,5 @@ func TestBuildDayPublishesAgainWhenTheStoredDayIsWrong(t *testing.T) {
 	result := f.build(day)
 	require.True(t, conn.doubled, "the first swap stored a doubled day")
 	require.True(t, result.Swapped)
-	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
+	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mcpconnectionattempts.OutcomesDailyTable, day))
 }

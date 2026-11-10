@@ -269,3 +269,36 @@ func TestProviderHealth_AttemptEndingInTheWindowCounts(t *testing.T) {
 	require.Equal(t, uint64(1), report.Counts.Attempts, "it started before the window but ended inside it")
 	require.Equal(t, uint64(1), report.Counts.Failures)
 }
+
+func TestProviderHealth_CountsTheProviderThatEndedTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.notion.com")
+	other := "mcp.asana.com"
+	for range 5 {
+		attempt := f.attempt("org-"+uuid.NewString(), 10*time.Minute)
+		f.write(attempt,
+			func(a Attempt, at time.Time) (Row, error) {
+				return RowAt(a, StepProviderSignIn, ResultSignedIn, false, at, Provider("https://"+other+"/oauth"))
+			},
+			f.step(StepProviderRefresh, CodeProviderUnavailable, true))
+	}
+
+	report := f.read(time.Hour, 0)
+	require.Equal(t, uint64(5), report.Counts.Failures, "the gateway's second member failed")
+	require.Equal(t, []ProviderFailure{{Step: StepProviderRefresh.String(), Reason: CodeProviderUnavailable.String(), Attempts: 5}}, report.Failures)
+
+	asana := newProviderFixture(t, other).read(time.Hour, 0)
+	require.Zero(t, asana.Counts.Attempts, "the first member's provider is not blamed")
+}
+
+func TestProviderHealth_BlockedStopIsNotAFailure(t *testing.T) {
+	t.Parallel()
+
+	f := newProviderFixture(t, "mcp.sentry.dev")
+	f.write(f.attempt("org-"+uuid.NewString(), 3*time.Hour), f.step(StepDiscoveryMember, CodeNeedsSignIn, false))
+
+	report := f.read(24*time.Hour, 0)
+	require.Empty(t, report.Failures, "a stop on a blocking reason is blocked, as End says")
+	require.Empty(t, report.Abandoned)
+}
