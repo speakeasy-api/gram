@@ -174,8 +174,11 @@ export function AgentName({
   className,
 }: {
   agent: ManagedAgent;
-  /** Re-reads the agent so the header and breadcrumb show the new name. */
-  refresh: () => void;
+  /**
+   * Re-reads the agent so the header and breadcrumb show the new name. The
+   * editor stays open until it resolves, so the old name never shows again.
+   */
+  refresh: () => Promise<unknown>;
   /** The title's typography, shared with every other identity header. */
   className?: string;
 }): JSX.Element {
@@ -212,8 +215,9 @@ export function AgentName({
             );
             return false;
           }
+          // A failed re-read leaves the rename saved; the next read shows it.
+          await refresh().catch(() => undefined);
           toast.success("Agent renamed");
-          refresh();
           return true;
         }}
       >

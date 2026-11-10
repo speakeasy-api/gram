@@ -4,13 +4,28 @@ import { afterEach, expect, it, vi } from "vitest";
 
 import EditAgentIdentity from "./EditAgentIdentity";
 
-vi.mock("@/contexts/Sdk", async (importOriginal) => ({
-  ...(await importOriginal<object>()),
+vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+  useSdkClient: () => ({}),
 }));
 // Only the redirect is under test; the sign-in flow it keeps has its own.
 vi.mock("./credentials/CredentialsWizard", () => ({
+  AGENT_SIGN_IN_STEP: 3,
   CredentialsWizard: () => <div>Agent sign-in flow</div>,
+}));
+// The page around the flow, with the agent and its grants already read.
+vi.mock("@/contexts/Auth", () => ({ useOrganization: () => ({ id: "org" }) }));
+vi.mock("@/components/page-templates", () => ({
+  FormPage: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+vi.mock("@/components/insights-dock", () => ({ InsightsConfig: () => null }));
+vi.mock("@tanstack/react-query", () => ({
+  useQuery: () => ({ data: { id: "agent_1", name: "Release Bot" } }),
+  useQueryClient: () => ({}),
+}));
+vi.mock("@gram/client/react-query/agentsListPolicyGrants.js", () => ({
+  useAgentsListPolicyGrants: () => ({ data: [] }),
+  invalidateAgentsListPolicyGrants: vi.fn(),
 }));
 
 function Landed(): JSX.Element {
@@ -53,4 +68,9 @@ it.each([
       `/acme/projects/default/identities/agent%3Aagent_1/mcp-sign-in${view}`,
     ),
   ).toBeTruthy();
+});
+
+it("keeps the Agent sign-in step and what follows it", () => {
+  open("?step=3");
+  expect(screen.getByText("Agent sign-in flow")).toBeTruthy();
 });

@@ -21,10 +21,10 @@ import {
 } from "@gram/client/react-query/agentsListPolicyGrants.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { CredentialsWizard } from "./credentials/CredentialsWizard";
-
-/** The wizard's Agent sign-in step: everything before it has a tab now. */
-const AGENT_SIGN_IN_STEP = 3;
+import {
+  AGENT_SIGN_IN_STEP,
+  CredentialsWizard,
+} from "./credentials/CredentialsWizard";
 
 /**
  * Changing how an existing agent signs in to Speakeasy: the setup wizard from

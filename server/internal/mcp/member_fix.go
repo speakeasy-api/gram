@@ -5,8 +5,8 @@
 // agent's MCP sign-in tab in the dashboard, or reviews its permissions there.
 // The message names no one, since the owner is not the only person who may
 // fix it, and the links carry no credential: the page asks the reader to sign
-// in to Speakeasy and shows the tab only to someone allowed to edit the
-// agent. Anywhere else, an administrator fixes it.
+// in to Speakeasy and shows its sign-in controls only to someone allowed to
+// edit the agent. Anywhere else, an administrator fixes it.
 
 package mcp
 

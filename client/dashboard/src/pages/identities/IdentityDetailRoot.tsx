@@ -276,7 +276,7 @@ function IdentityDetailContent(): JSX.Element {
                       <AgentName
                         agent={identity.agent}
                         className={className}
-                        refresh={() => void identityQuery.refetch()}
+                        refresh={() => identityQuery.refetch()}
                       />
                     )
                 : undefined

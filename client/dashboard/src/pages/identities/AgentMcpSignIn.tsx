@@ -1,12 +1,10 @@
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { useSearchParams } from "react-router";
 import { toast } from "sonner";
 
 import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Button } from "@/components/ui/Button";
 import { SkeletonTable } from "@/components/ui/Skeleton";
-import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { useRoutes } from "@/routes";
 import { CredentialsWizard } from "@/pages/agents/credentials/CredentialsWizard";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import {
@@ -31,7 +29,6 @@ export function AgentMcpSignIn({
   /** Re-reads the agent, whose "needs refresh" state a save can clear. */
   refresh: () => void;
 }): JSX.Element {
-  const routes = useRoutes();
   const queryClient = useQueryClient();
   const [params] = useSearchParams();
   const grants = useAgentsListPolicyGrants({ agentId: agent.id }, undefined, {
@@ -41,24 +38,17 @@ export function AgentMcpSignIn({
   // Bumped once the saved grants are read back, so the views start again from
   // what is now stored rather than from the draft that was just saved.
   const [generation, setGeneration] = useState(0);
+  // When the last save landed, so the views that reopen after it say so.
+  const [savedAt, setSavedAt] = useState<number | undefined>(undefined);
 
   if (!agent.permissions.write) {
     return (
       <InlineEmptyState
         icon="lock"
-        heading="Only people who can change this agent can change its MCP sign-in"
-        description="The servers it calls, and whose credential it uses on each, are listed on its Permissions tab."
-        action={
-          <Button asChild variant="secondary">
-            <Link
-              to={routes.identities.detail.permissions.href(
-                encodeIdentityUrn(`agent:${agent.id}`),
-              )}
-            >
-              Open Permissions
-            </Link>
-          </Button>
-        }
+        heading="Only people who can change this agent can see its MCP sign-in"
+        // The servers come from its policy, which only they can read, so no
+        // other tab lists them either.
+        description="Ask one of them to change its servers or reconnect a server it can no longer reach."
       />
     );
   }
@@ -88,8 +78,10 @@ export function AgentMcpSignIn({
           params.get("view") === "servers" ? "servers" : "sign-in"
         }
         grants={grants.data}
+        savedAt={savedAt}
         onDone={() => {
           toast.success("MCP sign-in saved");
+          setSavedAt(Date.now());
           refresh();
           // The views seed from these grants, so they reopen only once the
           // saved ones are read back: a cached pre-save read would show the

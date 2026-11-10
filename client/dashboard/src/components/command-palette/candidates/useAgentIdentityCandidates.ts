@@ -160,7 +160,10 @@ export function useAgentIdentityCandidates({
             "servers",
             "sign-in",
             "connection",
+            "connections",
             "reconnect",
+            "review",
+            "change",
           ],
           run: () => {
             void navigate(

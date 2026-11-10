@@ -311,6 +311,12 @@ function GrantedScopes({
 /** The server picker and the sign-in step, by their index in `STEPS`. */
 const SERVERS_STEP = 1;
 const SIGN_IN_STEP = 2;
+/**
+ * The Agent sign-in step. An existing agent edits only from here on: its name
+ * is renamed in the agent page's header, and its servers changed on the MCP
+ * sign-in tab (`section`).
+ */
+export const AGENT_SIGN_IN_STEP = 3;
 
 export function CredentialsWizard({
   agent,
@@ -319,6 +325,7 @@ export function CredentialsWizard({
   signInOnly = false,
   section = false,
   initialEditView = "sign-in",
+  savedAt,
   grants,
   onDone,
   onBusy,
@@ -353,6 +360,12 @@ export function CredentialsWizard({
   section?: boolean;
   /** Which of the tab's two views opens first. */
   initialEditView?: "servers" | "sign-in";
+  /**
+   * When the tab last saved. Its save button reads "Saved" for a moment
+   * after, so the save is seen to have landed. Not a dirty check: a save also
+   * assigns sign-ins reconnected since, which the selection does not show.
+   */
+  savedAt?: number;
   /** The servers the agent already reaches, for the editing flow. */
   grants?: AgentPolicyGrant[];
   /**
@@ -371,6 +384,7 @@ export function CredentialsWizard({
   verifyPollMs?: number;
 }): JSX.Element {
   const editing = editingProp || section;
+  const justSaved = useJustSaved(savedAt);
   const sdk = useSdkClient();
   const organization = useOrganization();
   const project = useProject();
@@ -459,8 +473,12 @@ export function CredentialsWizard({
   const [params, setParams] = useSearchParams();
   // Issuing another key starts at Agent sign-in: the steps before it describe
   // the agent itself, which already exists.
-  const firstStep = signInOnly ? 3 : 0;
-  const defaultStep = signInOnly ? 3 : initialPlatformKey === undefined ? 0 : 1;
+  const firstStep = signInOnly ? AGENT_SIGN_IN_STEP : 0;
+  const defaultStep = signInOnly
+    ? AGENT_SIGN_IN_STEP
+    : initialPlatformKey === undefined
+      ? 0
+      : 1;
   // Presence first: `Number(null)` and `Number("")` are both 0, which reads as
   // a deep link to the first step and leaves `defaultStep` unreachable.
   const linked = params.get("step");
@@ -2226,6 +2244,7 @@ export function CredentialsWizard({
                 // selection: the diff against an empty one withdraws them all.
                 disabled={
                   saving ||
+                  justSaved ||
                   !reconciled ||
                   refusedChoice !== null ||
                   authStop !== null ||
@@ -2234,7 +2253,7 @@ export function CredentialsWizard({
                 }
                 onClick={() => void save()}
               >
-                {saving ? "Saving…" : "Save changes"}
+                {saving ? "Saving…" : justSaved ? "Saved" : "Save changes"}
               </Button>
             </>
           }
@@ -2243,7 +2262,9 @@ export function CredentialsWizard({
     }
     // Editing writes after authentication. Past it the flow is the ordinary
     // one for an agent that exists: adding a credential it does not have.
-    if (editing && step < 3) {
+    // The app opens editing only from the Agent sign-in step now, so these
+    // views are reached by the tests of the save they share with the tab.
+    if (editing && step < AGENT_SIGN_IN_STEP) {
       return (
         <WizardFooter
           note={
@@ -2532,7 +2553,7 @@ export function CredentialsWizard({
         // Editing has settled everything a credential step would ask.
         // Issuing another key is the credential steps themselves, so none of
         // them is settled.
-        settledFrom={editing && !signInOnly ? 3 : undefined}
+        settledFrom={editing && !signInOnly ? AGENT_SIGN_IN_STEP : undefined}
         forward={existing && !secret}
         // Verify watches a key being used, so it has nothing to watch until
         // one is issued. Without this an existing agent could jump straight
@@ -2556,4 +2577,28 @@ export function CredentialsWizard({
       {footer()}
     </div>
   );
+}
+
+/** How long the MCP sign-in tab's save button reads "Saved" after a save. */
+const SAVED_FOR_MS = 2500;
+
+/**
+ * Whether a save at savedAt is recent enough to still show. The tab reopens
+ * its views after a save, so this reads the time rather than a flag the
+ * remount would lose.
+ */
+function useJustSaved(savedAt: number | undefined): boolean {
+  const recent = () =>
+    savedAt !== undefined && Date.now() - savedAt < SAVED_FOR_MS;
+  const [shown, setShown] = useState(recent);
+  useEffect(() => {
+    if (savedAt === undefined) return;
+    setShown(true);
+    const timer = setTimeout(
+      () => setShown(false),
+      SAVED_FOR_MS - (Date.now() - savedAt),
+    );
+    return () => clearTimeout(timer);
+  }, [savedAt]);
+  return shown;
 }

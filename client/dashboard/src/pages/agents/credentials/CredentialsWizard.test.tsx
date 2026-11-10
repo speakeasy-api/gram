@@ -3750,7 +3750,7 @@ describe("The MCP sign-in tab", () => {
     },
   ] as never;
 
-  function tab(initialEditView?: "servers" | "sign-in") {
+  function tab(initialEditView?: "servers" | "sign-in", savedAt?: number) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
@@ -3762,6 +3762,7 @@ describe("The MCP sign-in tab", () => {
             agent={agent}
             section
             initialEditView={initialEditView}
+            savedAt={savedAt}
             grants={grants}
             onDone={(id) => {
               onDone(id);
@@ -3815,6 +3816,21 @@ describe("The MCP sign-in tab", () => {
         ?.grantId,
     ).toBe("grant_one");
     expect(mocks.renameAgent).not.toHaveBeenCalled();
+  });
+
+  // The tab reopens on what was stored after a save, so the button says the
+  // save landed rather than offering the same save again.
+  it("reads Saved for a moment after a save", async () => {
+    tab(undefined, Date.now());
+    const saved = await screen.findByRole("button", { name: "Saved" });
+    expect((saved as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      await screen.findByRole(
+        "button",
+        { name: "Save changes" },
+        { timeout: 4000 },
+      ),
+    ).toBeTruthy();
   });
 });
 
