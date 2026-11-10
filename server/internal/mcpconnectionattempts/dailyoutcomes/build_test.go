@@ -177,8 +177,8 @@ func TestBuildDayDecidesHowAttemptsEnded(t *testing.T) {
 	result := f.build(day)
 	require.True(t, result.Swapped)
 	require.Equal(t, map[string]uint64{
-		// One organization, so the vendor names fold into other.
-		"|other|claude_code|inbound_token|connected||":                        1,
+		// One organization, so the vendor and client names fold into other.
+		"|other|other|inbound_token|connected||":                              1,
 		"|other||inbound_token|connected||":                                   1,
 		"|other||provider_sign_in|declined|provider_denied|":                  1,
 		"other|other||provider_sign_in|failed|provider_oauth_invalid_client|": 1,
@@ -211,17 +211,18 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 		return append(rows, f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, person))
 	}
 
-	retry, reconnect, admin, system, staff, looked, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	retry, reconnect, admin, agent, system, staff, looked, unfixed, lookahead, tooLate := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
 	at := day.Add(time.Hour)
 	systemFailure := fail(system, at)
 	systemFailure.AuthClientID = "auth-client-" + uuid.NewString()
 
 	rows := []mcpconnectionattempts.Row{
-		fail(retry, at), fail(reconnect, at), fail(admin, at), systemFailure, fail(staff, at), fail(looked, at), fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
+		fail(retry, at), fail(reconnect, at), fail(admin, at), fail(agent, at), systemFailure, fail(staff, at), fail(looked, at), fail(unfixed, at), fail(lookahead, at), fail(tooLate, at),
 	}
 	rows = append(rows, succeed(retry, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(reconnect, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(admin, at.Add(time.Hour), true)...)
+	rows = append(rows, succeed(agent, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(system, at.Add(time.Hour), true)...)
 	rows = append(rows, succeed(staff, at.Add(time.Hour), false)...)
 	rows = append(rows, succeed(looked, at.Add(time.Hour), false)...)
@@ -230,6 +231,7 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 	f.write(rows...)
 
 	f.audit(f.org, admin.String(), "mcp-server:update", "api_key", "key_admin", false, at.Add(30*time.Minute))
+	f.audit(f.org, agent.String(), "mcp-server:update", "agent", uuid.NewString(), false, at.Add(30*time.Minute))
 	f.audit(f.org, systemFailure.AuthClientID, "mcp-server:update", "user", "system", false, at.Add(30*time.Minute))
 	f.audit(f.org, staff.String(), "mcp-server:update", "user", "user_staff", true, at.Add(30*time.Minute))
 	f.audit(f.org, looked.String(), "platform-mcp-diagnostics:user_status_read", "user", "user_admin", false, at.Add(30*time.Minute))
@@ -237,10 +239,10 @@ func TestBuildDayNamesWhatFixedEachFailure(t *testing.T) {
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
-		"|dcr||inbound_token|connected||":                             6,
+		"|dcr||inbound_token|connected||":                             7,
 		"|dcr||mcp_request|failed|invalid_bearer_token|retry":         3,
 		"|dcr||mcp_request|failed|invalid_bearer_token|reconnect":     1,
-		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  1,
+		"|dcr||mcp_request|failed|invalid_bearer_token|admin_change":  2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|system_change": 2,
 		"|dcr||mcp_request|failed|invalid_bearer_token|":              2,
 	}, f.stored(mainTable, day))
@@ -356,14 +358,25 @@ func TestBuildDayKeepsVendorNamesOnlyWhenSeveralOrganizationsUseThem(t *testing.
 		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), uuid.New(), mcpconnectionattempts.AppOf(appURL)))
 		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute, mcpconnectionattempts.Provider(provider)))
 	}
+	newOrg := func() string { return "org-" + uuid.NewString() }
 	for range minOrgsPerLabel {
-		write("org-"+uuid.NewString(), "https://accounts.google.com", catalogApp)
+		write(newOrg(), "https://accounts.google.com", catalogApp)
+		write(newOrg(), "https://github.com", "dcr-client")
 	}
-	write(f.org, "https://github.com", "https://zed.dev/oauth/client-metadata.json")
+	// GitHub and the catalog app are each shared, but only one organization uses them together.
+	write(f.org, "https://github.com", catalogApp)
+	// Speakeasy's own organization does not count toward the threshold.
+	write(newOrg(), "https://slack.com", "dcr-client")
+	write(newOrg(), "https://slack.com", "dcr-client")
+	write("5a25158b-24dc-4d49-b03d-e85acfbea59c", "https://slack.com", "dcr-client")
+	write(newOrg(), "https://linear.app", "https://zed.dev/oauth/client-metadata.json")
 
 	f.build(day)
 	require.Equal(t, map[string]uint64{
 		"accounts.google.com|claude.ai||inbound_token|connected||": uint64(minOrgsPerLabel),
+		"github.com|dcr||inbound_token|connected||":                uint64(minOrgsPerLabel),
+		"github.com|other||inbound_token|connected||":              1,
+		"other|dcr||inbound_token|connected||":                     3,
 		"other|other||inbound_token|connected||":                   1,
 	}, f.stored(mainTable, day))
 }

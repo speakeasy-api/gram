@@ -20,7 +20,8 @@ const (
 	// FixedByNothing is a failure nothing fixed, or an attempt that did not fail.
 	FixedByNothing FixedBy = ""
 
-	// FixedByAdminChange is a fix after an admin changed something the attempts used.
+	// FixedByAdminChange is a fix after the customer changed something the attempts
+	// used: a person, an API key, or one of the customer's agents or workloads.
 	FixedByAdminChange FixedBy = "admin_change"
 
 	// FixedBySystemChange is a fix after Speakeasy changed something the attempts used.
@@ -152,7 +153,7 @@ type Change struct {
 	// SubjectID is the audited server, gateway, auth client, issuer or remote session client.
 	SubjectID string
 
-	// ByAdmin says the customer's admin made the change, not Speakeasy.
+	// ByAdmin says the customer made the change, not Speakeasy.
 	ByAdmin bool
 
 	// At is when the change was made.
@@ -160,29 +161,28 @@ type Change struct {
 }
 
 // configChangeVerbs are the action verbs that change configuration. An action counts
-// only when its verb, the part after the colon up to the first - or _, is listed, so a
-// new read-only action never counts as a fix.
+// when any word after the colon, split on - and _, is listed, so plugin:server_update
+// counts and a new read-only action never does.
 var configChangeVerbs = []string{
 	"create", "update", "delete", "upsert", "set", "add", "remove", "attach", "detach",
 	"enable", "disable", "revoke", "rotate", "restore", "replace", "rename", "reset",
-	"pause", "resume", "archive", "migrate", "duplicate",
+	"pause", "resume", "archive", "migrate", "duplicate", "approve", "submit", "refresh",
 }
 
 // IsConfigChange reports whether an audit action changed configuration rather than read it.
 func IsConfigChange(action string) bool {
-	_, verb, ok := strings.Cut(action, ":")
+	_, tail, ok := strings.Cut(action, ":")
 	if !ok {
 		return false
 	}
-	if end := strings.IndexAny(verb, "-_"); end >= 0 {
-		verb = verb[:end]
-	}
-	return slices.Contains(configChangeVerbs, verb)
+	return slices.ContainsFunc(strings.FieldsFunc(tail, func(r rune) bool { return r == '-' || r == '_' }), func(word string) bool {
+		return slices.Contains(configChangeVerbs, word)
+	})
 }
 
-// IsAdminActor reports whether an audit actor is the customer's admin: a person or an
-// API key, unless Speakeasy staff acted. user:system, system, agent and workload
-// actors are Speakeasy.
+// IsAdminActor reports whether an audit actor is the customer: a person, an API key,
+// or the customer's agent or workload, unless Speakeasy staff acted. user:system and
+// system actors are Speakeasy.
 func IsAdminActor(actorType, actorID string, internal bool) bool {
 	if internal {
 		return false
@@ -190,7 +190,7 @@ func IsAdminActor(actorType, actorID string, internal bool) bool {
 	switch actorType {
 	case string(urn.PrincipalTypeUser):
 		return actorID != "system"
-	case string(urn.PrincipalTypeAPIKey):
+	case string(urn.PrincipalTypeAPIKey), string(urn.PrincipalTypeAgent), string(urn.PrincipalTypeWorkload):
 		return true
 	default:
 		return false

@@ -172,8 +172,9 @@ func TestIsAdminActor(t *testing.T) {
 	require.False(t, mcpconnectionattempts.IsAdminActor("user", "user_staff", true), "Speakeasy staff")
 	require.False(t, mcpconnectionattempts.IsAdminActor("user", "system", false), "older background writers")
 	require.False(t, mcpconnectionattempts.IsAdminActor("system", "workos-role-sync", false))
-	require.False(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1", false))
-	require.False(t, mcpconnectionattempts.IsAdminActor("workload", "workload_1", false))
+	require.True(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1", false), "the customer's agent")
+	require.True(t, mcpconnectionattempts.IsAdminActor("workload", "workload_1", false), "a workload acts for the customer's agent")
+	require.False(t, mcpconnectionattempts.IsAdminActor("agent", "agent_1", true), "Speakeasy staff")
 }
 
 func TestFixedByCountsOnlyChangesAfterTheFailingRow(t *testing.T) {
@@ -292,10 +293,10 @@ func TestNextSuccessPairsServerlessAttemptsOnlyOnTheSameConnection(t *testing.T)
 
 func TestIsConfigChange(t *testing.T) {
 	t.Parallel()
-	for _, action := range []string{"mcp-server:update", "mcp-server:update-tool-metadata", "auth-client:attach-mcp-server", "meta-mcp:add_member", "remote-session-client:revoke-sessions"} {
+	for _, action := range []string{"mcp-server:update", "mcp-server:update-tool-metadata", "auth-client:attach-mcp-server", "meta-mcp:add_member", "remote-session-client:revoke-sessions", "plugin:server_update", "identity-provider-connection:submit-client-id", "remote-session:refresh", "mcp_approval_request:approve"} {
 		require.True(t, mcpconnectionattempts.IsConfigChange(action), action)
 	}
-	for _, action := range []string{"platform-mcp-diagnostics:user_status_read", "mcp-server:view", "update", ""} {
+	for _, action := range []string{"platform-mcp-diagnostics:user_status_read", "mcp-server:view", "mcp-server:promote-catalogue", "update", "update:", ""} {
 		require.False(t, mcpconnectionattempts.IsConfigChange(action), action)
 	}
 }
