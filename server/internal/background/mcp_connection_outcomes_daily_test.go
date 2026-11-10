@@ -71,4 +71,7 @@ func TestMCPConnectionOutcomesTimeoutsCoverEveryRead(t *testing.T) {
 	reads := dailyoutcomes.ReadsPerBuild * dailyoutcomes.ReadTimeout
 	require.Greater(t, mcpConnectionOutcomesBuildTimeout, reads)
 	require.Greater(t, mcpConnectionOutcomesPlanTimeout, reads)
+	require.GreaterOrEqual(t, mcpConnectionOutcomesMaxWaves*mcpConnectionOutcomesConcurrency, dailyoutcomes.RawSafeDays+1, "every planned day fits in the waves")
+	require.Greater(t, mcpConnectionOutcomesSweepRunTimeout, mcpConnectionOutcomesMaxWaves*mcpConnectionOutcomesDayRunTimeout)
+	require.Less(t, mcpConnectionOutcomesSweepRunTimeout, mcpConnectionOutcomesCatchupWindow, "a worst-case sweep ends before the next run")
 }

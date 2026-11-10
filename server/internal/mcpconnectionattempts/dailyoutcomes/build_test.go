@@ -2,6 +2,7 @@ package dailyoutcomes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -22,21 +23,22 @@ import (
 )
 
 // The long-term table has no tenant, so each test owns the days it writes. Days are
-// counted back from today and stay inside the rawSafeDays (29) the job reads.
+// counted back from today and stay inside the RawSafeDays (29) the job reads.
 const (
-	daysAgoOutcomes    = 25
-	daysAgoRerun       = 23
-	daysAgoFixedBy     = 20
-	daysAgoPlanOld     = 15
-	daysAgoExpiring    = 11
-	daysAgoEmpty       = 10
-	daysAgoMismatch    = 9
-	daysAgoCrossOrg    = 19
-	daysAgoPrivacy     = 8
-	daysAgoPlanDemo    = 6
-	daysAgoPlanMissing = 4
-	daysAgoPlanRecent  = 3
-	daysAgoRepublish   = 7
+	daysAgoOutcomes       = 25
+	daysAgoRerun          = 23
+	daysAgoFixedBy        = 20
+	daysAgoPlanOld        = 15
+	daysAgoExpiring       = 11
+	daysAgoEmpty          = 10
+	daysAgoMismatch       = 9
+	daysAgoCrossOrg       = 19
+	daysAgoPrivacy        = 8
+	daysAgoPlanDemo       = 6
+	daysAgoPlanMissing    = 4
+	daysAgoPlanRecent     = 3
+	daysAgoRepublish      = 7
+	daysAgoRepublishFails = 12
 )
 
 const catalogApp = "https://claude.ai/oauth/claude-code-client-metadata"
@@ -316,7 +318,7 @@ func TestBuildDayRefusesADayThatIsStillOpen(t *testing.T) {
 func TestDaysToBuild(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	f.b.backfillStart = f.today.AddDate(0, 0, -rawSafeDays)
+	f.b.backfillStart = f.today.AddDate(0, 0, -RawSafeDays)
 	server := uuid.New()
 	write := func(day time.Time, org string) {
 		a := mcpconnectionattempts.AttemptAt(uuid.New(), day.Add(time.Hour), mcpconnectionattempts.ServerScope(org, uuid.New(), server, mcpconnectionattempts.AppDCR))
@@ -403,7 +405,7 @@ func TestBuildDayRefusesADayWhoseRawEventsMayBeExpiring(t *testing.T) {
 	f := newFixture(t)
 	day := f.day(daysAgoExpiring)
 	f.insertStored(mainTable, day, "|dcr||inbound_token|connected||", 3)
-	f.b.clock = func() time.Time { return day.AddDate(0, 0, rawSafeDays+1) }
+	f.b.clock = func() time.Time { return day.AddDate(0, 0, RawSafeDays+1) }
 
 	_, err := f.b.BuildDay(t.Context(), day, f.now)
 	require.ErrorIs(t, err, ErrDayExpiring)
@@ -416,9 +418,15 @@ type doublingConn struct {
 	t       *testing.T
 	day     time.Time
 	doubled bool
+
+	// failAgain fails the second swap.
+	failAgain bool
 }
 
 func (c *doublingConn) Exec(ctx context.Context, query string, args ...any) error {
+	if c.doubled && c.failAgain && strings.Contains(query, "REPLACE PARTITION") {
+		return errors.New("second swap refused")
+	}
 	if !c.doubled && strings.Contains(query, "REPLACE PARTITION") {
 		c.doubled = true
 		require.NoError(c.t, c.Conn.Exec(ctx, `INSERT INTO `+stagingTable+` SELECT * FROM `+stagingTable+` WHERE day = toDate(?)`, c.day.Format(time.DateOnly)))
@@ -437,11 +445,24 @@ func TestBuildDayPublishesAgainWhenTheStoredDayIsWrong(t *testing.T) {
 		a := f.attempt(uuid.New(), mcpconnectionattempts.AppDCR, day.Add(time.Hour))
 		f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute))
 	}
-	conn := &doublingConn{Conn: f.ch, t: t, day: day, doubled: false}
+	conn := &doublingConn{Conn: f.ch, t: t, day: day, doubled: false, failAgain: false}
 	f.b.ch = conn
 
 	result := f.build(day)
 	require.True(t, conn.doubled, "the first swap stored a doubled day")
 	require.True(t, result.Swapped)
 	require.Equal(t, map[string]uint64{"|dcr||inbound_token|connected||": 3}, f.stored(mainTable, day))
+}
+
+func TestBuildDayReportsTheFirstSwapWhenPublishingAgainFails(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	day := f.day(daysAgoRepublishFails)
+	a := f.attempt(uuid.New(), mcpconnectionattempts.AppDCR, day.Add(time.Hour))
+	f.write(f.row(a, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued, true, time.Minute))
+	f.b.ch = &doublingConn{Conn: f.ch, t: t, day: day, doubled: false, failAgain: true}
+
+	result, err := f.b.BuildDay(t.Context(), day, f.now)
+	require.Error(t, err)
+	require.True(t, result.Swapped, "the first swap already replaced the stored day")
 }
