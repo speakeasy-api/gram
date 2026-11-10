@@ -1016,6 +1016,42 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskCreatePolicyBypassRequest", "type": "mutation"}`)
 	})
 
+	Method("getRiskPolicyBypassRequestTarget", func() {
+		Description("Fetch what a request access link asks for (the blocked server and tool) WITHOUT filing the request. Powers the request access page.")
+		Security(security.Session)
+
+		Payload(func() {
+			security.SessionPayload()
+			Attribute("request_token", String, "Signed request token generated when a risk policy blocks an action.")
+			Required("request_token")
+		})
+
+		Result(func() {
+			Attribute("server_name", String, "Display name of the blocked server, when known.")
+			Attribute("server_url", String, "URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.")
+			Attribute("server_command", String, "Launch command or identifier of the blocked server, when it has no URL.")
+			Attribute("tool_name", String, "The tool the agent tried to call, when known.")
+			Attribute("expires_at", String, "When the request link expires.", func() {
+				Format(FormatDateTime)
+			})
+			Required("expires_at")
+		})
+
+		HTTP(func() {
+			POST("/rpc/risk.getPolicyBypassRequestTarget")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicyBypassRequestTarget")
+		Meta("openapi:extension:x-speakeasy-group", "risk.policyBypassRequests")
+		Meta("openapi:extension:x-speakeasy-name-override", "getTarget")
+		// mutation, not query: the token is a POST body (it is a bearer
+		// secret, so it cannot live in a GET URL), and a query cache key built
+		// from URL params alone would let two tokens collide.
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetPolicyBypassRequestTarget", "type": "mutation"}`)
+	})
+
 	Method("acknowledgeRiskPolicyChallenge", func() {
 		Description("Acknowledge a risk policy warn/challenge from a warning-link token. Records the acknowledgement so the user's retried action proceeds; self-service (no admin approval).")
 		Security(security.Session)

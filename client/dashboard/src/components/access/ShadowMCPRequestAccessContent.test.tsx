@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   createApprovalRequest: vi.fn(),
+  fetchTarget: vi.fn(),
   useSession: vi.fn(),
 }));
 
@@ -30,6 +31,12 @@ vi.mock("@/lib/utils", async (importOriginal) => {
 vi.mock("@gram/client/react-query/riskCreatePolicyBypassRequest.js", () => ({
   useRiskCreatePolicyBypassRequestMutation: () => ({
     mutateAsync: mocks.createApprovalRequest,
+  }),
+}));
+
+vi.mock("@gram/client/react-query/riskGetPolicyBypassRequestTarget.js", () => ({
+  useRiskGetPolicyBypassRequestTargetMutation: () => ({
+    mutateAsync: mocks.fetchTarget,
   }),
 }));
 
@@ -124,6 +131,8 @@ beforeEach(() => {
   window.history.replaceState(null, "", "/");
   mocks.createApprovalRequest.mockReset();
   mocks.createApprovalRequest.mockResolvedValue({});
+  mocks.fetchTarget.mockReset();
+  mocks.fetchTarget.mockResolvedValue({ expiresAt: new Date() });
   mocks.useSession.mockReturnValue({ session: "" });
 });
 
@@ -225,6 +234,73 @@ describe("ShadowMCPRequestAccessContent", () => {
         },
       });
     });
+  });
+
+  it("names the server and tool the link asks access to", async () => {
+    sessionStorage.setItem(
+      "riskPolicyBypassRequestToken",
+      "rpbr2.stored-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+    mocks.fetchTarget.mockResolvedValue({
+      serverName: "mcp.team-notes.example.com",
+      serverUrl: "https://mcp.team-notes.example.com/mcp",
+      toolName: "search_notes",
+      expiresAt: new Date(),
+    });
+
+    renderPage("/risk-policy-bypass/request");
+
+    expect(await screen.findByText("mcp.team-notes.example.com")).toBeTruthy();
+    expect(
+      screen.getByText("https://mcp.team-notes.example.com/mcp"),
+    ).toBeTruthy();
+    expect(screen.getByText("search_notes")).toBeTruthy();
+    expect(screen.queryByText("Command")).toBeNull();
+    expect(mocks.fetchTarget).toHaveBeenCalledTimes(1);
+    expect(mocks.fetchTarget).toHaveBeenCalledWith({
+      request: {
+        getRiskPolicyBypassRequestTargetRequestBody: {
+          requestToken: "rpbr2.stored-token",
+        },
+      },
+    });
+    // Reading the link must not file the request.
+    expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
+  });
+
+  it("shows the launch command for a server without a URL", async () => {
+    sessionStorage.setItem(
+      "riskPolicyBypassRequestToken",
+      "rpbr2.stored-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+    mocks.fetchTarget.mockResolvedValue({
+      serverName: "Local Files",
+      serverCommand: "npx local-files-mcp",
+      expiresAt: new Date(),
+    });
+
+    renderPage("/risk-policy-bypass/request");
+
+    expect(await screen.findByText("npx local-files-mcp")).toBeTruthy();
+    expect(screen.getByText("Command")).toBeTruthy();
+    expect(screen.queryByText("URL")).toBeNull();
+  });
+
+  it("still asks for a note when the link details cannot be loaded", async () => {
+    sessionStorage.setItem(
+      "riskPolicyBypassRequestToken",
+      "rpbr2.stored-token",
+    );
+    mocks.useSession.mockReturnValue({ session: "session_123" });
+    mocks.fetchTarget.mockRejectedValue(new Error("forbidden"));
+
+    renderPage("/risk-policy-bypass/request");
+
+    await waitFor(() => expect(mocks.fetchTarget).toHaveBeenCalled());
+    expect(noteField()).toBeTruthy();
+    expect(screen.queryByText("Server")).toBeNull();
   });
 
   it("refuses a note longer than the endpoint accepts, before sending it", () => {

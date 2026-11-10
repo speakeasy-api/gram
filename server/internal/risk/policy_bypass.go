@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -76,6 +77,67 @@ func (s *Service) ListRiskPolicyBypassRequests(ctx context.Context, payload *gen
 	}
 
 	return &gen.ListRiskPolicyBypassRequestsResult{Requests: requests}, nil
+}
+
+// GetRiskPolicyBypassRequestTarget describes what a request access link asks
+// for, so the requester can see which server and tool they are asking about
+// before they explain why. It reads the token without redeeming it, and binds
+// it to the caller exactly like CreateRiskPolicyBypassRequest: same org, and
+// the original requester when one was recorded.
+func (s *Service) GetRiskPolicyBypassRequestTarget(ctx context.Context, payload *gen.GetRiskPolicyBypassRequestTargetPayload) (*gen.GetRiskPolicyBypassRequestTargetResult, error) {
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	if !ok || authCtx == nil {
+		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if strings.TrimSpace(s.jwtSecret) == "" {
+		return nil, oops.E(oops.CodeUnexpected, nil, "risk policy bypass request tokens are not configured").LogError(ctx, s.logger)
+	}
+
+	claims, err := parsePolicyBypassRequestToken(ctx, s.cache, s.jwtSecret, payload.RequestToken)
+	if err != nil {
+		if errors.Is(err, errPolicyBypassRequestStoreUnavailable) {
+			return nil, oops.E(oops.CodeUnexpected, err, "load risk policy bypass request").LogError(ctx, s.logger)
+		}
+		return nil, oops.E(oops.CodeInvalid, err, "invalid risk policy bypass request token")
+	}
+	if claims.OrganizationID != authCtx.ActiveOrganizationID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+	if claims.RequesterUserID != "" && claims.RequesterUserID != authCtx.UserID {
+		return nil, oops.C(oops.CodeForbidden)
+	}
+
+	return policyBypassRequestTargetView(claims), nil
+}
+
+// policyBypassRequestTargetView reduces the token's evidence to what the
+// request page shows. The URL goes through the inventory canonicalization so
+// credentials, query strings, and fragments the agent observed never reach the
+// page; the launch command is only shown for servers without a URL.
+func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRiskPolicyBypassRequestTargetResult {
+	evidence := shadowmcp.NormalizeAccessEvidence(shadowmcp.AccessEvidence{
+		FullURL:        conv.PtrValOr(claims.ObservedFullURL, ""),
+		URLHost:        conv.PtrValOr(claims.ObservedURLHost, ""),
+		ServerIdentity: conv.PtrValOr(claims.ObservedServerIdentity, ""),
+	})
+	serverURL := normalizedShadowMCPServerURL(evidence.FullURL)
+	serverCommand := ""
+	if serverURL == "" && evidence.URLHost == "" {
+		serverCommand = evidence.ServerIdentity
+	}
+
+	expiresAt := ""
+	if claims.ExpiresAt != nil {
+		expiresAt = claims.ExpiresAt.UTC().Format(time.RFC3339)
+	}
+
+	return &gen.GetRiskPolicyBypassRequestTargetResult{
+		ServerName:    conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))),
+		ServerURL:     conv.PtrEmpty(serverURL),
+		ServerCommand: conv.PtrEmpty(serverCommand),
+		ToolName:      conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ToolName, ""))),
+		ExpiresAt:     expiresAt,
+	}
 }
 
 func (s *Service) CreateRiskPolicyBypassRequest(ctx context.Context, payload *gen.CreateRiskPolicyBypassRequestPayload) (*gen.PolicyBypassRedemption, error) {

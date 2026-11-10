@@ -683,6 +683,7 @@ trackedFiles:
   src/funcs/riskPolicyBypassRequestsApprove.ts: {}
   src/funcs/riskPolicyBypassRequestsCreate.ts: {}
   src/funcs/riskPolicyBypassRequestsDeny.ts: {}
+  src/funcs/riskPolicyBypassRequestsGetTarget.ts: {}
   src/funcs/riskPolicyBypassRequestsList.ts: {}
   src/funcs/riskPolicyBypassRequestsRevoke.ts: {}
   src/funcs/riskPolicyChallengesAcknowledge.ts: {}
@@ -1349,6 +1350,8 @@ trackedFiles:
   src/models/components/getprojectoverviewresult.ts: {}
   src/models/components/getprojectresult.ts: {}
   src/models/components/getprompttemplateresult.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetrequestbody.ts: {}
+  src/models/components/getriskpolicybypassrequesttargetresponsebody.ts: {}
   src/models/components/getriskpolicychallengeresponsebody.ts: {}
   src/models/components/getsessionmetaresult.ts: {}
   src/models/components/getsetupdocsresponsebody.ts: {}
@@ -2639,6 +2642,7 @@ trackedFiles:
   src/models/operations/getriskoverview.ts: {}
   src/models/operations/getriskpolicy.ts: {}
   src/models/operations/getriskpolicyapproval.ts: {}
+  src/models/operations/getriskpolicybypassrequesttarget.ts: {}
   src/models/operations/getriskpolicychallenge.ts: {}
   src/models/operations/getrisksignals.ts: {}
   src/models/operations/getriskuserbreakdown.ts: {}
@@ -4073,6 +4077,7 @@ trackedFiles:
   src/react-query/riskGetBlock.ts: {}
   src/react-query/riskGetCustomDetectionRule.core.ts: {}
   src/react-query/riskGetCustomDetectionRule.ts: {}
+  src/react-query/riskGetPolicyBypassRequestTarget.ts: {}
   src/react-query/riskGetPolicyChallenge.ts: {}
   src/react-query/riskListApprovals.core.ts: {}
   src/react-query/riskListApprovals.ts: {}
@@ -8655,6 +8660,17 @@ examples:
       responses:
         "200":
           application/json: {"arguments_preview": {"key": "<value>", "key1": "<value>"}, "can_decide": true, "created_at": "2026-03-15T19:47:31.197Z", "id": "86a07cbc-4176-4a63-81ad-cd1cd9fd3bb3", "policy_id": "2f3ab995-5a1a-49c2-abbe-1aa050afb2d5", "policy_name": "<value>", "policy_version": 354650, "requester_urn": "<value>", "status": "approved", "surface": "<value>", "tool_name": "<value>", "updated_at": "2026-10-29T18:40:08.715Z"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getRiskPolicyBypassRequestTarget:
+    speakeasy-default-get-risk-policy-bypass-request-target:
+      requestBody:
+        application/json: {"request_token": "<value>"}
+      responses:
+        "200":
+          application/json: {"expires_at": "2026-11-21T19:04:39.559Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
