@@ -16,8 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -277,83 +275,14 @@ func boundSession() remotesessions_repo.RemoteSession {
 	return remotesessions_repo.RemoteSession{RemoteSessionClientID: uuid.New(), UserSessionIssuerID: uuid.New()}
 }
 
-// The service has no pool, so running the binding lookup would panic.
-func TestInvalidClientHappened_LogsOffSkipsTheBindingLookup(t *testing.T) {
-	t.Parallel()
-	s := &RefreshService{connections: mcpconnectionattemptstest.NewLogsOff(t).Recorder}
-	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
-
-	what, stored := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
-	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, what)
-	require.False(t, stored, "an unchecked code stays out of the steps metric")
-}
-
-// A logs-off refresh row is marked unstored, so the steps metric never counts its unchecked code.
-func TestRecordRefresh_LogsOffInvalidClientIsNotCountedAsAStep(t *testing.T) {
-	t.Parallel()
-	reader := sdkmetric.NewManualReader()
-	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), nil, func(context.Context, string) (bool, error) { return false, nil })
-	t.Cleanup(func() { _ = recorder.ShutdownAndWait(context.WithoutCancel(t.Context())) })
-	s := &RefreshService{connections: recorder}
-	scope := mcpconnectionattempts.ProviderSessionScope("org-logs-off", uuid.New(), mcpconnectionattempts.AppDCR)
-	// The first answer is a miss that starts a background check; the row waits for it to be remembered.
-	require.Eventually(t, func() bool { return !recorder.Stores(scope) }, 5*time.Second, time.Millisecond)
-	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerRegistrationEndpoint: pgtype.Text{String: "https://idp.example.com/register", Valid: true}}
-	what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, client, nil)
-	require.True(t, ok)
-	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, what)
-
-	s.recordRefresh(t.Context(), RefreshIn(scope), boundSession(), client, remotesessionmetrics.RefreshTriggerRequest, remotesessionmetrics.RefreshOutcomeInvalidClient, nil)
-
-	var collected metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(t.Context(), &collected))
-	for _, sm := range collected.ScopeMetrics {
-		for _, m := range sm.Metrics {
-			require.NotEqual(t, "mcp.connection.steps", m.Name, "no step was counted")
-		}
-	}
-}
-
 // A database that accepts and never answers holds the refresh only for the lookup's bound.
 func TestInvalidClientHappened_AStalledLookupDoesNotHoldTheRefresh(t *testing.T) {
 	t.Parallel()
 	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattemptstest.New(t).Recorder}
-	scope := mcpconnectionattempts.ProviderSessionScope("org-stalled", uuid.New(), mcpconnectionattempts.AppDCR)
 
 	started := time.Now()
-	what, _ := s.invalidClientHappened(t.Context(), RefreshIn(scope), boundSession())
+	what := s.invalidClientHappened(t.Context(), boundSession())
 
 	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "an unknown binding never recommends re-registration")
 	require.Less(t, time.Since(started), 3*time.Second, "well under the old 5 second wait")
-}
-
-// A cancelled request must not read as logs off: the cached feature check answers false then.
-func TestInvalidClientHappened_ACancelledRequestStillChecksLogs(t *testing.T) {
-	t.Parallel()
-	logsOnUnlessCancelled := func(ctx context.Context, _ string) (bool, error) { return ctx.Err() == nil, nil }
-	s := &RefreshService{db: stalledPool(t), connections: mcpconnectionattempts.NewCapturing(func(mcpconnectionattempts.Row) {}, logsOnUnlessCancelled)}
-	scope := mcpconnectionattempts.ProviderSessionScope("org-cancelled", uuid.New(), mcpconnectionattempts.AppDCR)
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-
-	what, _ := s.invalidClientHappened(ctx, RefreshIn(scope), boundSession())
-	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what, "logs read as on, so the lookup ran and timed out")
-}
-
-// A logs check that has no remembered answer doesn't hold the refresh: it runs in the background.
-func TestRefreshStores_ASlowLogsCheckDoesNotHoldTheRefresh(t *testing.T) {
-	t.Parallel()
-	release := make(chan struct{})
-	t.Cleanup(func() { close(release) })
-	slowLogsOff := func(context.Context, string) (bool, error) {
-		<-release
-		return false, nil
-	}
-	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), nil, slowLogsOff)
-	t.Cleanup(func() { _ = recorder.ShutdownAndWait(context.WithoutCancel(t.Context())) })
-	scope := mcpconnectionattempts.ProviderSessionScope("org-slow-logs", uuid.New(), mcpconnectionattempts.AppDCR)
-
-	started := time.Now()
-	require.True(t, recorder.Stores(scope), "a miss leaves the decision to the writer")
-	require.Less(t, time.Since(started), 100*time.Millisecond)
 }
