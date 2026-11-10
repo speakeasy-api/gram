@@ -178,7 +178,9 @@ func TestDeviceKey_TrustedPublicClientIP(t *testing.T) {
 			req := httptest.NewRequest(http.MethodGet, "/", nil)
 			req.Header.Set("X-Forwarded-For", "198.51.100.9, 198.51.100.10")
 			req.RemoteAddr = tt.remote
-			req.Header.Set("X-Client-IP", tt.header)
+			if tt.header != "" {
+				req.Header.Set("X-Client-IP", tt.header)
+			}
 			wrap := middleware.PublicHTTPTracing("test")
 			var handled *http.Request
 			wrap(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {

@@ -35,7 +35,7 @@ func TestCustomDomainIPAllowlist(t *testing.T) {
 		{name: "missing header denies spoof", allowlist: []string{"203.0.113.7"}, remote: "192.0.2.1:4321", want: http.StatusForbidden},
 		{name: "transport explicitly allowed", allowlist: []string{"192.0.2.1"}, remote: "192.0.2.1:4321", want: http.StatusNoContent},
 		{name: "malformed falls back", allowlist: []string{"192.0.2.0/24"}, header: []string{"bad"}, remote: "192.0.2.1:4321", want: http.StatusNoContent},
-		{name: "duplicates fall back", allowlist: []string{"203.0.113.7"}, header: []string{"203.0.113.7", "203.0.113.7"}, remote: "192.0.2.1:4321", want: http.StatusForbidden},
+		{name: "duplicates fall back", allowlist: []string{"192.0.2.1"}, header: []string{"203.0.113.7", "203.0.113.7"}, remote: "192.0.2.1:4321", want: http.StatusNoContent},
 		{name: "unresolved denied", allowlist: []string{"203.0.113.7"}, remote: "bad", want: http.StatusForbidden},
 		{name: "missing middleware fails closed", allowlist: []string{"203.0.113.7"}, header: []string{"203.0.113.7"}, missingContext: true, want: http.StatusForbidden},
 		{name: "invalid stored entry", allowlist: []string{"bad"}, header: []string{"203.0.113.7"}, want: http.StatusForbidden},
