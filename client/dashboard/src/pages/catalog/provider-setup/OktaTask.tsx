@@ -203,14 +203,13 @@ export function OktaTask(): JSX.Element {
             value: "web",
             title: "Web app",
             description:
-              "Recommended for Speakeasy, which manages the connection to Okta on its servers.",
+              "For server-side apps and chatbots. Recommended for Speakeasy.",
             icon: AppWindow,
           },
           {
             value: "native",
             title: "Native app",
-            description:
-              "Typically used by desktop apps connecting directly to Okta. Choose this if you need to use a Native app registration with Speakeasy.",
+            description: "For desktop MCP clients such as VS Code.",
             icon: Monitor,
           },
         ]}
