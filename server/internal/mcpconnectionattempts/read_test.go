@@ -149,6 +149,7 @@ func TestReadAttemptsFixCandidatesOnly(t *testing.T) {
 	day := time.Now().UTC().Truncate(24*time.Hour).AddDate(0, 0, -2)
 	scope := ServerScope(org, uuid.New(), uuid.New(), AppDCR)
 	connected, failed, open := AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(time.Hour), scope), AttemptAt(uuid.New(), day.Add(time.Hour), scope)
+	stopped := AttemptAt(uuid.New(), day.Add(time.Hour), scope)
 	var rows []Row
 	for _, step := range []struct {
 		attempt Attempt
@@ -158,6 +159,7 @@ func TestReadAttemptsFixCandidatesOnly(t *testing.T) {
 		{connected, ResultCodeIssued, true},
 		{failed, CodeInvalidGrant, true},
 		{open, ResultAccepted, false},
+		{stopped, CodeProviderRateLimited, false},
 	} {
 		row, err := RowAt(step.attempt, StepInboundToken, step.what, step.final, day.Add(time.Hour+time.Minute))
 		require.NoError(t, err)
@@ -170,7 +172,7 @@ func TestReadAttemptsFixCandidatesOnly(t *testing.T) {
 	require.NoError(t, ReadAttempts(t.Context(), ch, filter, func(s AttemptSummary) {
 		got[s.AttemptID] = s.End(time.Now()).Outcome
 	}))
-	require.Equal(t, map[uuid.UUID]Outcome{connected.ID(): OutcomeConnected, failed.ID(): OutcomeFailed}, got, "the open attempt has no reason")
+	require.Equal(t, map[uuid.UUID]Outcome{connected.ID(): OutcomeConnected, failed.ID(): OutcomeFailed, stopped.ID(): OutcomeFailed}, got, "the open attempt has no reason; the stopped one ended on its last reason")
 }
 
 func TestReadAttemptsBreaksAProviderTieLikeSummarize(t *testing.T) {
