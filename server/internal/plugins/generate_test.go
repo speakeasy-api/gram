@@ -4858,7 +4858,7 @@ func TestHooksPowerShellBootstrapReportsInstallFailures(t *testing.T) {
 	require.Contains(t, script, `Exit-InstallFailure "download failed" "download"`)
 	require.Contains(t, script, `Exit-InstallFailure "downloaded archive checksum mismatch" "checksum_mismatch"`)
 	require.Contains(t, script, `type = "client.install_failed"`)
-	require.Contains(t, script, `-TimeoutSec 3`)
+	require.Contains(t, script, `-TimeoutSec 3 -MaximumRedirection 0`)
 }
 
 func TestHooksBootstrapRejectsUnsafeReportURL(t *testing.T) {
@@ -4889,7 +4889,9 @@ func TestHooksBootstrapReportsInstallFailureWithWget(t *testing.T) {
 	}, false, "releases.test")
 
 	path := hooksBootstrapToolPath(t)
-	require.NoError(t, os.Remove(filepath.Join(path, "curl")))
+	if err := os.Remove(filepath.Join(path, "curl")); err != nil {
+		require.ErrorIs(t, err, os.ErrNotExist)
+	}
 	for _, tool := range []string{"wget", "sed", "head", "date", "timeout", "cat"} {
 		if resolved, err := exec.LookPath(tool); err == nil {
 			require.NoError(t, os.Symlink(resolved, filepath.Join(path, tool)))

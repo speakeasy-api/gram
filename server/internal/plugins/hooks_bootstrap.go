@@ -175,16 +175,14 @@ report_install_failure() {
       [ -z "$project" ] || printf 'header = "Gram-Project: %%s"\n' "$project"
     } | curl --config - --silent --output /dev/null --connect-timeout 2 --max-time 3 \
       --header 'Content-Type: application/json' --data "$body" "$report_endpoint" >/dev/null 2>&1 || true
-  elif command -v wget >/dev/null 2>&1; then
+  elif command -v wget >/dev/null 2>&1 && command -v timeout >/dev/null 2>&1; then
     report_rc=$(umask 077 && mktemp 2>/dev/null) || return 0
     {
       printf 'header = Gram-Key: %%s\n' "$api_key"
       [ -z "$project" ] || printf 'header = Gram-Project: %%s\n' "$project"
       printf 'header = Content-Type: application/json\n'
     } >"$report_rc"
-    report_wget="wget -q -O /dev/null --tries=1 --timeout=3"
-    ! command -v timeout >/dev/null 2>&1 || report_wget="timeout 3 $report_wget"
-    WGETRC="$report_rc" $report_wget --post-data="$body" "$report_endpoint" >/dev/null 2>&1 || true
+    WGETRC="$report_rc" timeout 3 wget -q -O /dev/null --tries=1 --timeout=3 --max-redirect=0 --post-data="$body" "$report_endpoint" >/dev/null 2>&1 || true
     rm -f "$report_rc"
   fi
 }
@@ -561,7 +559,7 @@ function Send-InstallFailure([string]$Cause) {
         $Headers = @{ "Gram-Key" = $Config.hooks_api_key }
         if ($Config.project) { $Headers["Gram-Project"] = $Config.project }
         $Uri = $Config.server_url.TrimEnd("/") + "/rpc/hooks.ingest"
-        Invoke-WebRequest -UseBasicParsing -Method Post -TimeoutSec 3 -Uri $Uri -Headers $Headers -ContentType "application/json" -Body $Body | Out-Null
+        Invoke-WebRequest -UseBasicParsing -Method Post -TimeoutSec 3 -MaximumRedirection 0 -Uri $Uri -Headers $Headers -ContentType "application/json" -Body $Body | Out-Null
     } catch { }
 }
 
