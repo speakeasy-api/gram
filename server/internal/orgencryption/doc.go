@@ -25,7 +25,7 @@
 //
 // The package fails closed, and nothing falls back to the application key. An
 // organization with no configuration cannot encrypt or decrypt at all. A
-// suspension stops a process within configCacheTTL of it being recorded. An
+// suspension stops a process within ConfigCacheTTL of it being recorded. An
 // unreachable or revoked KEK stops a process once its cached DEK expires,
 // within DataKeyCacheTTL.
 package orgencryption

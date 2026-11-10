@@ -853,6 +853,7 @@ const (
 	RiskExclusionMatchTypeKey    = attribute.Key("gram.risk.exclusion_match_type")
 	RiskReconcileRowCountKey     = attribute.Key("gram.risk.reconcile_row_count")
 	RiskReconcileRowsKeptKey     = attribute.Key("gram.risk.reconcile_rows_kept")
+	RiskEvidenceSealedCountKey   = attribute.Key("gram.risk.evidence_sealed_count")
 	SpendRuleIDKey               = attribute.Key("gram.spend.rule_id")
 	RiskSourceKey                = attribute.Key("gram.risk.source")
 	RiskScanAttemptKey           = attribute.Key("gram.risk.scan.attempt")
@@ -3377,6 +3378,13 @@ func SlogRiskReconcileRowCount(v int) slog.Attr {
 func RiskReconcileRowsKept(v int) attribute.KeyValue { return RiskReconcileRowsKeptKey.Int(v) }
 func SlogRiskReconcileRowsKept(v int) slog.Attr {
 	return slog.Int(string(RiskReconcileRowsKeptKey), v)
+}
+
+func RiskEvidenceSealedCount(v int64) attribute.KeyValue {
+	return RiskEvidenceSealedCountKey.Int64(v)
+}
+func SlogRiskEvidenceSealedCount(v int64) slog.Attr {
+	return slog.Int64(string(RiskEvidenceSealedCountKey), v)
 }
 
 func SpendRuleID(v string) attribute.KeyValue { return SpendRuleIDKey.String(v) }

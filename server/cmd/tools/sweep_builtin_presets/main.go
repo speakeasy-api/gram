@@ -100,10 +100,13 @@ type report struct {
 	disabledPolicy    int64
 	unreconstructable int64
 	redactionMismatch int64
-	bySource          map[string]int64
-	byFilter          map[string]int64
-	byReason          map[string]int64
-	lastCursor        uuid.UUID
+	// sealed counts rows whose match is encrypted under the organization's
+	// key, which this tool cannot read.
+	sealed     int64
+	bySource   map[string]int64
+	byFilter   map[string]int64
+	byReason   map[string]int64
+	lastCursor uuid.UUID
 }
 
 type policySweepFilters struct {
@@ -310,9 +313,10 @@ func openAssetStorage(ctx context.Context, logger *slog.Logger, backend, uri str
 // "prefix*" family exposed as a SQL LIKE pattern (Library.RuleIDGlobs, see
 // likeGlobs) — and that are still active (found, not excluded, not already
 // swept), within the id/time window. source and match are fetched because the
-// catalog classifies on all three axes.
+// catalog classifies on all three axes; sealed marks a match encrypted under
+// the organization's key, which this tool cannot read.
 const selectPage = `
-SELECT id, source, rule_id, match
+SELECT id, source, rule_id, match, match_encrypted IS NOT NULL AS sealed
 FROM risk_results
 WHERE organization_id = $1
   AND project_id = $2
@@ -352,6 +356,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 		disabledPolicy:    0,
 		unreconstructable: 0,
 		redactionMismatch: 0,
+		sealed:            0,
 		bySource:          map[string]int64{},
 		byFilter:          map[string]int64{},
 		byReason:          map[string]int64{},
@@ -405,13 +410,18 @@ func sweepPostgres(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, 
 				source string
 				ruleID string
 				match  *string
+				sealed bool
 			)
-			if err := rows.Scan(&id, &source, &ruleID, &match); err != nil {
+			if err := rows.Scan(&id, &source, &ruleID, &match, &sealed); err != nil {
 				rows.Close()
 				return rep, fmt.Errorf("scan Postgres row: %w", err)
 			}
 			n++
 			cursor = id
+			if sealed {
+				rep.sealed++
+				continue
+			}
 			if match == nil {
 				continue
 			}
@@ -655,6 +665,7 @@ func printReport(cfg config, rep report, lib *presetlib.Library) {
 	fmt.Printf("  disabled policy:     %d\n", rep.disabledPolicy)
 	fmt.Printf("  unreconstructable:   %d\n", rep.unreconstructable)
 	fmt.Printf("  redaction mismatch:  %d\n", rep.redactionMismatch)
+	fmt.Printf("  sealed:              %d\n", rep.sealed)
 	fmt.Printf("  last cursor:         %s\n", rep.lastCursor)
 
 	printCounts("  by source:", rep.bySource)

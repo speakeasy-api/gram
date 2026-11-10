@@ -844,10 +844,11 @@ func newWorkerCommand() *cli.Command {
 			// Unconfigured, this is nil without an error. A configuration error
 			// stops the worker: a silently disabled sweep would leave
 			// organizations whose key was revoked unsuspended.
-			_, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
+			orgEncryptionService, orgEncryptionProvisioner, err := newOrgEncryption(ctx, logger, c, db, gcpIdentity, auditLogger)
 			if err != nil {
 				return err
 			}
+			riskEvidence := risk.NewResultEvidenceCipher(orgEncryptionService)
 			// Issuer URLs are pinned to the outbound origin, as on the server.
 			// The worker only sweeps issuer keys, so a bad issuer setting turns
 			// the sweep off with an error log instead of stopping every
@@ -931,6 +932,7 @@ func newWorkerCommand() *cli.Command {
 				TrialEmailsService:             trialEmailsService,
 				TrialFixtureHandler:            newTrialFixtureHandler(c.String("environment"), db, productFeatures),
 				RiskFingerprinter:              riskFingerprinter,
+				RiskEvidence:                   riskEvidence,
 				DisableRiskRetroReconcile:      c.Bool("disable-clickhouse-risk-retro-reconcile"),
 				LLMAnalyzerEnabled:             llmAnalyzerConfigFromCLI(c).Enabled(),
 			})

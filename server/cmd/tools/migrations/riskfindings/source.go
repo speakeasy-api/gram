@@ -92,6 +92,10 @@ type SourceRow struct {
 	// AssistantID is the anchor chat's most recent live assistant_threads
 	// link, empty when the chat backs no live thread or no chat resolves.
 	AssistantID string
+
+	// Sealed reports that the row's match and spans are encrypted under its
+	// organization's key, so Match and Spans are empty.
+	Sealed bool
 }
 
 // selectPage walks risk_results in id order (uuidv7). The id is used ONLY as a
@@ -193,7 +197,8 @@ SELECT r.id, r.created_at, r.organization_id, r.project_id, r.risk_policy_id,
        COALESCE(NULLIF(cm.user_id, ''), NULLIF(pcm.user_id, ''), NULLIF(c.user_id, ''), '')::text AS user_id,
        COALESCE(NULLIF(cm.external_user_id, ''), NULLIF(pcm.external_user_id, ''), NULLIF(c.external_user_id, ''), '')::text AS external_user_id,
        COALESCE(cm.created_at, pcm.created_at, r.created_at) AS message_created_at,
-       COALESCE(thread.assistant_id::text, '') AS assistant_id
+       COALESCE(thread.assistant_id::text, '') AS assistant_id,
+       (r.match_encrypted IS NOT NULL OR r.spans_encrypted IS NOT NULL) AS sealed
 FROM risk_results r
 LEFT JOIN chat_messages cm
   ON cm.id = r.chat_message_id
@@ -518,7 +523,7 @@ func (s *Source) queryPage(ctx context.Context, query string, args ...any) ([]So
 			&r.Match, &r.StartPos, &r.EndPos, &r.Confidence, &r.Tags, &r.Spans, &r.DeadLetterReason,
 			&r.ExcludedAt, &r.ExclusionID, &r.FalsePositiveAt,
 			&r.ChatID, &r.UserID, &r.ExternalUserID,
-			&r.MessageCreatedAt, &r.AssistantID,
+			&r.MessageCreatedAt, &r.AssistantID, &r.Sealed,
 		); err != nil {
 			return nil, fmt.Errorf("scan row: %w", err)
 		}

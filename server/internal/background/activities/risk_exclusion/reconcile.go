@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assets/blobio"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/orgencryption"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/repo"
@@ -99,6 +100,9 @@ type Reconcile struct {
 	// fingerprints stored on ClickHouse rows. A zero value disables the
 	// ClickHouse exact-match apply (loud log) — Postgres still covers it.
 	fingerprinter risk.Fingerprinter
+	// evidence opens Postgres matches sealed under the organization's key
+	// for exact and regex exclusions. Nil leaves sealed matches unflagged.
+	evidence *risk.ResultEvidenceCipher
 	// assetStorage feeds regex plaintext reconstruction for findings anchored
 	// to content-part assets; nil narrows regex coverage to message-anchored
 	// findings.
@@ -108,7 +112,7 @@ type Reconcile struct {
 	chSkipped metric.Int64Counter
 }
 
-func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch *chrepo.Queries, fingerprinter risk.Fingerprinter, assetStorage blobio.Reader, disableRiskRetroReconcile bool) *Reconcile {
+func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, ch *chrepo.Queries, fingerprinter risk.Fingerprinter, evidence *risk.ResultEvidenceCipher, assetStorage blobio.Reader, disableRiskRetroReconcile bool) *Reconcile {
 	logger = logger.With(attr.SlogComponent("risk-exclusion-reconcile"))
 	meter := meterProvider.Meter("github.com/speakeasy-api/gram/server/internal/background/activities/risk_exclusion")
 
@@ -136,6 +140,7 @@ func NewReconcile(logger *slog.Logger, tracerProvider trace.TracerProvider, mete
 		ch:                        ch,
 		disableRiskRetroReconcile: disableRiskRetroReconcile,
 		fingerprinter:             fingerprinter,
+		evidence:                  evidence,
 		assetStorage:              assetStorage,
 		chRows:                    chRows,
 		chSkipped:                 chSkipped,
@@ -210,6 +215,19 @@ func (a *Reconcile) Do(ctx context.Context, args ReconcileArgs) (err error) {
 		}
 		if err := a.batchLoop(ctx, phaseApply, applyStart, a.pgApplyBatchFn(q, ex, exclusionID)); err != nil {
 			return fmt.Errorf("apply exclusion (%s): %w", ex.MatchType, err)
+		}
+	}
+
+	// 3b. Postgres apply over sealed matches. Exact and regex exclusions
+	// compare the match, which SQL cannot read once it is sealed under the
+	// organization's key, so those rows are opened and matched here.
+	if pgPhases && active && (ex.MatchType == "exact" || ex.MatchType == "regex") && !phaseDone(resume.Phase, phaseApplySealed) {
+		applyStart := uuid.UUID{}
+		if resume.Phase == phaseApplySealed {
+			applyStart = resume.Cursor
+		}
+		if err := a.pgApplySealed(ctx, q, ex, exclusionID, applyStart); err != nil {
+			return fmt.Errorf("apply exclusion to sealed matches (%s): %w", ex.MatchType, err)
 		}
 	}
 
@@ -353,6 +371,73 @@ func (a *Reconcile) pgApplyBatchFn(q *repo.Queries, ex repo.RiskExclusion, exclu
 			return nil, fmt.Errorf("unknown match_type %q", ex.MatchType)
 		}
 	}
+}
+
+// errSealedMatchesUnreadable means the organization's sealed matches cannot be
+// opened at all: organization encryption is off in this worker, or the
+// organization's key is suspended or has no risk-evidence DEK.
+var errSealedMatchesUnreadable = errors.New("sealed risk result matches cannot be opened")
+
+// pgApplySealed flags open findings whose sealed match an exact or regex
+// exclusion matches. Rows the organization's key cannot open stay unflagged
+// and the phase ends with a warning, so the ClickHouse phases still run.
+func (a *Reconcile) pgApplySealed(ctx context.Context, q *repo.Queries, ex repo.RiskExclusion, exclusionID uuid.NullUUID, cursor uuid.UUID) error {
+	matches := func(match string) bool { return match == ex.MatchValue }
+	if ex.MatchType == "regex" {
+		re, err := regexp.Compile(ex.MatchValue)
+		if err != nil {
+			a.logger.WarnContext(ctx, "invalid regex exclusion pattern; not applied to sealed matches", attr.SlogError(err), attr.SlogRiskExclusionID(ex.ID.String()))
+			return nil
+		}
+		matches = re.MatchString
+	}
+
+	err := a.batchLoop(ctx, phaseApplySealed, cursor, func(bctx context.Context, cursor uuid.UUID) ([]uuid.UUID, error) {
+		candidates, err := q.ListSealedMatchExclusionCandidatesBatch(bctx, repo.ListSealedMatchExclusionCandidatesBatchParams{
+			ProjectID: ex.ProjectID, PolicyID: ex.RiskPolicyID,
+			RuleIDFilter: ex.RuleIDFilter, SourceFilter: ex.SourceFilter,
+			Cursor: cursor, BatchLimit: reconcileBatchLimit,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("list sealed candidates: %w", err)
+		}
+
+		// Every candidate id advances the cursor, flagged or not.
+		ids := make([]uuid.UUID, 0, len(candidates))
+		flagged := make([]uuid.UUID, 0, len(candidates))
+		for _, c := range candidates {
+			ids = append(ids, c.ID)
+
+			match, err := a.evidence.OpenMatch(bctx, c.OrganizationID, pgtype.Text{String: "", Valid: false}, c.MatchEncrypted)
+			switch {
+			case errors.Is(err, orgencryption.ErrInvalidCiphertext):
+				a.logger.WarnContext(ctx, "sealed risk result match does not open; not evaluated", attr.SlogError(err), attr.SlogRiskExclusionID(ex.ID.String()), attr.SlogValueString(c.ID.String()))
+				continue
+			case errors.Is(err, risk.ErrResultEvidenceUnavailable), errors.Is(err, orgencryption.ErrSuspended), errors.Is(err, orgencryption.ErrNotProvisioned):
+				return nil, fmt.Errorf("%w: %w", errSealedMatchesUnreadable, err)
+			case err != nil:
+				return nil, fmt.Errorf("open sealed match: %w", err)
+			}
+
+			if matches(match.String) {
+				flagged = append(flagged, c.ID)
+			}
+		}
+
+		if len(flagged) > 0 {
+			if err := q.FlagRiskResultsExcludedBatch(bctx, repo.FlagRiskResultsExcludedBatchParams{ExclusionID: exclusionID, ProjectID: ex.ProjectID, Ids: flagged}); err != nil {
+				return nil, fmt.Errorf("flag sealed matches: %w", err)
+			}
+		}
+
+		return ids, nil
+	})
+	if errors.Is(err, errSealedMatchesUnreadable) {
+		a.logger.WarnContext(ctx, "exclusion not applied to sealed risk result matches", attr.SlogError(err), attr.SlogRiskExclusionID(ex.ID.String()))
+		return nil
+	}
+
+	return err
 }
 
 // chRun carries the per-run constants of the ClickHouse phases.
@@ -819,19 +904,22 @@ func (a *Reconcile) addSkip(ctx context.Context, reason string) {
 
 // reconcile phases, recorded in heartbeat details so a retry can resume the
 // correct loop at the correct cursor. Ordered: Postgres reverse, Postgres
-// apply, ClickHouse reverse, ClickHouse apply.
+// apply, Postgres apply over sealed matches, ClickHouse reverse, ClickHouse
+// apply.
 const (
-	phaseReverse   = "reverse"
-	phaseApply     = "apply"
-	phaseCHReverse = "ch_reverse"
-	phaseCHApply   = "ch_apply"
+	phaseReverse     = "reverse"
+	phaseApply       = "apply"
+	phaseApplySealed = "apply_sealed"
+	phaseCHReverse   = "ch_reverse"
+	phaseCHApply     = "ch_apply"
 )
 
 var phaseOrder = map[string]int{
-	phaseReverse:   0,
-	phaseApply:     1,
-	phaseCHReverse: 2,
-	phaseCHApply:   3,
+	phaseReverse:     0,
+	phaseApply:       1,
+	phaseApplySealed: 2,
+	phaseCHReverse:   3,
+	phaseCHApply:     4,
 }
 
 // phaseDone reports whether the resumed run had already advanced past the

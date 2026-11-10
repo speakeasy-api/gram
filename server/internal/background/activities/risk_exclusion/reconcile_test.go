@@ -89,6 +89,7 @@ func newReconcile(t *testing.T, conn *pgxpool.Pool, ch *chrepo.Queries) *risk_ex
 		ch,
 		risk.Fingerprinter{},
 		nil,
+		nil,
 		false,
 	)
 }
@@ -240,7 +241,7 @@ func TestReconcile_DisabledClickHouse(t *testing.T) {
 	require.NoError(t, chQueries.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{matching}))
 	reconcile := risk_exclusion.NewReconcile(
 		testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t),
-		conn, chQueries, risk.Fingerprinter{}, nil, true,
+		conn, chQueries, risk.Fingerprinter{}, nil, nil, true,
 	)
 	require.NoError(t, runReconcile(t, reconcile, risk_exclusion.ReconcileArgs{
 		ProjectID:   tenant.projectID,

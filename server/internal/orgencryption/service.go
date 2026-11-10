@@ -31,11 +31,12 @@ const (
 	// (organization, use case) it serves, plus decrypt-only DEKs.
 	dataKeyCacheSize = 4096
 
-	// configCacheTTL is how long a process trusts a configuration read. It
+	// ConfigCacheTTL is how long a process trusts a configuration read. It
 	// bounds how long a suspension takes to stop every process from using DEKs
 	// it already holds, at the cost of one indexed read per organization per
-	// period.
-	configCacheTTL = 10 * time.Second
+	// period. It equally bounds how long another process keeps reporting
+	// ErrNotProvisioned for a use case whose DEK was just created.
+	ConfigCacheTTL = 10 * time.Second
 
 	// configCacheSize bounds the configurations and active DEK ids one process
 	// remembers.
@@ -91,7 +92,7 @@ func NewService(logger *slog.Logger, db *pgxpool.Pool, identity *gcpauth.Identit
 		db:       db,
 		keys:     &keyResolver{cfg: cfg, identity: identity, clients: clients},
 		dataKeys: expirable.NewLRU[uuid.UUID, cachedDataKey](dataKeyCacheSize, nil, DataKeyCacheTTL),
-		configs:  expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, configCacheTTL),
+		configs:  expirable.NewLRU[configCacheKey, cachedConfig](configCacheSize, nil, ConfigCacheTTL),
 		flights:  singleflight.Group{},
 	}, nil
 }
@@ -336,7 +337,7 @@ func (s *Service) unwrapWith(ctx context.Context, logger *slog.Logger, q *repo.Q
 
 // Forget drops everything cached for an organization, so the next call reads
 // its configuration and unwraps its DEKs again. Provisioner calls it after a
-// change in the same process; other processes catch up within configCacheTTL
+// change in the same process; other processes catch up within ConfigCacheTTL
 // for suspension and DataKeyCacheTTL for key material.
 func (s *Service) Forget(organizationID string) {
 	for _, key := range s.configs.Keys() {

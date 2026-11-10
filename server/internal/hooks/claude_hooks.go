@@ -1587,6 +1587,11 @@ func (s *Service) recordShadowMCPBlockFinding(
 			attr.SlogEvent("claude_hook_block_finding_skip"), attr.SlogError(err))
 		return uuid.Nil, uuid.Nil, false
 	}
+	evidence, err := s.riskEvidence.Seal(ctx, metadata.GramOrgID, pgtype.Text{String: match, Valid: match != ""}, nil)
+	if err != nil {
+		s.logger.WarnContext(ctx, "shadow-mcp block: seal risk_result match; recording the finding without it",
+			attr.SlogEvent("claude_hook_block_finding_seal_failed"), attr.SlogError(err))
+	}
 	insertParams := repo.InsertShadowMCPBlockResultParams{
 		ID:                resultID,
 		ProjectID:         projectID,
@@ -1595,7 +1600,8 @@ func (s *Service) recordShadowMCPBlockFinding(
 		RiskPolicyVersion: policy.Version,
 		ChatMessageID:     uuid.NullUUID{UUID: msgID, Valid: true},
 		Description:       pgtype.Text{String: description, Valid: description != ""},
-		Match:             pgtype.Text{String: match, Valid: match != ""},
+		Match:             evidence.Match,
+		MatchEncrypted:    evidence.MatchEncrypted,
 		Confidence:        pgtype.Float8{Float64: 1.0, Valid: true},
 	}
 	if err := s.repo.InsertShadowMCPBlockResult(ctx, insertParams); err != nil {

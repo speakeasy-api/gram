@@ -435,6 +435,7 @@ INSERT INTO risk_results (
   , rule_id
   , description
   , match
+  , match_encrypted
   , confidence
 )
 VALUES (
@@ -448,7 +449,8 @@ VALUES (
   , TRUE
   , 'shadow_mcp.unverified_call'
   , sqlc.arg(description)
-  , sqlc.arg(match)
+  , sqlc.narg(match)
+  , sqlc.narg(match_encrypted)
   , sqlc.arg(confidence)
 );
 

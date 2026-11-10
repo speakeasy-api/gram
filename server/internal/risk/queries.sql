@@ -1026,8 +1026,8 @@ SELECT EXISTS (
 -- record, mirroring the empty result rows the chat batch path writes.
 -- Concurrent scans can race after the state check. A finding upgrades a clean
 -- row, while a clean result can never erase a finding.
-INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
-SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(confidence)::double precision
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, match_encrypted, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, @skill_version_id, @source::text, @found::boolean, sqlc.narg(rule_id)::text, sqlc.narg(description)::text, sqlc.narg(match)::text, sqlc.narg(match_encrypted)::text, sqlc.narg(confidence)::double precision
 FROM risk_policies p
 WHERE p.project_id = @project_id
   AND p.enabled IS TRUE
@@ -1051,6 +1051,7 @@ DO UPDATE SET
   rule_id = EXCLUDED.rule_id,
   description = EXCLUDED.description,
   match = EXCLUDED.match,
+  match_encrypted = EXCLUDED.match_encrypted,
   confidence = EXCLUDED.confidence
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE;
@@ -1460,6 +1461,32 @@ WHERE id IN (
   LIMIT @batch_limit
 )
 RETURNING id;
+
+-- name: ListSealedMatchExclusionCandidatesBatch :many
+-- Open findings whose match is sealed under the organization's risk-evidence
+-- key. ApplyExactExclusionBatch and ApplyRegexExclusionBatch cannot compare a
+-- sealed match in SQL, so the reconcile decrypts these and flags the matching
+-- ones with FlagRiskResultsExcludedBatch.
+SELECT rr.id, rr.organization_id, rr.match_encrypted
+FROM risk_results rr
+WHERE rr.project_id = @project_id
+  AND (sqlc.narg(policy_id)::uuid IS NULL OR rr.risk_policy_id = sqlc.narg(policy_id))
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.match_encrypted IS NOT NULL
+  AND (sqlc.narg(rule_id_filter)::text IS NULL OR rr.rule_id = sqlc.narg(rule_id_filter))
+  AND (sqlc.narg(source_filter)::text IS NULL OR rr.source = sqlc.narg(source_filter))
+  AND rr.id > @cursor
+ORDER BY rr.id
+LIMIT @batch_limit;
+
+-- name: FlagRiskResultsExcludedBatch :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = @exclusion_id
+WHERE project_id = @project_id
+  AND id = ANY(@ids::uuid[])
+  AND excluded_at IS NULL;
 
 -- name: ApplyRuleIDExclusionBatch :many
 UPDATE risk_results
@@ -1933,6 +1960,65 @@ WHERE evidence.organization_id = expired.organization_id
   AND evidence.project_id = expired.project_id
   AND evidence.execution_id = expired.execution_id
   AND evidence.phase = expired.phase;
+
+-- Risk result evidence encryption backfill ----------------------------------
+-- Moves an organization's plaintext risk_results.match and spans into the
+-- encrypted columns, one project at a time.
+
+-- name: ListOrganizationProjectIDsForEvidenceBackfill :many
+-- Every project the organization has had, deleted ones included: risk_results
+-- rows outlive a project's soft delete.
+SELECT id
+FROM projects
+WHERE organization_id = @organization_id
+ORDER BY id;
+
+-- name: ListPlaintextRiskResultEvidenceBatch :many
+-- One keyset page of a project's findings that still hold match or spans in
+-- plaintext, ordered by (created_at, id) so the scan rides the project's
+-- created_at index.
+SELECT id, organization_id, created_at, match, spans
+FROM risk_results
+WHERE project_id = @project_id
+  AND organization_id = @organization_id
+  AND (match IS NOT NULL OR spans IS NOT NULL)
+  AND (created_at, id) > (@after_created_at::timestamptz, @after_id::uuid)
+ORDER BY created_at, id
+LIMIT @batch_limit;
+
+-- name: SealRiskResultEvidenceBatch :execrows
+-- Stores the sealed evidence of a backfill page and clears its plaintext. An
+-- empty string in either array means the row had nothing to seal there. A row
+-- that already has sealed evidence is left alone.
+UPDATE risk_results rr
+SET match_encrypted = NULLIF(v.match_encrypted, '')
+  , spans_encrypted = NULLIF(v.spans_encrypted, '')
+  , match = NULL
+  , spans = NULL
+FROM (
+    SELECT UNNEST(@ids::uuid[]) AS id
+         , UNNEST(@match_encrypted::text[]) AS match_encrypted
+         , UNNEST(@spans_encrypted::text[]) AS spans_encrypted
+) v
+WHERE rr.id = v.id
+  AND rr.project_id = @project_id
+  AND rr.organization_id = @organization_id
+  AND rr.match_encrypted IS NULL
+  AND rr.spans_encrypted IS NULL;
+
+-- name: CountPlaintextRiskResultEvidence :one
+-- Findings of a project that still hold match or spans in plaintext.
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE project_id = @project_id
+  AND organization_id = @organization_id
+  AND (match IS NOT NULL OR spans IS NOT NULL);
+
+-- name: ListRiskResultEvidenceForTest :many
+SELECT id, source, match, spans, match_encrypted, spans_encrypted, excluded_exclusion_id
+FROM risk_results
+WHERE project_id = @project_id
+ORDER BY created_at, id;
 
 -- name: CreateChatForTest :one
 INSERT INTO chats (project_id, organization_id, user_id, external_user_id)
