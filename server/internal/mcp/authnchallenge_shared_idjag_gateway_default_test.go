@@ -50,9 +50,10 @@ func claimlessIDJAGForm(t *testing.T, signer idJAGTestAssertion, f sharedIssuerF
 }
 
 // seedPublicRemoteServer adds a public remote server to the fixture project,
-// which the organization gateway derives as a member. The fixture's own
-// servers are hosted, and gateways never serve hosted servers.
-func seedPublicRemoteServer(t *testing.T, ctx context.Context, ti *testInstance) {
+// which the organization gateway derives as a member, and returns its slug.
+// The fixture's own servers are hosted, and gateways never serve hosted
+// servers.
+func seedPublicRemoteServer(t *testing.T, ctx context.Context, ti *testInstance) string {
 	t.Helper()
 	projectID := *requireProjectAuthContext(t, ctx).ProjectID
 	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{
@@ -60,11 +61,12 @@ func seedPublicRemoteServer(t *testing.T, ctx context.Context, ti *testInstance)
 		TransportType: "streamable-http",
 		Url:           "https://member.example.com/mcp/" + uuid.NewString(),
 	})
+	slug := "remote-member-" + uuid.NewString()[:8]
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                  uuid.New(),
 		ProjectID:           projectID,
 		Name:                conv.ToPGText("Remote member"),
-		Slug:                conv.ToPGText("remote-member-" + uuid.NewString()[:8]),
+		Slug:                conv.ToPGText(slug),
 		EnvironmentID:       uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		UserSessionIssuerID: uuid.NullUUID{UUID: createUserSessionIssuer(t, ctx, ti.conn, projectID), Valid: true},
 		RemoteMcpServerID:   uuid.NullUUID{UUID: remote.ID, Valid: true},
@@ -72,6 +74,7 @@ func seedPublicRemoteServer(t *testing.T, ctx context.Context, ti *testInstance)
 		Visibility:          mcpservers.VisibilityPublic,
 	})
 	require.NoError(t, err)
+	return slug
 }
 
 // Okta and Codex name no resource at all: the organization gateway on this issuer is the target.
@@ -80,7 +83,7 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimDefaultsToOrganiza
 	ctx, ti, signer, f := sharedIDJAGFixture(t)
 	setOrganizationGateway(t, ctx, ti, true)
 	gateway := organizationGatewayResource(t, ctx, ti)
-	seedPublicRemoteServer(t, ctx, ti)
+	member := seedPublicRemoteServer(t, ctx, ti)
 
 	w := sharedToken(t, ctx, ti, f.issuer.ID.String(), claimlessIDJAGForm(t, signer, f, f.issuerURL, uuid.NewString()))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -102,6 +105,10 @@ func TestSharedAuthorizationServer_IDJAGWithoutResourceOrClaimDefaultsToOrganiza
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, listed.Code, listed.Body.String())
 	require.Contains(t, listed.Body.String(), `"structuredContent":{"servers":`)
+	require.Contains(t, listed.Body.String(), `"slug":"`+member+`"`)
+	for _, slug := range []string{f.slugA, f.slugB} {
+		require.NotContains(t, listed.Body.String(), `"slug":"`+slug+`"`, "a hosted server is never a gateway member")
+	}
 }
 
 // Without a usable gateway the request is refused before the assertion is spent.

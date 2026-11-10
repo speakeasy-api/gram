@@ -1285,9 +1285,9 @@ func (s *Service) attachAssociatedClients(ctx context.Context, organizationID st
 }
 
 // memberUsesClient reports whether a client authenticates for a member: one
-// of its associated clients, otherwise, for a member whose associations were
-// not read or that has none, a client of the member's authorization server in
-// the member's own project when a project owns it.
+// of its associated clients once they were read (a member with none matches
+// no client), otherwise a client of the member's authorization server in the
+// member's own project when a project owns it.
 func memberUsesClient(member metaMember, clientID, clientIssuerID uuid.UUID, clientProjectID uuid.NullUUID) bool {
 	if member.associatedClients != nil {
 		return member.associatedClients[clientID]

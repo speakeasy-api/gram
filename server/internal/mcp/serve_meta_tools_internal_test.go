@@ -58,7 +58,7 @@ func TestDispatchHostedGatewayMemberIsToolError(t *testing.T) {
 }
 
 // Code Mode reports the refusal as a rejected call carrying the reason, so
-// the program can stop calling that server.
+// the program can stop calling that server. The reason leaves the slug out.
 func TestDispatchHostedGatewayMemberRejectsCodeModeCall(t *testing.T) {
 	t.Parallel()
 
@@ -70,7 +70,8 @@ func TestDispatchHostedGatewayMemberRejectsCodeModeCall(t *testing.T) {
 	dispatchErr, ok := errors.AsType[*codemode.DispatchError](err)
 	require.True(t, ok, "error: %v", err)
 	require.Equal(t, "tool_call_rejected", dispatchErr.Code)
-	require.Equal(t, hostedMemberRefusalMessage, dispatchErr.Rejection)
+	require.Equal(t, hostedMemberRefusalUnnamed, dispatchErr.Rejection)
+	require.NotContains(t, dispatchErr.Rejection, "support", "the program already holds the slug it called")
 }
 
 // A slug that is neither a member nor a refused hosted member still reads as

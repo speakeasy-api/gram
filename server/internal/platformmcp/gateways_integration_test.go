@@ -271,6 +271,31 @@ func TestSetGatewayMembersRefusalLeavesTheGatewayAsItWas(t *testing.T) {
 	require.Equal(t, gatewayOutcomeUnchanged, unchanged.Outcome, "the refused change left nothing behind")
 }
 
+// A hosted member written before hosted servers were refused stays listed, so
+// an admin can remove it, but reads as excluded: the gateway serves none of
+// its tools.
+func TestSetGatewayMembersMarksALegacyHostedMemberExcluded(t *testing.T) {
+	t.Parallel()
+	ctx, f := seedGatewayFixture(t, "platform_mcp_set_gateway_members_legacy_hosted")
+	a := f.seedRemoteMember(t, ctx, "Alpha")
+	created, err := f.create(ctx, "Connectors", a)
+	require.NoError(t, err)
+	gatewayID := uuid.MustParse(created.GatewayID)
+	ctx = f.grantMCP(ctx, f.project.ID, gatewayID)
+	_, err = metamcprepo.New(f.conn).CreateMetaMCPMember(ctx, metamcprepo.CreateMetaMCPMemberParams{
+		ProjectID: f.project.ID, MetaMcpServerID: gatewayID, McpServerID: f.toolsetID, SortOrder: 1,
+	})
+	require.NoError(t, err)
+
+	read, err := f.set(ctx, created.GatewayID, a, f.toolsetID)
+	require.NoError(t, err)
+	require.Equal(t, gatewayOutcomeUnchanged, read.Outcome, "keeping an existing membership adds nothing")
+	require.Len(t, read.Gateway.Members, 2)
+	require.Empty(t, read.Gateway.Members[0].ExcludedReason)
+	require.Equal(t, f.toolsetID.String(), read.Gateway.Members[1].MCPID)
+	require.Equal(t, "hosted_server", read.Gateway.Members[1].ExcludedReason)
+}
+
 func TestSetGatewayMembersRefusesAGatewayOutsideTheProject(t *testing.T) {
 	t.Parallel()
 	ctx, f := seedGatewayFixture(t, "platform_mcp_set_gateway_members_missing")

@@ -271,7 +271,10 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 	}
 	if message, hosted := hostedMemberRefusal(gate, serverSlug); hosted {
 		if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+			// A Code Mode program already holds the slug it called, so the
+			// rejection leaves the untrusted slug out of the text it reads.
 			invocation.rejected = true
+			message = hostedMemberRefusalUnnamed
 		}
 		attempt.fail(http.StatusNotFound, message)
 		return marshalMetaToolError(ctx, logger, req.ID, message)
@@ -398,6 +401,10 @@ func marshalToolErrorResult(ctx context.Context, logger *slog.Logger, id mcpjson
 	}
 	return bs, nil
 }
+
+// hostedMemberRefusalUnnamed is the hosted member refusal without the
+// server's slug, for a Code Mode rejection.
+const hostedMemberRefusalUnnamed = "This server is hosted by Speakeasy, and hosted servers can't be used through a gateway. Connect to the server's own MCP URL instead."
 
 // hostedMemberRefusal is the tool error for a call naming one of a stored
 // gateway's hosted members, which gateways never serve.

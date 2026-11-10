@@ -231,13 +231,16 @@ FOR UPDATE;
 
 -- name: ListMetaMCPMembers :many
 -- List live memberships whose member server is itself still live, with the
--- member server's name and slug joined in for display.
+-- member server's name and slug joined in for display. mcp_server_hosted
+-- marks a membership written before hosted servers were refused; gateways
+-- never serve it.
 SELECT
     m.id,
     m.mcp_server_id,
     m.sort_order,
     s.name AS mcp_server_name,
-    s.slug AS mcp_server_slug
+    s.slug AS mcp_server_slug,
+    (s.toolset_id IS NOT NULL)::boolean AS mcp_server_hosted
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id

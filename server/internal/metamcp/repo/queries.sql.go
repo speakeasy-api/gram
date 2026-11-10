@@ -837,7 +837,8 @@ SELECT
     m.mcp_server_id,
     m.sort_order,
     s.name AS mcp_server_name,
-    s.slug AS mcp_server_slug
+    s.slug AS mcp_server_slug,
+    (s.toolset_id IS NOT NULL)::boolean AS mcp_server_hosted
 FROM meta_mcp_server_members m
 JOIN mcp_servers s
   ON s.id = m.mcp_server_id
@@ -855,15 +856,18 @@ type ListMetaMCPMembersParams struct {
 }
 
 type ListMetaMCPMembersRow struct {
-	ID            uuid.UUID
-	McpServerID   uuid.UUID
-	SortOrder     int32
-	McpServerName pgtype.Text
-	McpServerSlug pgtype.Text
+	ID              uuid.UUID
+	McpServerID     uuid.UUID
+	SortOrder       int32
+	McpServerName   pgtype.Text
+	McpServerSlug   pgtype.Text
+	McpServerHosted bool
 }
 
 // List live memberships whose member server is itself still live, with the
-// member server's name and slug joined in for display.
+// member server's name and slug joined in for display. mcp_server_hosted
+// marks a membership written before hosted servers were refused; gateways
+// never serve it.
 func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembersParams) ([]ListMetaMCPMembersRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPMembers, arg.MetaMcpServerID, arg.ProjectID)
 	if err != nil {
@@ -879,6 +883,7 @@ func (q *Queries) ListMetaMCPMembers(ctx context.Context, arg ListMetaMCPMembers
 			&i.SortOrder,
 			&i.McpServerName,
 			&i.McpServerSlug,
+			&i.McpServerHosted,
 		); err != nil {
 			return nil, err
 		}
