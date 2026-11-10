@@ -146,6 +146,9 @@ export function ApprovalReview({
   // what is left to say is that nobody asked — one clause that rides the
   // heading row rather than costing a box of its own beneath it.
   const untouched = unreviewed && detail.decisions.length === 0;
+  // Every ask attaches its requester, so a review with none was opened by
+  // viewing the server and was never raised, even after an admin decided it.
+  const asked = !unreviewed && detail.requesters.length > 0;
 
   let reviewBody: React.ReactNode = null;
   if (!unreviewed) {
@@ -154,7 +157,10 @@ export function ApprovalReview({
     // screen further down.
     reviewBody = (
       <div className="grid items-start gap-x-6 gap-y-4 md:grid-cols-2">
-        <Requesters requesters={detail.requesters} />
+        <Requesters
+          requesters={detail.requesters}
+          decided={detail.decisions.length > 0}
+        />
         <PriorDecisions decisions={detail.decisions} />
       </div>
     );
@@ -169,7 +175,7 @@ export function ApprovalReview({
       title={title}
       collectedAt={detail.evidenceCollectedAt}
       status={detail.request.status}
-      createdAt={unreviewed ? undefined : detail.request.createdAt}
+      createdAt={asked ? detail.request.createdAt : undefined}
       versionPinned={detail.request.versionPinned}
       notice={
         untouched
@@ -282,7 +288,7 @@ function ReviewHeader({
    */
   collectedAt: Date | undefined;
   status: string;
-  /** Absent for an unreviewed dossier: nobody raised it. */
+  /** Absent when no one has asked: nobody raised it. */
   createdAt: Date | undefined;
   versionPinned: boolean;
   /** The review's state, when it is short enough to ride this row. */
@@ -341,16 +347,22 @@ function ReviewHeader({
 
 function Requesters({
   requesters,
+  decided,
 }: {
   requesters: ApprovalRequester[];
+  /** Whether an admin has decided, so an empty list does not hide it. */
+  decided: boolean;
 }): JSX.Element {
   return (
     <section className="space-y-2">
       <h3 className="text-eyebrow">Who asked, and why</h3>
       {requesters.length === 0 ? (
+        // Every ask records who made it, so no requesters means no ask: the
+        // review was opened from the server page, not raised by anyone.
         <p className="text-muted-foreground text-sm">
-          No requester is attached — this ask arrived without an identifiable
-          user.
+          {decided
+            ? "No one has asked for it. An admin decided without a request."
+            : "No one has asked for it."}
         </p>
       ) : (
         // One framed list with hairline rules, not a stack of cards: three
