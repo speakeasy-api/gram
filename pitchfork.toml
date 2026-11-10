@@ -10,6 +10,7 @@ line_retention = 10000
 # of application startup. Bulk stop still includes them for worktree removal.
 [groups.application]
 daemons = [
+  "mcp-fixture",
   "dev-idp",
   "dev-idp-dashboard",
   "admin",
@@ -28,6 +29,7 @@ daemons = [
 
 [groups.default]
 daemons = [
+  "mcp-fixture",
   "dev-idp",
   "dev-idp-dashboard",
   "admin",
@@ -90,6 +92,10 @@ depends = ["mock-oidc"]
 run = "mise run start:admin-dashboard"
 ready_cmd = "mise run check:daemon --name {{name}}"
 depends = ["admin"]
+
+[daemons.mcp-fixture]
+run = "mise run start:mcp-fixture"
+ready_cmd = "mise run check:daemon --name {{name}}"
 
 [daemons.mock-oidc]
 run = "mise run start:mock-oidc"
