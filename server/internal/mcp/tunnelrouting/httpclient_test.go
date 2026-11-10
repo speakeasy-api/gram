@@ -512,7 +512,7 @@ func TestHTTPClientRouteWaitCancellationIsNotStoreFailure(t *testing.T) {
 		return nil, nil
 	}}
 	req := tokenRequest(t, "https://auth.example.internal/oauth/token").WithContext(ctx)
-	resp, err := newTestHTTPClient(t, store).Do(req, "tunnel-1")
+	resp, err := newTestHTTPClient(t, store).Do(req, "tunnel-1") //nolint:bodyclose // error path returns a nil response
 	require.Nil(t, resp)
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, ErrRouteStoreUnavailable)
