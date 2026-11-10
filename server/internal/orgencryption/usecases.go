@@ -16,12 +16,17 @@ type UseCase string
 const (
 	// UseCaseTailscaleGatewayState is the use case for Tailscale gateway state.
 	UseCaseTailscaleGatewayState UseCase = "tailscale-gateway-state"
+
+	// UseCaseRiskEvidence is the use case for the customer text a risk
+	// finding matched.
+	UseCaseRiskEvidence UseCase = "risk-evidence"
 )
 
 // registeredUseCases lists every use case the package accepts. Add a consumer
 // here before calling any entry point with its name.
 var registeredUseCases = []UseCase{
 	UseCaseTailscaleGatewayState,
+	UseCaseRiskEvidence,
 }
 
 // ParseUseCase returns the registered use case named value.

@@ -380,6 +380,27 @@ func (q *Queries) CountEnabledRegexExclusionsInScope(ctx context.Context, arg Co
 	return column_1, err
 }
 
+const countPlaintextRiskResultEvidence = `-- name: CountPlaintextRiskResultEvidence :one
+SELECT COUNT(*)::BIGINT
+FROM risk_results
+WHERE project_id = $1
+  AND organization_id = $2
+  AND (match IS NOT NULL OR spans IS NOT NULL)
+`
+
+type CountPlaintextRiskResultEvidenceParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Findings of a project that still hold match or spans in plaintext.
+func (q *Queries) CountPlaintextRiskResultEvidence(ctx context.Context, arg CountPlaintextRiskResultEvidenceParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPlaintextRiskResultEvidence, arg.ProjectID, arg.OrganizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const countRiskResultsByPolicyID = `-- name: CountRiskResultsByPolicyID :one
 SELECT COUNT(*)::BIGINT
 FROM risk_results
@@ -1203,6 +1224,26 @@ func (q *Queries) FetchUnanalyzedMessageIDs(ctx context.Context, arg FetchUnanal
 		return nil, err
 	}
 	return items, nil
+}
+
+const flagRiskResultsExcludedBatch = `-- name: FlagRiskResultsExcludedBatch :exec
+UPDATE risk_results
+SET excluded_at = clock_timestamp()
+  , excluded_exclusion_id = $1
+WHERE project_id = $2
+  AND id = ANY($3::uuid[])
+  AND excluded_at IS NULL
+`
+
+type FlagRiskResultsExcludedBatchParams struct {
+	ExclusionID uuid.NullUUID
+	ProjectID   uuid.UUID
+	Ids         []uuid.UUID
+}
+
+func (q *Queries) FlagRiskResultsExcludedBatch(ctx context.Context, arg FlagRiskResultsExcludedBatchParams) error {
+	_, err := q.db.Exec(ctx, flagRiskResultsExcludedBatch, arg.ExclusionID, arg.ProjectID, arg.Ids)
+	return err
 }
 
 const getActiveRiskPolicyAck = `-- name: GetActiveRiskPolicyAck :one
@@ -3392,6 +3433,39 @@ func (q *Queries) ListMetaMCPServerIDsContainingMCPServer(ctx context.Context, a
 	return items, nil
 }
 
+const listOrganizationProjectIDsForEvidenceBackfill = `-- name: ListOrganizationProjectIDsForEvidenceBackfill :many
+
+SELECT id
+FROM projects
+WHERE organization_id = $1
+ORDER BY id
+`
+
+// Risk result evidence encryption backfill ----------------------------------
+// Moves an organization's plaintext risk_results.match and spans into the
+// encrypted columns, one project at a time.
+// Every project the organization has had, deleted ones included: risk_results
+// rows outlive a project's soft delete.
+func (q *Queries) ListOrganizationProjectIDsForEvidenceBackfill(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationProjectIDsForEvidenceBackfill, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrphanedLifecycleBoundRiskPoliciesByProject = `-- name: ListOrphanedLifecycleBoundRiskPoliciesByProject :many
 SELECT id, project_id, organization_id, enabled, name, policy_type, sources, presidio_entities, analyzer_config, mcp_scope, prompt_injection_rules, disabled_rules, custom_rule_ids, action, audience_type, shadow_mcp_disposition, auto_name, user_message, prompt, model_config, approval_config, score, version, created_at, updated_at, deleted_at, deleted
 FROM risk_policies AS policy
@@ -3455,6 +3529,68 @@ func (q *Queries) ListOrphanedLifecycleBoundRiskPoliciesByProject(ctx context.Co
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPlaintextRiskResultEvidenceBatch = `-- name: ListPlaintextRiskResultEvidenceBatch :many
+SELECT id, organization_id, created_at, match, spans
+FROM risk_results
+WHERE project_id = $1
+  AND organization_id = $2
+  AND (match IS NOT NULL OR spans IS NOT NULL)
+  AND (created_at, id) > ($3::timestamptz, $4::uuid)
+ORDER BY created_at, id
+LIMIT $5
+`
+
+type ListPlaintextRiskResultEvidenceBatchParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	AfterCreatedAt pgtype.Timestamptz
+	AfterID        uuid.UUID
+	BatchLimit     int32
+}
+
+type ListPlaintextRiskResultEvidenceBatchRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	CreatedAt      pgtype.Timestamptz
+	Match          pgtype.Text
+	Spans          []byte
+}
+
+// One keyset page of a project's findings that still hold match or spans in
+// plaintext, ordered by (created_at, id) so the scan rides the project's
+// created_at index.
+func (q *Queries) ListPlaintextRiskResultEvidenceBatch(ctx context.Context, arg ListPlaintextRiskResultEvidenceBatchParams) ([]ListPlaintextRiskResultEvidenceBatchRow, error) {
+	rows, err := q.db.Query(ctx, listPlaintextRiskResultEvidenceBatch,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.AfterCreatedAt,
+		arg.AfterID,
+		arg.BatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListPlaintextRiskResultEvidenceBatchRow
+	for rows.Next() {
+		var i ListPlaintextRiskResultEvidenceBatchRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.CreatedAt,
+			&i.Match,
+			&i.Spans,
 		); err != nil {
 			return nil, err
 		}
@@ -4147,6 +4283,51 @@ func (q *Queries) ListRiskPolicyMCPScopeServerIDs(ctx context.Context, arg ListR
 	return items, nil
 }
 
+const listRiskResultEvidenceForTest = `-- name: ListRiskResultEvidenceForTest :many
+SELECT id, source, match, spans, match_encrypted, spans_encrypted, excluded_exclusion_id
+FROM risk_results
+WHERE project_id = $1
+ORDER BY created_at, id
+`
+
+type ListRiskResultEvidenceForTestRow struct {
+	ID                  uuid.UUID
+	Source              string
+	Match               pgtype.Text
+	Spans               []byte
+	MatchEncrypted      pgtype.Text
+	SpansEncrypted      pgtype.Text
+	ExcludedExclusionID uuid.NullUUID
+}
+
+func (q *Queries) ListRiskResultEvidenceForTest(ctx context.Context, projectID uuid.UUID) ([]ListRiskResultEvidenceForTestRow, error) {
+	rows, err := q.db.Query(ctx, listRiskResultEvidenceForTest, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRiskResultEvidenceForTestRow
+	for rows.Next() {
+		var i ListRiskResultEvidenceForTestRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Source,
+			&i.Match,
+			&i.Spans,
+			&i.MatchEncrypted,
+			&i.SpansEncrypted,
+			&i.ExcludedExclusionID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRiskResultsByProjectAndPolicy = `-- name: ListRiskResultsByProjectAndPolicy :many
 SELECT rr.id, rr.project_id, rr.organization_id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id, rr.chat_content_part_id, rr.skill_version_id, rr.source, rr.found, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos, rr.confidence, rr.tags, rr.spans, rr.match_encrypted, rr.spans_encrypted, rr.dead_letter_reason, rr.excluded_at, rr.excluded_exclusion_id, rr.false_positive_at, rr.false_positive_reason, rr.created_at, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, c.external_user_id AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
 FROM risk_results rr
@@ -4427,6 +4608,67 @@ func (q *Queries) ListRiskUserRuleBreakdown(ctx context.Context, arg ListRiskUse
 	for rows.Next() {
 		var i ListRiskUserRuleBreakdownRow
 		if err := rows.Scan(&i.RuleID, &i.Source, &i.Findings); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSealedMatchExclusionCandidatesBatch = `-- name: ListSealedMatchExclusionCandidatesBatch :many
+SELECT rr.id, rr.organization_id, rr.match_encrypted
+FROM risk_results rr
+WHERE rr.project_id = $1
+  AND ($2::uuid IS NULL OR rr.risk_policy_id = $2)
+  AND rr.found IS TRUE
+  AND rr.excluded_at IS NULL
+  AND rr.match_encrypted IS NOT NULL
+  AND ($3::text IS NULL OR rr.rule_id = $3)
+  AND ($4::text IS NULL OR rr.source = $4)
+  AND rr.id > $5
+ORDER BY rr.id
+LIMIT $6
+`
+
+type ListSealedMatchExclusionCandidatesBatchParams struct {
+	ProjectID    uuid.UUID
+	PolicyID     uuid.NullUUID
+	RuleIDFilter pgtype.Text
+	SourceFilter pgtype.Text
+	Cursor       uuid.UUID
+	BatchLimit   int32
+}
+
+type ListSealedMatchExclusionCandidatesBatchRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	MatchEncrypted pgtype.Text
+}
+
+// Open findings whose match is sealed under the organization's risk-evidence
+// key. ApplyExactExclusionBatch and ApplyRegexExclusionBatch cannot compare a
+// sealed match in SQL, so the reconcile decrypts these and flags the matching
+// ones with FlagRiskResultsExcludedBatch.
+func (q *Queries) ListSealedMatchExclusionCandidatesBatch(ctx context.Context, arg ListSealedMatchExclusionCandidatesBatchParams) ([]ListSealedMatchExclusionCandidatesBatchRow, error) {
+	rows, err := q.db.Query(ctx, listSealedMatchExclusionCandidatesBatch,
+		arg.ProjectID,
+		arg.PolicyID,
+		arg.RuleIDFilter,
+		arg.SourceFilter,
+		arg.Cursor,
+		arg.BatchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSealedMatchExclusionCandidatesBatchRow
+	for rows.Next() {
+		var i ListSealedMatchExclusionCandidatesBatchRow
+		if err := rows.Scan(&i.ID, &i.OrganizationID, &i.MatchEncrypted); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -4875,10 +5117,10 @@ func (q *Queries) PruneRiskPolicyMCPScope(ctx context.Context, arg PruneRiskPoli
 }
 
 const recordSkillPromptInjectionScan = `-- name: RecordSkillPromptInjectionScan :exec
-INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, confidence)
-SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::double precision
+INSERT INTO risk_results (project_id, organization_id, risk_policy_id, risk_policy_version, skill_version_id, source, found, rule_id, description, match, match_encrypted, confidence)
+SELECT p.project_id, p.organization_id, p.id, p.version, $1, $2::text, $3::boolean, $4::text, $5::text, $6::text, $7::text, $8::double precision
 FROM risk_policies p
-WHERE p.project_id = $8
+WHERE p.project_id = $9
   AND p.enabled IS TRUE
   AND p.deleted IS FALSE
   AND 'prompt_injection' = ANY (p.sources)
@@ -4900,6 +5142,7 @@ DO UPDATE SET
   rule_id = EXCLUDED.rule_id,
   description = EXCLUDED.description,
   match = EXCLUDED.match,
+  match_encrypted = EXCLUDED.match_encrypted,
   confidence = EXCLUDED.confidence
 WHERE EXCLUDED.found IS TRUE
   AND risk_results.found IS FALSE
@@ -4912,6 +5155,7 @@ type RecordSkillPromptInjectionScanParams struct {
 	RuleID         pgtype.Text
 	Description    pgtype.Text
 	Match          pgtype.Text
+	MatchEncrypted pgtype.Text
 	Confidence     pgtype.Float8
 	ProjectID      uuid.UUID
 }
@@ -4930,6 +5174,7 @@ func (q *Queries) RecordSkillPromptInjectionScan(ctx context.Context, arg Record
 		arg.RuleID,
 		arg.Description,
 		arg.Match,
+		arg.MatchEncrypted,
 		arg.Confidence,
 		arg.ProjectID,
 	)
@@ -5188,6 +5433,49 @@ func (q *Queries) RiskEvalChatBelongsToProject(ctx context.Context, arg RiskEval
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const sealRiskResultEvidenceBatch = `-- name: SealRiskResultEvidenceBatch :execrows
+UPDATE risk_results rr
+SET match_encrypted = NULLIF(v.match_encrypted, '')
+  , spans_encrypted = NULLIF(v.spans_encrypted, '')
+  , match = NULL
+  , spans = NULL
+FROM (
+    SELECT UNNEST($3::uuid[]) AS id
+         , UNNEST($4::text[]) AS match_encrypted
+         , UNNEST($5::text[]) AS spans_encrypted
+) v
+WHERE rr.id = v.id
+  AND rr.project_id = $1
+  AND rr.organization_id = $2
+  AND rr.match_encrypted IS NULL
+  AND rr.spans_encrypted IS NULL
+`
+
+type SealRiskResultEvidenceBatchParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Ids            []uuid.UUID
+	MatchEncrypted []string
+	SpansEncrypted []string
+}
+
+// Stores the sealed evidence of a backfill page and clears its plaintext. An
+// empty string in either array means the row had nothing to seal there. A row
+// that already has sealed evidence is left alone.
+func (q *Queries) SealRiskResultEvidenceBatch(ctx context.Context, arg SealRiskResultEvidenceBatchParams) (int64, error) {
+	result, err := q.db.Exec(ctx, sealRiskResultEvidenceBatch,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Ids,
+		arg.MatchEncrypted,
+		arg.SpansEncrypted,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setChatMessageExternalUserIDForTest = `-- name: SetChatMessageExternalUserIDForTest :exec
