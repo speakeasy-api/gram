@@ -53,10 +53,10 @@ type connectionEnding struct {
 	what mcpconnectionattempts.Happened
 }
 
-// connectionClients is the clients seeded attempts come from.
 // demoScriptVersion is the seeded HTTP library version, as its User-Agent names it.
 const demoScriptVersion = "0.28.1"
 
+// connectionClients is the clients seeded attempts come from.
 var connectionClients = []struct{ family, version string }{
 	{mcpconnectionattempts.FamilyCodexCLI, "0.77.0"},
 	{mcpconnectionattempts.FamilyClaudeCode, "2.0.14"},
