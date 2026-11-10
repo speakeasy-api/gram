@@ -543,6 +543,7 @@ func (s *Server) issue(w http.ResponseWriter, email, clientID string, scopes []s
 		"expires_in":    int(s.cfg.AccessTokenTTL.Seconds()),
 		"refresh_token": pair.RefreshToken,
 		"scope":         pair.Scope,
+		"resource":      fixtureauth.OAuthResource(s.issuer),
 	})
 }
 

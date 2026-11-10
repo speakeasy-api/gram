@@ -361,10 +361,13 @@ open their effective assignments; the dropdown always offers compact member sear
     Custom Headers directly after the Identity controls. In Postgres, only the
     Linear row in `mcp_servers` has `remote_session_issuer_id` set, to the
     Example Workspace Identity provider, and the one client bound to Linear's
-    user session issuer sits under that same provider, so the stamp matches what
+    user session issuer (`remote-identity-client-linear`, the main CIMD
+    client) sits under that same provider, so the stamp matches what
     `ResyncMCPServerRemoteSessionIssuers` would derive. Linear offers one
-    OAuth client, "Example Workspace sign-in"; the legacy callback client
-    stays unbound and shows only on the provider's pages. After
+    OAuth client, "Example Workspace sign-in". The legacy callback client
+    (`attachment-client`) has no row in
+    `remote_session_client_user_session_issuers` and no server association;
+    it shows only on the provider's pages. After
     `mise run seed`, the local org renames Linear to **Per-User OAuth Server**
     (provider **MCP Fixture OAuth**, server URL on `GRAM_MCP_FIXTURE_URL`)
     and GitHub to **Shared or Own Token Server**; the demo org keeps Linear

@@ -794,8 +794,9 @@ func chfEmailClient(email string) string {
 
 // chfGatewayDiscovery is gateway (meta MCP) traffic for the Acme Agent
 // Gateway, which fronts the four mcp_servers seeded in postgres.sql. Ids
-// reproduce s.det("metamcp-1") / ("mcpserver-<member>") /
-// ("remotemcp-<member>") so ClickHouse rows join the Postgres rows.
+// reproduce s.det("metamcp-1"), gatewayMemberServer (the toolsets' canonical
+// wrappers for support and ops, s.det("mcpserver-<member>") for the remotes)
+// and s.det("remotemcp-<member>"), so ClickHouse rows join the Postgres rows.
 //
 // Discovery calls (list_servers / describe_server / describe_tools) land under
 // gram.event.source = meta_discovery with a "metamcp:" urn: the runtime never

@@ -209,7 +209,7 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 			})
 		}, 1, "demo seed postflight: expected 1 MCP server stamped with the Remote MCP identity provider, found %d"},
 		{byProj(s.q.PostflightIDLinearProtectedResource), 1, "demo seed postflight: expected Linear's protected resource pinned to read, found %d matching rows"},
-		// Linear's two clients, and each EMA service's own client.
+		// Linear's one OAuth client, and each EMA service's own client.
 		{byProj(s.q.PostflightIDServerClientAssociations), 3, "demo seed postflight: expected 3 MCP server upstream client associations, found %d"},
 		// One per server each seeded sign-in reaches: the Linear and Slack
 		// sign-ins on their own server, the gateway sign-ins on both members.
