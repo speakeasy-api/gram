@@ -731,21 +731,17 @@ WHERE source.user_session_issuer_id = @source_issuer_id
   )
 ORDER BY source.client_id;
 
--- The queries below merge each source CIMD client into the target issuer's
--- row for the same metadata document URL. ListMergeableCimdSourceClientIDs decides
--- which source clients merge; every later step takes those source clients and
--- finds each one's target row by client_id, re-checking only that both rows
--- are live on their issuers. The steps run in this order
--- before the remaining source clients move: consent resources, then duplicate
--- consents and their remaining resources, remaining consents, sessions, then
--- the source client rows.
+-- Merging a source CIMD client into the target issuer's client for the same
+-- metadata document URL. ListMergeableCimdClientPairs decides which clients
+-- merge; the steps after it each take one pair and run in order, each seeing
+-- the previous step's writes.
 
--- name: ListMergeableCimdSourceClientIDs :many
--- Lists each live source client resolved from a Client ID Metadata Document
--- that the target issuer also has a live client for. A source client an
--- issuance selection profile pins to the source issuer is left out: the
--- profile's foreign key keeps it on that issuer.
-SELECT source.id
+-- name: ListMergeableCimdClientPairs :many
+-- Pairs each live source client resolved from a Client ID Metadata Document
+-- with the target issuer's live client for the same document URL. A source
+-- client an issuance selection profile pins to the source issuer is left out:
+-- the profile's foreign key keeps it on that issuer.
+SELECT source.id AS source_client_id, target.id AS target_client_id
 FROM user_session_clients AS source
 JOIN user_session_clients AS target
   ON target.user_session_issuer_id = @target_issuer_id
@@ -775,174 +771,93 @@ WHERE source.user_session_issuer_id = @source_issuer_id
   )
 ORDER BY source.id;
 
--- name: MoveMergedCimdClientConsentResources :execrows
--- Approval evidence on a source consent that duplicates a live target consent
--- (same subject and upstream set) moves to the target consent, except for
--- resources the target consent already covers.
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-), duplicate_consents AS (
-    SELECT source_consent.id AS source_consent_id, target_consent.id AS target_consent_id
-    FROM pairs
-    JOIN user_session_consents AS source_consent
-      ON source_consent.user_session_client_id = pairs.source_client_id
-     AND source_consent.deleted IS FALSE
-    JOIN user_session_consents AS target_consent
-      ON target_consent.user_session_client_id = pairs.target_client_id
-     AND target_consent.subject_urn = source_consent.subject_urn
-     AND target_consent.remote_set_hash = source_consent.remote_set_hash
-     AND target_consent.deleted IS FALSE
-)
+-- name: MoveDuplicateConsentResourcesToClient :execrows
+-- Where the same subject approved the same upstream set through both clients,
+-- approval evidence for resources only the source consent covers moves onto
+-- the target consent.
 UPDATE user_session_consent_resources AS resource
-SET user_session_consent_id = duplicate_consents.target_consent_id,
+SET user_session_consent_id = target_consent.id,
     updated_at = clock_timestamp()
-FROM duplicate_consents
-WHERE resource.user_session_consent_id = duplicate_consents.source_consent_id
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
   AND resource.deleted IS FALSE
   AND NOT EXISTS (
     SELECT 1
     FROM user_session_consent_resources AS existing
-    WHERE existing.user_session_consent_id = duplicate_consents.target_consent_id
+    WHERE existing.user_session_consent_id = target_consent.id
       AND existing.resource = resource.resource
       AND existing.deleted IS FALSE
   );
 
--- name: RetireMergedCimdClientDuplicateConsentResources :execrows
--- Approval evidence still on a source duplicate consent after the move covers
--- resources the target consent already holds, so it is retired with its
--- consent rather than left live under a deleted parent.
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-)
+-- name: RetireDuplicateConsentResources :execrows
+-- Evidence still on a source consent the target duplicates covers resources
+-- the target consent already holds, so it is retired with the consent.
 UPDATE user_session_consent_resources AS resource
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-FROM pairs
-JOIN user_session_consents AS source_consent
-  ON source_consent.user_session_client_id = pairs.source_client_id
- AND source_consent.deleted IS FALSE
-WHERE resource.user_session_consent_id = source_consent.id
-  AND resource.deleted IS FALSE
-  AND EXISTS (
-    SELECT 1
-    FROM user_session_consents AS target_consent
-    WHERE target_consent.user_session_client_id = pairs.target_client_id
-      AND target_consent.subject_urn = source_consent.subject_urn
-      AND target_consent.remote_set_hash = source_consent.remote_set_hash
-      AND target_consent.deleted IS FALSE
-  );
+FROM user_session_consents AS source_consent
+JOIN user_session_consents AS target_consent
+  ON target_consent.user_session_client_id = @target_client_id
+ AND target_consent.subject_urn = source_consent.subject_urn
+ AND target_consent.remote_set_hash = source_consent.remote_set_hash
+ AND target_consent.deleted IS FALSE
+WHERE source_consent.user_session_client_id = @source_client_id
+  AND source_consent.deleted IS FALSE
+  AND resource.user_session_consent_id = source_consent.id
+  AND resource.deleted IS FALSE;
 
--- name: RetireMergedCimdClientDuplicateConsents :execrows
+-- name: RetireDuplicateConsents :execrows
 -- The target consent is authoritative for a subject and upstream set it
--- already covers, so the source duplicate is retired.
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-)
+-- already covers.
 UPDATE user_session_consents AS source_consent
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-FROM pairs
-WHERE source_consent.user_session_client_id = pairs.source_client_id
+WHERE source_consent.user_session_client_id = @source_client_id
   AND source_consent.deleted IS FALSE
   AND EXISTS (
     SELECT 1
     FROM user_session_consents AS target_consent
-    WHERE target_consent.user_session_client_id = pairs.target_client_id
+    WHERE target_consent.user_session_client_id = @target_client_id
       AND target_consent.subject_urn = source_consent.subject_urn
       AND target_consent.remote_set_hash = source_consent.remote_set_hash
       AND target_consent.deleted IS FALSE
   );
 
--- name: RepointMergedCimdClientConsents :execrows
--- Consents the target client lacks move to it with the target's tenancy.
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-)
+-- name: RepointConsentsToClient :execrows
+-- Remaining source consents move to the target client with its tenancy.
 UPDATE user_session_consents AS consent
-SET user_session_client_id = pairs.target_client_id,
-    project_id = pairs.target_project_id,
-    organization_id = pairs.target_organization_id,
+SET user_session_client_id = target.id,
+    project_id = target.project_id,
+    organization_id = target.organization_id,
     updated_at = clock_timestamp()
-FROM pairs
-WHERE consent.user_session_client_id = pairs.source_client_id
+FROM user_session_clients AS target
+WHERE target.id = @target_client_id
+  AND target.deleted IS FALSE
+  AND consent.user_session_client_id = @source_client_id
   AND consent.deleted IS FALSE;
 
--- name: RepointMergedCimdClientSessions :execrows
+-- name: RepointSessionsToClient :execrows
 -- Sessions keep their refresh tokens; only the client they belong to changes.
 -- Their issuer and tenancy move with the rest of the source sessions.
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-)
 UPDATE user_sessions AS session
-SET user_session_client_id = pairs.target_client_id,
+SET user_session_client_id = @target_client_id::uuid,
     updated_at = clock_timestamp()
-FROM pairs
-WHERE session.user_session_client_id = pairs.source_client_id
+WHERE session.user_session_client_id = @source_client_id::uuid
   AND session.deleted IS FALSE;
 
--- name: RetireMergedCimdClients :execrows
-WITH pairs AS (
-    SELECT source.id AS source_client_id, target.id AS target_client_id,
-           target.project_id AS target_project_id, target.organization_id AS target_organization_id
-    FROM user_session_clients AS source
-    JOIN user_session_clients AS target
-      ON target.user_session_issuer_id = @target_issuer_id
-     AND target.client_id = source.client_id
-     AND target.deleted IS FALSE
-    WHERE source.id = ANY(@source_client_ids::uuid[])
-      AND source.user_session_issuer_id = @source_issuer_id
-      AND source.deleted IS FALSE
-)
+-- name: RetireMergedUserSessionClient :execrows
 UPDATE user_session_clients AS client
 SET deleted_at = clock_timestamp(),
     updated_at = clock_timestamp()
-FROM pairs
-WHERE client.id = pairs.source_client_id;
+WHERE client.id = @source_client_id
+  AND client.deleted IS FALSE;
 
 -- name: CountUserSessionIssuerPrincipalBindingConflicts :one
 SELECT COUNT(*)::int

@@ -432,49 +432,53 @@ type mergedCimdClients struct {
 }
 
 // mergeDuplicateCimdClients folds each source client resolved from a Client
-// ID Metadata Document into the target issuer's row for the same document URL.
-// Both rows describe one client, so the target row survives: its consents win
-// where the same subject approved the same upstream set on both issuers, and
-// every other consent and session moves to it. The steps must run in this
-// order because each one skips source clients that are no longer live.
+// ID Metadata Document into the target issuer's client for the same document
+// URL. Both rows describe one client, so the target row survives: its consents
+// win where the same subject approved the same upstream set on both issuers,
+// and every other consent and session moves to it. Each pair's steps run in
+// order, each seeing the previous step's writes.
 func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, organizationID string, sourceIssuerID, targetIssuerID uuid.UUID) (mergedCimdClients, error) {
-	sourceClientIDs, err := q.ListMergeableCimdSourceClientIDs(ctx, repo.ListMergeableCimdSourceClientIDsParams{TargetIssuerID: targetIssuerID, SourceIssuerID: sourceIssuerID, OrganizationID: organizationID})
+	pairs, err := q.ListMergeableCimdClientPairs(ctx, repo.ListMergeableCimdClientPairsParams{TargetIssuerID: targetIssuerID, SourceIssuerID: sourceIssuerID, OrganizationID: organizationID})
 	if err != nil {
 		return mergedCimdClients{}, fmt.Errorf("list mergeable clients: %w", err)
 	}
-	if len(sourceClientIDs) == 0 {
-		return mergedCimdClients{clients: 0, consents: 0}, nil
+
+	merged := mergedCimdClients{clients: 0, consents: 0}
+	for _, pair := range pairs {
+		source, target := pair.SourceClientID, pair.TargetClientID
+
+		if _, err := q.MoveDuplicateConsentResourcesToClient(ctx, repo.MoveDuplicateConsentResourcesToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("move consent resources of client %s: %w", source, err)
+		}
+
+		if _, err := q.RetireDuplicateConsentResources(ctx, repo.RetireDuplicateConsentResourcesParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire duplicate consent resources of client %s: %w", source, err)
+		}
+
+		retired, err := q.RetireDuplicateConsents(ctx, repo.RetireDuplicateConsentsParams{SourceClientID: source, TargetClientID: target})
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire duplicate consents of client %s: %w", source, err)
+		}
+
+		repointed, err := q.RepointConsentsToClient(ctx, repo.RepointConsentsToClientParams{SourceClientID: source, TargetClientID: target})
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("repoint consents of client %s: %w", source, err)
+		}
+
+		if _, err := q.RepointSessionsToClient(ctx, repo.RepointSessionsToClientParams{SourceClientID: source, TargetClientID: target}); err != nil {
+			return mergedCimdClients{}, fmt.Errorf("repoint sessions of client %s: %w", source, err)
+		}
+
+		clients, err := q.RetireMergedUserSessionClient(ctx, source)
+		if err != nil {
+			return mergedCimdClients{}, fmt.Errorf("retire client %s: %w", source, err)
+		}
+
+		merged.clients += clients
+		merged.consents += retired + repointed
 	}
 
-	params := repo.MoveMergedCimdClientConsentResourcesParams{TargetIssuerID: targetIssuerID, SourceClientIds: sourceClientIDs, SourceIssuerID: sourceIssuerID}
-	if _, err := q.MoveMergedCimdClientConsentResources(ctx, params); err != nil {
-		return mergedCimdClients{}, fmt.Errorf("move consent resources: %w", err)
-	}
-
-	if _, err := q.RetireMergedCimdClientDuplicateConsentResources(ctx, repo.RetireMergedCimdClientDuplicateConsentResourcesParams(params)); err != nil {
-		return mergedCimdClients{}, fmt.Errorf("retire duplicate consent resources: %w", err)
-	}
-
-	retired, err := q.RetireMergedCimdClientDuplicateConsents(ctx, repo.RetireMergedCimdClientDuplicateConsentsParams(params))
-	if err != nil {
-		return mergedCimdClients{}, fmt.Errorf("retire duplicate consents: %w", err)
-	}
-
-	repointed, err := q.RepointMergedCimdClientConsents(ctx, repo.RepointMergedCimdClientConsentsParams(params))
-	if err != nil {
-		return mergedCimdClients{}, fmt.Errorf("repoint consents: %w", err)
-	}
-
-	if _, err := q.RepointMergedCimdClientSessions(ctx, repo.RepointMergedCimdClientSessionsParams(params)); err != nil {
-		return mergedCimdClients{}, fmt.Errorf("repoint sessions: %w", err)
-	}
-
-	clients, err := q.RetireMergedCimdClients(ctx, repo.RetireMergedCimdClientsParams(params))
-	if err != nil {
-		return mergedCimdClients{}, fmt.Errorf("retire clients: %w", err)
-	}
-
-	return mergedCimdClients{clients: clients, consents: retired + repointed}, nil
+	return merged, nil
 }
 
 func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssuerPayload) (*orggen.MigrateOrganizationUserSessionIssuerResult, error) {
