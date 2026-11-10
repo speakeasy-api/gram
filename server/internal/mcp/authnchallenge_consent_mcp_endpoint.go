@@ -176,6 +176,11 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "load mcp server for consent transport").LogError(ctx, logger)
 		}
+		// The approvals server, the only server with a first-party backend, is
+		// no longer served; see serveResolvedMCPEndpoint.
+		if row.BuiltinBackend.Valid {
+			return oops.E(oops.CodeNotFound, nil, "mcp server not found")
+		}
 		serverRow = &row
 	}
 
@@ -202,11 +207,6 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
-	}
-	// The approvals server, the only server with a first-party backend, is no
-	// longer served; see serveResolvedMCPEndpoint.
-	if serverRow != nil && serverRow.BuiltinBackend.Valid {
-		return oops.E(oops.CodeNotFound, nil, "mcp server not found")
 	}
 	if serverRow != nil {
 		return s.serveConsentProxiedMCP(w, r, endpoint, challengeState, draft, serverRow, postedAuthClient)

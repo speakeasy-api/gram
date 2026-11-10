@@ -545,6 +545,36 @@ func TestAddMetaMcpMember_RejectsUnproxiedServer(t *testing.T) {
 	require.ErrorContains(t, err, "unproxied")
 }
 
+// A retired approvals server (builtin_backend) stays in mcp_servers until a
+// cleanup migration deletes it, but serves nothing, so a gateway refuses it as
+// it would any server that is not live.
+func TestAddMetaMcpMember_RejectsRetiredApprovalsServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	meta := seedMetaMcpServer(t, ctx, ti, "approvals host")
+
+	serverID, err := uuid.NewV7()
+	require.NoError(t, err)
+	_, err = ti.conn.Exec(ctx, `INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')`, serverID, *authCtx.ProjectID, "speakeasy-approvals-"+uuid.NewString()[:8])
+	require.NoError(t, err)
+
+	_, err = ti.service.AddMetaMcpMember(ctx, &gen.AddMetaMcpMemberPayload{
+		SessionToken:     nil,
+		ApikeyToken:      nil,
+		ProjectSlugInput: nil,
+		MetaMcpServerID:  meta.ID,
+		McpServerID:      serverID.String(),
+		SortOrder:        nil,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+}
+
 // Attaching a member whose upstream identity pieces exist binds the member's
 // OAuth client to the gateway's issuer, so consent offers the provider with
 // no manual attach. A second member on the same upstream is a no-op: one

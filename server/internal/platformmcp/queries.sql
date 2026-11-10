@@ -1046,6 +1046,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) AS readiness ON TRUE
 WHERE m.deleted IS FALSE
+  -- A retired approvals server serves nothing until a cleanup migration deletes it.
+  AND m.builtin_backend IS NULL
   AND (@skip_authorization_filter::boolean OR m.id = ANY(@allowed_mcp_ids::uuid[]))
   AND (sqlc.narg(project_id)::uuid IS NULL OR m.project_id = sqlc.narg(project_id)::uuid)
   AND (sqlc.narg(after_mcp_id)::uuid IS NULL OR m.id > sqlc.narg(after_mcp_id)::uuid)
@@ -1161,6 +1163,7 @@ FROM (
     WHERE m.id = @mcp_server_id
       AND m.project_id = @project_id
       AND m.deleted IS FALSE
+      AND m.builtin_backend IS NULL
 ) AS inventory;
 
 -- plugin_servers is the attachment authority, so plugin membership is read from

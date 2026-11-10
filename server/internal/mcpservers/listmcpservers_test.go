@@ -65,6 +65,31 @@ func TestListMcpServers_Multiple(t *testing.T) {
 	require.Len(t, result.McpServers, 2)
 }
 
+// A retired approvals server (builtin_backend) stays in mcp_servers until a
+// cleanup migration deletes it, but serves nothing, so it is not listed.
+func TestListMcpServers_HidesRetiredApprovalsServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	_, err := ti.conn.Exec(ctx, `INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES (gen_random_uuid(), $1, 'Speakeasy Approvals', 'speakeasy-approvals', 'approvals', 'private')`, *authCtx.ProjectID)
+	require.NoError(t, err)
+
+	result, err := ti.service.ListMcpServers(ctx, &gen.ListMcpServersPayload{
+		SessionToken:      nil,
+		ApikeyToken:       nil,
+		ProjectSlugInput:  nil,
+		RemoteMcpServerID: nil,
+		ToolsetID:         nil,
+	})
+	require.NoError(t, err)
+	require.Empty(t, result.McpServers)
+}
+
 func TestListMcpServers_FilterByRemoteMcpServerID(t *testing.T) {
 	t.Parallel()
 

@@ -173,6 +173,11 @@ func (w GatewayWriter) AddMember(ctx context.Context, tx pgx.Tx, actor Actor, me
 	if err != nil {
 		return AddedMember{}, fmt.Errorf("lock mcp server: %w", err)
 	}
+	// A retired approvals server (builtin_backend) serves nothing, so it is not
+	// a live server, until a cleanup migration deletes it.
+	if server.BuiltinBackend.Valid {
+		return AddedMember{}, ErrMemberServerNotInProject
+	}
 
 	// The gateway addresses members by qualified serverslug--toolname, so a
 	// slugless server (legacy pre-2026-05 rows never updated since) can never
