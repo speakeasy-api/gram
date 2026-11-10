@@ -181,9 +181,11 @@ WHERE project_id = @project_id::uuid AND slug = 'github';
 -- project-scoped CIMD client, Slack carries one inert shared Service Account
 -- credential, and GitHub intentionally has no upstream identity. The demo
 -- values are display fixtures only and cannot authenticate to any service.
--- Two more vendor remotes for the agent MCP sign-in tab: Notion signs each
--- caller in to its own account through OAuth, and DeepWiki is a public server
--- that needs no sign-in at all. Public endpoints, nothing connects on its own.
+-- Two more vendor remotes for the agent MCP sign-in tab, both real and
+-- connectable: Notion signs each caller in to their own account once an
+-- admin sets up its sign-in from the server's page (Speakeasy registers a
+-- client with Notion then; the seed holds no credential), and DeepWiki is a
+-- public server that needs no sign-in at all.
 -- name: ServersInsertSignInExampleRemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
   (@notion_id::uuid, @project_id::uuid, 'Notion', 'notion',
@@ -209,33 +211,14 @@ INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
   (@deepwiki_id::uuid, @project_id::uuid, 'DeepWiki', 'deepwiki',
    NULL, @remote_deepwiki_id::uuid, @issuer_workforce_id::uuid, 'private');
 
--- Notion's authorization server, as its discovery document names it.
--- name: ServersInsertNotionRemoteSessionIssuer :exec
-INSERT INTO remote_session_issuers
-  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
-   token_endpoint, scopes_supported, grant_types_supported,
-   response_types_supported, token_endpoint_auth_methods_supported,
-   code_challenge_methods_supported, client_id_metadata_document_supported,
-   name)
-VALUES
-  (@id::uuid, @project_id::uuid, @org_id::text,
-   'notion', 'https://mcp.notion.com',
-   'https://mcp.notion.com/authorize',
-   'https://mcp.notion.com/token',
-   ARRAY[]::text[], ARRAY['authorization_code', 'refresh_token'],
-   ARRAY['code'], ARRAY['none'], ARRAY['S256'], FALSE,
-   'Notion');
-
--- A public client with a placeholder id: signing in to Notion for real needs
--- a registration, which an admin makes from the server's page.
--- name: ServersInsertNotionRemoteSessionClient :exec
-INSERT INTO remote_session_clients
-  (id, project_id, organization_id, remote_session_issuer_id, client_id,
-   client_id_issued_at, token_endpoint_auth_method, scope)
-VALUES
-  (@id::uuid, @project_id::uuid, @org_id::text,
-   @remote_session_issuer_id::uuid, @client_id::text,
-   clock_timestamp(), 'none', NULL);
+-- Each gets an endpoint of its own, as a server added in the dashboard does:
+-- the endpoint is where its sign-in page lives.
+-- name: ServersInsertSignInExampleEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@notion_endpoint_id::uuid, @project_id::uuid, NULL,
+   @notion_server_id::uuid, @notion_slug::text),
+  (@deepwiki_endpoint_id::uuid, @project_id::uuid, NULL,
+   @deepwiki_server_id::uuid, @deepwiki_slug::text);
 
 -- name: ServersInsertLinearRemoteSessionIssuer :exec
 INSERT INTO remote_session_issuers

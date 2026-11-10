@@ -39,7 +39,6 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 		det("mcpserver-linear"):      {det("remote-identity-client-linear"), det("attachment-client")},
 		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
 		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
-		det("mcpserver-notion"):      {det("remote-identity-client-notion")},
 	}
 
 	for range 2 {

@@ -1499,66 +1499,6 @@ func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg Ser
 	return err
 }
 
-const serversInsertNotionRemoteSessionClient = `-- name: ServersInsertNotionRemoteSessionClient :exec
-INSERT INTO remote_session_clients
-  (id, project_id, organization_id, remote_session_issuer_id, client_id,
-   client_id_issued_at, token_endpoint_auth_method, scope)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   $4::uuid, $5::text,
-   clock_timestamp(), 'none', NULL)
-`
-
-type ServersInsertNotionRemoteSessionClientParams struct {
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
-	OrgID                 string
-	RemoteSessionIssuerID uuid.UUID
-	ClientID              string
-}
-
-// A public client with a placeholder id: signing in to Notion for real needs
-// a registration, which an admin makes from the server's page.
-func (q *Queries) ServersInsertNotionRemoteSessionClient(ctx context.Context, arg ServersInsertNotionRemoteSessionClientParams) error {
-	_, err := q.db.Exec(ctx, serversInsertNotionRemoteSessionClient,
-		arg.ID,
-		arg.ProjectID,
-		arg.OrgID,
-		arg.RemoteSessionIssuerID,
-		arg.ClientID,
-	)
-	return err
-}
-
-const serversInsertNotionRemoteSessionIssuer = `-- name: ServersInsertNotionRemoteSessionIssuer :exec
-INSERT INTO remote_session_issuers
-  (id, project_id, organization_id, slug, issuer, authorization_endpoint,
-   token_endpoint, scopes_supported, grant_types_supported,
-   response_types_supported, token_endpoint_auth_methods_supported,
-   code_challenge_methods_supported, client_id_metadata_document_supported,
-   name)
-VALUES
-  ($1::uuid, $2::uuid, $3::text,
-   'notion', 'https://mcp.notion.com',
-   'https://mcp.notion.com/authorize',
-   'https://mcp.notion.com/token',
-   ARRAY[]::text[], ARRAY['authorization_code', 'refresh_token'],
-   ARRAY['code'], ARRAY['none'], ARRAY['S256'], FALSE,
-   'Notion')
-`
-
-type ServersInsertNotionRemoteSessionIssuerParams struct {
-	ID        uuid.UUID
-	ProjectID uuid.UUID
-	OrgID     string
-}
-
-// Notion's authorization server, as its discovery document names it.
-func (q *Queries) ServersInsertNotionRemoteSessionIssuer(ctx context.Context, arg ServersInsertNotionRemoteSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, serversInsertNotionRemoteSessionIssuer, arg.ID, arg.ProjectID, arg.OrgID)
-	return err
-}
-
 const serversInsertNotionUserSessionIssuer = `-- name: ServersInsertNotionUserSessionIssuer :exec
 INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
                                   authn_challenge_mode, session_duration,
@@ -1919,6 +1859,39 @@ func (q *Queries) ServersInsertServerClientAssociation(ctx context.Context, arg 
 	return err
 }
 
+const serversInsertSignInExampleEndpoints = `-- name: ServersInsertSignInExampleEndpoints :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  ($1::uuid, $2::uuid, NULL,
+   $3::uuid, $4::text),
+  ($5::uuid, $2::uuid, NULL,
+   $6::uuid, $7::text)
+`
+
+type ServersInsertSignInExampleEndpointsParams struct {
+	NotionEndpointID   uuid.UUID
+	ProjectID          uuid.UUID
+	NotionServerID     uuid.UUID
+	NotionSlug         string
+	DeepwikiEndpointID uuid.UUID
+	DeepwikiServerID   uuid.UUID
+	DeepwikiSlug       string
+}
+
+// Each gets an endpoint of its own, as a server added in the dashboard does:
+// the endpoint is where its sign-in page lives.
+func (q *Queries) ServersInsertSignInExampleEndpoints(ctx context.Context, arg ServersInsertSignInExampleEndpointsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertSignInExampleEndpoints,
+		arg.NotionEndpointID,
+		arg.ProjectID,
+		arg.NotionServerID,
+		arg.NotionSlug,
+		arg.DeepwikiEndpointID,
+		arg.DeepwikiServerID,
+		arg.DeepwikiSlug,
+	)
+	return err
+}
+
 const serversInsertSignInExampleMCPServers = `-- name: ServersInsertSignInExampleMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
@@ -1974,9 +1947,11 @@ type ServersInsertSignInExampleRemoteMCPServersParams struct {
 // project-scoped CIMD client, Slack carries one inert shared Service Account
 // credential, and GitHub intentionally has no upstream identity. The demo
 // values are display fixtures only and cannot authenticate to any service.
-// Two more vendor remotes for the agent MCP sign-in tab: Notion signs each
-// caller in to its own account through OAuth, and DeepWiki is a public server
-// that needs no sign-in at all. Public endpoints, nothing connects on its own.
+// Two more vendor remotes for the agent MCP sign-in tab, both real and
+// connectable: Notion signs each caller in to their own account once an
+// admin sets up its sign-in from the server's page (Speakeasy registers a
+// client with Notion then; the seed holds no credential), and DeepWiki is a
+// public server that needs no sign-in at all.
 func (q *Queries) ServersInsertSignInExampleRemoteMCPServers(ctx context.Context, arg ServersInsertSignInExampleRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertSignInExampleRemoteMCPServers, arg.NotionID, arg.ProjectID, arg.DeepwikiID)
 	return err
