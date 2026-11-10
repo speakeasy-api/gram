@@ -10,7 +10,7 @@ const (
 	// telemetry cannot carry them: it relays what reached the OTLP ingest
 	// endpoints, and a tool Speakeasy runs never passes through those.
 	DataSourceToolCallLogs = "tool_call_logs"
-	// DataSourceMCPConnectionLogs exports failed, blocked and declined MCP connection attempts.
+	// DataSourceMCPConnectionLogs exports failed MCP connection attempts.
 	DataSourceMCPConnectionLogs = "mcp_connection_logs"
 )
 
