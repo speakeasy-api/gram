@@ -102,9 +102,9 @@ export function IdentityRail({
               >
                 {item.badge}
               </span>
-              {/* Read with the title: "MCP sign-in, 2 need attention". */}
+              {/* Read with the title: "MCP sign-in (2 need attention)". */}
               <span className="sr-only">
-                {`, ${item.badge} need${item.badge === 1 ? "s" : ""} attention`}
+                {`(${item.badge} need${item.badge === 1 ? "s" : ""} attention)`}
               </span>
             </>
           ) : null}
