@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import CreateFromSource from "./CreateFromSource";
 const api = vi.hoisted(() => ({
@@ -84,4 +85,17 @@ it("creates a server seeded with only the chosen source's tools", async () => {
     }),
   );
   expect(api.create).toHaveBeenCalledOnce();
+});
+it("shows the seeding error when filling the server fails", async () => {
+  api.update.mockRejectedValueOnce(new Error("Seeding failed"));
+  render(
+    <MemoryRouter>
+      <CreateFromSource />
+    </MemoryRouter>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /First source/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Create" }));
+  expect(await screen.findByText("Seeding failed")).toBeTruthy();
+  expect(api.create).toHaveBeenCalledOnce();
+  expect(toast.success).not.toHaveBeenCalled();
 });

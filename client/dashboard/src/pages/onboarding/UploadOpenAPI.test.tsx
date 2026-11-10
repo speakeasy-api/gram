@@ -91,7 +91,7 @@ beforeEach(() => {
   state.stepper.state = "error";
   state.stepper.meta.current.deployment = { id: "deployment" };
 });
-it("offers deployment logs and a reset after a failed deployment", () => {
+it("offers deployment logs after a failed deployment", () => {
   render(<UploadOpenAPI />, { wrapper: Router });
   fireEvent.click(screen.getByRole("button", { name: "View Logs" }));
   expect(location()).toBe("/org/projects/project/deployments/deployment");
