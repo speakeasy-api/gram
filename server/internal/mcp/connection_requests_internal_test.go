@@ -282,6 +282,18 @@ func TestMemberClientFailure_TunneledDeadlineIsProviderUnreachable(t *testing.T)
 	require.Equal(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code)
 }
 
+// A tunnel gateway that reported its own failure before the deadline keeps the blame.
+func TestMemberClientFailure_TunneledDeadlineAfterAGatewayFailureIsNotTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{tunnelErr: wire.TunnelErrorRouteLookupFailed}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.NotEqual(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code)
+}
+
 func TestRecordMemberFailure(t *testing.T) {
 	t.Parallel()
 

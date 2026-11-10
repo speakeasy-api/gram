@@ -376,6 +376,20 @@ func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
 // transient HTTP statuses included. The member never said it.
 const sdkTransportRejected = "rejected by transport"
 
+// memberDeadlineRanOut reports that the member call's own deadline ended it with nothing on
+// our side to blame: no tunnel gateway status and no forwarding setup failure. A slow member
+// is the provider's, tunneled or not.
+func memberDeadlineRanOut(ctx context.Context, tunnelError string, err, exchangeErr error) bool {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) && !errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	if _, gateway := tunnelrouting.FailureHappened(tunnelError, err, exchangeErr); gateway {
+		return false
+	}
+	_, setup := errors.AsType[*proxy.ForwardSetupError](errors.Join(err, exchangeErr))
+	return !setup
+}
+
 // memberClientFailure keeps transport failures scoped to a member and preserves
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
@@ -423,7 +437,10 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// The caller went away, so this says nothing about the member.
 		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr, ctx.Err()))
+		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "", errors.Join(err, exchangeErr))
+		if memberDeadlineRanOut(ctx, rt.tunnelError(), err, exchangeErr) {
+			code = mcpconnectionattempts.CodeProviderUnreachable
+		}
 		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
