@@ -732,4 +732,6 @@ func TestCreateDataExportCreatesConnectionLogs(t *testing.T) {
 	output, err := createConnectionLogsExport(ctx, reader, principal, project.ID.String())
 	require.NoError(t, err)
 	require.Equal(t, "mcp_connection_logs", output.Route.DataSource)
+	require.Equal(t, project.ID.String(), output.Route.ProjectID)
+	require.True(t, output.Route.Enabled)
 }

@@ -12,8 +12,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel/log"
-	"go.opentelemetry.io/otel/sdk/resource"
 	collectorlogsv1 "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	logsv1 "go.opentelemetry.io/proto/otlp/logs/v1"
@@ -27,23 +25,13 @@ import (
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
-	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otel/enrich"
-	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/streams"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
-
-// pipelineSink is the production adapter's shape, which lives in cmd/gram.
-type pipelineSink struct{ logs *otelpub.Logger }
-
-func (s pipelineSink) Publish(ctx context.Context, organizationID, projectID, recordID string, record log.Record) gcp.PublishResult {
-	return s.logs.Publish(otelpub.WithRecordID(otelpub.WithTenant(ctx, organizationID, projectID), recordID), record)
-}
-
-func (s pipelineSink) Close() { s.logs.Close() }
 
 func capturePublisher[M any](t *testing.T) (*gcp.MockPublisher[M], func() []M) {
 	t.Helper()
@@ -139,7 +127,7 @@ func TestExportPipeline_RealRecordReachesASensitiveExcludedDestinationUnredacted
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, logsAlwaysOn,
-		mcpconnectionattempts.WithExport(pipelineSink{logs: otelpub.NewLogger(inboundPublisher, resource.Empty(), dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource))}))
+		mcpconnectionattempts.WithExport(otelsink.New(inboundPublisher, "gram-server")))
 	recorder.End(ctx, mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(organizationID, project.ID, uuid.New(), mcpconnectionattempts.AppDCR)),
 		mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderUnavailable)
 	require.NoError(t, recorder.Shutdown(ctx))

@@ -207,6 +207,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	got := recordAttributes(record)
 	require.Equal(t, []string{
 		"error.type",
+		"log.record.uid",
 		"server.address",
 		"server.port",
 		"speakeasy.mcp_connection.attempt_id",
@@ -229,6 +230,7 @@ func TestExportRecord_CarriesTheAttemptAndTheCatalogText(t *testing.T) {
 	}, slices.Sorted(maps.Keys(got)))
 
 	require.Equal(t, row.AttemptID.String(), got[string(attr.ExtMcpConnectionAttemptIDKey)].AsString())
+	require.Equal(t, exportRecordID(row), got[string(attr.LogRecordUIDKey)].AsString(), "destinations dedupe redeliveries on it")
 	require.True(t, got[string(attr.ExtMcpConnectionFinalKey)].AsBool())
 	require.Equal(t, "failed", got[string(attr.ExtMcpConnectionOutcomeKey)].AsString())
 	require.Equal(t, CodeIDPUnavailable.String(), got[string(attr.ErrorTypeKey)].AsString())
@@ -576,6 +578,7 @@ func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 	t.Parallel()
 
 	sink := &fakeSink{block: make(chan struct{})}
+	t.Cleanup(func() { close(sink.block) })
 	recorder := newExportRecorder(t, &scriptedConn{}, sink)
 
 	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true), exportTestRow(t, CodeIDPUnavailable, true)})
@@ -593,7 +596,6 @@ func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 		require.Fail(t, "ShutdownAndWait waited on an unacked export publish")
 	}
 
-	close(sink.block)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, 1, sink.closes())
 	}, 10*time.Second, 10*time.Millisecond)
@@ -601,3 +603,64 @@ func TestShutdownAndWait_ReturnsWithABlockedSink(t *testing.T) {
 
 // PipelineInfra lets the external pipeline test reach this package's containers.
 func PipelineInfra() *testenv.Environment { return infra }
+
+func TestExportRows_PublishesOnlyErrorAndAbove(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{}
+	recorder := newExportRecorder(t, &scriptedConn{}, sink)
+
+	recorder.exportRows([]Row{
+		exportTestRow(t, CodeNoServerAccess, true),
+		exportTestRow(t, CodeIDPUnavailable, true),
+	})
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	published := sink.snapshot()
+	require.Len(t, published, 1, "a blocked attempt is stored but not published")
+	require.Equal(t, log.SeverityError, published[0].record.Severity())
+}
+
+// panicResult settles at once and panics when read.
+type panicResult struct{ ready chan struct{} }
+
+func (r panicResult) Ready() <-chan struct{} { return r.ready }
+
+func (panicResult) Get(context.Context) (string, error) { panic("ack panicked") }
+
+type panicAckSink struct{}
+
+func (panicAckSink) Publish(context.Context, string, string, string, log.Record) gcp.PublishResult {
+	ready := make(chan struct{})
+	close(ready)
+	return panicResult{ready: ready}
+}
+
+func (panicAckSink) Close() {}
+
+func TestExport_PanickingAckIsCountedAndTheProcessSurvives(t *testing.T) {
+	t.Parallel()
+
+	recorder := newExportRecorder(t, &scriptedConn{}, panicAckSink{})
+
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedPanic))
+	require.Zero(t, recorder.exporter.inFlight.Load(), "the slot is released")
+}
+
+func TestExportRows_UnsettledPublishKeepsItsSlot(t *testing.T) {
+	t.Parallel()
+
+	sink := &fakeSink{block: make(chan struct{})}
+	t.Cleanup(func() { close(sink.block) })
+	recorder := newExportRecorder(t, &scriptedConn{}, sink, withExportInFlight(1))
+
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
+	time.Sleep(50 * time.Millisecond)
+	recorder.exportRows([]Row{exportTestRow(t, CodeIDPUnavailable, true)})
+
+	require.Equal(t, int64(1), recorder.exporter.inFlight.Load())
+	require.Equal(t, int64(1), notExported(t, recorder, notExportedQueueFull))
+}

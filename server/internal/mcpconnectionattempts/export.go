@@ -28,8 +28,9 @@ const (
 	// instead of growing memory while Pub/Sub is slow.
 	exportMaxInFlight = 1024
 
-	// exportTimeout bounds how long one row waits for its ack.
-	exportTimeout = 15 * time.Second
+	// minExportSeverity is the lowest severity published. Blocked and declined rows keep their
+	// severity for when a destination can ask for them; until then publishing them is waste.
+	minExportSeverity = log.SeverityError
 
 	// defaultExportDrain is how long outstanding publishes may settle at shutdown.
 	defaultExportDrain = 5 * time.Second
@@ -125,7 +126,7 @@ func (r *Recorder) exportRows(rows []Row) {
 		return
 	}
 	for _, row := range rows {
-		if _, _, ok := exportSeverity(row); !ok {
+		if severity, _, ok := exportSeverity(row); !ok || severity < minExportSeverity {
 			continue
 		}
 		// otelpub requires a project, and org gateways have none.
@@ -182,15 +183,21 @@ func (r *Recorder) exportRow(row Row) {
 	result := r.exporter.sink.Publish(withRowTrace(r.writerCtx, row), row.OrganizationID, row.ProjectID.String(), exportRecordID(row), record)
 	r.exporter.inFlight.Add(1)
 	r.exporter.acks.Go(func() {
+		// The slot is held until Pub/Sub settles the publish, whose own timeout bounds it.
 		defer r.exporter.inFlight.Add(-1)
-		ctx, cancel := context.WithTimeout(r.writerCtx, exportTimeout)
-		defer cancel()
-		if _, err := result.Get(ctx); err != nil {
-			reason := notExportedFailed
-			if r.writerCtx.Err() != nil {
-				reason = notExportedShutdown
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				r.countNotExported(row, notExportedPanic, fmt.Errorf("connection log export ack: %v", recovered))
 			}
-			r.countNotExported(row, reason, err)
+		}()
+		select {
+		case <-result.Ready():
+		case <-r.writerCtx.Done():
+			r.countNotExported(row, notExportedShutdown, r.writerCtx.Err())
+			return
+		}
+		if _, err := result.Get(context.WithoutCancel(r.writerCtx)); err != nil {
+			r.countNotExported(row, notExportedFailed, err)
 		}
 	})
 }
@@ -261,6 +268,8 @@ func exportRecord(row Row) (log.Record, bool) {
 
 	attrs := []attribute.KeyValue{
 		attr.ExtMcpConnectionAttemptID(row.AttemptID.String()),
+		// The relay strips record_id, so destinations dedupe redeliveries on this.
+		attr.LogRecordUID(exportRecordID(row)),
 		attr.ExtMcpConnectionFinal(row.IsFinal),
 		// error.type holds the connection reason code.
 		attr.ErrorType(row.Reason),

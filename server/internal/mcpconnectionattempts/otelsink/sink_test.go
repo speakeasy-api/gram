@@ -1,4 +1,4 @@
-package gram
+package otelsink_test
 
 import (
 	"testing"
@@ -9,14 +9,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/log"
-	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.41.0"
 
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/otelsink"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	"github.com/speakeasy-api/gram/server/internal/otelpub"
 )
 
-func newTestConnectionLogExport(t *testing.T) (*connectionLogExport, *[]*otelv1.InboundLogRecord) {
+func newTestConnectionLogExport(t *testing.T) (*otelsink.Sink, *[]*otelv1.InboundLogRecord) {
 	t.Helper()
 
 	published := &[]*otelv1.InboundLogRecord{}
@@ -28,11 +26,7 @@ func newTestConnectionLogExport(t *testing.T) (*connectionLogExport, *[]*otelv1.
 			*published = append(*published, record)
 		}).Return(gcp.NewSuccessPublishResult()).Maybe()
 
-	return &connectionLogExport{
-		logs: otelpub.NewLogger(publisher,
-			resource.NewWithAttributes(semconv.SchemaURL, semconv.ServiceNameKey.String(gatewayRecordsServiceName)),
-			dialect.ConnectionLogScope, otelpub.WithProvenanceSource(dialect.ConnectionLogSource)),
-	}, published
+	return otelsink.New(publisher, "gram-server"), published
 }
 
 func connectionLogTestRecord() log.Record {
@@ -57,4 +51,5 @@ func TestConnectionLogExport_PublishesUnderTheRowTenant(t *testing.T) {
 	require.Equal(t, "project-row", record.GetProvenance().GetProjectId())
 	require.Equal(t, "attempt:step:reason", record.GetRecordId())
 	require.Equal(t, dialect.ConnectionLogScope, record.GetScope().GetName())
+	require.Equal(t, dialect.ConnectionLogSource, record.GetProvenance().GetSource())
 }

@@ -186,6 +186,7 @@ const (
 	ObservedTimeUnixNanoKey              = attribute.Key("observed_time_unix_nano")
 	ServerAddressKey                     = semconv.ServerAddressKey
 	ServerPortKey                        = semconv.ServerPortKey
+	LogRecordUIDKey                      = semconv.LogRecordUIDKey
 	ServiceEnvKey                        = semconv.DeploymentEnvironmentNameKey
 	ServiceInstanceIDKey                 = semconv.ServiceInstanceIDKey
 	ServiceNameKey                       = semconv.ServiceNameKey
@@ -1865,6 +1866,7 @@ func SlogHookDeliverySpoolDepth(v int) slog.Attr {
 func ServerAddress(v string) attribute.KeyValue { return ServerAddressKey.String(v) }
 func SlogServerAddress(v string) slog.Attr      { return slog.String(string(ServerAddressKey), v) }
 func ServerPort(v int) attribute.KeyValue       { return ServerPortKey.Int(v) }
+func LogRecordUID(v string) attribute.KeyValue  { return LogRecordUIDKey.String(v) }
 func SlogServerPort(v int) slog.Attr            { return slog.Int(string(ServerPortKey), v) }
 
 func ServiceName(v string) attribute.KeyValue { return ServiceNameKey.String(v) }
