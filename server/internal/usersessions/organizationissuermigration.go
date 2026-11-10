@@ -442,6 +442,10 @@ func mergeDuplicateCimdClients(ctx context.Context, q *repo.Queries, params repo
 		return mergedCimdClients{}, fmt.Errorf("move consent resources: %w", err)
 	}
 
+	if _, err := q.RetireMergedCimdClientDuplicateConsentResources(ctx, repo.RetireMergedCimdClientDuplicateConsentResourcesParams(params)); err != nil {
+		return mergedCimdClients{}, fmt.Errorf("retire duplicate consent resources: %w", err)
+	}
+
 	retired, err := q.RetireMergedCimdClientDuplicateConsents(ctx, repo.RetireMergedCimdClientDuplicateConsentsParams(params))
 	if err != nil {
 		return mergedCimdClients{}, fmt.Errorf("retire duplicate consents: %w", err)

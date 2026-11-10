@@ -88,6 +88,9 @@ func TestOrganizationUserSessionIssuerMigrateMergesDuplicateCimdClients(t *testi
 	liveResources, err := repo.CountLiveUserSessionConsentResourcesFixture(ctx, usersessionsrepo.CountLiveUserSessionConsentResourcesFixtureParams{ProjectID: projectID, ConsentIds: []uuid.UUID{targetShared.ID}})
 	require.NoError(t, err)
 	require.Equal(t, int64(2), liveResources, "the target consent keeps its own resource and gains the source-only one")
+	orphanedResources, err := repo.CountLiveUserSessionConsentResourcesFixture(ctx, usersessionsrepo.CountLiveUserSessionConsentResourcesFixtureParams{ProjectID: projectID, ConsentIds: []uuid.UUID{sourceShared.ID}})
+	require.NoError(t, err)
+	require.Zero(t, orphanedResources, "resources left on the retired source consent are retired with it")
 
 	sourceOnlyAfter, err := repo.GetUserSessionConsentByID(ctx, usersessionsrepo.GetUserSessionConsentByIDParams{ID: sourceOnlyConsent.ID, ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID})
 	require.NoError(t, err)
@@ -101,6 +104,8 @@ func TestOrganizationUserSessionIssuerMigrateMergesDuplicateCimdClients(t *testi
 	require.Equal(t, targetID, sessionAfter.UserSessionIssuerID)
 	require.True(t, sessionAfter.UserSessionClientID.Valid)
 	require.Equal(t, targetClient.ID, sessionAfter.UserSessionClientID.UUID)
+	require.Equal(t, session.RefreshTokenHash, sessionAfter.RefreshTokenHash, "the session's refresh token keeps working after the merge")
+	require.True(t, session.RefreshExpiresAt.Time.Equal(sessionAfter.RefreshExpiresAt.Time))
 }
 
 func TestOrganizationUserSessionIssuerMigratePreflightBlocksCimdClientPinnedByIssuanceProfile(t *testing.T) {
