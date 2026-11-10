@@ -82,7 +82,7 @@ var deviceIdentityMemo struct {
 // lookup inputs. The key covers everything that changes where the lookup goes,
 // so a changed environment never reads a stale answer.
 func deviceIdentityFor(ctx context.Context) deviceIdentity {
-	key := strings.Join(deviceAgentCommands(), "\x00") + "\x01" + agentSocketPath() + "\x01" + Env("DEVICE_AGENT_COMMANDS")
+	key := strings.Join(deviceAgentCommands(), "\x00") + "\x01" + strings.Join(agentSocketPaths(), "\x00") + "\x01" + Env("DEVICE_AGENT_COMMANDS")
 	deviceIdentityMemo.Lock()
 	if deviceIdentityMemo.key == key && nowFunc().Sub(deviceIdentityMemo.at) < deviceIdentityTTL {
 		id := deviceIdentityMemo.id
@@ -194,9 +194,18 @@ func socketIdentityEmail(ctx context.Context) string {
 }
 
 // socketIdentity is socketIdentityEmail's full answer, workload fields
-// included. ok is false when no usable document came back.
+// included, from the first socket that returns a usable document. ok is false
+// when none did.
 func socketIdentity(ctx context.Context) (deviceIdentity, bool) {
-	socket := agentSocketPath()
+	for _, socket := range agentSocketPaths() {
+		if id, ok := socketIdentityAt(ctx, socket); ok {
+			return id, true
+		}
+	}
+	return deviceIdentity{}, false
+}
+
+func socketIdentityAt(ctx context.Context, socket string) (deviceIdentity, bool) {
 	if socket == "" {
 		return deviceIdentity{}, false
 	}
@@ -299,27 +308,28 @@ func identityEnv() []string {
 	return append(env, "HOME="+account)
 }
 
-// agentSocketPath mirrors the device agent's api.SocketPath, including the
-// SPEAKEASY_SOCKET override. Without the override it prefers the first home
-// whose socket exists, so a hook running under a temporary $HOME still
-// reaches the daemon in the account's home.
-func agentSocketPath() string {
+// agentSocketPaths mirrors the device agent's api.SocketPath, including the
+// SPEAKEASY_SOCKET override, in the order callers should try them. Without the
+// override it lists the socket under $HOME and then under the account's home:
+// a hook running under a temporary $HOME still reaches the daemon in the real
+// home, even when a stale socket file sits in the temporary one. A missing
+// socket fails the dial at once, so trying the next path costs nothing.
+func agentSocketPaths() []string {
 	if v := os.Getenv("SPEAKEASY_SOCKET"); v != "" {
-		return v
+		return []string{v}
 	}
 	if runtime.GOOS == "windows" {
-		return `\\.\pipe\speakeasy-agent`
+		return []string{`\\.\pipe\speakeasy-agent`}
 	}
 	homes := agentHomes()
 	if len(homes) == 0 {
-		return "/tmp/speakeasy-agent.sock"
+		return []string{"/tmp/speakeasy-agent.sock"}
 	}
+	paths := make([]string, 0, len(homes))
 	for _, home := range homes {
-		if socket := homeSocketPath(home); fileExists(socket) {
-			return socket
-		}
+		paths = append(paths, homeSocketPath(home))
 	}
-	return homeSocketPath(homes[0])
+	return paths
 }
 
 func homeSocketPath(home string) string {

@@ -51,6 +51,13 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	socket := filepath.Join(dir, "agent.sock")
+	serveIdentitySocket(t, socket, status, body)
+	return socket
+}
+
+// serveIdentitySocket is startIdentitySocket at a caller-chosen path.
+func serveIdentitySocket(t *testing.T, socket string, status int, body string) {
+	t.Helper()
 	ln, err := net.Listen("unix", socket)
 	require.NoError(t, err)
 	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -67,7 +74,6 @@ func startIdentitySocket(t *testing.T, status int, body string) string {
 	})}
 	go func() { _ = srv.Serve(ln) }()
 	t.Cleanup(func() { _ = srv.Close() })
-	return socket
 }
 
 // isolateInstalledAgent hides machine-wide speakeasyd installs, and any under
@@ -93,13 +99,14 @@ func stubAccountHome(t *testing.T, home string) {
 }
 
 // writeFakeAgent installs a shell speakeasyd at path that prints body and, when
-// marker is set, touches it so the test can tell whether it ran.
+// marker is set, creates it so the test can tell whether it ran. Only shell
+// builtins: the tests empty PATH, so `touch` would not be found.
 func writeFakeAgent(t *testing.T, path, body, marker string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
 	script := "#!/bin/sh\n"
 	if marker != "" {
-		script += "touch '" + marker + "'\n"
+		script += ": > '" + marker + "'\n"
 	}
 	script += "printf '%s' '" + body + "'\n"
 	require.NoError(t, os.WriteFile(path, []byte(script), 0o700))
@@ -217,7 +224,7 @@ func TestDeviceAgentIdentityRunsWithAccountHome(t *testing.T) {
 	require.Equal(t, "account-home@example.com", deviceAgentEmail(t.Context()))
 }
 
-func TestAgentSocketPathFindsDaemonUnderAccountHome(t *testing.T) {
+func TestAgentSocketPathsListHOMEThenAccountHome(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("named pipe path does not depend on the home folder")
 	}
@@ -227,13 +234,44 @@ func TestAgentSocketPathFindsDaemonUnderAccountHome(t *testing.T) {
 	account := t.TempDir()
 	stubAccountHome(t, account)
 
-	// No daemon anywhere: keep the $HOME-derived path, as before.
-	require.Equal(t, homeSocketPath(moved), agentSocketPath())
+	require.Equal(t, []string{homeSocketPath(moved), homeSocketPath(account)}, agentSocketPaths())
 
-	socket := homeSocketPath(account)
-	require.NoError(t, os.MkdirAll(filepath.Dir(socket), 0o755))
-	require.NoError(t, os.WriteFile(socket, nil, 0o600))
-	require.Equal(t, socket, agentSocketPath())
+	stubAccountHome(t, moved)
+	require.Equal(t, []string{homeSocketPath(moved)}, agentSocketPaths(), "one home, one path")
+}
+
+// shortTempDir is a temp folder short enough that a socket under the device
+// agent's per-home layout stays within the ~104-byte sockaddr_un limit.
+func shortTempDir(t *testing.T) string {
+	t.Helper()
+	// /tmp, not os.TempDir(): macOS's per-user TMPDIR alone eats about half
+	// of the limit.
+	dir, err := os.MkdirTemp("/tmp", "h")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// A stale socket file under the temporary $HOME (a daemon that ran there once)
+// must not hide the live daemon under the account's home.
+func TestSocketIdentitySkipsStaleSocketUnderHOME(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-socket fixture is POSIX-only")
+	}
+	t.Setenv("SPEAKEASY_SOCKET", "")
+	moved := shortTempDir(t)
+	t.Setenv("HOME", moved)
+	stale := homeSocketPath(moved)
+	require.NoError(t, os.MkdirAll(filepath.Dir(stale), 0o755))
+	require.NoError(t, os.WriteFile(stale, nil, 0o600))
+
+	account := shortTempDir(t)
+	stubAccountHome(t, account)
+	live := homeSocketPath(account)
+	require.NoError(t, os.MkdirAll(filepath.Dir(live), 0o755))
+	serveIdentitySocket(t, live, http.StatusOK, `{"v":1,"enrolled":true,"email":"live@example.com","source":"managed"}`)
+
+	require.Equal(t, "live@example.com", socketIdentityEmail(t.Context()))
 }
 
 func TestDeviceAgentEmailSocketRescue(t *testing.T) {
