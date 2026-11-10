@@ -77,3 +77,40 @@ export function serverIdentityAuthMethod(
   if (supported.length === 0) return "client_secret_basic";
   return firstPreferredAuthMethod(supported);
 }
+
+/** The parts of a stored client that decide whether a new one can start from it. */
+type TemplateCandidate = {
+  credentialOwner: string;
+  upstreamRejectedAt?: Date | undefined;
+  clientIdMetadataUri?: string | undefined;
+  tokenEndpointAuthMethod?: string | undefined;
+};
+
+/**
+ * Whether a new personal sign-in client can start from a stored one, mirroring
+ * the server's refusals so the rest stay out of a list rather than failing at
+ * Save. A client Speakeasy hosts a metadata document for has no credentials to
+ * copy and is registered again, which needs the provider to still support it.
+ * A shared credential, one the provider rejected, and one that signs with a key
+ * set registered for its own record cannot stand in a second record.
+ */
+export function usableAsClientTemplate(
+  candidate: TemplateCandidate,
+  metadataDocumentSupported: boolean,
+): boolean {
+  if (candidate.credentialOwner !== "subject") return false;
+  if (candidate.upstreamRejectedAt) return false;
+  if (candidate.clientIdMetadataUri) return metadataDocumentSupported;
+  // The SDK enum does not list private_key_jwt, but the server stores it.
+  return candidate.tokenEndpointAuthMethod !== "private_key_jwt";
+}
+
+/**
+ * A stored client's token endpoint method when a new client can declare it,
+ * undefined otherwise so the server decides.
+ */
+export function copyableAuthMethod(
+  method: string | undefined,
+): PreferredAuthMethod | undefined {
+  return PREFERRED_AUTH_METHODS.find((candidate) => candidate === method);
+}

@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   issuersPage: vi.fn(),
   issuersSearch: vi.fn(),
   issuerById: vi.fn(),
+  issuerClients: vi.fn(),
   discovery: { snapshot: null as Record<string, unknown> | null },
   impact: vi.fn(),
 }));
@@ -113,7 +114,10 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 
 vi.mock("@/lib/remote-identity/queries/useAllRemoteSessionClients", () => ({
-  useAllRemoteSessionClients: () => ({ items: [], isLoading: false }),
+  useAllRemoteSessionClients: () => ({
+    items: mocks.issuerClients() ?? [],
+    isLoading: false,
+  }),
 }));
 
 vi.mock("./useIssuerDuplicatePreflight", () => ({
@@ -402,5 +406,124 @@ describe("AttachRemoteIdentityProviderSheet", () => {
     expect(screen.getAllByRole("combobox")[0]?.textContent).toContain(
       "Catalog provider — https://catalog.example.test",
     );
+  });
+
+  describe("a client started from an existing one", () => {
+    const provider = {
+      id: "provider-catalog",
+      slug: "catalog",
+      name: "Catalog provider",
+      issuer: "https://catalog.example.test",
+    };
+    const stored = {
+      id: "stored-client",
+      clientId: "stored-app",
+      credentialOwner: "subject",
+      tokenEndpointAuthMethod: "client_secret_post",
+      scope: ["read", "write"],
+      audience: "https://api.example.test",
+      callbackUrl: "https://old.example.com/mcp/remote_login_callback",
+      remoteSessionIssuerId: provider.id,
+      userSessionIssuerIds: ["another-servers-issuer"],
+    };
+    const pickProvider = (clients: unknown[]) => {
+      mocks.issuersPage.mockReturnValue([provider]);
+      mocks.issuerById.mockReturnValue(provider);
+      mocks.issuerClients.mockReturnValue(clients);
+      renderSheet();
+      fireEvent.click(screen.getByText("Choose an authorization server…"));
+      fireEvent.click(
+        screen.getByText("Catalog provider — https://catalog.example.test"),
+      );
+    };
+    const attach = () =>
+      fireEvent.click(
+        screen.getByRole("button", { name: "Attach Authorization Server" }),
+      );
+
+    it("creates a separate client on the stored registration and never binds the stored one", async () => {
+      pickProvider([stored]);
+
+      // The sole candidate is filled in for review, secret left blank.
+      await waitFor(() =>
+        expect(
+          (screen.getByPlaceholderText("client_abc123") as HTMLInputElement)
+            .value,
+        ).toBe("stored-app"),
+      );
+      expect(
+        screen.getByRole("button", { name: "New from existing" }),
+      ).toBeTruthy();
+      expect(
+        (
+          screen.getByPlaceholderText(
+            "Leave blank to copy the stored secret",
+          ) as HTMLInputElement
+        ).value,
+      ).toBe("");
+      // The registration lists the stored client's redirect URI, not a new one.
+      expect(
+        screen.getByText("https://old.example.com/mcp/remote_login_callback"),
+      ).toBeTruthy();
+      expect(
+        screen.getByText(/Attaching creates a separate client/),
+      ).toBeTruthy();
+
+      attach();
+      await waitFor(() => expect(mocks.createClient).toHaveBeenCalled());
+      expect(mocks.createClient).toHaveBeenCalledWith({
+        createRemoteSessionClientForm: {
+          remoteSessionIssuerId: provider.id,
+          userSessionIssuerIds: ["user-session-issuer-1"],
+          clientId: "stored-app",
+          clientSecret: undefined,
+          templateClientId: "stored-client",
+          tokenEndpointAuthMethod: "client_secret_post",
+          scope: ["read", "write"],
+          audience: "https://api.example.test",
+        },
+      });
+      expect(mocks.attachClient).not.toHaveBeenCalled();
+    });
+
+    it("copies no secret once the client ID is changed", async () => {
+      pickProvider([stored]);
+      await waitFor(() =>
+        expect(
+          (screen.getByPlaceholderText("client_abc123") as HTMLInputElement)
+            .value,
+        ).toBe("stored-app"),
+      );
+      fireEvent.change(screen.getByPlaceholderText("client_abc123"), {
+        target: { value: "another-app" },
+      });
+      fireEvent.change(
+        screen.getByPlaceholderText("Secret for this client ID"),
+        { target: { value: "typed-secret" } },
+      );
+
+      attach();
+      await waitFor(() => expect(mocks.createClient).toHaveBeenCalled());
+      expect(mocks.createClient).toHaveBeenCalledWith({
+        createRemoteSessionClientForm: expect.objectContaining({
+          clientId: "another-app",
+          clientSecret: "typed-secret",
+          templateClientId: undefined,
+        }),
+      });
+      expect(mocks.attachClient).not.toHaveBeenCalled();
+    });
+
+    it("offers only the from-scratch form when no stored client can be a starting point", () => {
+      pickProvider([{ ...stored, credentialOwner: "self" }]);
+
+      expect(
+        screen.queryByRole("button", { name: "New from existing" }),
+      ).toBeNull();
+      expect(
+        (screen.getByPlaceholderText("client_abc123") as HTMLInputElement)
+          .value,
+      ).toBe("");
+    });
   });
 });

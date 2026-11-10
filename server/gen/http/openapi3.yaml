@@ -104240,7 +104240,7 @@ components:
                     $ref: '#/components/schemas/CreateRemoteSessionIssuerForm'
                 existing_client_id:
                     type: string
-                    description: An existing visible remote-session client to link. Required only for existing mode.
+                    description: 'An existing visible remote-session client to link. Required only for existing mode. Linking shares the client with every server that already uses it: a person holds one upstream grant per client, so signing in through one server replaces the grant another server obtained. To give this server its own client on the same upstream registration, use manual mode with client_configuration.template_client_id instead.'
                     format: uuid
                 mcp_server_id:
                     type: string
@@ -105695,6 +105695,10 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Explicit upstream OAuth scopes the dance should request for this client. Omit to fall back to the issuer's scopes_supported.
+                template_client_id:
+                    type: string
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.'
+                    format: uuid
                 token_endpoint_auth_audience_format:
                     type: string
                     description: Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
@@ -127415,6 +127419,10 @@ components:
                         pattern: ^[!#-[\]-~]+$
                         maxLength: 128
                     description: Each value must be an RFC 6749 scope token.
+                template_client_id:
+                    type: string
+                    description: 'An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template''s stored client_secret, unless client_secret is supplied, and the callback the template''s registration lists. client_id must equal the template''s. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.'
+                    format: uuid
                 token_endpoint_auth_method:
                     type: string
                     description: How the client authenticates at the provider token endpoint, or the preferred method for DCR.
@@ -127422,7 +127430,7 @@ components:
                         - client_secret_basic
                         - client_secret_post
                         - none
-            description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id and client_secret and uses scope, audience, and token_endpoint_auth_method as registration preferences.
+            description: Configuration for a newly-created project remote-session client. Manual mode requires client_id. Auto mode forbids client_id, client_secret and template_client_id and uses scope, audience, and token_endpoint_auth_method as registration preferences.
         ServerIdentityImpactForm:
             type: object
             properties:

@@ -3218,6 +3218,7 @@ func unmarshalServerIdentityClientConfigurationRequestBodyToRemotesessionsServer
 	res := &remotesessions.ServerIdentityClientConfiguration{
 		ClientID:                v.ClientID,
 		ClientSecret:            v.ClientSecret,
+		TemplateClientID:        v.TemplateClientID,
 		TokenEndpointAuthMethod: v.TokenEndpointAuthMethod,
 		Audience:                v.Audience,
 	}

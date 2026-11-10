@@ -1035,6 +1035,203 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(guide.getAttribute("href")).toBe("https://docs.github.com/apps");
   });
 
+  describe("a client started from an existing one", () => {
+    const stored = (overrides: Record<string, unknown> = {}) => ({
+      id: "stored-client",
+      clientId: "STORED-APP",
+      credentialOwner: "subject",
+      tokenEndpointAuthMethod: "client_secret_post",
+      scope: ["read"],
+      audience: "https://api.example.test",
+      remoteSessionIssuerId: "provider-1",
+      createdAt: new Date(0),
+      ...overrides,
+    });
+    const withStored = (...clients: Array<Record<string, unknown>>) => {
+      mocks.clients.mockReturnValue({
+        items: clients,
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+    };
+    const startFrom = (id: string) => {
+      const hook = renderIdentityDraft();
+      act(() => hook.result.current.selectProvider("provider-1"));
+      act(() => hook.result.current.selectChoice("existing"));
+      act(() => hook.result.current.selectExisting(id));
+      return hook;
+    };
+    const committed = () =>
+      mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm;
+
+    it("fills the form for review and has the server copy the secret into a new client", async () => {
+      connectClient();
+      withStored(stored());
+      const { result } = startFrom("stored-client");
+
+      // Nothing secret is read into the form: the field is blank.
+      expect(result.current).toMatchObject({
+        existingClientId: "stored-client",
+        clientId: "STORED-APP",
+        clientSecret: "",
+        scopes: ["read"],
+        copiesSecret: true,
+        canSave: true,
+      });
+      await act(async () => expect(await result.current.save()).toBe(true));
+
+      expect(committed()).toMatchObject({
+        mcpServerId: "mcp-server-1",
+        providerId: "provider-1",
+        clientMode: "manual",
+        clientConfiguration: {
+          clientId: "STORED-APP",
+          templateClientId: "stored-client",
+          scope: ["read"],
+          audience: "https://api.example.test",
+          tokenEndpointAuthMethod: "client_secret_post",
+        },
+      });
+      expect(committed().clientConfiguration.clientSecret).toBeUndefined();
+      // The stored client is named as a starting point only, never linked.
+      expect(committed()).not.toHaveProperty("existingClientId");
+    });
+
+    it("sends reviewed edits, and copies no secret for a different client ID", async () => {
+      connectClient();
+      withStored(stored());
+      const { result } = startFrom("stored-client");
+      act(() => {
+        result.current.setClientId("ANOTHER-APP");
+        result.current.setClientSecret("TYPED-SECRET");
+        result.current.setScopes(["read", "write"]);
+      });
+      expect(result.current.copiesSecret).toBe(false);
+      await act(async () => expect(await result.current.save()).toBe(true));
+
+      expect(committed().clientConfiguration).toMatchObject({
+        clientId: "ANOTHER-APP",
+        clientSecret: "TYPED-SECRET",
+        scope: ["read", "write"],
+      });
+      expect(committed().clientConfiguration.templateClientId).toBeUndefined();
+    });
+
+    it("registers a hosted document client again instead of copying it", async () => {
+      autoConfigurableProvider();
+      withStored(
+        stored({
+          clientId: "https://app.example.test/oauth/client-metadata/stored",
+          clientIdMetadataUri:
+            "https://app.example.test/oauth/client-metadata/stored",
+          tokenEndpointAuthMethod: "none",
+        }),
+      );
+      const { result } = startFrom("stored-client");
+
+      expect(result.current.clientId).toBe("");
+      expect(result.current.copiesSecret).toBe(false);
+      await act(async () => expect(await result.current.save()).toBe(true));
+
+      expect(committed()).toMatchObject({
+        clientMode: "auto",
+        clientConfiguration: { scope: ["read"] },
+      });
+      expect(committed().clientConfiguration.clientId).toBeUndefined();
+      expect(committed().clientConfiguration.templateClientId).toBeUndefined();
+      expect(committed()).not.toHaveProperty("existingClientId");
+    });
+
+    it.each([
+      ["a shared credential", { credentialOwner: "self" }],
+      ["one the provider rejected", { upstreamRejectedAt: new Date(0) }],
+      [
+        "one that signs with a key set",
+        { tokenEndpointAuthMethod: "private_key_jwt" },
+      ],
+      [
+        "a hosted document the provider no longer supports",
+        {
+          clientIdMetadataUri:
+            "https://app.example.test/oauth/client-metadata/stored",
+        },
+      ],
+    ])("does not offer %s as a starting point", (_name, overrides) => {
+      connectClient();
+      withStored(stored(overrides));
+      const { result } = renderIdentityDraft();
+      act(() => result.current.selectProvider("provider-1"));
+
+      expect(result.current.existingAvailable).toBe(false);
+      expect(result.current.existingOptions).toEqual([]);
+      act(() => result.current.selectChoice("existing"));
+      expect(result.current.choice).toBe("manual");
+    });
+
+    it("never falls back to another client when the starting one goes away", async () => {
+      connectClient();
+      withStored(stored(), stored({ id: "other-client", clientId: "OTHER" }));
+      const { result, rerender } = startFrom("stored-client");
+      expect(result.current.canSave).toBe(true);
+
+      withStored(stored({ id: "other-client", clientId: "OTHER" }));
+      rerender();
+
+      expect(result.current.existingClientId).toBeNull();
+      expect(result.current.canSave).toBe(false);
+      await act(async () => expect(await result.current.save()).toBe(false));
+      expect(mocks.commit).not.toHaveBeenCalled();
+    });
+
+    it("drops the starting client's settings when another choice is made", () => {
+      connectClient();
+      withStored(stored());
+      const { result } = startFrom("stored-client");
+
+      act(() => result.current.selectChoice("manual"));
+
+      expect(result.current).toMatchObject({
+        choice: "manual",
+        existingClientId: null,
+        clientId: "",
+        scopes: [],
+        copiesSecret: false,
+      });
+    });
+
+    it("says the new client is separate and never shows a stored secret", () => {
+      connectClient();
+      mocks.clients.mockReturnValue({
+        items: [
+          stored({
+            id: "client-1",
+            userSessionIssuerIds: ["user-session-issuer-1"],
+          }),
+        ],
+        isLoading: false,
+        isError: false,
+        error: null,
+      });
+      renderIdentity();
+      fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
+      fireEvent.click(screen.getByRole("radio", { name: /New from existing/ }));
+
+      expect(
+        screen.getByText(/Saving creates a separate client for this server/),
+      ).toBeDefined();
+      fireEvent.click(screen.getByRole("combobox", { name: "Start from" }));
+      fireEvent.click(screen.getByRole("option"));
+
+      expect(
+        (screen.getByLabelText("Client ID") as HTMLInputElement).value,
+      ).toBe("STORED-APP");
+      const secret = screen.getByLabelText("Client secret") as HTMLInputElement;
+      expect(secret.value).toBe("");
+      expect(secret.placeholder).toBe("Copied when you save");
+    });
+  });
+
   describe("unsaved provider discovery recovery", () => {
     it("offers no correction while discovery is healthy", async () => {
       discoverUnsavedProvider();
@@ -1415,6 +1612,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
           {
             id: "saved-example-client",
             clientId: "EXAMPLE-CLIENT",
+            credentialOwner: "subject",
             remoteSessionIssuerId: saved.id,
             createdAt: new Date(0),
           },
@@ -1425,15 +1623,24 @@ describe("RemoteMcpIdentitySectionBody", () => {
       await waitFor(() => expect(result.current.selected?.id).toBe(saved.id));
       expect(result.current.selected?.isNew).toBe(false);
       expect(result.current.choice).toBe("existing");
-      expect(result.current.existingClientId).toBe("saved-example-client");
+      // A stored client is a starting point the operator picks, never a
+      // default that Save would use unseen.
+      expect(result.current.existingClientId).toBeNull();
+      expect(result.current.canSave).toBe(false);
+      act(() => result.current.selectExisting("saved-example-client"));
       await act(async () => expect(await result.current.save()).toBe(true));
-      expect(mocks.commit).toHaveBeenCalledWith({
-        commitServerIdentityConfigurationForm: expect.objectContaining({
-          providerId: saved.id,
-          createProvider: undefined,
-          existingClientId: "saved-example-client",
-        }),
+      const committed =
+        mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm;
+      expect(committed).toMatchObject({
+        providerId: saved.id,
+        clientMode: "manual",
+        clientConfiguration: {
+          clientId: "EXAMPLE-CLIENT",
+          templateClientId: "saved-example-client",
+        },
       });
+      expect(committed.createProvider).toBeUndefined();
+      expect(committed).not.toHaveProperty("existingClientId");
       expect(saved.issuer).toBe("https://saved.example.test/stored-path/");
       expect(mocks.fetchMetadata).toHaveBeenCalledOnce();
     });
@@ -1448,6 +1655,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
               {
                 id: "example-existing-client",
                 clientId: "EXAMPLE-CLIENT",
+                credentialOwner: "subject",
                 remoteSessionIssuerId: "provider-1",
                 createdAt: new Date(0),
               },
@@ -1462,17 +1670,23 @@ describe("RemoteMcpIdentitySectionBody", () => {
           if (mode === "manual")
             result.current.setClientId("EXAMPLE-MANUAL-CLIENT");
         });
+        if (mode === "existing") {
+          act(() => result.current.selectExisting("example-existing-client"));
+        }
         expect(result.current.canSave).toBe(true);
         await act(async () => expect(await result.current.save()).toBe(true));
-        expect(mocks.commit).toHaveBeenCalledWith({
-          commitServerIdentityConfigurationForm: expect.objectContaining({
-            providerId: "provider-1",
-            createProvider: undefined,
-            clientMode: mode,
-            existingClientId:
-              mode === "existing" ? "example-existing-client" : undefined,
-          }),
+        const committed =
+          mocks.commit.mock.calls[0]![0].commitServerIdentityConfigurationForm;
+        // Starting from a stored client still creates one: it is never linked.
+        expect(committed).toMatchObject({
+          providerId: "provider-1",
+          clientMode: "manual",
         });
+        expect(committed.createProvider).toBeUndefined();
+        expect(committed).not.toHaveProperty("existingClientId");
+        expect(committed.clientConfiguration.templateClientId).toBe(
+          mode === "existing" ? "example-existing-client" : undefined,
+        );
         expect(mocks.fetchMetadata).not.toHaveBeenCalled();
       },
     );
@@ -2453,6 +2667,7 @@ describe("RemoteMcpIdentitySectionBody", () => {
         {
           id: "client-1",
           clientId: "dashboard-client",
+          credentialOwner: "subject",
           remoteSessionIssuerId: "provider-1",
           userSessionIssuerIds: ["user-session-issuer-1"],
           scope: ["read", "write"],
@@ -2488,17 +2703,14 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(screen.getByText("Unconfigured client")).toBeDefined();
     expect(mocks.commit).not.toHaveBeenCalled();
 
-    // The only existing client is the one in force, so reusing it changes
-    // nothing and Save stays shut.
+    // Every choice makes a client of the server's own. A stored client is only
+    // ever a starting point, and none is picked on the operator's behalf.
+    expect(screen.queryByRole("radio", { name: /Existing client/ })).toBeNull();
     expect(
       screen
-        .getByRole("radio", { name: /Existing client/ })
+        .getByRole("radio", { name: /New from existing/ })
         .getAttribute("aria-checked"),
-    ).toBe("true");
-    expect(
-      (screen.getByRole("button", { name: "Save" }) as HTMLButtonElement)
-        .disabled,
-    ).toBe(true);
+    ).toBe("false");
 
     fireEvent.click(screen.getByRole("radio", { name: /Auto-Configure/ }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -2677,19 +2889,20 @@ describe("RemoteMcpIdentitySectionBody", () => {
     expect(mocks.commit).not.toHaveBeenCalled();
   });
 
-  it("saves header edits when a cleared client is put back unchanged", async () => {
+  it("saves header edits once a cleared client is put back by cancelling", async () => {
     connectClient();
 
     renderIdentity();
     fireEvent.click(screen.getByRole("button", { name: "Clear connection" }));
-    // The only existing client is the connected one, so nothing changed.
-    expect(
-      screen
-        .getByRole("radio", { name: /Existing client/ })
-        .getAttribute("aria-checked"),
-    ).toBe("true");
     addCustomHeader("X-Team", "eng");
+    // Clearing asks for a new client, and no choice puts the old one back.
+    expect(
+      screen.getByText(
+        "Finish the User Identity change, or cancel it, to save.",
+      ),
+    ).toBeDefined();
 
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(
       screen.queryByText(
         "Finish the User Identity change, or cancel it, to save.",
@@ -2739,7 +2952,9 @@ describe("RemoteMcpIdentitySectionBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(screen.getByText("Connected")).toBeDefined();
-    expect(screen.queryByRole("radio", { name: /Existing client/ })).toBeNull();
+    expect(
+      screen.queryByRole("radio", { name: /New from existing/ }),
+    ).toBeNull();
   });
 
   it("does not offer Auto-Configure against a plain-http token endpoint", () => {

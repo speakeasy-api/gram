@@ -70,7 +70,11 @@ type CommitServerIdentityConfigurationRequestBody struct {
 	// How to provide the OAuth client.
 	ClientMode *string `form:"client_mode,omitempty" json:"client_mode,omitempty" xml:"client_mode,omitempty"`
 	// An existing visible remote-session client to link. Required only for
-	// existing mode.
+	// existing mode. Linking shares the client with every server that already uses
+	// it: a person holds one upstream grant per client, so signing in through one
+	// server replaces the grant another server obtained. To give this server its
+	// own client on the same upstream registration, use manual mode with
+	// client_configuration.template_client_id instead.
 	ExistingClientID *string `form:"existing_client_id,omitempty" json:"existing_client_id,omitempty" xml:"existing_client_id,omitempty"`
 	// Client settings for auto or manual mode. Forbidden for existing mode.
 	ClientConfiguration *ServerIdentityClientConfigurationRequestBody `form:"client_configuration,omitempty" json:"client_configuration,omitempty" xml:"client_configuration,omitempty"`
@@ -3146,6 +3150,17 @@ type ServerIdentityClientConfigurationRequestBody struct {
 	// The out-of-band OAuth client secret. Manual mode only; encrypted before
 	// persistence.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, and a client the issuer has rejected.
+	TemplateClientID *string `form:"template_client_id,omitempty" json:"template_client_id,omitempty" xml:"template_client_id,omitempty"`
 	// How the client authenticates at the provider token endpoint, or the
 	// preferred method for DCR.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -5654,6 +5669,9 @@ func ValidateCreateRemoteSessionIssuerFormRequestBody(body *CreateRemoteSessionI
 // ValidateServerIdentityClientConfigurationRequestBody runs the validations
 // defined on ServerIdentityClientConfigurationRequestBody
 func ValidateServerIdentityClientConfigurationRequestBody(body *ServerIdentityClientConfigurationRequestBody) (err error) {
+	if body.TemplateClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.template_client_id", *body.TemplateClientID, goa.FormatUUID))
+	}
 	if body.TokenEndpointAuthMethod != nil {
 		if !(*body.TokenEndpointAuthMethod == "client_secret_basic" || *body.TokenEndpointAuthMethod == "client_secret_post" || *body.TokenEndpointAuthMethod == "none") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.token_endpoint_auth_method", *body.TokenEndpointAuthMethod, []any{"client_secret_basic", "client_secret_post", "none"}))

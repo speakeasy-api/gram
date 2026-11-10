@@ -31,6 +31,15 @@ func credentialOwnerAttribute() {
 	})
 }
 
+// TemplateClientAttribute declares the optional template_client_id a manual
+// create carries to reuse a stored client's upstream registration without the
+// secret leaving the server.
+func TemplateClientAttribute() {
+	Attribute("template_client_id", String, "An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.", func() {
+		Format(FormatUUID)
+	})
+}
+
 // createKeySetAttribute declares the optional json_web_key_set_id a create form
 // carries so a private_key_jwt client can be created in one call. It is gated
 // on the customer-managed keys entitlement when present, the same as
@@ -821,6 +830,7 @@ var CreateRemoteSessionClientForm = Type("CreateRemoteSessionClientForm", func()
 	})
 	Attribute("client_id", String, "client_id supplied by the caller.")
 	Attribute("client_secret", String, "client_secret supplied by the caller. Speakeasy encrypts before persisting.")
+	TemplateClientAttribute()
 	Attribute("token_endpoint_auth_method", String, "How the client authenticates at the issuer's token endpoint. Omit to default to client_secret_basic.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.", tokenEndpointAuthAudienceFormatEnum)
 	createKeySetAttribute()

@@ -83,6 +83,17 @@ type CreateRemoteSessionClientRequestBody struct {
 	ClientID string `form:"client_id" json:"client_id" xml:"client_id"`
 	// client_secret supplied by the caller. Speakeasy encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// An existing remote_session_client of the same issuer, visible to the
+	// project, whose upstream registration the new client reuses. The new client
+	// is an independent record with its own id: it copies the template's stored
+	// client_secret, unless client_secret is supplied, and the callback the
+	// template's registration lists. client_id must equal the template's.
+	// Sessions, grants, user_session_issuer attachments and MCP server
+	// associations are not copied, and the template is unchanged. Refused for a
+	// client metadata document client, a private_key_jwt client, a
+	// credential_owner self client, a client managed by an identity provider
+	// connection, and a client the issuer has rejected.
+	TemplateClientID *string `form:"template_client_id,omitempty" json:"template_client_id,omitempty" xml:"template_client_id,omitempty"`
 	// How the client authenticates at the issuer's token endpoint. Omit to default
 	// to client_secret_basic.
 	TokenEndpointAuthMethod *string `form:"token_endpoint_auth_method,omitempty" json:"token_endpoint_auth_method,omitempty" xml:"token_endpoint_auth_method,omitempty"`
@@ -3854,6 +3865,7 @@ func NewCreateRemoteSessionClientRequestBody(p *remotesessionclients.CreateRemot
 		RemoteSessionIssuerID:           p.RemoteSessionIssuerID,
 		ClientID:                        p.ClientID,
 		ClientSecret:                    p.ClientSecret,
+		TemplateClientID:                p.TemplateClientID,
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
 		JSONWebKeySetID:                 p.JSONWebKeySetID,

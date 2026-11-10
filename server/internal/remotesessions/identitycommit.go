@@ -363,6 +363,12 @@ type ClientCredentials struct {
 
 	// Audience is sent as the resource/audience parameter, if set.
 	Audience *string
+
+	// TemplateClientID, when valid, is a stored client of the plan's provider
+	// with the same ClientID whose upstream registration the new client
+	// reuses: its stored secret, unless ClientSecret is set, and the callback
+	// that registration lists. The template is only read.
+	TemplateClientID uuid.NullUUID
 }
 
 // RegistrationMethod is how a commit got its client.
@@ -508,6 +514,11 @@ func (c *IdentityCommit) Preflight(ctx context.Context) error {
 			return err
 		}
 	}
+	if c.plan.Client.kind == clientManual && c.plan.Client.credentials.TemplateClientID.Valid {
+		if _, err := c.loadTemplate(ctx, q, c.plan.Client.credentials); err != nil {
+			return err
+		}
+	}
 
 	bound, err := listUserSessionIssuerClients(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, c.plan.UserSessionIssuerID)
 	if err != nil {
@@ -581,6 +592,22 @@ func (c *IdentityCommit) preflightLinkedClient(ctx context.Context, q *repo.Quer
 		return c.refuseOrgWideBinding(existing.RemoteSessionClient)
 	}
 	return nil
+}
+
+// loadTemplate reads the template credentials names and refuses one that
+// cannot supply this client's registration.
+func (c *IdentityCommit) loadTemplate(ctx context.Context, q *repo.Queries, credentials ClientCredentials) (clientTemplate, error) {
+	if c.plan.Provider.create != nil {
+		return clientTemplate{}, identityRefusal(ErrIdentityInvalid, nil, "a template client requires an existing provider")
+	}
+	template, err := loadClientTemplate(ctx, q, c.plan.Scope.ProjectID, c.plan.Scope.OrganizationID, credentials.TemplateClientID.UUID, c.provider.ID, credentials.ClientID)
+	if err != nil {
+		return clientTemplate{}, err
+	}
+	if err := template.requireSecret(conv.PtrValOr(credentials.TokenEndpointAuthMethod, ""), credentials.ClientSecret != ""); err != nil {
+		return clientTemplate{}, err
+	}
+	return template, nil
 }
 
 // readProvider loads the plan's stored provider once, for Preflight and
@@ -707,6 +734,7 @@ func (c *IdentityCommit) register(ctx context.Context, reg Registration) (Regist
 		TokenEndpointAuthMethod: &method,
 		Scope:                   policy.Scope,
 		Audience:                policy.Audience,
+		TemplateClientID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 	}
 	return reg, nil
 }
@@ -1727,6 +1755,23 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 	if credentials.IssuedAt.Valid {
 		clientIDIssuedAt = credentials.IssuedAt
 	}
+	secretExpiresAt := credentials.SecretExpiresAt
+	legacyCallbackURL := false
+	if credentials.TemplateClientID.Valid {
+		// Read again under the commit's locks: the row copied is the one stored
+		// now, and a template that stopped qualifying since Preflight is refused.
+		template, err := c.loadTemplate(ctx, tx.q, credentials)
+		if err != nil {
+			return repo.RemoteSessionClient{}, err
+		}
+		if !secret.Valid {
+			secret = template.secretEncrypted
+			secretExpiresAt = template.clientSecretExpiresAt
+		}
+		clientIDIssuedAt = template.clientIDIssuedAt
+		callbackBaseURL = template.callbackBaseURL
+		legacyCallbackURL = template.legacyCallbackURL
+	}
 	client, err := tx.q.CreateRemoteSessionClient(ctx, repo.CreateRemoteSessionClientParams{
 		ForwardClientName:               false,
 		ProjectID:                       conv.ToNullUUID(c.plan.Scope.ProjectID),
@@ -1735,7 +1780,7 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		ClientID:                        strings.TrimSpace(credentials.ClientID),
 		ClientSecretEncrypted:           secret,
 		ClientIDIssuedAt:                clientIDIssuedAt,
-		ClientSecretExpiresAt:           credentials.SecretExpiresAt,
+		ClientSecretExpiresAt:           secretExpiresAt,
 		TokenEndpointAuthAudienceFormat: pgtype.Text{String: "", Valid: false},
 		// Neither is set here; a JWKS is attached afterwards through the
 		// client JWKS API.
@@ -1744,13 +1789,16 @@ func (c *IdentityCommit) createClient(ctx context.Context, tx *IdentityTx, crede
 		TokenEndpointAuthMethod:      conv.PtrToPGText(credentials.TokenEndpointAuthMethod),
 		Scope:                        credentials.Scope,
 		Audience:                     conv.PtrToPGText(credentials.Audience),
-		LegacyCallbackUrl:            false,
+		LegacyCallbackUrl:            legacyCallbackURL,
 		CallbackBaseUrl:              callbackBaseURL,
 		GrantTypes:                   nil,
 		CredentialOwner:              pgtype.Text{String: "", Valid: false},
 	})
 	if err != nil {
 		return repo.RemoteSessionClient{}, fmt.Errorf("create client: %w", err)
+	}
+	if credentials.TemplateClientID.Valid {
+		return client, c.auditClientCopy(ctx, tx, client, credentials.TemplateClientID.UUID)
 	}
 	return client, c.auditClientCreate(ctx, tx, client)
 }
@@ -1823,6 +1871,31 @@ func (c *IdentityCommit) auditClientCreate(ctx context.Context, tx *IdentityTx, 
 		SnapshotAfter:          snapshot,
 	}); err != nil {
 		return fmt.Errorf("audit client creation: %w", err)
+	}
+	return nil
+}
+
+// auditClientCopy records a client created from a template's registration,
+// naming the template it left unchanged.
+func (c *IdentityCommit) auditClientCopy(ctx context.Context, tx *IdentityTx, client repo.RemoteSessionClient, sourceID uuid.UUID) error {
+	snapshot, err := mv.BuildRemoteSessionClientView(client, nil)
+	if err != nil {
+		return fmt.Errorf("build created client view: %w", err)
+	}
+
+	if err := c.committer.audit.LogRemoteSessionClientDuplicate(ctx, tx.tx, audit.LogRemoteSessionClientDuplicateEvent{
+		OrganizationID:               c.plan.Scope.OrganizationID,
+		ProjectID:                    c.plan.Scope.ProjectID,
+		Actor:                        c.plan.Scope.Actor,
+		ActorDisplayName:             c.plan.Scope.ActorDisplayName,
+		ActorSlug:                    nil,
+		RemoteSessionClientURN:       urn.NewRemoteSessionClient(client.ID),
+		ClientID:                     client.ClientID,
+		SourceRemoteSessionClientURN: urn.NewRemoteSessionClient(sourceID),
+		Registration:                 audit.RemoteSessionClientDuplicateRegistrationCopied,
+		SnapshotAfter:                snapshot,
+	}); err != nil {
+		return fmt.Errorf("audit client copy: %w", err)
 	}
 	return nil
 }

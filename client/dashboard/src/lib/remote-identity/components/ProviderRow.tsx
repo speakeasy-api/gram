@@ -200,9 +200,9 @@ function ProviderGroupItems({
  * One Remote Identity Provider, the client the server uses with it, and how
  * to get a new one — the whole User Identity decision on a single settings
  * row. A connected client reads as a status; clearing it opens the choice of
- * an existing client, automatic registration or manual credentials. The
- * issuer and client records behind it stay on the Remote Identity Provider
- * pages.
+ * a new client started from a stored one, automatic registration or manual
+ * credentials. The issuer and client records behind it stay on the Remote
+ * Identity Provider pages.
  */
 export function UserIdentityRow({
   draft,
@@ -652,14 +652,14 @@ function RegistrationChoices({
     >
       <RadioCard
         value="existing"
-        title="Existing client"
+        title="New from existing"
         disabled={!draft.existingAvailable}
       >
         {draft.existingAvailable ? (
-          `Reuse a client already registered with ${name}.`
+          `Start a new client from one already registered with ${name}.`
         ) : (
           <UnavailableReason
-            reason={`No clients are registered with ${name} yet. Auto-Configure or Manual creates the first one.`}
+            reason={`No client registered with ${name} can be used as a starting point yet. Auto-Configure or Manual creates the first one.`}
           />
         )}
       </RadioCard>
@@ -693,7 +693,13 @@ function ChoiceDetails({
 }): JSX.Element | null {
   switch (draft.choice) {
     case "existing":
-      return <ExistingClientField draft={draft} disabled={disabled} />;
+      return (
+        <StartingClientFields
+          draft={draft}
+          disabled={disabled}
+          providerName={providerName}
+        />
+      );
     case "auto":
       return draft.methodChoiceAvailable ? (
         <AdvancedOptions>
@@ -713,44 +719,73 @@ function ChoiceDetails({
   }
 }
 
-function ExistingClientField({
+/**
+ * The client a new one starts from, and the settings it carries over for
+ * review. The picked client is a starting point only: it is never linked to
+ * this server and Save does not change it.
+ */
+function StartingClientFields({
   draft,
   disabled,
+  providerName,
 }: {
   draft: UserIdentityDraft;
   disabled: boolean;
+  providerName: string;
 }): JSX.Element {
+  const starting = draft.existingClient;
   return (
-    <div className="max-w-md space-y-1.5">
-      <Text small className="block font-medium">
-        Client
-      </Text>
-      <Select
-        value={draft.existingClientId ?? undefined}
-        onValueChange={draft.selectExisting}
-        disabled={disabled}
-      >
-        <SelectTrigger aria-label="Client">
-          <SelectValue placeholder="Choose a client" />
-        </SelectTrigger>
-        <SelectContent>
-          {draft.existingOptions.map((option: ClientOption) => (
-            <SelectItem key={option.id} value={option.id}>
-              {option.name}
-              {option.hint ? (
-                <span className="text-muted-foreground ml-2 font-mono text-xs">
-                  {option.hint}
-                </span>
-              ) : null}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {draft.sameAsConnected ? (
-        <Text muted small className="block">
-          This is the client the server already uses. Choose another to replace
-          it.
+    <div className="space-y-3">
+      <div className="max-w-md space-y-1.5">
+        <Text small className="block font-medium">
+          Start from
         </Text>
+        <Select
+          value={draft.existingClientId ?? ""}
+          onValueChange={draft.selectExisting}
+          disabled={disabled}
+        >
+          <SelectTrigger aria-label="Start from">
+            <SelectValue placeholder="Choose a client" />
+          </SelectTrigger>
+          <SelectContent>
+            {draft.existingOptions.map((option: ClientOption) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.name}
+                {option.hint ? (
+                  <span className="text-muted-foreground ml-2 font-mono text-xs">
+                    {option.hint}
+                  </span>
+                ) : null}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Text muted small className="block">
+          Saving creates a separate client for this server. The client you start
+          from, the servers that use it, and the people signed in through it
+          stay as they are.
+        </Text>
+      </div>
+      {starting?.metadataDocument ? (
+        <div className="max-w-md space-y-1.5">
+          <Text muted small className="block">
+            Speakeasy publishes this client itself, so the new client gets its
+            own client ID and no secret is copied.
+          </Text>
+          <ScopeField
+            draft={draft}
+            disabled={disabled}
+            providerName={providerName}
+          />
+        </div>
+      ) : starting ? (
+        <ManualCredentialsFields
+          draft={draft}
+          disabled={disabled}
+          providerName={providerName}
+          startingClientId={starting.clientId}
+        />
       ) : null}
     </div>
   );
@@ -850,11 +885,27 @@ function ManualCredentialsFields({
   draft,
   disabled,
   providerName,
+  startingClientId,
 }: {
   draft: UserIdentityDraft;
   disabled: boolean;
   providerName: string;
+  /** The client ID of the client these fields were filled from, if any. */
+  startingClientId?: string;
 }): JSX.Element {
+  let secretPlaceholder = "Optional";
+  let secretHint: string | null = null;
+  if (draft.copiesSecret) {
+    secretPlaceholder = "Copied when you save";
+    secretHint =
+      "Leave the secret blank to copy the stored one. It is copied on the server and never shown here.";
+  } else if (
+    startingClientId !== undefined &&
+    draft.clientId.trim() !== startingClientId
+  ) {
+    secretHint =
+      "A different client ID is a different registration, so no secret is copied. Enter the secret for this client ID.";
+  }
   // The guide URL comes from issuer metadata, so it is upstream input: only
   // render the action once it is known to be an ordinary http(s) link.
   const registrationGuideUrl = safeExternalHttpUrl(draft.registrationGuideUrl);
@@ -882,13 +933,18 @@ function ManualCredentialsFields({
             type="password"
             value={draft.clientSecret}
             onChange={draft.setClientSecret}
-            placeholder="Optional"
+            placeholder={secretPlaceholder}
             disabled={disabled}
             aria-label="Client secret"
             noAutofill
           />
         </div>
       </div>
+      {secretHint ? (
+        <Text muted small className="block">
+          {secretHint}
+        </Text>
+      ) : null}
       <AdvancedOptions>
         <ScopeField
           draft={draft}

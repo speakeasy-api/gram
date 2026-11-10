@@ -58,6 +58,9 @@ type serverIdentityRequest struct {
 	existingClientID    uuid.UUID
 	clientMode          string
 	clientConfiguration *gen.ServerIdentityClientConfiguration
+	// templateClientID, in manual mode, is the stored client whose upstream
+	// registration the new client reuses.
+	templateClientID uuid.NullUUID
 	// registrationMethod is "dcr" when auto mode must skip CIMD; otherwise it
 	// is empty or "cimd", both of which prefer CIMD.
 	registrationMethod string
@@ -290,6 +293,7 @@ func (r serverIdentityRequest) plan(authCtx *contextvalues.AuthContext, orgAdmin
 			TokenEndpointAuthMethod: r.clientConfiguration.TokenEndpointAuthMethod,
 			Scope:                   r.clientConfiguration.Scope,
 			Audience:                r.clientConfiguration.Audience,
+			TemplateClientID:        r.templateClientID,
 		})
 	default:
 		client = RegisterClient(RegistrationPolicy{
@@ -418,6 +422,7 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		existingClientID:    uuid.Nil,
 		clientMode:          payload.ClientMode,
 		clientConfiguration: payload.ClientConfiguration,
+		templateClientID:    uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		registrationMethod:  conv.PtrValOr(payload.RegistrationMethod, ""),
 		replacement:         nil,
 	}
@@ -473,8 +478,8 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		if payload.ExistingClientID != nil || payload.ClientConfiguration == nil {
 			return serverIdentityRequest{}, errors.New("auto client mode requires client_configuration and forbids existing_client_id")
 		}
-		if payload.ClientConfiguration.ClientID != nil || payload.ClientConfiguration.ClientSecret != nil {
-			return serverIdentityRequest{}, errors.New("auto client mode forbids client_id and client_secret")
+		if payload.ClientConfiguration.ClientID != nil || payload.ClientConfiguration.ClientSecret != nil || payload.ClientConfiguration.TemplateClientID != nil {
+			return serverIdentityRequest{}, errors.New("auto client mode forbids client_id, client_secret and template_client_id")
 		}
 	case serverIdentityClientModeManual:
 		if payload.ExistingClientID != nil || payload.ClientConfiguration == nil {
@@ -484,9 +489,20 @@ func parseServerIdentityRequest(payload *gen.CommitServerIdentityConfigurationPa
 		if clientID == "" {
 			return serverIdentityRequest{}, errors.New("manual client mode requires client_id")
 		}
+		if payload.ClientConfiguration.TemplateClientID != nil {
+			if payload.CreateProvider != nil {
+				return serverIdentityRequest{}, errors.New("template_client_id requires an existing provider")
+			}
+			templateID, err := uuid.Parse(*payload.ClientConfiguration.TemplateClientID)
+			if err != nil {
+				return serverIdentityRequest{}, fmt.Errorf("parse template_client_id: %w", err)
+			}
+			req.templateClientID = uuid.NullUUID{UUID: templateID, Valid: true}
+		}
 		secret := conv.PtrValOr(payload.ClientConfiguration.ClientSecret, "")
 		method := conv.PtrValOr(payload.ClientConfiguration.TokenEndpointAuthMethod, "")
-		if (method == string(TokenEndpointAuthMethodBasic) || method == string(TokenEndpointAuthMethodPost)) && secret == "" {
+		// A template may supply the secret; the commit checks that it does.
+		if (method == string(TokenEndpointAuthMethodBasic) || method == string(TokenEndpointAuthMethodPost)) && secret == "" && !req.templateClientID.Valid {
 			return serverIdentityRequest{}, fmt.Errorf("%s requires client_secret", method)
 		}
 	default:

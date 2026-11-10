@@ -92,6 +92,10 @@ export type CreateRemoteSessionClientForm = {
    */
   scope?: Array<string> | undefined;
   /**
+   * An existing remote_session_client of the same issuer, visible to the project, whose upstream registration the new client reuses. The new client is an independent record with its own id: it copies the template's stored client_secret, unless client_secret is supplied, and the callback the template's registration lists. client_id must equal the template's. Sessions, grants, user_session_issuer attachments and MCP server associations are not copied, and the template is unchanged. Refused for a client metadata document client, a private_key_jwt client, a credential_owner self client, a client managed by an identity provider connection, and a client the issuer has rejected.
+   */
+  templateClientId?: string | undefined;
+  /**
    * Identifier used as the aud claim in private_key_jwt assertions. Omit to use the issuer identifier; token_endpoint is available for providers that require the token endpoint URL.
    */
   tokenEndpointAuthAudienceFormat?:
@@ -137,6 +141,7 @@ export type CreateRemoteSessionClientForm$Outbound = {
   json_web_key_set_id?: string | undefined;
   remote_session_issuer_id: string;
   scope?: Array<string> | undefined;
+  template_client_id?: string | undefined;
   token_endpoint_auth_audience_format?: string | undefined;
   token_endpoint_auth_method?: string | undefined;
   user_session_issuer_ids?: Array<string> | undefined;
@@ -164,6 +169,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
     jsonWebKeySetId: z.optional(z.string()),
     remoteSessionIssuerId: z.string(),
     scope: z.optional(z.array(z.string())),
+    templateClientId: z.optional(z.string()),
     tokenEndpointAuthAudienceFormat: z.optional(
       CreateRemoteSessionClientFormTokenEndpointAuthAudienceFormat$outboundSchema,
     ),
@@ -181,6 +187,7 @@ export const CreateRemoteSessionClientForm$outboundSchema: z.ZodMiniType<
       credentialOwner: "credential_owner",
       jsonWebKeySetId: "json_web_key_set_id",
       remoteSessionIssuerId: "remote_session_issuer_id",
+      templateClientId: "template_client_id",
       tokenEndpointAuthAudienceFormat: "token_endpoint_auth_audience_format",
       tokenEndpointAuthMethod: "token_endpoint_auth_method",
       userSessionIssuerIds: "user_session_issuer_ids",
