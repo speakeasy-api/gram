@@ -131,8 +131,10 @@ type ServersInsertAttachmentClientParams struct {
 // The client sits under Linear's own remote identity provider: every client
 // bound to one user session issuer must share a remote issuer, or the
 // mcp_servers.remote_session_issuer_id derivation above would come out NULL.
-// Reserved example endpoints, an invalid ciphertext and no refresh token
-// prevent this display fixture from becoming a usable upstream credential.
+// Reserved example endpoints and no refresh token keep this display fixture
+// from becoming a usable upstream credential while its dummy access token,
+// encrypted at seed time, reads as connected. A held re-check lease keeps the
+// idle re-check from presenting it anywhere.
 func (q *Queries) ServersInsertAttachmentClient(ctx context.Context, arg ServersInsertAttachmentClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAttachmentClient,
 		arg.ID,
@@ -147,13 +149,13 @@ const serversInsertAttachmentSession = `-- name: ServersInsertAttachmentSession 
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   upstream_display_name, created_at, last_used_at)
+   upstream_display_name, created_at, last_used_at, last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + $5::interval, false,
+        $5::text, now() + $6::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
-        now() - interval '3 days', now() - interval '40 minutes')
+        now() - interval '3 days', now() - interval '40 minutes', now() + interval '10 years')
 `
 
 type ServersInsertAttachmentSessionParams struct {
@@ -161,6 +163,7 @@ type ServersInsertAttachmentSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	ExpiresIn             pgtype.Interval
 }
 
@@ -170,6 +173,7 @@ func (q *Queries) ServersInsertAttachmentSession(ctx context.Context, arg Server
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.ExpiresIn,
 	)
 	return err
@@ -2200,15 +2204,16 @@ const serversInsertValidatedSession = `-- name: ServersInsertValidatedSession :e
 INSERT INTO remote_sessions
   (id, subject_urn, user_session_issuer_id, remote_session_client_id,
    access_token_encrypted, access_expires_at, auto_refresh, scopes,
-   grant_generation, last_validated_at, validation_status, created_at, last_used_at)
+   grant_generation, last_validated_at, validation_status, created_at, last_used_at,
+   last_refresh_attempt_at)
 VALUES ($1::uuid,
         'user:' || $2::text, $3::uuid,
         $4::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
-        ARRAY['read'], $5::bigint,
-        CASE WHEN $6::text <> '' THEN now() - make_interval(hours => $7::int) END,
-        NULLIF($6::text, ''), now() - make_interval(days => $8::int),
-        now() - make_interval(hours => $7::int))
+        $5::text, now() + interval '7 days', false,
+        ARRAY['read'], $6::bigint,
+        CASE WHEN $7::text <> '' THEN now() - make_interval(hours => $8::int) END,
+        NULLIF($7::text, ''), now() - make_interval(days => $9::int),
+        now() - make_interval(hours => $8::int), now() + interval '10 years')
 `
 
 type ServersInsertValidatedSessionParams struct {
@@ -2216,6 +2221,7 @@ type ServersInsertValidatedSessionParams struct {
 	UserID                string
 	UserSessionIssuerID   uuid.UUID
 	RemoteSessionClientID uuid.UUID
+	AccessTokenEncrypted  string
 	GrantGeneration       int64
 	Status                string
 	HoursAgo              int32
@@ -2224,8 +2230,9 @@ type ServersInsertValidatedSessionParams struct {
 
 // Upstream sessions on Linear's CIMD client, one per last-validation outcome
 // plus one never validated, so the admin server health page shows every
-// validation state. Inert like the session above: an invalid ciphertext and
-// no refresh token. grant_generation above 1 records re-authorizations.
+// validation state. Inert like the session above: no refresh token, and a held
+// re-check lease, renewed by each reseed, keeps the idle re-check from
+// presenting the dummy token to Linear and overwriting the seeded verdicts. grant_generation above 1 records re-authorizations.
 // An empty status is the never-validated session (NULL status and
 // last_validated_at).
 func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg ServersInsertValidatedSessionParams) error {
@@ -2234,6 +2241,7 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 		arg.UserID,
 		arg.UserSessionIssuerID,
 		arg.RemoteSessionClientID,
+		arg.AccessTokenEncrypted,
 		arg.GrantGeneration,
 		arg.Status,
 		arg.HoursAgo,

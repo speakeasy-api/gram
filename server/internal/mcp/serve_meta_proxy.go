@@ -58,8 +58,11 @@ import (
 // be obtained, or was requested for another resource, answers with the
 // member-scoped remedy rather than an anonymous call.
 //
-// A subject's connection in an outage answers retryably and returns its entry
-// for chaining. A usable credential for the same upstream outranks it.
+// A subject's connection held without a token returns its entry with the
+// member-scoped failure: an outage answers retryably, a sign-in that can't be
+// read asks for a reconnect, and a refused renewal names the administrator.
+// The entry is returned for chaining. A usable credential for the same
+// upstream outranks it, and of several held entries an outage answers first.
 //
 // A tunneled member is routed by identity alone: only the entry keyed by its
 // own derived remote_session_issuer (mcpserverissuersync.go), accepted when
@@ -74,7 +77,7 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if member.tunneledServerID.Valid {
 		routed, err := tunneledIssuerToken(tokens, member.remoteSessionIssuerID, want)
 		if err != nil {
-			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.SessionUnavailable() {
+			if entry := tokens[member.remoteSessionIssuerID.UUID]; entry.HeldWithoutToken() {
 				return entry, metaMemberClientCredentialError(member, err)
 			}
 			return none, metaMemberClientCredentialError(member, err)
@@ -84,13 +87,16 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	if want == "" {
 		return none, nil
 	}
-	var matched, outage remotesessions.UpstreamToken
+	var matched, held remotesessions.UpstreamToken
+	var heldIssuer uuid.UUID
 	found := 0
 	for issuerID, entry := range tokens {
-		if entry.SessionUnavailable() {
-			// A grant from before resources were recorded still names its member by issuer.
-			if upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID) {
-				outage = entry
+		if entry.HeldWithoutToken() {
+			// A held grant on the member's own issuer answers for it even when its resource
+			// no longer matches: it carries no bearer, and the alternative is an anonymous call.
+			routes := upstreamTokenRoutes(issuerID, entry, want, member.remoteSessionIssuerID) || (member.remoteSessionIssuerID.Valid && issuerID == member.remoteSessionIssuerID.UUID)
+			if routes && heldOutranks(entry, issuerID, held, heldIssuer) {
+				held, heldIssuer = entry, issuerID
 			}
 			continue
 		}
@@ -101,8 +107,8 @@ func routeMetaMemberToken(tokens map[uuid.UUID]remotesessions.UpstreamToken, mem
 	}
 	switch found {
 	case 0:
-		if outage.SessionUnavailable() {
-			return outage, metaMemberClientCredentialError(member, outage.ClientCredentialErr)
+		if held.HeldWithoutToken() {
+			return held, metaMemberClientCredentialError(member, held.ClientCredentialErr)
 		}
 		if member.remoteSessionIssuerID.Valid {
 			if entry, ok := tokens[member.remoteSessionIssuerID.UUID]; ok && entry.CredentialOwner == remotesessions.CredentialOwnerSelf {
@@ -268,20 +274,26 @@ func memberCredentialLoadError(member metaMember, err error) error {
 	return memberConnectionError{memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug)}, status: 0, retryable: false, retryAfter: 0}, code}
 }
 
-// chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
+// chainMetaMember chains a member with no routed credential or one held without
+// a token, as a direct server does. A chained token is a verified credential for
+// the same person, never an anonymous call; when chaining yields none, the held
+// failure stands, so an unreadable sign-in still asks for a reconnect.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
-	outage := routed.SessionUnavailable()
-	if outage {
+	held := routed.HeldWithoutToken()
+	switch {
+	case routed.SignInUnreadable():
+		routeErr = newMemberSignInUnreadableError(member, gate.memberReconnectAsk(member), routed.ClientCredentialErr)
+	case held:
 		routeErr = withMemberConnectLink(routeErr, member, gate.memberCallerURL(member))
 		if routeErr != nil {
 			routeErr = memberConnectionError{routeErr, resolveFailureHappened(routed.ClientCredentialErr)}
 		}
 	}
-	if (routeErr != nil && !outage) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
+	if (routeErr != nil && !held) || (routed.Token != "") || gate.chainUpstream == nil || member.upstreamNoAuth || (member.authClient != nil && member.authClient.outcome != authClientLegacy) {
 		return routed, routed.Token, routeErr
 	}
 	chained, err := gate.chainUpstream(ctx, member, resource)
-	if outage && chained == "" {
+	if held && chained == "" {
 		return routed, "", routeErr
 	}
 	var none remotesessions.UpstreamToken
@@ -294,12 +306,20 @@ func (s *Service) recordDialFailure(ctx context.Context, gate *metaGateContext, 
 	if stale, ok := errors.AsType[memberStaleChoiceError](err); ok && stale.saved {
 		return
 	}
+	var opts []mcpconnectionattempts.Option
+	if id, ok := remotesessions.UnreadableRemoteSessionID(err); ok {
+		opts = append(opts, mcpconnectionattempts.RemoteSession(id))
+	}
 	if _, credential := errors.AsType[memberCredentialError](err); credential {
-		s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
+		code := mcpconnectionattempts.CodeInvalidRemoteSession
+		if failure, ok := errors.AsType[memberConnectionError](err); ok && failure.code != (mcpconnectionattempts.Code{}) {
+			code = failure.code
+		}
+		s.recordMemberFailure(ctx, gate, member, code, opts...)
 		return
 	}
 	if failure, ok := errors.AsType[memberConnectionError](err); ok {
-		s.recordMemberFailure(ctx, gate, member, failure.code)
+		s.recordMemberFailure(ctx, gate, member, failure.code, opts...)
 	}
 }
 
