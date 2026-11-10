@@ -24,7 +24,10 @@ const (
 	// NodeStatusDraining means the hosting pod is shutting down.
 	NodeStatusDraining NodeStatus = "draining"
 
-	// NodeStatusError means the last start attempt failed.
+	// NodeStatusError means the last start attempt failed, or a running node
+	// failed its status check and was stopped. Either way the slot has no
+	// node and is retried on a later poll, with backoff after repeated
+	// failures.
 	NodeStatusError NodeStatus = "error"
 
 	// NodeStatusStopped means the hosting pod stopped the node cleanly.
