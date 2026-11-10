@@ -2,8 +2,9 @@
 
 import { GenerativeUI } from "@/elements/components/ui/generative-ui";
 import { cn } from "@/lib/utils";
-import { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
-import { FC, useEffect, useMemo, useState } from "react";
+import type { SyntaxHighlighterProps } from "@assistant-ui/react-markdown";
+import type { FC } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MacOSWindowFrame } from "../components/MacOSWindowFrame";
 
 const loadingMessages = [

@@ -22,7 +22,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
-import { Table, TableProps } from "@/components/ui/Table";
+import type { TableProps } from "@/components/ui/Table";
+import { Table } from "@/components/ui/Table";
 import { cloneElement, Suspense, useState } from "react";
 import { Outlet } from "react-router";
 import { DeploymentsEmptyState } from "./DeploymentsEmptyState";

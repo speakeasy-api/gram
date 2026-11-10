@@ -3,7 +3,7 @@ import {
   CollapsibleNavItem,
   ReleaseStageNavSection,
 } from "@/components/nav-menu";
-import { ReleaseStage } from "@/components/release-stage-badge";
+import type { ReleaseStage } from "@/components/release-stage-badge";
 
 // Stable items lead each group; staged items follow, most mature first. Keyed
 // by stage so a new stage fails to compile until it is given a place here —
@@ -14,7 +14,7 @@ const STAGE_SECTIONS: Record<ReleaseStage, true> = {
 };
 const STAGE_ORDER = Object.keys(STAGE_SECTIONS) as ReleaseStage[];
 import { useRBAC } from "@/hooks/useRBAC";
-import { AppRoute } from "@/routes";
+import type { AppRoute } from "@/routes";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React from "react";
 import { visibleNavEntries } from "./sidebar-nav-layout";

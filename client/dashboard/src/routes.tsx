@@ -1,9 +1,10 @@
-import { Icon, IconProps } from "@/components/ui/Icon";
-import { IconName } from "@/components/ui/Icon/names";
+import type { IconProps } from "@/components/ui/Icon";
+import { Icon } from "@/components/ui/Icon";
+import type { IconName } from "@/components/ui/Icon/names";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { ReleaseStage } from "./components/release-stage-badge";
+import type { ReleaseStage } from "./components/release-stage-badge";
 import { useSlugs } from "./contexts/Sdk";
 import { cn } from "./lib/utils";
 

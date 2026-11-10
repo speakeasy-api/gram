@@ -1,6 +1,6 @@
 import { useRBAC } from "@/hooks/useRBAC";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
-import { Scope } from "@gram/client/models/components/rolegrant.js";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
 import { useRoles } from "@gram/client/react-query/roles.js";

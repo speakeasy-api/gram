@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { TextArea } from "@/components/ui/Textarea";
 import { Text } from "@/components/ui/Text";
-import { Assistant } from "@gram/client/models/components/assistant.js";
+import type { Assistant } from "@gram/client/models/components/assistant.js";
 import { invalidateAllAssistantsList } from "@gram/client/react-query/assistantsList.js";
 import { useAssistantsUpdateMutation } from "@gram/client/react-query/assistantsUpdate.js";
 import { useQueryClient } from "@tanstack/react-query";

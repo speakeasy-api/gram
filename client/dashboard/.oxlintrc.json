@@ -37,6 +37,11 @@
     ],
     "typescript/switch-exhaustiveness-check": "error",
     "typescript/strict-void-return": "error",
+    "typescript/consistent-type-imports": [
+      "error",
+      // vi.mock factories type the real module as `typeof import("x")`.
+      { "disallowTypeAnnotations": false }
+    ],
 
     // Oxlint 1.79 split react/react-compiler into individual rules. The
     // dashboard does not run React Compiler, so keep these checks opt-in until
