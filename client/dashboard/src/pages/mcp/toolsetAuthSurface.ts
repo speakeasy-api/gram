@@ -56,9 +56,7 @@ export function canConfigureExternalOAuth(toolset: Toolset): boolean {
     (toolset.oauthEnablementMetadata?.oauth2SecurityCount ?? 0) > 0;
 
   return Boolean(
-    toolset.mcpEnabled &&
-    toolset.mcpIsPublic &&
-    hasOAuthAuthorizationCodeFlow,
+    toolset.mcpEnabled && toolset.mcpIsPublic && hasOAuthAuthorizationCodeFlow,
   );
 }
 

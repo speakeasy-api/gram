@@ -422,7 +422,10 @@ export const oauthWizardMachine = setup({
               target: "#oauthWizard.proxy.credentials",
               actions: assign({
                 error: ({ event }) =>
-                  errorMessage(event.error, "Failed to configure user sessions"),
+                  errorMessage(
+                    event.error,
+                    "Failed to configure user sessions",
+                  ),
               }),
             },
           },

@@ -199,26 +199,26 @@ export function HostedToolsTab({
   return (
     <Stack className="mb-4">
       <Stack
-          direction="horizontal"
-          justify="space-between"
-          align="center"
-          className="mb-4"
-        >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <PageEyebrow />
-            <h1 className="text-display-sm font-thin">Tools</h1>
-          </div>
-          <Stack direction="horizontal" gap={2}>
-            {canWrite && (
-              <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
-                <Button.LeftIcon>
-                  <Icon name="plus" className="h-4 w-4" />
-                </Button.LeftIcon>
-                <Button.Text>Add Tools</Button.Text>
-              </Button>
-            )}
-          </Stack>
+        direction="horizontal"
+        justify="space-between"
+        align="center"
+        className="mb-4"
+      >
+        <div className="flex min-w-0 flex-col gap-1.5">
+          <PageEyebrow />
+          <h1 className="text-display-sm font-thin">Tools</h1>
+        </div>
+        <Stack direction="horizontal" gap={2}>
+          {canWrite && (
+            <Button onClick={() => setAddToolsDialogOpen(true)} size="sm">
+              <Button.LeftIcon>
+                <Icon name="plus" className="h-4 w-4" />
+              </Button.LeftIcon>
+              <Button.Text>Add Tools</Button.Text>
+            </Button>
+          )}
         </Stack>
+      </Stack>
 
       {/* Read-only tool filtering scopes panel (only when filtering enabled) */}
       {filteringEnabled && toolFilters && (

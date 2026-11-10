@@ -56,11 +56,7 @@ beforeEach(() => {
 });
 it("scopes every lookup and the catalog cache/request to the server project", async () => {
   renderHook(() => useInstalledCatalogServer("server", true, "server-project"));
-  for (const query of [
-    mocks.servers,
-    mocks.remotes,
-    mocks.unproxied,
-  ]) {
+  for (const query of [mocks.servers, mocks.remotes, mocks.unproxied]) {
     expect(query).toHaveBeenCalledWith(
       { gramProject: "server-project" },
       undefined,

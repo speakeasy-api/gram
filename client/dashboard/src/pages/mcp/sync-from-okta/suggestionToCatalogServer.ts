@@ -9,9 +9,7 @@ const TRANSPORT_TYPES: ReadonlySet<string> = new Set(
 );
 
 function transportType(type: string): TransportType | null {
-  return TRANSPORT_TYPES.has(type)
-    ? (type as TransportType)
-    : null;
+  return TRANSPORT_TYPES.has(type) ? (type as TransportType) : null;
 }
 
 /**

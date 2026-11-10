@@ -78,12 +78,12 @@ export function useOrgMcpServers(enabled: boolean): OrgMcpServers {
         : `${baseUrl}/mcp/${project?.slug ?? ""}/${t.slug}/${t.defaultEnvironmentSlug ?? ""}`;
       const mcpUrl = fullUrl.replace(/^https?:\/\//, "");
       const tools = t.tools.map((tool) => ({
-          id: tool.id,
-          name: tool.name,
-          type: tool.type,
-          httpMethod: tool.httpMethod,
-          annotations: tool.annotations,
-        }));
+        id: tool.id,
+        name: tool.name,
+        type: tool.type,
+        httpMethod: tool.httpMethod,
+        annotations: tool.annotations,
+      }));
       // Skip servers with nothing grantable.
       if (tools.length === 0) continue;
       group.servers.push({
