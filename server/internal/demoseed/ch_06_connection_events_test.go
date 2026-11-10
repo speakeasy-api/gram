@@ -50,7 +50,7 @@ func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, rows, tc.rows)
 			if tc.member {
-				require.Equal(t, s.det("mcpserver-support").String(), rows[2].MemberID)
+				require.Equal(t, s.supportServer().String(), rows[2].MemberID)
 				require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[2].ClientFamily)
 				require.Equal(t, s.connectionDevice("stopped-attempt"), rows[2].DeviceKey)
 			} else {

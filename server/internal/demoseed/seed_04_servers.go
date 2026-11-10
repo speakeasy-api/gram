@@ -73,11 +73,7 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	if err := s.q.ServersInsertMCPServers(ctx, repo.ServersInsertMCPServersParams{
-		SupportID:         s.det("mcpserver-support"),
 		ProjectID:         proj,
-		Toolset1:          s.toolset1(),
-		OpsID:             s.det("mcpserver-ops"),
-		Toolset2:          s.toolset2(),
 		LinearID:          s.det("mcpserver-linear"),
 		RemoteLinearID:    s.det("remotemcp-linear"),
 		IssuerLinearID:    s.det("issuer-linear"),
@@ -155,8 +151,10 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}
 
 	n, err := s.q.ServersInsertRoleServerMemberships(ctx, repo.ServersInsertRoleServerMembershipsParams{
-		OrgID:     org,
-		ProjectID: proj,
+		OrgID:           org,
+		ProjectID:       proj,
+		SupportServerID: s.supportServer(),
+		OpsServerID:     s.opsServer(),
 	})
 	if err != nil {
 		return fmt.Errorf("insert demo role server memberships: %w", err)
@@ -264,9 +262,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SupportMemberID: s.det("metamember-support"),
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-1"),
-		SupportServerID: s.det("mcpserver-support"),
+		SupportServerID: s.supportServer(),
 		OpsMemberID:     s.det("metamember-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		OpsServerID:     s.opsServer(),
 		LinearMemberID:  s.det("metamember-linear"),
 		LinearServerID:  s.det("mcpserver-linear"),
 		SlackMemberID:   s.det("metamember-slack"),
@@ -286,9 +284,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 		SupportMemberID: s.det("metamember-code-support"),
 		ProjectID:       proj,
 		MetaID:          s.det("metamcp-code"),
-		SupportServerID: s.det("mcpserver-support"),
+		SupportServerID: s.supportServer(),
 		OpsMemberID:     s.det("metamember-code-ops"),
-		OpsServerID:     s.det("mcpserver-ops"),
+		OpsServerID:     s.opsServer(),
 	}); err != nil {
 		return fmt.Errorf("insert demo code gateway members: %w", err)
 	}
@@ -587,9 +585,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	if err := s.q.ServersInsertKillswitchVersionResources(ctx, repo.ServersInsertKillswitchVersionResourcesParams{
 		OrgID:            org,
 		ActiveSelectedID: s.det("killswitch-active-selected"),
-		SupportServerID:  s.det("mcpserver-support"),
+		SupportServerID:  s.supportServer(),
 		ChangedID:        s.det("killswitch-changed"),
-		OpsServerID:      s.det("mcpserver-ops"),
+		OpsServerID:      s.opsServer(),
 		LinearServerID:   s.det("mcpserver-linear"),
 		LiftedID:         s.det("killswitch-lifted"),
 		SlackServerID:    s.det("mcpserver-slack"),
@@ -634,8 +632,9 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	return s.seedAuthClients(ctx)
 }
 
-// seedAuthClients records Linear's personal client as the upstream OAuth
-// migration derives it, and two clients an administrator created: a token
+// seedAuthClients records Linear's two OAuth clients as the upstream OAuth
+// migration derives them (named here: left to the migration, both would be
+// named after their shared issuer), and two clients an administrator created: a token
 // shared by two servers and a pass-through of the caller's own GitHub token,
 // with who may use the shared token, and the token chosen for an app that
 // signs in to Linear without a browser.
@@ -645,6 +644,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	clients := []repo.ServersInsertAuthClientParams{
 		{ID: s.det("auth-client-linear"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("remote-identity-client-linear"), Valid: true}},
+		{ID: s.det("auth-client-linear-attachment"), OrgID: org, ProjectID: proj, ClientType: "remote_session", Source: "backfill", Name: "Linear (attached sessions)", RemoteSessionClientID: uuid.NullUUID{UUID: s.det("attachment-client"), Valid: true}},
 		{ID: s.det("auth-client-github-token"), OrgID: org, ProjectID: proj, ClientType: "static_credential", Source: "admin", Name: "Engineering automation token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		{ID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj, ClientType: "pass_through", Source: "admin", Name: "Your own GitHub token", RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 	}
@@ -668,6 +668,7 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 
 	associations := []struct{ key, server, client string }{
 		{"auth-client-assoc-linear", "mcpserver-linear", "auth-client-linear"},
+		{"auth-client-assoc-linear-attachment", "mcpserver-linear", "auth-client-linear-attachment"},
 		{"auth-client-assoc-github", "mcpserver-github", "auth-client-github-token"},
 		{"auth-client-assoc-linear-token", "mcpserver-linear", "auth-client-github-token"},
 		{"auth-client-assoc-github-forwarded", "mcpserver-github", "auth-client-github-forwarded"},

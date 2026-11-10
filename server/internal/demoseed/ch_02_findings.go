@@ -535,11 +535,11 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			var execID, mcpServerID, toolsetID, toolName, phase, mediation, method, principal, outcome string
 			if !onUser {
 				execID = s.det("mcp-execution-" + strconv.Itoa(i)).String()
-				mcpServerID = s.det("mcpserver-support").String()
+				mcpServerID = s.supportServer().String()
 				toolsetID = s.toolset1().String()
 				toolName = "get_customer"
 				if i%5 == 0 {
-					mcpServerID = s.det("mcpserver-ops").String()
+					mcpServerID = s.opsServer().String()
 					toolsetID = s.toolset2().String()
 					toolName = "check_health"
 				}
@@ -625,7 +625,7 @@ func (s *seeder) chfRiskFindings(ctx context.Context, ch driver.Conn) error {
 			"",
 			"",
 			s.det("mcp-execution-181").String(),
-			s.det("mcpserver-support").String(),
+			s.supportServer().String(),
 			s.toolset1().String(),
 			"get_customer",
 			"request",

@@ -484,7 +484,7 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
 			// The serving wrapper's id; every seventh chat models calls recorded before stamping.
 			if i%7 != 0 {
-				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.det("mcpserver-ops").String(), s.toolset1().String()) + `"`
+				attrs += `,"gram.mcp_server.id":"` + chIf(i%5 == 0, s.opsServer().String(), s.toolset1().String()) + `"`
 			}
 			attrs += `,"http.response.status_code":` + chIf(failed, "500", "200") +
 				`,"gram.outcome":"` + chIf(failed || toolError, "error", "ok") + `"` +

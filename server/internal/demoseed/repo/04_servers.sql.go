@@ -991,7 +991,8 @@ type ServersInsertHostedToolsetMCPServersParams struct {
 
 // Each hosted toolset owns a canonical wrapper (id = the toolset id) that
 // holds its hosting state, and one platform endpoint at the wrapper's slug.
-// The fresh-id servers above stay separate servers over the same toolsets.
+// The wrapper is the toolset's only MCP server: a second server over the
+// same toolset shows up as a duplicate in every server picker.
 func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg ServersInsertHostedToolsetMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertHostedToolsetMCPServers,
 		arg.Toolset1,
@@ -1377,31 +1378,23 @@ func (q *Queries) ServersInsertLinearRemoteSessionIssuer(ctx context.Context, ar
 }
 
 const serversInsertMCPServers = `-- name: ServersInsertMCPServers :exec
-INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
+INSERT INTO mcp_servers (id, project_id, name, slug,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  ($1::uuid, $2::uuid, 'Acme Support Tools',
-   'acme-support-tools', $3::uuid, NULL, NULL, 'private'),
-  ($4::uuid, $2::uuid, 'Acme Ops', 'acme-ops',
-   $5::uuid, NULL, NULL, 'private'),
-  ($6::uuid, $2::uuid, 'Linear', 'linear',
-   NULL, $7::uuid,
-   $8::uuid, 'private'),
-  ($9::uuid, $2::uuid, 'Slack', 'slack',
-   NULL, $10::uuid,
-   $11::uuid, 'private'),
-  ($12::uuid, $2::uuid, 'GitHub', 'github',
-   NULL, $13::uuid,
-   $14::uuid, 'private')
+  ($1::uuid, $2::uuid, 'Linear', 'linear',
+   $3::uuid,
+   $4::uuid, 'private'),
+  ($5::uuid, $2::uuid, 'Slack', 'slack',
+   $6::uuid,
+   $7::uuid, 'private'),
+  ($8::uuid, $2::uuid, 'GitHub', 'github',
+   $9::uuid,
+   $10::uuid, 'private')
 `
 
 type ServersInsertMCPServersParams struct {
-	SupportID         uuid.UUID
-	ProjectID         uuid.UUID
-	Toolset1          uuid.UUID
-	OpsID             uuid.UUID
-	Toolset2          uuid.UUID
 	LinearID          uuid.UUID
+	ProjectID         uuid.UUID
 	RemoteLinearID    uuid.UUID
 	IssuerLinearID    uuid.UUID
 	SlackID           uuid.UUID
@@ -1414,12 +1407,8 @@ type ServersInsertMCPServersParams struct {
 
 func (q *Queries) ServersInsertMCPServers(ctx context.Context, arg ServersInsertMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertMCPServers,
-		arg.SupportID,
-		arg.ProjectID,
-		arg.Toolset1,
-		arg.OpsID,
-		arg.Toolset2,
 		arg.LinearID,
+		arg.ProjectID,
 		arg.RemoteLinearID,
 		arg.IssuerLinearID,
 		arg.SlackID,
@@ -1700,8 +1689,8 @@ type ServersInsertRemoteMCPServersParams struct {
 // old demo.ensure_demo_org(); tenant identifiers arrive as parameters.
 // MCP servers and the Gateway Endpoint fronting them (AGE-3299).
 // Two backends so the gateway's member table shows both classes: the
-// toolset-backed pair executes in-process, the third-party remotes are
-// proxied. URLs are the vendors' public MCP endpoints: no credentials,
+// toolset-backed pair (the hosted toolsets' canonical wrappers below)
+// executes in-process, the third-party remotes are proxied. URLs are the vendors' public MCP endpoints: no credentials,
 // and nothing here connects on its own.
 func (q *Queries) ServersInsertRemoteMCPServers(ctx context.Context, arg ServersInsertRemoteMCPServersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertRemoteMCPServers,
@@ -1769,9 +1758,10 @@ JOIN organization_roles r ON a.principal_urn = 'role:organization:' || r.id
 CROSS JOIN mcp_servers s
 WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
   AND s.project_id = $2::uuid
-  -- Canonical hosted wrappers share their toolset's name with the
-  -- fresh-id servers above; distribute those servers only.
-  AND s.id IS DISTINCT FROM s.toolset_id
+  -- Of the hosted toolsets' wrappers, distribute Acme Support Tools and
+  -- Acme Ops; the partner and OAuth discovery toolsets stay out of plugins.
+  AND (s.id IS DISTINCT FROM s.toolset_id
+       OR s.id IN ($3::uuid, $4::uuid))
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = $1::text AND g.principal_urn = a.principal_urn
@@ -1781,8 +1771,10 @@ WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
 `
 
 type ServersInsertRoleServerMembershipsParams struct {
-	OrgID     string
-	ProjectID uuid.UUID
+	OrgID           string
+	ProjectID       uuid.UUID
+	SupportServerID uuid.UUID
+	OpsServerID     uuid.UUID
 }
 
 // Distribute these servers to the seeded organization roles holding
@@ -1791,7 +1783,12 @@ type ServersInsertRoleServerMembershipsParams struct {
 // servers. Store server identities, not legacy toolset memberships. Content
 // has no manual/automatic distinction and never widens a plugin's audience.
 func (q *Queries) ServersInsertRoleServerMemberships(ctx context.Context, arg ServersInsertRoleServerMembershipsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships, arg.OrgID, arg.ProjectID)
+	result, err := q.db.Exec(ctx, serversInsertRoleServerMemberships,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.SupportServerID,
+		arg.OpsServerID,
+	)
 	if err != nil {
 		return 0, err
 	}

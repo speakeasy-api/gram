@@ -141,7 +141,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
-			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
+			fail:  postflightMustEqual(5, "expected 5 auth client associations, found %d"),
 		},
 		{
 			what:  "setup tasks",
@@ -244,7 +244,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 				return s.q.PostflightCountKillswitchOverlappingActive(ctx, repo.PostflightCountKillswitchOverlappingActiveParams{
 					OrgID:        org,
 					PrincipalKey: s.userID(demoUsers[0].handle),
-					ResourceKey:  s.det("mcpserver-support").String(),
+					ResourceKey:  s.supportServer().String(),
 				})
 			},
 			fail: postflightMustEqual(2, "expected 2 overlapping active killswitches, found %d"),
