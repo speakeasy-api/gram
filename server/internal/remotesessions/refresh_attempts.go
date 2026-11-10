@@ -35,8 +35,9 @@ func (s *RefreshService) recordRefresh(
 	if !ok {
 		return false, false
 	}
+	stored := true
 	if what == mcpconnectionattempts.CodeRefreshInvalidClient {
-		what = s.invalidClientHappened(ctx, attribution, sess)
+		what, stored = s.invalidClientHappened(ctx, attribution, sess)
 	}
 	opts := []mcpconnectionattempts.Option{
 		mcpconnectionattempts.Provider(client.IssuerUrl),
@@ -48,6 +49,9 @@ func (s *RefreshService) recordRefresh(
 		mcpconnectionattempts.Detail(string(trigger)),
 		attribution.client,
 	}
+	if !stored {
+		opts = append(opts, mcpconnectionattempts.Unstored())
+	}
 	_, failed := what.(mcpconnectionattempts.Code)
 	if !attribution.attempt.IsZero() {
 		accepted := s.connections.Step(ctx, attribution.attempt, mcpconnectionattempts.StepProviderRefresh, what, opts...)
@@ -58,17 +62,16 @@ func (s *RefreshService) recordRefresh(
 }
 
 // invalidClientHappened names a refresh_invalid_client row, recommending re-registration only
-// when the tenant's binding is known. A row that won't be stored skips the lookup and keeps
-// the code refreshHappened chose, so its steps metric stays refresh_invalid_client even when
-// the binding is managed.
-func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) mcpconnectionattempts.Code {
+// when the tenant's binding is known. stored is false for a row that won't be stored: it
+// skips the lookup, and the steps metric leaves it out rather than count an unchecked code.
+func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession) (code mcpconnectionattempts.Code, stored bool) {
 	scope := attribution.scope
 	if !attribution.attempt.IsZero() {
 		scope = attribution.attempt.Scope()
 	}
 	// Detached: a cancelled request reads as logs off on a feature cache miss.
 	if !s.connections.Stores(context.WithoutCancel(ctx), scope) {
-		return mcpconnectionattempts.CodeRefreshInvalidClient
+		return mcpconnectionattempts.CodeRefreshInvalidClient, false
 	}
 	lookupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), emaBindingLookupTimeout)
 	defer cancel()
@@ -77,9 +80,9 @@ func (s *RefreshService) invalidClientHappened(ctx context.Context, attribution 
 		UserSessionIssuerID:   sess.UserSessionIssuerID,
 	})
 	if err != nil || managed {
-		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
+		return mcpconnectionattempts.CodeProviderOAuthInvalidClient, true
 	}
-	return mcpconnectionattempts.CodeRefreshInvalidClient
+	return mcpconnectionattempts.CodeRefreshInvalidClient, true
 }
 
 // canReregister reports whether dynamic registration can reproduce this client.

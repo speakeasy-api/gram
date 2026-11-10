@@ -1287,3 +1287,55 @@ func TestShutdownAndWait_AWedgedWriterAndABlockedLogStillReturn(t *testing.T) {
 		t.Fatal("ShutdownAndWait waited on a blocked log call")
 	}
 }
+
+func TestDrainWindow_KeepsAMinimumFromASmallBudget(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 28*time.Second, drainWindow(30*time.Second))
+	require.Equal(t, minDrainWindow, drainWindow(writerJoinMargin))
+	require.Equal(t, minDrainWindow, drainWindow(time.Second))
+	require.Equal(t, 300*time.Millisecond, drainWindow(300*time.Millisecond))
+}
+
+// ctxConn fails a batch once its context ends, like the real driver.
+type ctxConn struct {
+	*repeatsConn
+}
+
+func (c ctxConn) PrepareBatch(ctx context.Context, query string, opts ...driver.PrepareBatchOption) (driver.Batch, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, fmt.Errorf("prepare batch: %w", err)
+	}
+	return c.repeatsConn.PrepareBatch(ctx, query, opts...)
+}
+
+// A budget smaller than writerJoinMargin still drains a healthy backlog.
+func TestShutdownAndWait_ASmallBudgetStillDrains(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	cfg := testConfig()
+	cfg.flushInterval = time.Hour
+	recorder := newTestRecorder(t, ctxConn{repeatsConn: conn}, cfg)
+	for range 5 {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	require.NoError(t, recorder.ShutdownAndWait(ctx))
+	require.Equal(t, int64(5), conn.rows.Load())
+	require.Zero(t, recorder.droppedTotal(t))
+}
+
+// A row its caller knows won't be stored stays out of the steps metric.
+func TestRecord_UnstoredRowIsNotCountedAsAStep(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorder(t, conn, testConfig())
+	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient, Unstored())
+	require.Zero(t, stepsCounted(t, recorder))
+	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient)
+	require.Equal(t, int64(1), stepsCounted(t, recorder))
+}
