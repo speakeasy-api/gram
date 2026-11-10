@@ -33,6 +33,7 @@ vi.mock("@/components/page-layout", () => {
         CTA: Section,
       }),
     },
+    useInPageFrame: () => true,
   };
 });
 vi.mock("@/hooks/useFeatureFlag", () => ({

@@ -2425,6 +2425,10 @@ WHERE project_id = @project_id
   AND deployment_id = @deployment_id
   AND tool_urn = @tool_urn;
 
+-- name: CreateExternalMCPAttachmentFixture :exec
+INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
+VALUES (@deployment_id, @name, @slug, @registry_server_specifier);
+
 -- name: ExpireUserSessionFixture :execrows
 -- Test-only fixture: expires a session without waiting for its access token TTL.
 UPDATE user_sessions
@@ -2643,3 +2647,10 @@ UPDATE device_agent_state_reports
 SET os = @os
 WHERE organization_id = @organization_id
   AND email = @email;
+
+-- name: InsertRetiredApprovalsServerFixture :exec
+-- A project's approvals server as Speakeasy created it before the server was
+-- retired. Such rows stay until a cleanup migration deletes them, and every
+-- read path must treat them as gone.
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES (@id, @project_id, 'Speakeasy Approvals', @slug, 'approvals', 'private');

@@ -402,7 +402,25 @@ WITH selected AS (
                      AND c.client_type IN ('static_credential', 'pass_through'))))
       )
   ) AS candidates
-  WHERE $1::boolean AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  WHERE $1::boolean AND NOT $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
+  UNION ALL
+  -- Discovery evaluates every offered client in one metadata-only read, using
+  -- the same authoritative header-source checks as a single proposed choice.
+  SELECT FALSE, link.auth_client_id, NULL::uuid, m.id, m.project_id,
+         p.organization_id, FALSE
+  FROM mcp_servers AS m
+  JOIN projects AS p ON p.id = m.project_id
+   AND p.organization_id = $5::text AND p.deleted IS FALSE
+  JOIN mcp_server_auth_clients AS link ON link.mcp_server_id = m.id
+   AND link.project_id = m.project_id AND link.organization_id = p.organization_id
+   AND link.deleted IS FALSE
+  JOIN mcp_auth_clients AS c ON c.id = link.auth_client_id
+   AND c.organization_id = p.organization_id
+   AND (c.project_id IS NULL OR c.project_id = m.project_id)
+   AND c.deleted IS FALSE
+  WHERE $1::boolean AND $9::boolean
+    AND m.id = ANY($4::uuid[]) AND m.deleted IS FALSE
 )
 SELECT sel.mcp_server_id,
        sel.ambiguous,
@@ -644,6 +662,7 @@ type GetAuthClientSelectionParams struct {
 	ProposedRegistrationID uuid.NullUUID
 	ProposedAuthClientID   uuid.NullUUID
 	ProposedNoAuth         bool
+	ProposeAllClients      bool
 }
 
 type GetAuthClientSelectionRow struct {
@@ -694,6 +713,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		arg.ProposedRegistrationID,
 		arg.ProposedAuthClientID,
 		arg.ProposedNoAuth,
+		arg.ProposeAllClients,
 	)
 	if err != nil {
 		return nil, err
@@ -1155,11 +1175,13 @@ func (q *Queries) ListMCPServerUpstreamIssuers(ctx context.Context, arg ListMCPS
 
 const listRememberedAuthClients = `-- name: ListRememberedAuthClients :many
 SELECT latest.mcp_server_id,
-       latest.auth_client_id::uuid AS auth_client_id
+       latest.auth_client_id,
+       latest.remote_session_client_id
 FROM (
   SELECT DISTINCT ON (sel.mcp_server_id)
          sel.mcp_server_id,
-         sel.auth_client_id
+         sel.auth_client_id,
+         sel.remote_session_client_id
   FROM upstream_client_selections AS sel
   JOIN user_sessions AS us
     ON COALESCE(us.credential_id, us.id) = sel.credential_id
@@ -1170,7 +1192,7 @@ FROM (
     AND sel.deleted IS FALSE
   ORDER BY sel.mcp_server_id, sel.created_at DESC
 ) AS latest
-WHERE latest.auth_client_id IS NOT NULL
+WHERE latest.auth_client_id IS NOT NULL OR latest.remote_session_client_id IS NOT NULL
 `
 
 type ListRememberedAuthClientsParams struct {
@@ -1180,14 +1202,15 @@ type ListRememberedAuthClientsParams struct {
 }
 
 type ListRememberedAuthClientsRow struct {
-	McpServerID  uuid.UUID
-	AuthClientID uuid.UUID
+	McpServerID           uuid.UUID
+	AuthClientID          uuid.NullUUID
+	RemoteSessionClientID uuid.NullUUID
 }
 
-// The auth client a subject most recently approved for each MCP server
-// through any of their user sessions. It only prefills a new consent and is
-// checked again before use. A latest approval with no client remembers
-// nothing.
+// The auth client and connected service a subject most recently approved for
+// each MCP server through any of their user sessions. It only prefills a new
+// consent and is checked again before use. Callers skip rows whose column they
+// read is null: a latest approval without it remembers nothing.
 func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRememberedAuthClientsParams) ([]ListRememberedAuthClientsRow, error) {
 	rows, err := q.db.Query(ctx, listRememberedAuthClients, arg.SubjectUrn, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1197,7 +1220,7 @@ func (q *Queries) ListRememberedAuthClients(ctx context.Context, arg ListRemembe
 	var items []ListRememberedAuthClientsRow
 	for rows.Next() {
 		var i ListRememberedAuthClientsRow
-		if err := rows.Scan(&i.McpServerID, &i.AuthClientID); err != nil {
+		if err := rows.Scan(&i.McpServerID, &i.AuthClientID, &i.RemoteSessionClientID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

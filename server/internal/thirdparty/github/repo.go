@@ -390,22 +390,28 @@ func (c *Client) getRef(ctx context.Context, installationID int64, owner, repo, 
 func (c *Client) createTree(ctx context.Context, installationID int64, owner, repo string, files map[string][]byte) (string, error) {
 	treeEntries := make([]map[string]string, 0, len(files))
 	for path, content := range files {
-		// The Trees API treats `content` as UTF-8 text; binary content must be
-		// uploaded via the Blobs API and referenced by `sha`. Fail loudly here
-		// rather than silently corrupting binary files.
-		if !utf8.Valid(content) {
-			return "", fmt.Errorf("create tree: %q is not valid UTF-8 (binary content requires the Blobs API)", path)
-		}
 		mode := "100644"
 		if strings.HasSuffix(path, ".sh") {
 			mode = "100755"
 		}
-		treeEntries = append(treeEntries, map[string]string{
-			"path":    path,
-			"mode":    mode,
-			"type":    "blob",
-			"content": string(content),
-		})
+		entry := map[string]string{
+			"path": path,
+			"mode": mode,
+			"type": "blob",
+		}
+		// The Trees API treats `content` as UTF-8 text, so binary content such
+		// as a plugin icon is uploaded through the Blobs API and referenced by
+		// `sha` instead of being corrupted inline.
+		if utf8.Valid(content) {
+			entry["content"] = string(content)
+		} else {
+			sha, err := c.createBlob(ctx, installationID, owner, repo, content)
+			if err != nil {
+				return "", fmt.Errorf("create blob for %q: %w", path, err)
+			}
+			entry["sha"] = sha
+		}
+		treeEntries = append(treeEntries, entry)
 	}
 
 	// Omit base_tree to build a clean tree from scratch. This ensures
@@ -434,6 +440,37 @@ func (c *Client) createTree(ctx context.Context, installationID int64, owner, re
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return "", fmt.Errorf("decode tree: %w", err)
+	}
+	return result.SHA, nil
+}
+
+// createBlob uploads content as a base64 blob and returns its SHA, for files
+// the Trees API cannot carry inline.
+func (c *Client) createBlob(ctx context.Context, installationID int64, owner, repo string, content []byte) (string, error) {
+	body, err := json.Marshal(map[string]string{
+		"content":  base64.StdEncoding.EncodeToString(content),
+		"encoding": "base64",
+	})
+	if err != nil {
+		return "", fmt.Errorf("marshal blob: %w", err)
+	}
+
+	url, _ := url.JoinPath(apiBase, "repos", owner, repo, "git", "blobs")
+	resp, err := c.doAPI(ctx, installationID, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	defer o11y.NoLogDefer(func() error { return resp.Body.Close() })
+
+	if resp.StatusCode != http.StatusCreated {
+		return "", fmt.Errorf("status %d: %s", resp.StatusCode, truncatedBody(resp))
+	}
+
+	var result struct {
+		SHA string `json:"sha"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", fmt.Errorf("decode blob: %w", err)
 	}
 	return result.SHA, nil
 }

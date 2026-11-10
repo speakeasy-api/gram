@@ -16,6 +16,13 @@ import { XYFade } from "@/components/ui/XyFade";
 import { SplashScreen } from "@/components/ui/LogoLoader";
 import { PageEyebrow } from "./page-eyebrow";
 
+const PageFrameContext = React.createContext(false);
+
+/** Whether the caller renders inside a `Page`, and so under its header. */
+export function useInPageFrame(): boolean {
+  return React.useContext(PageFrameContext);
+}
+
 function PageLayout({ children }: { children: React.ReactNode }) {
   return (
     // The document scrolls and the page header sticks, so the layout only sets
@@ -24,7 +31,9 @@ function PageLayout({ children }: { children: React.ReactNode }) {
     // for the SidebarInset visual gutter (m-2 top+bottom = 1rem) and the
     // impersonation banner via --banner-offset.
     <div className="flex min-h-[calc(100vh-1rem-var(--banner-offset,0px))] flex-col has-[[data-page-bound]]:h-[calc(100vh-1rem-var(--banner-offset,0px))] has-[[data-page-bound]]:overflow-hidden">
-      <ContentErrorBoundary>{children}</ContentErrorBoundary>
+      <PageFrameContext.Provider value={true}>
+        <ContentErrorBoundary>{children}</ContentErrorBoundary>
+      </PageFrameContext.Provider>
     </div>
   );
 }

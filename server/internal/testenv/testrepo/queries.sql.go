@@ -901,6 +901,28 @@ func (q *Queries) CreateAuthClientHeaderFixture(ctx context.Context, arg CreateA
 	return err
 }
 
+const createExternalMCPAttachmentFixture = `-- name: CreateExternalMCPAttachmentFixture :exec
+INSERT INTO external_mcp_attachments (deployment_id, name, slug, registry_server_specifier)
+VALUES ($1, $2, $3, $4)
+`
+
+type CreateExternalMCPAttachmentFixtureParams struct {
+	DeploymentID            uuid.UUID
+	Name                    string
+	Slug                    string
+	RegistryServerSpecifier string
+}
+
+func (q *Queries) CreateExternalMCPAttachmentFixture(ctx context.Context, arg CreateExternalMCPAttachmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, createExternalMCPAttachmentFixture,
+		arg.DeploymentID,
+		arg.Name,
+		arg.Slug,
+		arg.RegistryServerSpecifier,
+	)
+	return err
+}
+
 const createHostedToolsetEndpointFixture = `-- name: CreateHostedToolsetEndpointFixture :execrows
 INSERT INTO mcp_endpoints (project_id, mcp_server_id, custom_domain_id, slug)
 SELECT s.project_id, s.id, $1::uuid, $2
@@ -3694,6 +3716,25 @@ INSERT INTO mcp_registries (id,name,url,source_type,auth_profile,enabled,certifi
 
 func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, insertRetainedLegacyCatalogSourceFixture, id)
+	return err
+}
+
+const insertRetiredApprovalsServerFixture = `-- name: InsertRetiredApprovalsServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')
+`
+
+type InsertRetiredApprovalsServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      pgtype.Text
+}
+
+// A project's approvals server as Speakeasy created it before the server was
+// retired. Such rows stay until a cleanup migration deletes them, and every
+// read path must treat them as gone.
+func (q *Queries) InsertRetiredApprovalsServerFixture(ctx context.Context, arg InsertRetiredApprovalsServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRetiredApprovalsServerFixture, arg.ID, arg.ProjectID, arg.Slug)
 	return err
 }
 

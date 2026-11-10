@@ -82,10 +82,6 @@ type RiskPolicy struct {
 	// For require_approval policies: who may approve held calls. Null for every
 	// other action.
 	ApprovalConfig *RiskPolicyApprovalConfig
-	// Set only on the create or update response that turned on the project's first
-	// approval policy: the approvals server Speakeasy created and whether it
-	// joined the Default plugin.
-	ApprovalsServerSetup *RiskPolicyApprovalsServerSetup
 	// CVSS-style severity (0.1-10) the author assigns to findings this policy
 	// produces. Descriptive only; changing it does not re-scan messages. Defaults
 	// to 5.

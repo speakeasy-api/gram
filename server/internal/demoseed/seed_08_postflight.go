@@ -425,11 +425,6 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
 		},
 		{
-			what:  "approvals server",
-			count: byProject(s.q.PostflightCountApprovalsServers),
-			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
-		},
-		{
 			what:  "hosted toolset wrappers",
 			count: byProject(s.q.PostflightCountHostedToolsetDrift),
 			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),

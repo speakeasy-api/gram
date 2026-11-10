@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -68,6 +69,11 @@ type Service struct {
 	authz    *authz.Engine
 	audit    *audit.Logger
 	features feature.Provider
+
+	// authEnforcement reads which organizations choose upstream
+	// authentication through typed auth clients, where a server's
+	// authorization server and client come from what it offers.
+	authEnforcement *authenforcement.Gate
 }
 
 var (
@@ -86,13 +92,14 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("oktaresourceconnections"))
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
-		logger:   logger,
-		db:       db,
-		auth:     auth.New(logger, db, sessionManager, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		features: features,
+		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/oktaresourceconnections"),
+		logger:          logger,
+		db:              db,
+		auth:            auth.New(logger, db, sessionManager, authzEngine),
+		authz:           authzEngine,
+		audit:           auditLogger,
+		features:        features,
+		authEnforcement: authenforcement.NewGate(db),
 	}
 }
 
@@ -269,8 +276,9 @@ type resourceKey struct {
 
 // resourceScopes is what the cached resource row for sv says about scopes,
 // for each client. Behind a login issuer only a client that owns the
-// resource reads the row, as its login would; a server without one has no
-// login to match, so its resolved client reads it.
+// resource reads the row, as its login would; under typed enforcement the
+// server's offers decide ownership instead. A server without a login issuer
+// has no login to match, so its resolved client reads it.
 func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(clientID uuid.UUID) remotesessions.ResourceScopes {
 	none := remotesessions.ResourceScopes{Pin: nil, ChallengeScopes: nil, ScopesSupported: nil, Live: false, UseDiscovered: snap.discoverScopes}
 	row := snap.resourceRow(sv)
@@ -278,6 +286,11 @@ func (snap *snapshot) resourceScopes(sv repo.ListEligibleServersRow) func(client
 		switch {
 		case row == nil:
 			return none
+		case sv.TypedAuthEnforced:
+			if !slices.Contains(sv.OfferedClientIds, clientID) {
+				return none
+			}
+			return *row
 		case sv.UserSessionIssuerID.Valid && !snap.owners[sv.ID][clientID]:
 			return none
 		default:
@@ -340,7 +353,11 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 		return nil, oops.E(oops.CodeUnexpected, err, "load identity provider connection").LogError(ctx, logger)
 	}
 
-	all, err := q.ListEligibleServers(ctx, organizationID)
+	enforced, err := s.authEnforcement.Enforced(ctx, organizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+	all, err := q.ListEligibleServers(ctx, repo.ListEligibleServersParams{OrganizationID: organizationID, TypedAuthEnforced: enforced})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list servers").LogError(ctx, logger)
 	}
@@ -406,7 +423,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if snap.discoverScopes {
 		var asks []remotesessions.ResourceOwnerQuery
 		for _, sv := range servers {
-			if !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
+			if sv.TypedAuthEnforced || !sv.RemoteUrl.Valid || !sv.UserSessionIssuerID.Valid {
 				continue
 			}
 			if _, ok := snap.resources[resourceKey{projectID: sv.ProjectID, url: sv.RemoteUrl.String}]; !ok {
@@ -414,7 +431,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 			}
 			asks = append(asks, remotesessions.ResourceOwnerQuery{ServerID: sv.ID, ProjectID: sv.ProjectID, UserSessionIssuerID: sv.UserSessionIssuerID.UUID, Upstream: sv.RemoteUrl.String})
 		}
-		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks)
+		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks, feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
 		}
@@ -501,6 +518,9 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if !ok || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
+		if sv.TypedAuthEnforced && !slices.Contains(sv.OfferedClientIds, c.ID) {
+			continue
+		}
 		// Identity chaining requests the scopes recorded at Turn on.
 		for _, scope := range remotesessions.GrantScopes(b.RequestedScopes) {
 			if !slices.Contains(boundScopes, scope) {
@@ -525,7 +545,12 @@ func resolveClient(sv repo.ListEligibleServersRow, resource, documentResource st
 		if c.RemoteSessionIssuerID != sv.IssuerID || (c.ProjectID.Valid && c.ProjectID.UUID != sv.ProjectID) {
 			continue
 		}
-		if sv.UserSessionIssuerID.Valid && !slices.Contains(c.UserSessionIssuerIds, sv.UserSessionIssuerID.UUID) {
+		switch {
+		case sv.TypedAuthEnforced:
+			if !slices.Contains(sv.OfferedClientIds, c.ID) {
+				continue
+			}
+		case sv.UserSessionIssuerID.Valid && !slices.Contains(c.UserSessionIssuerIds, sv.UserSessionIssuerID.UUID):
 			continue
 		}
 		candidates = append(candidates, c)
@@ -714,12 +739,17 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 	snap.connection = current
 	snap.deepLink = deepLink(current)
 
+	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+
 	// All keys belong to the locked connection. Validate aliases before any
 	// writes: multiple servers can refer to the same issuer and resource.
 	servers := make([]repo.ListEligibleServersRow, 0, len(items))
 	byUpstream := make(map[upstreamKey]confirmation, len(items))
 	for _, item := range items {
-		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID})
+		sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: item.serverID, TypedAuthEnforced: enforced})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
 		}
@@ -847,7 +877,11 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 	if err := lockConnection(ctx, q, authCtx.ActiveOrganizationID, snap.connection.ID, logger); err != nil {
 		return nil, err
 	}
-	sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: id})
+	enforced, err := s.authEnforcement.Enforced(ctx, authCtx.ActiveOrganizationID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+	sv, err := q.GetEligibleServer(ctx, repo.GetEligibleServerParams{OrganizationID: authCtx.ActiveOrganizationID, McpServerID: id, TypedAuthEnforced: enforced})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, oops.E(oops.CodeNotFound, nil, "server not found")
 	}

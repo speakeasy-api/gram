@@ -140,7 +140,11 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		return s.serveConsentHideServer(w, r, endpoint, challengeState, stateID)
 	}
 
-	bound, err := s.listEndpointClients(ctx, endpoint, challengeState)
+	// offered maps each registration the endpoint offers through a typed auth
+	// client to the project it is served in. Actions on those run from that
+	// offer, which authorizes them whether or not the sign-in links the
+	// registration; it is empty where typed auth clients are not enforced.
+	bound, offered, err := s.listEndpointClientsAndRegistrations(ctx, endpoint, challengeState)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list remote session clients").LogError(ctx, logger)
 	}
@@ -212,8 +216,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		if _, err := s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.clientProjectID(*client), endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID); err != nil {
-			return oops.E(oops.CodeUnexpected, err, "disconnect remote session").LogError(ctx, logger)
+		var derr error
+		if projectID, ok := offered[client.ID]; ok {
+			_, derr = s.remoteChallengeMgr.DisconnectAuthClientRemoteSession(ctx, subject, projectID, endpoint.OrganizationID, client.ID)
+		} else {
+			_, derr = s.remoteChallengeMgr.DisconnectRemoteSession(ctx, subject, endpoint.clientProjectID(*client), endpoint.OrganizationID, endpoint.UserSessionIssuerID, client.ID)
+		}
+		if derr != nil {
+			return oops.E(oops.CodeUnexpected, derr, "disconnect remote session").LogError(ctx, logger)
 		}
 		// Latch auto-connect off. Without this the redirect back to the consent
 		// page would see a single disconnected card and immediately bounce the
@@ -241,15 +251,21 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
-			ctx,
-			consentRefreshAttribution(r, endpoint, challengeState),
-			subject,
-			endpoint.clientProjectID(*client),
-			endpoint.OrganizationID,
-			endpoint.UserSessionIssuerID,
-			client.ID,
-		)
+		var result remotesessions.RefreshResult
+		var refreshErr error
+		if projectID, ok := offered[client.ID]; ok {
+			result, refreshErr = s.remoteChallengeMgr.RefreshAuthClientRemoteSession(ctx, consentRefreshAttribution(r, endpoint, challengeState), subject, projectID, endpoint.OrganizationID, client.ID)
+		} else {
+			result, refreshErr = s.remoteChallengeMgr.RefreshRemoteSession(
+				ctx,
+				consentRefreshAttribution(r, endpoint, challengeState),
+				subject,
+				endpoint.clientProjectID(*client),
+				endpoint.OrganizationID,
+				endpoint.UserSessionIssuerID,
+				client.ID,
+			)
+		}
 		if refreshErr != nil {
 			switch {
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
@@ -276,7 +292,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client, offered)
 		// A notice lives on the cards, which saved consent's short page doesn't show.
 		noticeURL := backURL + "&consent=required"
 		switch {
@@ -312,8 +328,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		enabled := r.PostForm.Get("auto_refresh") == "on"
 		for i := range clients {
-			if _, err := s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.clientProjectID(clients[i]), endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled); err != nil {
-				return oops.E(oops.CodeUnexpected, err, "set remote session auto refresh").LogError(ctx, logger)
+			var serr error
+			if projectID, ok := offered[clients[i].ID]; ok {
+				_, serr = s.remoteChallengeMgr.SetAuthClientRemoteSessionAutoRefresh(ctx, subject, projectID, endpoint.OrganizationID, clients[i].ID, enabled)
+			} else {
+				_, serr = s.remoteChallengeMgr.SetRemoteSessionAutoRefresh(ctx, subject, endpoint.clientProjectID(clients[i]), endpoint.OrganizationID, endpoint.UserSessionIssuerID, clients[i].ID, enabled)
+			}
+			if serr != nil {
+				return oops.E(oops.CodeUnexpected, serr, "set remote session auto refresh").LogError(ctx, logger)
 			}
 		}
 		http.Redirect(w, r, backURL, http.StatusSeeOther)
@@ -362,10 +384,11 @@ func (s *Service) buildRemoteConnectURL(
 		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
-	// endpoint.UpstreamResource only when no other bound client can claim
-	// it: under multi-binding it may belong to a different client's
-	// upstream, while a client shared by servers with different upstreams
-	// derives none on its own and would record a grant nothing routes to.
+	// An exact typed offer takes precedence and keeps endpoint.UpstreamResource.
+	// Otherwise, use it only when no other bound client can claim it: under
+	// multi-binding it may belong to a different client's upstream, while a
+	// client shared by servers with different upstreams derives none on its
+	// own and would record a grant nothing routes to.
 	var clientResource string
 	var rerr error
 	claimedByMember := false
@@ -433,6 +456,13 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
+		// An exact typed offer authorizes this registration for this server.
+		// Alternative providers offering the same server are not competing
+		// resource owners; keep the selected server's concrete target. Legacy
+		// issuer bindings and ambiguous gateway members retain their derivation.
+		if !claimedByMember && endpoint.McpServerID.Valid && endpoint.UpstreamResource != "" && typedAuthorization.ServerID == endpoint.McpServerID.UUID {
+			clientResource = endpoint.UpstreamResource
+		}
 	}
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,

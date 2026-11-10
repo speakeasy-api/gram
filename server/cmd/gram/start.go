@@ -1824,7 +1824,7 @@ func newStartCommand() *cli.Command {
 			remoteSessionsCache := cache.NewRedisCacheAdapter(redisClient)
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 			identityCommitter.SetCallbackOrigins(callbackOrigins)
-			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner), remotesessions.WithRefreshConnectionRecorder(connectionRecorder)), productFeatures, protectedResources)
+			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner), remotesessions.WithRefreshConnectionRecorder(connectionRecorder), remotesessions.WithRefreshFeatureFlags(featureFlags)), productFeatures, protectedResources)
 			remoteSessionsService.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(logger, db, encryptionClient, guardianPolicy, remoteChallengeManager))
 			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
 			usersessions.Attach(mux, userSessionsService)
@@ -2121,14 +2121,6 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				approvalService,
 			)
-			// The first approval policy adds the approvals server to the Default
-			// plugin and republishes it, like an endpoint added to a live server.
-			riskService.WithApprovalsServerPublishing(plugins.PublicationRequests{Enabled: publicationEmit}, func(ctx context.Context, projectID uuid.UUID, userID string, pluginCreated bool) {
-				if pluginsGitHub == nil || temporalEnv == nil {
-					return
-				}
-				background.TriggerPluginPublish(ctx, temporalEnv, logger, projectID, userID, pluginCreated)
-			})
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 
