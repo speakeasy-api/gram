@@ -533,11 +533,13 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					require.Equal(t, tc.message, body)
 					require.Equal(t, tc.fixable, errors.Is(err, codemode.ErrConsentRequired))
 				}
+				callReferenceLine := ""
 				ran := false
 				mcp.SetTestCodeExecutor(g.ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
 					ran = true
 					_, callErr := host.Call(runCtx, "source--tool_000", json.RawMessage(`{}`))
 					requireRefusal(callErr)
+					_, callReferenceLine = contextvalues.SplitConnectionReference(callErr.Error())
 					_, describeErr := host.Describe(runCtx, "source--tool_000")
 					requireRefusal(describeErr)
 					search, searchErr := host.Search(runCtx, codemode.SearchArgs{Query: "", Server: "source", Limit: 10})
@@ -568,14 +570,15 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})
 				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 				require.True(t, ran, w.Body.String())
-				requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
+				row := requireSetupChangedRow(t, rec, g.serverID, tc.fixable)
+				require.Equal(t, contextvalues.ConnectionReferenceMarker+row.AttemptID.String(), callReferenceLine)
 			})
 		}
 	}
 }
 
 // requireSetupChangedRow finds the one refused call recorded for a stale choice.
-func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) {
+func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recording, serverID uuid.UUID, fixable bool) mcpconnectionattempts.Row {
 	t.Helper()
 	var rows []mcpconnectionattempts.Row
 	for _, row := range rec.Rows() {
@@ -591,6 +594,7 @@ func requireSetupChangedRow(t *testing.T, rec *mcpconnectionattemptstest.Recordi
 	}
 	require.Equal(t, want.String(), rows[0].Reason)
 	require.Equal(t, string(who), rows[0].WhoFixes)
+	return rows[0]
 }
 
 // An approved catalog refuses the call before dialing, and that refusal is recorded.
