@@ -294,7 +294,7 @@ INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
    @user_session_issuer_id::uuid);
 
 -- sort_order is the order agents see members in list_servers.
--- Gateways hold only remote and tunneled servers, never hosted ones.
+-- The demo gateways hold remote servers. Gateways never serve hosted ones.
 -- name: ServersInsertMetaMCPServerMembers :exec
 INSERT INTO meta_mcp_server_members (id, project_id, meta_mcp_server_id,
                                      mcp_server_id, sort_order) VALUES

@@ -211,13 +211,16 @@ func (s *seeder) seedServers(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("bind demo linear remote session client: %w", err)
 	}
-	// The gateway serves Linear as a member, so its issuer binds Linear's
-	// client too, or no gateway sign-in could choose a client for Linear.
-	if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
-		RemoteSessionClientID: s.det("remote-identity-client-linear"),
-		UserSessionIssuerID:   s.det("issuer-gateway"),
-	}); err != nil {
-		return fmt.Errorf("bind demo linear remote session client to the gateway: %w", err)
+	// Both gateways serve Linear as a member, so each gateway's issuer binds
+	// Linear's client too, or no gateway sign-in could choose a client for
+	// Linear.
+	for _, gateway := range []string{"issuer-gateway", "issuer-code-gateway"} {
+		if err := s.q.ServersInsertRemoteSessionClientIssuerBinding(ctx, repo.ServersInsertRemoteSessionClientIssuerBindingParams{
+			RemoteSessionClientID: s.det("remote-identity-client-linear"),
+			UserSessionIssuerID:   s.det(gateway),
+		}); err != nil {
+			return fmt.Errorf("bind demo linear remote session client to %s: %w", gateway, err)
+		}
 	}
 	if err := s.q.ServersStampRemoteSessionIssuer(ctx, repo.ServersStampRemoteSessionIssuerParams{
 		RemoteSessionIssuerID: s.det("remote-identity-provider-linear"),

@@ -1481,7 +1481,7 @@ type ServersInsertMetaMCPServerMembersParams struct {
 }
 
 // sort_order is the order agents see members in list_servers.
-// Gateways hold only remote and tunneled servers, never hosted ones.
+// The demo gateways hold remote servers. Gateways never serve hosted ones.
 func (q *Queries) ServersInsertMetaMCPServerMembers(ctx context.Context, arg ServersInsertMetaMCPServerMembersParams) error {
 	_, err := q.db.Exec(ctx, serversInsertMetaMCPServerMembers,
 		arg.LinearMemberID,
