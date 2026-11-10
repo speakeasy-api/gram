@@ -2569,13 +2569,17 @@ export function CredentialsWizard({
             if (!open) cancelPicker();
           }}
         >
-          <Dialog.Content className="max-h-[85vh] max-w-3xl overflow-y-auto">
+          {/* Only the picker scrolls: Cancel and Continue stay in view at any
+              window height. */}
+          <Dialog.Content className="flex max-h-[85vh] max-w-3xl flex-col overflow-hidden">
             <Dialog.Title className="sr-only">Add MCP servers</Dialog.Title>
             <Dialog.Description className="sr-only">
               Pick the MCP servers this agent calls. Continue saves them.
             </Dialog.Description>
-            {body(SERVERS_STEP)}
-            <Dialog.Footer className="items-center gap-3 sm:justify-between">
+            <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+              {body(SERVERS_STEP)}
+            </div>
+            <Dialog.Footer className="shrink-0 items-center gap-3 sm:justify-between">
               <Text small muted>
                 {blocked ??
                   (allServers
