@@ -286,6 +286,11 @@ func splitLogRelayMessages(messages []logRelayMessage) (telemetry, connectionLog
 	return telemetry, connectionLogs, excluded, belowSeverity
 }
 
+// isConnectionLogRecord reports a record only the connection logs route carries, until AIM-960 adds them to the feed.
+func isConnectionLogRecord(record *otelv1.LogRecord) bool {
+	return logOriginalScopeName(record) == dialect.ConnectionLogScope
+}
+
 // logOriginalScopeName is the producer's scope as the transform preserved it.
 func logOriginalScopeName(record *otelv1.LogRecord) string {
 	for _, kv := range record.GetAttributes() {

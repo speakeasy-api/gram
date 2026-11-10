@@ -301,14 +301,14 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	stopPubSub := shutdown.funcs[pubsubShutdown]
 	shutdown.funcs[pubsubShutdown] = func(ctx context.Context) error {
 		var errs []error
+		if shutdownConnections != nil {
+			errs = append(errs, shutdownConnections(ctx))
+		}
 		if drainRisk != nil {
 			errs = append(errs, drainRisk(ctx))
 		}
 		if enforcementShutdown != nil {
 			errs = append(errs, enforcementShutdown(ctx))
-		}
-		if shutdownConnections != nil {
-			errs = append(errs, shutdownConnections(ctx))
 		}
 		return errors.Join(append(errs, stopPublishers(ctx), stopPubSub(ctx))...)
 	}

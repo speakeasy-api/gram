@@ -797,6 +797,7 @@ const (
 	DirectoryMembershipsOpenedKey   = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey   = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                      = attribute.Key("gram.outcome")
+
 	// ExtMcpConnection keys are customer-facing, on exported MCP connection logs. Recorder metrics use the gram.connection keys.
 	ExtMcpConnectionAttemptIDKey        = attribute.Key("speakeasy.mcp_connection.attempt_id")
 	ExtMcpConnectionServerIDKey         = attribute.Key("speakeasy.mcp_connection.server_id")

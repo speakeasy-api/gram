@@ -157,10 +157,10 @@ func (s *Service) mcpConnectionLogsAvailable(ctx context.Context, logger *slog.L
 func (s *Service) requireDataSourceAvailable(ctx context.Context, logger *slog.Logger, organizationID, source string) error {
 	available, err := DataSourceAvailable(ctx, s.flags, organizationID, source)
 	if err != nil {
-		logger.WarnContext(ctx, "check data source availability", attr.SlogError(err))
+		return oops.E(oops.CodeUnavailable, err, "could not check whether this data source is available").LogWarn(ctx, logger)
 	}
 	if !available {
-		return oops.E(oops.CodeInvalid, err, "this data source is not available for this organization")
+		return oops.E(oops.CodeInvalid, nil, "this data source is not available for this organization")
 	}
 	return nil
 }
@@ -615,6 +615,8 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 		return nil, oops.E(oops.CodeInvalid, err, "invalid data_source")
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogProjectID(authCtx.ProjectID.String()))
+	// Checked before the row lock because the flag evaluation can call out.
+	sourceAvailability := s.requireDataSourceAvailable(ctx, logger, authCtx.ActiveOrganizationID, source)
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "begin data export route update").LogError(ctx, logger)
@@ -633,10 +635,8 @@ func (s *Service) UpdateRoute(ctx context.Context, payload *gen.UpdateRoutePaylo
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock data export route").LogError(ctx, logger)
 	}
-	if before.DataSource != source {
-		if err := s.requireDataSourceAvailable(ctx, logger, authCtx.ActiveOrganizationID, source); err != nil {
-			return nil, err
-		}
+	if before.DataSource != source && sourceAvailability != nil {
+		return nil, sourceAvailability
 	}
 
 	destinationID, err := s.validateRouteDestination(ctx, queries, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.OtelDestinationID, payload.Enabled)

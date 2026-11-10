@@ -366,7 +366,7 @@ func TestRouteAllowsConnectionLogsWithTheFlag(t *testing.T) {
 	require.True(t, *listed.McpConnectionLogsAvailable)
 }
 
-func TestRouteExistingConnectionLogsKeepsWorkingWhenTheFlagTurnsOff(t *testing.T) {
+func TestRouteExistingConnectionLogsStaysEditableWhenTheFlagTurnsOff(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)

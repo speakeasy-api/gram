@@ -103,7 +103,7 @@ func (r *PostgresReader) CreateDataExport(ctx context.Context, principal Princip
 	}
 	available, err := dataexports.DataSourceAvailable(ctx, r.dataExportMutations.flags, principal.OrganizationID, dataSource)
 	if err != nil {
-		return CreateDataExportOutput{}, fmt.Errorf("%w: %w", ErrDataExportSourceUnavailable, err)
+		return CreateDataExportOutput{}, fmt.Errorf("evaluate data source availability: %w", err)
 	}
 	if !available {
 		return CreateDataExportOutput{}, ErrDataExportSourceUnavailable
