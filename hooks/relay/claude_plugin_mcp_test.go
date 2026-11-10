@@ -170,6 +170,7 @@ func TestResolveClaudePluginMCPPrefersProjectInstall(t *testing.T) {
 // runner with `claude mcp list` unavailable, the case in which agenthooks
 // leaves plugin MCP calls without transport.
 func TestRunnerSendsClaudePluginMCPURL(t *testing.T) {
+	setSpoolStateHome(t)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("TMPDIR", t.TempDir())
 	t.Setenv("XDG_CACHE_HOME", t.TempDir())

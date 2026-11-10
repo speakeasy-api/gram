@@ -402,9 +402,16 @@ func parseClaudePluginMCPConfig(data []byte) map[string]claudePluginMCPServer {
 }
 
 // readClaudePluginFile reads a regular file of at most
-// maxClaudePluginConfigBytes.
+// maxClaudePluginConfigBytes. A project .mcp.json is repository-controlled, so
+// a FIFO or device there must not block the hook: the path is stat'ed before
+// the open, the open itself cannot block, and the descriptor is checked again
+// in case the path was swapped in between.
 func readClaudePluginFile(path string) ([]byte, bool) {
-	file, err := os.Open(path) // #nosec G304 -- Claude Code config paths under the user's own config and plugin cache.
+	pre, err := os.Stat(path)
+	if err != nil || !pre.Mode().IsRegular() {
+		return nil, false
+	}
+	file, err := os.OpenFile(path, os.O_RDONLY|piNonBlockingOpenFlag, 0) // #nosec G304 -- Claude Code config paths under the user's own config and plugin cache.
 	if err != nil {
 		return nil, false
 	}
