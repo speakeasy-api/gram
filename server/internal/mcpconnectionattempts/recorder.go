@@ -123,7 +123,7 @@ func Grant(grantType string) Option {
 }
 
 // Unstored marks a row whose caller found, through Stores, that it won't be stored. The
-// steps metric then leaves it out, as it would any row the writer drops for logs off.
+// steps metric counts it only if the writer's logs check stores it after all.
 func Unstored() Option {
 	return Option{apply: func(row *Row) { row.unstored = true }}
 }
@@ -234,7 +234,8 @@ type Row struct {
 	// failedElsewhere is for the export only and is never stored.
 	failedElsewhere bool
 
-	// unstored marks a row its caller knows won't be stored, so the steps metric skips it.
+	// unstored marks a row its caller expects won't be stored, so the steps metric counts it
+	// only if the writer's own logs check stores it after all.
 	unstored bool
 }
 
@@ -595,9 +596,14 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		}
 		row.Repeats = decision.repeats
 	}
-	r.countStep(ctx, row)
+	if !row.unstored {
+		r.countStep(ctx, row)
+	}
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(r.writerCtx, row.OrganizationID); reason == "" {
+			if row.unstored {
+				r.countStep(ctx, row)
+			}
 			r.stampClient(&row)
 			r.capture(row)
 			return true
@@ -843,6 +849,10 @@ func (r *Recorder) run() {
 				r.drop(context.Background(), reason, events(row), nil)
 				return
 			}
+			// The caller's Stores answer was a snapshot; this check decides.
+			if row.unstored {
+				r.countStep(context.Background(), row)
+			}
 			r.stampClient(&row)
 			batch = append(batch, row)
 		})
@@ -856,7 +866,9 @@ func (r *Recorder) run() {
 	addPending := func(rows []Row) {
 		for _, row := range rows {
 			r.unfinished.Add(1)
-			r.countStep(context.Background(), row)
+			if !row.unstored {
+				r.countStep(context.Background(), row)
+			}
 			add(row)
 		}
 	}
@@ -946,7 +958,7 @@ func (r *Recorder) insert(rows []Row) bool {
 }
 
 func (r *Recorder) countStep(ctx context.Context, row Row) {
-	if r.steps == nil || row.unstored {
+	if r.steps == nil {
 		return
 	}
 	r.steps.Add(ctx, 1, metric.WithAttributes(

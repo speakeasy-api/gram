@@ -378,9 +378,9 @@ const sdkTransportRejected = "rejected by transport"
 
 // memberDeadlineRanOut reports that the member call's own deadline ended it with nothing on
 // our side to blame: no tunnel gateway status and no forwarding setup failure. A slow member
-// is the provider's, tunneled or not.
+// is the provider's, tunneled or not. A transport timeout under a live ctx is not the member's.
 func memberDeadlineRanOut(ctx context.Context, tunnelError string, err, exchangeErr error) bool {
-	if !errors.Is(ctx.Err(), context.DeadlineExceeded) && !errors.Is(err, context.DeadlineExceeded) {
+	if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 		return false
 	}
 	if _, gateway := tunnelrouting.FailureHappened(tunnelError, err, exchangeErr); gateway {
