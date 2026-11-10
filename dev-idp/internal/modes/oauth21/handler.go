@@ -36,6 +36,7 @@ import (
 	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -99,6 +100,10 @@ type Handler struct {
 	// authorize leg to learn a client's redirect_uris, and on the mint leg to
 	// learn the keys a CIMD client authenticates with.
 	cimd *cimd.Resolver
+	// nonces holds each pending auth code's OIDC nonce until the code is
+	// redeemed. Codes live minutes and a restart voids them anyway, so memory
+	// is enough and the stored schema stays unchanged.
+	nonces sync.Map // auth code -> nonce
 }
 
 func NewHandler(cfg Config, ks *keystore.Keystore, logger *slog.Logger, tracerProvider trace.TracerProvider, db *sql.DB) *Handler {
@@ -312,6 +317,9 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 	scope := q.Get("scope")
 	state := q.Get("state")
 	codeChallenge := q.Get("code_challenge")
+	// An OIDC client's nonce comes back in the id_token, binding it to this
+	// sign-in.
+	nonce := q.Get("nonce")
 	codeChallengeMethod := q.Get("code_challenge_method")
 
 	if responseType != "code" {
@@ -416,6 +424,10 @@ func (h *Handler) handleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if nonce != "" {
+		h.nonces.Store(code, nonce)
+	}
+
 	rq := target.Query()
 	rq.Set("code", code)
 	if state != "" {
@@ -510,7 +522,11 @@ func (h *Handler) handleAuthorizationCodeGrant(ctx context.Context, w http.Respo
 	}
 
 	scope := pgTextOrEmpty(stored.Scope)
-	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope, "")
+	nonce := ""
+	if v, ok := h.nonces.LoadAndDelete(code); ok {
+		nonce, _ = v.(string)
+	}
+	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, scope, "", nonce)
 	if err != nil {
 		h.logger.ErrorContext(ctx, "issue token set", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
@@ -563,7 +579,7 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 		}
 	}
 
-	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, pgTextOrEmpty(stored.Scope), reuseRefresh)
+	tokens, err := h.issueTokenSet(ctx, queries, stored.UserID, stored.ClientID, pgTextOrEmpty(stored.Scope), reuseRefresh, "")
 	if err != nil {
 		h.logger.ErrorContext(ctx, "issue token set on refresh", slog.Any("error", err))
 		oauthError(w, http.StatusInternalServerError, "server_error", "failed to issue tokens")
@@ -578,8 +594,9 @@ func (h *Handler) handleRefreshTokenGrant(ctx context.Context, w http.ResponseWr
 //
 // reuseRefresh, when non-empty, is handed back verbatim instead of minting a
 // new refresh token -- the non-rotating path, where the caller's existing
-// token stays live.
-func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID, scope, reuseRefresh string) (tokenResponse, error) {
+// token stays live. nonce, when non-empty, is the authorization request's
+// nonce and lands in the id_token.
+func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID, scope, reuseRefresh, nonce string) (tokenResponse, error) {
 	access := randomHex(32)
 	refresh := reuseRefresh
 
@@ -617,7 +634,7 @@ func (h *Handler) issueTokenSet(ctx context.Context, queries *repo.Queries, user
 	}
 
 	if scopeContains(scope, "openid") {
-		idToken, err := h.signIDToken(ctx, queries, userID, clientID)
+		idToken, err := h.signIDToken(ctx, queries, userID, clientID, nonce)
 		if err != nil {
 			return tokenResponse{}, err
 		}
@@ -645,10 +662,11 @@ type idTokenClaims struct {
 	Email   string `json:"email,omitempty"`
 	Name    string `json:"name,omitempty"`
 	Picture string `json:"picture,omitempty"`
+	Nonce   string `json:"nonce,omitempty"`
 	jwt.RegisteredClaims
 }
 
-func (h *Handler) signIDToken(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID string) (string, error) {
+func (h *Handler) signIDToken(ctx context.Context, queries *repo.Queries, userID uuid.UUID, clientID, nonce string) (string, error) {
 	user, err := queries.GetUser(ctx, userID)
 	if err != nil {
 		return "", fmt.Errorf("look up user for id_token: %w", err)
@@ -659,6 +677,7 @@ func (h *Handler) signIDToken(ctx context.Context, queries *repo.Queries, userID
 		Email:   user.Email,
 		Name:    user.DisplayName,
 		Picture: pgTextOrEmpty(user.PhotoUrl),
+		Nonce:   nonce,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ID:        uuid.New().String(),
 			Issuer:    h.issuer(),

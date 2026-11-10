@@ -429,3 +429,18 @@ UPDATE mcp_auth_client_emas
 SET resource = @resource::text, updated_at = clock_timestamp()
 WHERE remote_session_client_id = @remote_session_client_id::uuid
   AND organization_id = @organization_id::text AND deleted IS FALSE;
+
+-- Provisions the developer in the local org's directory, linked to their
+-- user, the way directory sync would. Federated sign-in (the Enterprise
+-- Sign-In server) admits only directory-provisioned people.
+-- name: LocalProvisionDeveloperDirectoryUser :exec
+INSERT INTO directory_users
+  (organization_id, user_id, workos_directory_user_id, email, first_name,
+   workos_created_at, workos_updated_at)
+VALUES (@organization_id::text, @user_id::text, 'devidp_dir_' || @user_id::text,
+        @email::text, @display_name::text, clock_timestamp(), clock_timestamp())
+ON CONFLICT (workos_directory_user_id) DO UPDATE
+SET organization_id = EXCLUDED.organization_id, user_id = EXCLUDED.user_id,
+    email = EXCLUDED.email, first_name = EXCLUDED.first_name,
+    deleted_at = NULL, workos_deleted_at = NULL,
+    workos_updated_at = clock_timestamp(), updated_at = clock_timestamp();

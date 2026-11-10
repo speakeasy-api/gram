@@ -143,7 +143,7 @@ func (h *dbHandler) seedAssignment(t *testing.T, app repo.EmaApp, user repo.User
 // grant would, so mint tests can present a real subject_token.
 func (h *dbHandler) signIDToken(t *testing.T, user repo.User) string {
 	t.Helper()
-	token, err := h.Handler.signIDToken(t.Context(), h.queries, user.ID, "test-login-client")
+	token, err := h.Handler.signIDToken(t.Context(), h.queries, user.ID, "test-login-client", "")
 	require.NoError(t, err, "sign id_token")
 	return token
 }
