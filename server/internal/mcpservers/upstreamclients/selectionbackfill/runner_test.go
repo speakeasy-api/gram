@@ -756,7 +756,8 @@ func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
 
 		settled, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
 		require.NoError(t, err)
-		require.Equal(t, map[Outcome]int{OutcomeSelected: 1}, settled.Pairs)
+		require.Equal(t, 1, settled.Pairs[OutcomeSelected])
+		require.Len(t, settled.Pairs, 1, "no other outcome")
 		require.Equal(t, 1, settled.FullyCovered)
 	})
 
@@ -771,13 +772,15 @@ func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
 
 		predicted, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
 		require.NoError(t, err)
-		require.Equal(t, map[Outcome]int{OutcomeClient: 1}, predicted.Pairs)
+		require.Equal(t, 1, predicted.Pairs[OutcomeClient])
+		require.Len(t, predicted.Pairs, 1, "no other outcome")
 
 		_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
 		require.NoError(t, err)
 		settled, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
 		require.NoError(t, err)
-		require.Equal(t, map[Outcome]int{OutcomeSelected: 1}, settled.Pairs)
+		require.Equal(t, 1, settled.Pairs[OutcomeSelected])
+		require.Len(t, settled.Pairs, 1, "no other outcome")
 		require.Empty(t, settled.Gaps)
 	})
 
@@ -843,7 +846,8 @@ func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
 		require.NoError(t, err)
 		rolledBack, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
 		require.NoError(t, err)
-		require.Equal(t, map[Outcome]int{OutcomeClient: 1}, rolledBack.Pairs, "the association makes the no-auth choice stale")
+		require.Equal(t, 1, rolledBack.Pairs[OutcomeClient], "the association makes the no-auth choice stale")
+		require.Len(t, rolledBack.Pairs, 1, "no other outcome")
 		_, err = Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
 		require.NoError(t, err)
 		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
