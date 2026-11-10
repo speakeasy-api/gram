@@ -31,6 +31,7 @@ func main() {
 	keyFile := flag.String("ssl-key-file", os.Getenv("GRAM_SSL_KEY_FILE"), "TLS key file")
 	ttl := flag.Duration("access-token-ttl", durationEnv("GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL", time.Hour), "access token lifetime")
 	suggested := flag.String("suggested-emails", envOr("GRAM_MCP_FIXTURE_SUGGESTED_EMAILS", "alex@fixture.test,sam@fixture.test"), "comma-separated emails offered on the sign-in page")
+	devIDPURL := flag.String("devidp-url", os.Getenv("GRAM_MCP_FIXTURE_DEVIDP_URL"), "dev-idp external URL; serves the Enterprise Managed Authorization endpoint (empty: not served)")
 	tunnelGateway := flag.String("tunnel-gateway-url", os.Getenv("GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL"), "local tunnel gateway to serve the open endpoint through (empty: no tunnel)")
 	flag.Parse()
 
@@ -53,6 +54,7 @@ func main() {
 		SuggestedEmails: splitList(*suggested),
 		HTTPClient:      &http.Client{Timeout: 10 * time.Second},
 		Logger:          logger,
+		DevIDPURL:       *devIDPURL,
 	})
 	srv := &http.Server{
 		Addr:              *address,

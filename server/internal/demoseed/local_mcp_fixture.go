@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/tunnel/wire"
 )
@@ -36,6 +37,14 @@ type LocalMCPFixtureOptions struct {
 	AccessTokenTTL time.Duration
 	// Encryption encrypts the minted tokens the way Speakeasy stores them.
 	Encryption *encryption.Client
+	// DevIDPURL is the dev-idp's external URL (GRAM_DEVIDP_EXTERNAL_URL). With
+	// DevIDPClientID it makes the Enterprise Sign-In (ID-JAG) Server work
+	// (local_ema.go); empty leaves that server display-only.
+	DevIDPURL string
+	// DevIDPClientID is the dev-idp's static login client (GRAM_IDP_CLIENT_ID).
+	DevIDPClientID string
+	// HTTPClient reaches the dev-idp's management API.
+	HTTPClient *guardian.HTTPClient
 }
 
 // Fixed values for the servers wired to the fixture.
@@ -45,7 +54,7 @@ const (
 	// fixtureOwnTokenHeader is the request header a Pass-Through Token Server
 	// caller puts their own upstream token in; Speakeasy forwards it as
 	// Authorization.
-	fixtureOwnTokenHeader = "X-Upstream-Token"
+	fixtureOwnTokenHeader = "X-Upstream-Token" // #nosec G101 -- a header name, not a credential
 	fixtureAPIEnvVar      = "ACME_SERVER_URL"
 	demoOAuthResource     = "https://mcp-fixture.example.com/mcp/oauth"
 )
@@ -61,7 +70,9 @@ const (
 //     every live seeded sign-in holds real fixture tokens;
 //   - the Shared or Own Token Server: its URL points at the fixture's
 //     shared-token endpoint and its shared credential carries the checked-in
-//     shared token.
+//     shared token;
+//   - the Enterprise Sign-In (ID-JAG) Server, through the dev-idp
+//     (local_ema.go).
 //
 // The shared seed already gives these servers their names. The public demo
 // org keeps the placeholder host: prod cannot reach a developer's localhost.
@@ -267,6 +278,13 @@ func wireLocalMCPFixture(ctx context.Context, logger *slog.Logger, tx pgx.Tx, op
 		ID: s.tunnelSourceID(), ProjectID: proj,
 	})
 	if err := expect("set the tunnel key", n, err); err != nil {
+		return err
+	}
+
+	// 8. The Enterprise Sign-In (ID-JAG) Server: signed in through the
+	// dev-idp, it reaches the fixture's EMA endpoint with a token Speakeasy
+	// obtains by exchanging that identity for an ID-JAG.
+	if err := wireLocalEMA(ctx, logger, tx, opts, base); err != nil {
 		return err
 	}
 

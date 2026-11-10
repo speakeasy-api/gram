@@ -107,6 +107,230 @@ func (q *Queries) LocalAttachMCPAppToToolset(ctx context.Context, arg LocalAttac
 	return err
 }
 
+const localEMAPointAuthClient = `-- name: LocalEMAPointAuthClient :execrows
+UPDATE mcp_auth_client_emas
+SET resource = $1::text, updated_at = clock_timestamp()
+WHERE remote_session_client_id = $2::uuid
+  AND organization_id = $3::text AND deleted IS FALSE
+`
+
+type LocalEMAPointAuthClientParams struct {
+	Resource              string
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        string
+}
+
+func (q *Queries) LocalEMAPointAuthClient(ctx context.Context, arg LocalEMAPointAuthClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointAuthClient, arg.Resource, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointBinding = `-- name: LocalEMAPointBinding :execrows
+UPDATE remote_session_ema_bindings
+SET resource = $1::text, updated_at = clock_timestamp()
+WHERE id = $2::uuid AND project_id = $3::uuid
+`
+
+type LocalEMAPointBindingParams struct {
+	Resource  string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) LocalEMAPointBinding(ctx context.Context, arg LocalEMAPointBindingParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointBinding, arg.Resource, arg.ID, arg.ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointIdentityProvider = `-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    authorization_endpoint = $1::text || '/authorize',
+    token_endpoint = $1::text || '/token',
+    userinfo_endpoint = $1::text || '/userinfo',
+    revocation_endpoint = $1::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = $1::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = $2::text,
+    updated_at = clock_timestamp()
+WHERE id = $3::uuid AND organization_id = $4::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderParams struct {
+	Issuer         string
+	Name           string
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+// identity provider is the dev-idp's OAuth 2.1 server.
+func (q *Queries) LocalEMAPointIdentityProvider(ctx context.Context, arg LocalEMAPointIdentityProviderParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProvider,
+		arg.Issuer,
+		arg.Name,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointIdentityProviderClient = `-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text,
+    client_secret_encrypted = $2::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = $3::text,
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND organization_id = $5::text AND project_id IS NULL AND deleted IS FALSE
+`
+
+type LocalEMAPointIdentityProviderClientParams struct {
+	ClientID              string
+	ClientSecretEncrypted string
+	CallbackBaseUrl       string
+	ID                    uuid.UUID
+	OrganizationID        string
+}
+
+// Speakeasy's registration at the dev-idp: its static login client, with the
+// checked-in local secret the dev-idp EMA app also holds.
+func (q *Queries) LocalEMAPointIdentityProviderClient(ctx context.Context, arg LocalEMAPointIdentityProviderClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointIdentityProviderClient,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.CallbackBaseUrl,
+		arg.ID,
+		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointProtectedResource = `-- name: LocalEMAPointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = $1::text,
+    metadata_url = $2::text,
+    authorization_servers = ARRAY[$3::text],
+    scopes_supported = $4::text[],
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = $5::uuid AND project_id = $6::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointProtectedResourceParams struct {
+	Resource    string
+	MetadataUrl string
+	Issuer      string
+	Scopes      []string
+	ID          uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+// The protected resource, its binding and the typed auth client move from the
+// shared seed's placeholder to the running fixture's /mcp/ema endpoint.
+func (q *Queries) LocalEMAPointProtectedResource(ctx context.Context, arg LocalEMAPointProtectedResourceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointProtectedResource,
+		arg.Resource,
+		arg.MetadataUrl,
+		arg.Issuer,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointVendorClient = `-- name: LocalEMAPointVendorClient :execrows
+UPDATE remote_session_clients
+SET client_id = $1::text,
+    client_secret_encrypted = $2::text,
+    scope = $3::text[],
+    updated_at = clock_timestamp()
+WHERE id = $4::uuid AND project_id = $5::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointVendorClientParams struct {
+	ClientID              string
+	ClientSecretEncrypted string
+	Scopes                []string
+	ID                    uuid.UUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) LocalEMAPointVendorClient(ctx context.Context, arg LocalEMAPointVendorClientParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointVendorClient,
+		arg.ClientID,
+		arg.ClientSecretEncrypted,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const localEMAPointVendorIssuer = `-- name: LocalEMAPointVendorIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = $1::text,
+    token_endpoint = $1::text || '/token',
+    introspection_endpoint = $1::text || '/introspect',
+    jwks_uri = $1::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = $2::text[],
+    updated_at = clock_timestamp()
+WHERE id = $3::uuid AND project_id = $4::uuid AND deleted IS FALSE
+`
+
+type LocalEMAPointVendorIssuerParams struct {
+	Issuer    string
+	Scopes    []string
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// The server's authorization server: the dev-idp resource authorization
+// server for the fixture's /mcp/ema endpoint.
+func (q *Queries) LocalEMAPointVendorIssuer(ctx context.Context, arg LocalEMAPointVendorIssuerParams) (int64, error) {
+	result, err := q.db.Exec(ctx, localEMAPointVendorIssuer,
+		arg.Issuer,
+		arg.Scopes,
+		arg.ID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const localEnableCodeModeFeature = `-- name: LocalEnableCodeModeFeature :exec
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1::text, 'code_mode')

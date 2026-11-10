@@ -878,7 +878,7 @@ WHERE project_id = $1::uuid AND deleted IS FALSE
 `
 
 // The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
-// Pro, and the two EMA services' authorization servers.
+// Pro, and the Enterprise Sign-In (ID-JAG) Server's authorization server.
 func (q *Queries) PostflightIDProjectRemoteSessionIssuers(ctx context.Context, projectID uuid.UUID) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDProjectRemoteSessionIssuers, projectID)
 	var count int64
@@ -1411,7 +1411,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 32
+WHERE (SELECT count(*) FROM live) = 29
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY($1::uuid[])
@@ -1471,7 +1471,7 @@ type PostflightIDUpstreamClientChoicesParams struct {
 }
 
 // Check both the total and the expected credential/server/client tuples so
-// thirty-two misassigned choices cannot satisfy postflight.
+// twenty-nine misassigned choices cannot satisfy postflight.
 func (q *Queries) PostflightIDUpstreamClientChoices(ctx context.Context, arg PostflightIDUpstreamClientChoicesParams) (int64, error) {
 	row := q.db.QueryRow(ctx, postflightIDUpstreamClientChoices,
 		arg.LinearSessionIds,
@@ -1581,7 +1581,7 @@ type PostflightIDWorkforceInboundEMATrustParams struct {
 	EmaProvider     uuid.UUID
 }
 
-// EMA: two ready bindings, no cached credentials, and one saved provider
+// EMA: one ready binding, no cached credentials, and no saved provider
 // order. The workforce issuer accepts ID-JAGs from the fictional provider
 // without federating interactive sign-in through it.
 func (q *Queries) PostflightIDWorkforceInboundEMATrust(ctx context.Context, arg PostflightIDWorkforceInboundEMATrustParams) (int64, error) {

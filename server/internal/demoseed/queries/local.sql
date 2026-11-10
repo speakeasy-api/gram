@@ -348,3 +348,84 @@ WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
 -- name: LocalFixtureSetTunnelKey :execrows
 UPDATE tunneled_mcp_servers SET key_hash = @key_hash::text, key_prefix = @key_prefix::text, status = 'active', updated_at = clock_timestamp()
 WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The Enterprise Sign-In (ID-JAG) Server (local_ema.go). Locally the company
+-- identity provider is the dev-idp's OAuth 2.1 server.
+-- name: LocalEMAPointIdentityProvider :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    authorization_endpoint = @issuer::text || '/authorize',
+    token_endpoint = @issuer::text || '/token',
+    userinfo_endpoint = @issuer::text || '/userinfo',
+    revocation_endpoint = @issuer::text || '/revoke',
+    registration_endpoint = NULL,
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = ARRAY['openid', 'email', 'profile'],
+    grant_types_supported = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    response_types_supported = ARRAY['code'],
+    token_endpoint_auth_methods_supported = ARRAY['client_secret_post'],
+    code_challenge_methods_supported = ARRAY['S256'],
+    id_token_signing_alg_values_supported = ARRAY['RS256'],
+    authorization_response_iss_parameter_supported = TRUE,
+    oidc = TRUE,
+    name = @name::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- Speakeasy's registration at the dev-idp: its static login client, with the
+-- checked-in local secret the dev-idp EMA app also holds.
+-- name: LocalEMAPointIdentityProviderClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    token_endpoint_auth_method = 'client_secret_post',
+    grant_types = ARRAY['authorization_code', 'refresh_token', 'urn:ietf:params:oauth:grant-type:token-exchange'],
+    scope = ARRAY['openid', 'email', 'profile'],
+    callback_base_url = @callback_base_url::text,
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND organization_id = @organization_id::text AND project_id IS NULL AND deleted IS FALSE;
+
+-- The server's authorization server: the dev-idp resource authorization
+-- server for the fixture's /mcp/ema endpoint.
+-- name: LocalEMAPointVendorIssuer :execrows
+UPDATE remote_session_issuers
+SET issuer = @issuer::text,
+    token_endpoint = @issuer::text || '/token',
+    introspection_endpoint = @issuer::text || '/introspect',
+    jwks_uri = @issuer::text || '/.well-known/jwks.json',
+    jwks = NULL, jwks_fetched_at = NULL, jwks_cache_expires_at = NULL, jwks_etag = NULL,
+    scopes_supported = @scopes::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalEMAPointVendorClient :execrows
+UPDATE remote_session_clients
+SET client_id = @client_id::text,
+    client_secret_encrypted = @client_secret_encrypted::text,
+    scope = @scopes::text[],
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- The protected resource, its binding and the typed auth client move from the
+-- shared seed's placeholder to the running fixture's /mcp/ema endpoint.
+-- name: LocalEMAPointProtectedResource :execrows
+UPDATE remote_protected_resources
+SET resource_identifier = @resource::text,
+    metadata_url = @metadata_url::text,
+    authorization_servers = ARRAY[@issuer::text],
+    scopes_supported = @scopes::text[],
+    metadata_fetched_at = clock_timestamp(),
+    updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- name: LocalEMAPointBinding :execrows
+UPDATE remote_session_ema_bindings
+SET resource = @resource::text, updated_at = clock_timestamp()
+WHERE id = @id::uuid AND project_id = @project_id::uuid;
+
+-- name: LocalEMAPointAuthClient :execrows
+UPDATE mcp_auth_client_emas
+SET resource = @resource::text, updated_at = clock_timestamp()
+WHERE remote_session_client_id = @remote_session_client_id::uuid
+  AND organization_id = @organization_id::text AND deleted IS FALSE;

@@ -24,8 +24,9 @@ func TestLocalServerClientAssociations(t *testing.T) {
 
 // Every seeded proxied server whose issuer binds an upstream client carries
 // the association it is meant to use, so the backfill has nothing to decide.
-// GitHub and DeepWiki share the workforce issuer with the EMA services but
-// have no evidence for any of their clients, so they use none. Notion has its
+// GitHub and DeepWiki share the workforce issuer but have no evidence for
+// any of its clients, so they use none. The Enterprise Sign-In (ID-JAG)
+// Server has its own issuer and uses its authorization server's client. Notion has its
 // own issuer and no seeded client. DeepWiki is public and needs no sign-in.
 func testServerClientAssociations(t *testing.T, spec Spec) {
 	t.Helper()
@@ -36,9 +37,8 @@ func testServerClientAssociations(t *testing.T, spec Spec) {
 	github := det("mcpserver-github")
 	deepwiki := det("mcpserver-deepwiki")
 	want := map[uuid.UUID][]uuid.UUID{
-		det("mcpserver-linear"):      {det("remote-identity-client-linear")},
-		det("mcpserver-ema-tracker"): {det("ema-client-tracker")},
-		det("mcpserver-ema-wiki"):    {det("ema-client-wiki")},
+		det("mcpserver-linear"):             {det("remote-identity-client-linear")},
+		det("mcpserver-enterprise-sign-in"): {det("ema-client-enterprise-sign-in")},
 	}
 
 	for range 2 {

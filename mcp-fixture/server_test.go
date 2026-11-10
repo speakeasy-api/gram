@@ -341,3 +341,87 @@ func TestPersonalTokenPage(t *testing.T) {
 	require.Equal(t, "pat@fixture.test", who["identity"])
 	require.Equal(t, "own-token", who["auth"])
 }
+
+// fakeResourceAS stands in for the dev-idp's resource authorization server
+// introspection endpoint: active holds the tokens it reports as active.
+func fakeResourceAS(t *testing.T, active map[string]map[string]any) string {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /resource-as/"+fixtureauth.EMAResourceSlug+"/introspect", func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, r.ParseForm())
+		body, ok := active[r.Form.Get("token")]
+		if !ok {
+			body = map[string]any{"active": false}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(body)
+	})
+	idp := httptest.NewServer(mux)
+	t.Cleanup(idp.Close)
+	return idp.URL
+}
+
+func startEMAFixture(t *testing.T, devIDPURL string) string {
+	t.Helper()
+	srv := httptest.NewUnstartedServer(nil)
+	base := "http://" + srv.Listener.Addr().String()
+	srv.Config.Handler = mcpfixture.New(mcpfixture.Config{BaseURL: base, AccessTokenTTL: time.Hour, DevIDPURL: devIDPURL}).Handler()
+	srv.Start()
+	t.Cleanup(srv.Close)
+	return base
+}
+
+func TestEMAEndpoint(t *testing.T) {
+	t.Parallel()
+	exp := time.Now().Add(time.Hour).Unix()
+	tokens := map[string]map[string]any{}
+	devIDP := fakeResourceAS(t, tokens)
+	base := startEMAFixture(t, devIDP)
+	resource := fixtureauth.Resource(base, fixtureauth.PathEMAMCP)
+	authServer := fixtureauth.EMAAuthorizationServer(devIDP)
+	tokens["good"] = map[string]any{"active": true, "scope": fixtureauth.EMAScope, "username": "dev@fixture.test", "exp": exp, "aud": resource, "iss": authServer}
+	tokens["other-resource"] = map[string]any{"active": true, "scope": fixtureauth.EMAScope, "username": "dev@fixture.test", "exp": exp, "aud": "https://elsewhere.test/mcp", "iss": authServer}
+	tokens["other-issuer"] = map[string]any{"active": true, "scope": fixtureauth.EMAScope, "username": "dev@fixture.test", "exp": exp, "aud": resource, "iss": "https://elsewhere.test/as"}
+
+	// The protected resource names the dev-idp's resource authorization server.
+	meta := decode[map[string]any](t, get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP))
+	require.Equal(t, resource, meta["resource"])
+	require.Equal(t, []any{authServer}, meta["authorization_servers"])
+
+	who := callTool(t, base+fixtureauth.PathEMAMCP, "good", "whoami", nil)
+	require.Equal(t, "dev@fixture.test", who["identity"])
+	require.Equal(t, "ema", who["auth"])
+	require.Equal(t, []any{fixtureauth.EMAScope}, who["scopes"])
+
+	for _, tok := range []string{"", "unknown", "other-resource", "other-issuer"} {
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+fixtureauth.PathEMAMCP, strings.NewReader(`{}`))
+		require.NoError(t, err)
+		if tok != "" {
+			req.Header.Set("Authorization", "Bearer "+tok)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		_ = resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode, tok)
+		require.Contains(t, resp.Header.Get("WWW-Authenticate"), `resource_metadata="`+base+`/.well-known/oauth-protected-resource/mcp/ema"`, tok)
+	}
+
+	// The fixture's own OAuth tokens are not accepted there.
+	pair, err := fixtureauth.IssueTokens(base, resource, "client", "sam@fixture.test", nil, time.Hour, time.Now())
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, base+fixtureauth.PathEMAMCP, strings.NewReader(`{}`))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+pair.AccessToken)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestEMAEndpointNeedsTheDevIDP(t *testing.T) {
+	t.Parallel()
+	_, base := startFixture(t, time.Hour)
+	resp := get(t, base+"/.well-known/oauth-protected-resource"+fixtureauth.PathEMAMCP)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}

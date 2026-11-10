@@ -253,6 +253,10 @@ GRAM_MCP_FIXTURE_ACCESS_TOKEN_TTL = "1h"
 ## The fixture runs a tunnel agent through the local gateway, serving its open
 ## MCP endpoint as the seeded Tunnelled Private Server.
 GRAM_MCP_FIXTURE_TUNNEL_GATEWAY_URL = "ws://localhost:{{env.TUNNEL_GATEWAY_PUBLIC_PORT}}/connect"
+## The fixture's Enterprise Managed Authorization endpoint (/mcp/ema) takes
+## tokens from this dev-idp's resource authorization server. The local seed
+## points the Enterprise Sign-In (ID-JAG) Server at it.
+GRAM_MCP_FIXTURE_DEVIDP_URL = "{{env.GRAM_DEVIDP_EXTERNAL_URL}}"
 ## GitHub App for plugin publishing (leave unset to disable)
 # GRAM_PLUGINS_GITHUB_APP_ID = ""
 # GRAM_PLUGINS_GITHUB_PRIVATE_KEY = ""

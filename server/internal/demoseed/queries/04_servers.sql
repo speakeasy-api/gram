@@ -413,15 +413,17 @@ INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, slug) VALUES
   (@id::uuid, @project_id::uuid, @mcp_server_id::uuid, @slug::text);
 
 -- Enterprise Managed Authorization (EMA). Acme Identity is a fictional
--- identity provider for two fictional services behind workforce servers;
--- the workforce sign-in deliberately does not trust it, so demo sign-in is
--- unaffected. Neither service has accepted a provider yet: a seeded
--- acceptance needs a trusted issuer session, which the hourly delegation
--- cleanup erases unless an organization sign-in trusts the issuer. Acme
--- Wiki carries a saved provider order. Speakeasy's own issuer is not seeded:
--- it needs a KMS signing key. Reserved example hosts and invalid ciphertext
--- keep every row inert. These servers are added after role distribution, so
--- plugins skip them.
+-- company identity provider. The Enterprise Sign-In (ID-JAG) Server has a
+-- sign-in of its own that federates through it: a caller signs in at the
+-- company provider, and Speakeasy exchanges that identity for an ID-JAG and
+-- redeems it at the server's authorization server for the upstream token.
+-- The shared workforce sign-in only trusts the provider for inbound EMA, so
+-- the other servers' sign-in is unaffected. No caller has signed in yet, so
+-- there is no delegation or cached credential. Speakeasy's own issuer is not
+-- seeded: it needs a KMS signing key. Reserved example hosts and invalid
+-- ciphertext keep every row inert in the demo org; the local seed points them
+-- at the dev-idp and the MCP fixture (local_ema.go). The server is added
+-- after role distribution, so plugins skip it.
 -- name: ServersInsertEMAIdentityProvider :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, authorization_endpoint,
@@ -439,9 +441,8 @@ VALUES
    ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
    'Acme Identity');
 
--- The workforce sign-in client is left unset: pointing interactive sign-in at
--- this fictional provider would send every server on it to a provider that
--- doesn't exist. The Services pages still show these vendors.
+-- Speakeasy's registration at the company provider. Only the Enterprise
+-- Sign-In issuer signs in through it.
 -- name: ServersInsertEMAIdentityProviderClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -463,98 +464,83 @@ WHERE id = @workforce_issuer::uuid
   AND project_id IS NULL
   AND deleted IS FALSE;
 
--- name: ServersInsertEMARemoteMCPServers :exec
-INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
-  (@tracker_id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
-   'streamable-http', 'https://mcp.acme-tracker.example/mcp'),
-  (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
-   'streamable-http', 'https://mcp.acme-wiki.example/mcp');
+-- The Enterprise Sign-In (ID-JAG) Server's own organization sign-in, federated
+-- through the company provider: its trusted client is the one the caller
+-- signs in with, and the ID token it returns is what Speakeasy exchanges.
+-- name: ServersInsertEMAUserSessionIssuer :exec
+INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
+                                  authn_challenge_mode, session_duration,
+                                  authorization_server_mode,
+                                  trusted_remote_session_issuer_id,
+                                  trusted_remote_session_client_id) VALUES
+  (@id::uuid, NULL, @org_id::text, 'enterprise-sign-in',
+   'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint',
+   @trusted_issuer_id::uuid, @trusted_client_id::uuid);
 
--- name: ServersInsertEMAMCPServers :exec
+-- name: ServersInsertEMARemoteMCPServer :exec
+INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   'streamable-http', 'https://mcp-fixture.example.com/mcp/ema');
+
+-- name: ServersInsertEMAMCPServer :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
                          visibility) VALUES
-  (@tracker_id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
-   NULL, @remote_tracker_id::uuid, @issuer_workforce_id::uuid, 'disabled'),
-  (@wiki_id::uuid, @project_id::uuid, 'Acme Wiki', 'acme-wiki',
-   NULL, @remote_wiki_id::uuid, @issuer_workforce_id::uuid, 'disabled');
+  (@id::uuid, @project_id::uuid, 'Enterprise Sign-In (ID-JAG) Server', 'enterprise-sign-in',
+   NULL, @remote_id::uuid, @issuer_id::uuid, 'private');
 
--- Each service's authorization server accepts ID-JAGs from a confidential client.
--- name: ServersInsertEMAVendorIssuers :exec
+-- name: ServersInsertEMAEndpoint :exec
+INSERT INTO mcp_endpoints (id, project_id, meta_mcp_server_id, mcp_server_id, slug) VALUES
+  (@id::uuid, @project_id::uuid, NULL, @mcp_server_id::uuid, @slug::text);
+
+-- The server's authorization server accepts ID-JAGs from a confidential client.
+-- name: ServersInsertEMAVendorIssuer :exec
 INSERT INTO remote_session_issuers
   (id, project_id, organization_id, slug, issuer, token_endpoint, name,
    grant_types_supported, authorization_grant_profiles_supported,
    token_endpoint_auth_methods_supported)
 VALUES
-  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
-   'acme-tracker-auth', 'https://auth.acme-tracker.example',
-   'https://auth.acme-tracker.example/oauth/token', 'Acme Tracker',
-   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'enterprise-sign-in-auth', 'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture',
+   'https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture/token',
+   'Enterprise Sign-In Authorization Server',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
    ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-   ARRAY['client_secret_basic']),
-  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
-   'acme-wiki-auth', 'https://auth.acme-wiki.example',
-   'https://auth.acme-wiki.example/oauth/token', 'Acme Wiki',
-   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
-   ARRAY['urn:ietf:params:oauth:grant-profile:id-jag'],
-   ARRAY['client_secret_basic']);
+   ARRAY['client_secret_post']);
 
--- name: ServersInsertEMAVendorClients :exec
+-- name: ServersInsertEMAVendorClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
    client_secret_encrypted, token_endpoint_auth_method, grant_types, scope)
 VALUES
-  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
-   @tracker_issuer_id::uuid, 'demo-acme-tracker-client',
-   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
-   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
-   ARRAY['issues:read']),
-  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
-   @wiki_issuer_id::uuid, 'demo-acme-wiki-client',
-   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_basic',
-   ARRAY['authorization_code', 'urn:ietf:params:oauth:grant-type:jwt-bearer'],
-   ARRAY['pages:read']);
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @issuer_id::uuid, 'demo-enterprise-sign-in-client',
+   'DEMO-NOT-VALID-CIPHERTEXT', 'client_secret_post',
+   ARRAY['urn:ietf:params:oauth:grant-type:jwt-bearer'],
+   ARRAY['notes:read']);
 
--- name: ServersInsertEMAProtectedResources :exec
+-- name: ServersInsertEMAProtectedResource :exec
 INSERT INTO remote_protected_resources
   (id, project_id, organization_id, resource_identifier, metadata_url,
    authorization_servers, scopes_supported, metadata_fetched_at)
 VALUES
-  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
-   'https://mcp.acme-tracker.example/mcp',
-   'https://mcp.acme-tracker.example/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://auth.acme-tracker.example'], ARRAY['issues:read'],
-   now() - interval '2 hours'),
-  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
-   'https://mcp.acme-wiki.example/mcp',
-   'https://mcp.acme-wiki.example/.well-known/oauth-protected-resource/mcp',
-   ARRAY['https://auth.acme-wiki.example'], ARRAY['pages:read'],
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   'https://mcp-fixture.example.com/mcp/ema',
+   'https://mcp-fixture.example.com/.well-known/oauth-protected-resource/mcp/ema',
+   ARRAY['https://dev-idp.example.com/resource-as/speakeasy-mcp-fixture'], ARRAY['notes:read'],
    now() - interval '2 hours');
 
--- name: ServersInsertEMABindings :exec
+-- name: ServersInsertEMABinding :exec
 INSERT INTO remote_session_ema_bindings
   (id, project_id, organization_id, user_session_issuer_id,
    remote_session_issuer_id, resource, remote_session_client_id, generation,
    state, grant_source, created_at, updated_at)
 VALUES
-  (@tracker_id::uuid, @project_id::uuid, @org_id::text,
-   @issuer_workforce_id::uuid, @tracker_issuer_id::uuid,
-   'https://mcp.acme-tracker.example/mcp', @tracker_client_id::uuid, 1,
+  (@id::uuid, @project_id::uuid, @org_id::text,
+   @user_session_issuer_id::uuid, @issuer_id::uuid,
+   'https://mcp-fixture.example.com/mcp/ema', @client_id::uuid, 1,
    'ready', 'administrator_declared',
-   now() - interval '6 days', now() - interval '6 days'),
-  (@wiki_id::uuid, @project_id::uuid, @org_id::text,
-   @issuer_workforce_id::uuid, @wiki_issuer_id::uuid,
-   'https://mcp.acme-wiki.example/mcp', @wiki_client_id::uuid, 1,
-   'ready', 'administrator_declared',
-   now() - interval '1 day', now() - interval '1 day');
-
--- A saved order for Acme Wiki, so its service page shows "Use default".
--- name: ServersInsertEMAProviderOrder :exec
-INSERT INTO remote_session_ema_providers
-  (id, organization_id, vendor_issuer, remote_session_issuer_id, position)
-VALUES
-  (@id::uuid, @org_id::text, 'https://auth.acme-wiki.example',
-   @remote_session_issuer_id::uuid, 0);
+   now() - interval '6 days', now() - interval '6 days');
 
 -- Live connections spread across the MCP servers, not pooled on one issuer.
 -- The identity page's connections tab groups by MCP server, and every

@@ -83,6 +83,16 @@ func newDemoSeedCommand() *cli.Command {
 				Value:   time.Hour,
 			},
 			&cli.StringFlag{
+				Name:    "local-devidp-url",
+				Usage:   "External URL of the local dev-idp; the Enterprise Sign-In (ID-JAG) Server signs in and exchanges identities through it",
+				EnvVars: []string{"GRAM_DEVIDP_EXTERNAL_URL"},
+			},
+			&cli.StringFlag{
+				Name:    "local-devidp-client-id",
+				Usage:   "The dev-idp's static login client id, which Speakeasy's dev-idp registration for the Enterprise Sign-In (ID-JAG) Server reuses",
+				EnvVars: []string{"GRAM_IDP_CLIENT_ID"},
+			},
+			&cli.StringFlag{
 				Name:    "server-url",
 				Usage:   "Speakeasy's own URL, which the local MCP fixture redirects sign-ins back to",
 				EnvVars: []string{"GRAM_SERVER_URL"},
@@ -214,7 +224,7 @@ func newDemoSeedCommand() *cli.Command {
 // localMCPFixtureOptions reads the local MCP fixture settings. Without a
 // fixture URL the seeded servers stay display-only.
 func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, error) {
-	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil}
+	opts := demoseed.LocalMCPFixtureOptions{BaseURL: "", ServerURL: nil, AccessTokenTTL: c.Duration("local-mcp-fixture-access-token-ttl"), Encryption: nil, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil}
 	base := c.String("local-mcp-fixture-url")
 	if base == "" || base == "unset" {
 		return opts, nil
@@ -233,6 +243,16 @@ func localMCPFixtureOptions(c *cli.Context) (demoseed.LocalMCPFixtureOptions, er
 	opts.BaseURL = base
 	opts.ServerURL = serverURL
 	opts.Encryption = encryptionClient
+	opts.DevIDPURL = c.String("local-devidp-url")
+	opts.DevIDPClientID = c.String("local-devidp-client-id")
+	// The dev-idp listens on localhost, which the default egress policy
+	// refuses; the local seed only ever calls the developer's own dev-idp.
+	policy, err := guardian.NewUnsafePolicy(otel.GetTracerProvider(), []string{})
+	if err != nil {
+		return opts, fmt.Errorf("create the dev-idp egress policy: %w", err)
+	}
+	opts.HTTPClient = policy.Client()
+	opts.HTTPClient.Timeout = 10 * time.Second
 	return opts, nil
 }
 

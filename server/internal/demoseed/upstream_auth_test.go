@@ -60,7 +60,7 @@ func TestSeedUpstreamAuthReadyAfterReseed(t *testing.T) {
 // shared token. Each agent attachment grant is bound to the agent's owner and
 // the attachment's upstream client.
 func expectedSeedAuthGrants() []string {
-	sharedClients := []string{"Static credential", "Your own token", "Shared service token", "Acme Wiki", "Acme Tracker"}
+	sharedClients := []string{"Static credential", "Your own token", "Shared service token", "Enterprise Sign-In Authorization Server"}
 	var out []string
 	shared := func(principal, kind string, clients ...string) {
 		for _, client := range clients {
@@ -77,7 +77,7 @@ func expectedSeedAuthGrants() []string {
 	for _, role := range []string{"analyst", "collaborator", "environment-manager", "read-only-tools", "temporary-escalation"} {
 		shared("role "+role, "shared_client", sharedClients...)
 	}
-	shared("role engineer", "shared_client", "Static credential", "Your own token", "Acme Wiki", "Acme Tracker")
+	shared("role engineer", "shared_client", "Static credential", "Your own token", "Enterprise Sign-In Authorization Server")
 	shared("role engineer", "", "Shared service token")
 	shared("role support-desk", "shared_client", "Static credential")
 	out = append(out, "role contractors | mcp:blocked_auth | Shared service token | type= | owner= | upstream= | ")

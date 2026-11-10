@@ -149,7 +149,7 @@ WHERE id = @workforce_issuer::uuid
 SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
--- EMA: two ready bindings, no cached credentials, and one saved provider
+-- EMA: one ready binding, no cached credentials, and no saved provider
 -- order. The workforce issuer accepts ID-JAGs from the fictional provider
 -- without federating interactive sign-in through it.
 -- name: PostflightIDWorkforceInboundEMATrust :one
@@ -177,7 +177,7 @@ SELECT count(*) FROM remote_session_ema_providers
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
 -- The Per-User OAuth Server's remote identity provider, the identity chaining example, Jamf
--- Pro, and the two EMA services' authorization servers.
+-- Pro, and the Enterprise Sign-In (ID-JAG) Server's authorization server.
 -- name: PostflightIDProjectRemoteSessionIssuers :one
 SELECT count(*) FROM remote_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -221,7 +221,7 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- thirty-two misassigned choices cannot satisfy postflight.
+-- twenty-nine misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
@@ -229,7 +229,7 @@ WITH live AS (
     AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 32
+WHERE (SELECT count(*) FROM live) = 29
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])

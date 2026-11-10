@@ -2686,3 +2686,22 @@ SELECT name, value, value_from_request_header, is_secret FROM remote_mcp_server_
 -- name: GetEnvironmentEntryFixture :one
 -- Reads one environment entry by environment and name.
 SELECT value, is_secret FROM environment_entries WHERE environment_id = @environment_id AND name = @name;
+
+-- name: GetLocalEMAWiringFixture :one
+-- Reads what the local seed points the Enterprise Sign-In (ID-JAG) Server's
+-- binding at: its resource, the user session issuer's trusted identity
+-- provider and client, and the authorization server and its client.
+SELECT b.resource,
+       idp.issuer AS identity_provider,
+       idp_client.client_id AS identity_provider_client_id,
+       idp_client.client_secret_encrypted AS identity_provider_client_secret,
+       vendor.issuer AS authorization_server,
+       vendor.token_endpoint AS authorization_server_token_endpoint,
+       vendor_client.client_id AS authorization_server_client_id
+FROM remote_session_ema_bindings b
+JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id
+JOIN remote_session_issuers idp ON idp.id = usi.trusted_remote_session_issuer_id
+JOIN remote_session_clients idp_client ON idp_client.id = usi.trusted_remote_session_client_id
+JOIN remote_session_issuers vendor ON vendor.id = b.remote_session_issuer_id
+JOIN remote_session_clients vendor_client ON vendor_client.id = b.remote_session_client_id
+WHERE b.id = @id;

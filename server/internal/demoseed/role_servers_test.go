@@ -88,7 +88,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 		for _, slug := range []string{"engineer", "read-only-tools"} {
 			require.NotEmpty(t, memberships[slug], "role plugin %s must deliver servers", slug)
 		}
-		require.Equal(t, []string{"shared-token"}, memberships["engineering-essentials"])
+		require.Equal(t, []string{"pass-through-token"}, memberships["engineering-essentials"])
 		require.Len(t, audiences["engineering-essentials"], 1)
 		require.Equal(t, audiences["engineer"], audiences["engineering-essentials"])
 		// Exact role audiences plus server content drive Team Access links.
@@ -96,7 +96,7 @@ func testRoleServersSurviveReseed(t *testing.T, spec Spec) {
 			require.Len(t, audiences[role], 1)
 			matches := 0
 			for slug, audience := range audiences {
-				if slices.Contains(audience, audiences[role][0]) && slices.Contains(memberships[slug], "shared-token") {
+				if slices.Contains(audience, audiences[role][0]) && slices.Contains(memberships[slug], "pass-through-token") {
 					matches++
 				}
 			}

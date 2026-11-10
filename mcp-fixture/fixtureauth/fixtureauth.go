@@ -67,8 +67,26 @@ const (
 	PathSharedMCP = "/mcp/shared"
 	// PathOpenMCP needs no credentials at all.
 	PathOpenMCP = "/mcp/open"
-	PathAPI     = "/acme-api"
+	// PathEMAMCP takes access tokens from the dev-idp's resource
+	// authorization server, which Speakeasy obtains through Enterprise
+	// Managed Authorization (an ID-JAG exchange). The fixture serves it only
+	// when it knows the dev-idp's URL.
+	PathEMAMCP = "/mcp/ema"
+	PathAPI    = "/acme-api"
 )
+
+// EMAResourceSlug is the dev-idp resource whose authorization server issues
+// the tokens PathEMAMCP accepts. The local seed registers it at the dev-idp.
+const EMAResourceSlug = "speakeasy-mcp-fixture"
+
+// EMAScope is the one scope the dev-idp grants for PathEMAMCP.
+const EMAScope = ScopeNotesRead
+
+// EMAAuthorizationServer is the issuer of the dev-idp resource authorization
+// server for PathEMAMCP, for a dev-idp served at devIDPURL.
+func EMAAuthorizationServer(devIDPURL string) string {
+	return strings.TrimRight(devIDPURL, "/") + "/resource-as/" + EMAResourceSlug
+}
 
 // PersonalTokenTTL is how long a token from the personal token page lives.
 const PersonalTokenTTL = 30 * 24 * time.Hour

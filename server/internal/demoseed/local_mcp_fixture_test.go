@@ -39,7 +39,7 @@ func TestLocalFixturesPointServersAtMCPFixture(t *testing.T) {
 	opts := LocalFixturesOptions{
 		DeveloperEmail: testDeveloperEmail,
 		Environment:    "local",
-		MCPFixture:     LocalMCPFixtureOptions{BaseURL: base, ServerURL: serverURL, AccessTokenTTL: time.Hour, Encryption: enc},
+		MCPFixture:     LocalMCPFixtureOptions{BaseURL: base, ServerURL: serverURL, AccessTokenTTL: time.Hour, Encryption: enc, DevIDPURL: "", DevIDPClientID: "", HTTPClient: nil},
 	}
 
 	spec := LocalSpec()
