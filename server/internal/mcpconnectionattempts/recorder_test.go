@@ -1328,14 +1328,26 @@ func TestShutdownAndWait_ASmallBudgetStillDrains(t *testing.T) {
 	require.Zero(t, recorder.droppedTotal(t))
 }
 
-// A row its caller knows won't be stored stays out of the steps metric.
+// A row its caller expected unstored stays out of the steps metric while logs are off.
 func TestRecord_UnstoredRowIsNotCountedAsAStep(t *testing.T) {
+	t.Parallel()
+
+	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
+	recorder := newTestRecorderWithLogs(t, conn, func(context.Context, string) (bool, error) { return false, nil }, testConfig())
+	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient, Unstored())
+	require.NoError(t, recorder.Shutdown(t.Context()))
+	require.Zero(t, stepsCounted(t, recorder))
+	require.Equal(t, int64(1), recorder.dropped(t, dropLogsOff))
+}
+
+// Logs that turn on after the caller's Stores check store the row, so its step counts.
+func TestRecord_UnstoredRowStoredAfterAllCountsAsAStep(t *testing.T) {
 	t.Parallel()
 
 	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}, mu: sync.Mutex{}, traces: nil}
 	recorder := newTestRecorder(t, conn, testConfig())
 	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient, Unstored())
-	require.Zero(t, stepsCounted(t, recorder))
-	recorder.Once(t.Context(), testScope(), StepProviderRefresh, CodeRefreshInvalidClient)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+	require.Equal(t, int64(1), conn.rows.Load())
 	require.Equal(t, int64(1), stepsCounted(t, recorder))
 }

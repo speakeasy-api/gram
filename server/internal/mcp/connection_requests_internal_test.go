@@ -291,7 +291,17 @@ func TestMemberClientFailure_TunneledDeadlineAfterAGatewayFailureIsNotTheProvide
 	err := memberClientFailure(ctx, testenv.NewLogger(t), stubMemberOutcome{tunnelErr: wire.TunnelErrorRouteLookupFailed}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, errors.New("call failed"))
 	failure, ok := errors.AsType[memberConnectionError](err)
 	require.True(t, ok)
-	require.NotEqual(t, mcpconnectionattempts.CodeProviderUnreachable, failure.code)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
+}
+
+// A tunneled transport timeout while the member call still has time is the gateway's, not the provider's.
+func TestMemberClientFailure_TunneledTransportTimeoutIsNotTheProvider(t *testing.T) {
+	t.Parallel()
+
+	err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{}, memberDial{tunneled: true}, metaMember{slug: "fixture"}, fmt.Errorf("dial gateway: %w", context.DeadlineExceeded))
+	failure, ok := errors.AsType[memberConnectionError](err)
+	require.True(t, ok)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, failure.code)
 }
 
 func TestRecordMemberFailure(t *testing.T) {
