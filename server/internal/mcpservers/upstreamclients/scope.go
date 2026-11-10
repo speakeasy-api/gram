@@ -133,9 +133,9 @@ type ClientAssociationScope struct {
 }
 
 // LockClientAssociationScope reads the servers associated with clientID and
-// locks their projects' writer scope and registration gates, with that of
-// also, the other projects the caller's change writes. Call it before the
-// transaction's first row lock or mutation.
+// locks their projects' writer scope and registration gates. It also locks
+// the writer scope of the projects in also, which the caller's change writes
+// too. Call it before the transaction's first row lock or mutation.
 func LockClientAssociationScope(ctx context.Context, tx pgx.Tx, organizationID string, clientID uuid.UUID, also []uuid.UUID) (ClientAssociationScope, error) {
 	scope := ClientAssociationScope{organizationID: organizationID, clientID: clientID, servers: nil, projects: nil}
 	servers, projects, err := clientServers(ctx, tx, organizationID, clientID)
