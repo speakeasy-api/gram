@@ -116,8 +116,15 @@ describe("AgentProviderIcon", () => {
         'img[src="/icons/platforms/kit.png"]',
       );
       expect(image).toBeTruthy();
-      expect(image?.getAttribute("class")).toBe("size-4");
+      expect(image?.getAttribute("class")).toBe("block dark:hidden size-4");
       expect(image?.getAttribute("alt")).toBe("");
+
+      const darkImage = container.querySelector(
+        'img[src="/icons/platforms/kit-dark.png"]',
+      );
+      expect(darkImage).toBeTruthy();
+      expect(darkImage?.getAttribute("class")).toBe("hidden dark:block size-4");
+      expect(darkImage?.getAttribute("alt")).toBe("");
     },
   );
 
