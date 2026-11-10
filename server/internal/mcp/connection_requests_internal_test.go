@@ -255,6 +255,7 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 		{name: "proxy answered itself", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, want: mcpconnectionattempts.Code{}},
 		{name: "no credential to send", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeInvalidRemoteSession},
 		{name: "configured key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},
+		{name: "auth client key rejected", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized, answer: keySent}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeStaticKeyRejected},
 		{name: "configured key lacks permission", outcome: stubMemberOutcome{rejected: http.StatusForbidden, answer: keySent}, dial: memberDial{anonymous: true, configuredHeaders: true}, want: mcpconnectionattempts.Code{}},
 		{name: "tunnel down", outcome: stubMemberOutcome{code: http.StatusBadGateway, tunnelErr: wire.TunnelErrorNoLiveSession}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeTunnelUnavailable},
 		{name: "server behind the tunnel", outcome: stubMemberOutcome{code: http.StatusBadGateway}, dial: memberDial{tunneled: true}, want: mcpconnectionattempts.CodeProviderServerError},
@@ -275,6 +276,20 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 			require.Equal(t, tc.want, failure.code)
 		})
 	}
+}
+
+// A member's configured credential is what its build sends: the client's headers once selected.
+func TestMemberSendsConfiguredCredential(t *testing.T) {
+	t.Parallel()
+
+	serverKey := []remotemcp_repo.RemoteMcpServerHeader{{Name: "X-Api-Key", Value: pgtype.Text{String: "key", Valid: true}, IsSecret: true}}
+	clientKey := []proxy.ConfiguredHeader{{Name: "X-Client-Key", StaticValue: "key", IsSecret: true}}
+	plain := []proxy.ConfiguredHeader{{Name: "X-Region", StaticValue: "eu"}}
+
+	require.True(t, memberSendsConfiguredCredential(serverKey, nil, false))
+	require.True(t, memberSendsConfiguredCredential(nil, clientKey, true), "a legacy client that may chain still sends its own key")
+	require.False(t, memberSendsConfiguredCredential(serverKey, plain, true), "the server's key is dropped for the client's headers")
+	require.False(t, memberSendsConfiguredCredential(nil, plain, false))
 }
 
 // A caller that went away says nothing about the member.
