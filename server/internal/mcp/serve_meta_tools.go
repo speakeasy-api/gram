@@ -371,15 +371,19 @@ func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logge
 		inputs, syntheticReq, s.toolProxy, s.billingTracker, s.billingRepository, &s.toolsetCache,
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
-	// An anonymous caller's rejected bearer says nothing about a person's access.
-	anonymousRejection := inputs.upstreamRejection == mcpconnectionattempts.CodeProviderRejected && gate.resolvedSubject(ctx) == nil
-	if err == nil && inputs.upstreamRejection != (mcpconnectionattempts.Code{}) && !anonymousRejection {
-		s.recordMemberFailure(ctx, gate, member, inputs.upstreamRejection)
+	// A refusal keeps its own code, as on a hosted server; otherwise the provider's rejection is recorded.
+	code, refused := toolsCallRefusal(err)
+	if !refused {
+		code = inputs.upstreamRejection
+		// An anonymous caller's rejected bearer says nothing about a person's access.
+		if code == mcpconnectionattempts.CodeProviderRejected && gate.resolvedSubject(ctx) == nil {
+			code = mcpconnectionattempts.Code{}
+		}
+	}
+	if code != (mcpconnectionattempts.Code{}) {
+		s.recordMemberFailure(ctx, gate, member, code)
 	}
 	if err != nil {
-		if code, ok := toolsCallRefusal(err); ok {
-			s.recordMemberFailure(ctx, gate, member, code)
-		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults (unexpected errors and server

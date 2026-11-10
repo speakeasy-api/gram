@@ -988,6 +988,32 @@ func TestGatewayHostedToolProviderRejectionRecords(t *testing.T) {
 	require.Len(t, rec.Rows(), 1)
 }
 
+// A gateway member's rejection is recorded even when its response cannot be formatted, as on a hosted server.
+func TestGatewayHostedToolRejectionWithUnreadableResponseRecords(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth := requireProjectAuthContext(t, ctx)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, uuid.Nil)
+	member := seedHostedMetaMember(t, ctx, ti, meta.ID, "unreadable", 0, mcpservers.VisibilityPublic)
+	ti.addToolWithSecurity(ctx, t, member.toolsetID, *auth.ProjectID, auth.ActiveOrganizationID)
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; =")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte("unauthorized"))
+	}))
+	t.Cleanup(upstream.Close)
+	ti.service.SetEnvironmentLoader(savedKeyEnv{vars: map[string]string{"TEST_SERVER_URL": upstream.URL, "TEST_API_KEY": "saved-key"}})
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	_ = executeMetaTool(t, ti, slug, "", member.slug+"--test_tool")
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeStaticKeyRejected)
+	require.Equal(t, member.serverID.String(), row.MemberID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+	require.Len(t, rec.Rows(), 1)
+}
+
 // statusUpstream answers every request with status and a short text body.
 func statusUpstream(t *testing.T, status int) *httptest.Server {
 	t.Helper()
