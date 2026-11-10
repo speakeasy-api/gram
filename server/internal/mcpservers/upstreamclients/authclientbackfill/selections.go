@@ -162,11 +162,16 @@ type liveCredential struct {
 // bound to issuer, which is what the upstream client choice serves it on.
 // For an organization enforcing upstream auth (typedOnly), a server's upstream
 // OAuth client associations make no choice stale or rejected, as issuance reads
-// them there.
+// them there, but an unmapped OAuth choice still needs its registration and
+// that registration's issuer to be live.
 func decideSelection(row ListSelectionMappingsRow, issuer uuid.UUID, typedOnly bool) (SelectionOutcome, uuid.UUID) {
 	readsNoAuth := row.NoAuth || row.NamesHeaders
 	staleNoAuth := readsNoAuth && ((row.ServerHasAssociations && !typedOnly) || row.ServerHasOauthClients || slices.Contains(row.EmaGatewayIssuerIds, issuer))
-	oauthRejected := !readsNoAuth && ((!row.RegistrationAssociated && !typedOnly) || !slices.Contains(row.RegistrationIssuerIds, issuer))
+	registrationServes := row.RegistrationLive
+	if !typedOnly {
+		registrationServes = row.RegistrationAssociated
+	}
+	oauthRejected := !readsNoAuth && (!registrationServes || !slices.Contains(row.RegistrationIssuerIds, issuer))
 	switch {
 	case staleNoAuth:
 		return SelectionStaleNoAuth, uuid.Nil

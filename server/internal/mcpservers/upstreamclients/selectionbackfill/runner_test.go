@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -711,6 +712,20 @@ func TestRecordUpstreamClientSelectionsFromTypedState(t *testing.T) {
 		require.Empty(t, f.selections(credential))
 	})
 
+	t.Run("a registration two offered clients share is left to a pick", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer)
+		f.authClient("remote_session", registration, server)
+		f.authClient("service_account", registration, server)
+
+		credential := f.session(issuer)
+		f.recordPickedFrom(issuer, credential, nil, true)
+		require.Empty(t, f.selections(credential), "a choice of the shared registration would name neither client")
+	})
+
 	t.Run("a no-auth choice still names the server's headers beside an association", func(t *testing.T) {
 		t.Parallel()
 		f := newFixture(t)
@@ -797,6 +812,28 @@ func TestRunReadsTypedStateUnderEnforcement(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []Gap{{CredentialID: credential, MCPServerID: server, Outcome: OutcomeUnreachableClient}}, report.Gaps)
 		require.Empty(t, f.selections(credential))
+	})
+
+	t.Run("a choice whose registration was deleted is not covered", func(t *testing.T) {
+		t.Parallel()
+		f := newFixture(t)
+		issuer := f.projectIssuer()
+		registration := f.client(issuer)
+		server := f.server(issuer)
+		f.authClient("remote_session", registration, server)
+		f.enforce(f.orgID)
+		credential := f.session(issuer)
+		_, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: true})
+		require.NoError(t, err)
+		require.Equal(t, map[uuid.UUID]uuid.UUID{server: registration}, f.selections(credential))
+
+		_, err = remotesessionsrepo.New(f.pool).DeleteRemoteSessionClient(t.Context(), remotesessionsrepo.DeleteRemoteSessionClientParams{ID: registration, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}})
+		require.NoError(t, err)
+		report, err := Run(t.Context(), f.pool, Options{OrganizationID: f.orgID, Apply: false})
+		require.NoError(t, err)
+		require.Zero(t, report.Pairs[OutcomeSelected], "the resolver refuses a choice whose registration is gone")
+		require.Len(t, report.Gaps, 1)
+		require.Equal(t, credential, report.Gaps[0].CredentialID)
 	})
 
 	t.Run("a run across organizations reads each one's enforcement", func(t *testing.T) {

@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	keysrepo "github.com/speakeasy-api/gram/server/internal/keys/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -718,9 +719,21 @@ func TestEnforcedNoAuthServerIgnoresALeftoverAssociation(t *testing.T) {
 
 	w := call(f.issue(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString())))
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	upstream.requireToolCallAuth(t, "", "the typed session reaches the upstream with no credential")
+	toolCalls := func() int {
+		n := 0
+		for _, req := range upstream.journal() {
+			if req.rpcMethod == mcpversions.MethodToolsCall {
+				n++
+			}
+		}
+		return n
+	}
+	calls := toolCalls()
 
 	w = call(f.issueFrom(t, ctx, slug, issuerID, createTestUser(t, ctx, f.ti, "leftover-"+uuid.NewString()), nil, false))
 	require.Equal(t, http.StatusUnauthorized, w.Code, w.Body.String())
+	require.Equal(t, calls, toolCalls(), "the refused session's tool call never reaches the upstream")
 }
 
 func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {

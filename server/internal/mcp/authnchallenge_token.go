@@ -683,17 +683,19 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err != nil {
 		return err
 	}
-	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested)
+	// Read once, so the picks and the choices recorded beside them follow the
+	// same enforcement state.
+	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
+	}
+	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested, enforced)
 	if err != nil {
 		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
 			return err
 		}
 		return oops.E(oops.CodeUnexpected, err, "decide upstream credentials").LogError(ctx, logger)
-	}
-	enforced, err := authenforcement.ReadEnforced(ctx, s.db, endpoint.OrganizationID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "read upstream auth enforcement").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)

@@ -294,4 +294,6 @@ func TestUpstreamOAuthMigration_EnforcedNoAuthChoiceBesideAnAssociationIsCovered
 	require.Zero(t, run.Status.ReconnectCredentials)
 	require.NotNil(t, run.Status.AuthClients)
 	require.Zero(t, *run.Status.AuthClients.SelectionGapCount, run.Status.AuthClients.SelectionGaps)
+	require.Zero(t, *run.Status.AuthClients.PendingSelectionMappings, "the no-auth choice needs no mapping")
+	require.True(t, *run.Status.AuthClients.SelectionsComplete, "the choices read complete, so enforcement is not blocked")
 }

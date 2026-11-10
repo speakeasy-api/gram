@@ -5167,7 +5167,7 @@ eligible AS (
     WHERE a.deleted IS FALSE
       AND NOT $9::boolean
     UNION ALL
-    SELECT DISTINCT l.mcp_server_id,
+    SELECT l.mcp_server_id,
            ac.remote_session_client_id
     FROM mcp_server_auth_clients AS l
     JOIN reachable AS r
@@ -5182,12 +5182,17 @@ eligible AS (
     JOIN remote_session_clients AS c
       ON c.id = ac.remote_session_client_id
      AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
     JOIN remote_session_client_user_session_issuers AS binding
       ON binding.remote_session_client_id = ac.remote_session_client_id
      AND binding.user_session_issuer_id = $4
     WHERE l.deleted IS FALSE
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
       AND $9::boolean
+    GROUP BY l.mcp_server_id, ac.remote_session_client_id
+    HAVING count(DISTINCT ac.id) = 1
 ),
 decided AS (
     SELECT r.id AS mcp_server_id,
@@ -5473,6 +5478,10 @@ type RecordUpstreamClientSelectionsParams struct {
 // OAuth-backed auth client. The credential's issuer must still bind a
 // registration for it to be chosen without a person picking it, which only
 // ever withholds a choice: a pick on the consent page does not need the binding.
+// A registration counts only while it and its issuer are live and exactly one
+// offered client uses it, since a choice of a registration two clients share
+// names neither and the resolver serves it as ambiguous; that choice is left to
+// a pick.
 // The typed auth client each decided choice names, by the rule the auth
 // client backfill maps recorded choices with, so a choice recorded now is the
 // choice the backfill would map: a client choice names the live, enabled

@@ -2991,6 +2991,17 @@ SELECT sel.id,
            AND a.remote_session_client_id = sel.remote_session_client_id
            AND a.deleted IS FALSE
        )::boolean AS registration_associated,
+       -- The registration and its issuer are live, which the typed resolver
+       -- requires of a choice whatever the server's associations.
+       EXISTS (
+         SELECT 1
+         FROM remote_session_clients AS c
+         JOIN remote_session_issuers AS rsi
+           ON rsi.id = c.remote_session_issuer_id
+          AND rsi.deleted IS FALSE
+         WHERE c.id = sel.remote_session_client_id
+           AND c.deleted IS FALSE
+       )::boolean AS registration_live,
        ARRAY(
          SELECT link.user_session_issuer_id
          FROM remote_session_client_user_session_issuers AS link
@@ -3244,6 +3255,7 @@ type ListSelectionMappingsRow struct {
 	NamesHeaders           bool
 	ServerHasAssociations  bool
 	RegistrationAssociated bool
+	RegistrationLive       bool
 	RegistrationIssuerIds  []uuid.UUID
 	CandidateIds           []uuid.UUID
 	ServerHasOauthClients  bool
@@ -3297,6 +3309,7 @@ func (q *Queries) ListSelectionMappings(ctx context.Context, arg ListSelectionMa
 			&i.NamesHeaders,
 			&i.ServerHasAssociations,
 			&i.RegistrationAssociated,
+			&i.RegistrationLive,
 			&i.RegistrationIssuerIds,
 			&i.CandidateIds,
 			&i.ServerHasOauthClients,

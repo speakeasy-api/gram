@@ -473,8 +473,9 @@ func TestRun_ChoicesAreNotMappedAfterAFailedPhase(t *testing.T) { //nolint:paral
 }
 
 // For an organization enforcing upstream auth, an association neither makes a
-// no-auth choice stale nor rejects an unmapped client choice. The issuer binding
-// and the auth clients the server offers still decide.
+// no-auth choice stale nor rejects an unmapped client choice. The issuer binding,
+// the registration's liveness and the auth clients the server offers still
+// decide.
 func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 	t.Parallel()
 	issuer, candidate := uuid.New(), uuid.New()
@@ -498,24 +499,34 @@ func TestDecideSelectionIgnoresAssociationsWhenTypedOnly(t *testing.T) {
 			want:      SelectionStaleNoAuth,
 		},
 		"unmapped client without an association, not enforcing": {
-			row:  ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			row:  ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
 			want: SelectionUnusable,
 		},
 		"unmapped client without an association, enforcing": {
-			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			row:       ListSelectionMappingsRow{RegistrationLive: true, RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
 			typedOnly: true,
 			want:      SelectionMap,
 		},
+		"unmapped client whose registration was deleted, enforcing": {
+			row:       ListSelectionMappingsRow{RegistrationIssuerIds: []uuid.UUID{issuer}, CandidateIds: []uuid.UUID{candidate}},
+			typedOnly: true,
+			want:      SelectionUnusable,
+		},
 		"unmapped client the issuer does not bind, enforcing": {
-			row:       ListSelectionMappingsRow{CandidateIds: []uuid.UUID{candidate}},
+			row:       ListSelectionMappingsRow{RegistrationLive: true, CandidateIds: []uuid.UUID{candidate}},
 			typedOnly: true,
 			want:      SelectionUnusable,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			got, _ := decideSelection(tc.row, issuer, tc.typedOnly)
+			got, mapped := decideSelection(tc.row, issuer, tc.typedOnly)
 			require.Equal(t, tc.want, got)
+			if got == SelectionMap {
+				require.Equal(t, candidate, mapped, "the candidate is the client recorded")
+			} else {
+				require.Equal(t, uuid.Nil, mapped)
+			}
 		})
 	}
 }

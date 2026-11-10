@@ -257,22 +257,29 @@ offered_oauth AS (
       AND l.organization_id = (SELECT organization_id FROM session_issuer)
 ),
 typed_eligible AS (
-    SELECT DISTINCT o.mcp_server_id,
+    SELECT o.mcp_server_id,
            o.remote_session_client_id
     FROM offered_oauth AS o
     JOIN remote_session_clients AS c
       ON c.id = o.remote_session_client_id
      AND c.deleted IS FALSE
+    JOIN remote_session_issuers AS rsi
+      ON rsi.id = c.remote_session_issuer_id
+     AND rsi.deleted IS FALSE
     JOIN remote_session_client_user_session_issuers AS binding
       ON binding.remote_session_client_id = o.remote_session_client_id
      AND binding.user_session_issuer_id = $4
     WHERE o.client_type IN ('remote_session', 'service_account')
+    GROUP BY o.mcp_server_id, o.remote_session_client_id
+    HAVING count(DISTINCT o.auth_client_id) = 1
 )
 SELECT r.id AS mcp_server_id,
        -- A recorded choice counts only while it is usable. Without typed_only
        -- that is the predicate GetUpstreamClientSelection serves with; the two
        -- must stay identical. With it, a choice naming an auth client counts
-       -- while that client is live, enabled and offered, a no-auth choice while
+       -- while that client is live, enabled and offered (and, for one backed by
+       -- a registration, while the registration and its issuer are live, as the
+       -- resolver requires), a no-auth choice while
        -- the server offers no enabled OAuth-backed client, and an unmapped
        -- client choice while it could be decided today.
        EXISTS (
@@ -301,6 +308,15 @@ SELECT r.id AS mcp_server_id,
                WHERE l.mcp_server_id = r.id
                  AND l.auth_client_id = sel.auth_client_id
                  AND l.deleted IS FALSE
+                 AND (ac.client_type NOT IN ('remote_session', 'service_account') OR EXISTS (
+                   SELECT 1
+                   FROM remote_session_clients AS reg
+                   JOIN remote_session_issuers AS rsi
+                     ON rsi.id = reg.remote_session_issuer_id
+                    AND rsi.deleted IS FALSE
+                   WHERE reg.id = ac.remote_session_client_id
+                     AND reg.deleted IS FALSE
+                 ))
              )
              WHEN $3::boolean AND sel.no_auth THEN NOT EXISTS (
                SELECT 1 FROM offered_oauth AS o WHERE o.mcp_server_id = r.id
@@ -400,7 +416,10 @@ type ListUpstreamClientSelectionCoverageRow struct {
 // associations, and a recorded choice counts as the typed resolver reads it.
 // The enabled OAuth-backed auth clients each reachable server offers.
 // The registrations of those clients the credential's issuer binds, which is
-// what a choice can be decided from without a person picking it.
+// what a choice can be decided from without a person picking it, as
+// RecordUpstreamClientSelections decides it: the registration and its issuer
+// are live, and exactly one offered client uses it. A registration two
+// clients share names neither, so the resolver serves its choice as ambiguous.
 func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg ListUpstreamClientSelectionCoverageParams) ([]ListUpstreamClientSelectionCoverageRow, error) {
 	rows, err := q.db.Query(ctx, listUpstreamClientSelectionCoverage,
 		arg.CredentialKind,

@@ -128,10 +128,6 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 		return fail(fmt.Errorf("begin catalogue approval: %w", err))
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	enforced, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
-	if err != nil {
-		return fail(err)
-	}
 	q := usersessionsrepo.New(tx)
 	policy, previous, err := s.loadReconnectConnection(ctx, q, endpoint, state, time.Now())
 	if err != nil {
@@ -144,6 +140,12 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 			return fail(err)
 		}
 		return s.finishCodeReconnectApproval(w, r, t, endpoint, state, jtis)
+	}
+	// Read on the approval transaction, and only once a new catalogue is to be
+	// recorded, so a retry of a committed approval does not depend on it.
+	enforced, err := authenforcement.ReadEnforced(ctx, tx, endpoint.OrganizationID)
+	if err != nil {
+		return fail(err)
 	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {

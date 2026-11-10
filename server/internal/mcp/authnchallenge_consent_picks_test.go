@@ -22,6 +22,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -186,6 +187,13 @@ func TestHandleToken_RecordsChoicesFromAuthClientsUnderEnforcement(t *testing.T)
 		Slug:            fx.endpoint.Slug,
 	})
 	require.NoError(t, err)
+	// Both registrations are associated, so the legacy reading has two
+	// candidates and would record nothing without a pick.
+	for _, registration := range []uuid.UUID{fx.clientA, fx.clientB} {
+		n, err := upstreamclientsrepo.New(fx.ti.conn).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{OrganizationID: fx.orgID, RemoteSessionClientID: registration, McpServerID: serverID, ProjectID: fx.projectID})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), n)
+	}
 	fixtures := authclientfixtures.New(fx.ti.conn)
 	authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: fx.orgID, ProjectID: uuid.NullUUID{UUID: fx.projectID, Valid: true}, ClientType: "remote_session", Source: "admin", RemoteSessionClientID: uuid.NullUUID{UUID: fx.clientB, Valid: true}})
 	require.NoError(t, err)

@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/associationbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -45,7 +46,13 @@ func migrateUpstreamAuth(ctx context.Context, logger *slog.Logger, db *pgxpool.P
 		return err
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: false})
+	// The selection backfill reads the organization's enforcement state on its
+	// own; the auth client backfill is told it, as the admin migration does.
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return fmt.Errorf("record typed auth clients: %w", err)
+	}
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: true, PageSize: 0, TypedOnly: enforced})
 	if err != nil {
 		return fmt.Errorf("record typed auth clients: %w", err)
 	}
@@ -126,7 +133,11 @@ func upstreamAuthReadiness(ctx context.Context, logger *slog.Logger, db *pgxpool
 		}
 	}
 
-	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: false})
+	enforced, err := authenforcement.ReadEnforced(ctx, db, organizationID)
+	if err != nil {
+		return fmt.Errorf("check typed auth clients: %w", err)
+	}
+	clients, err := authclientbackfill.Run(ctx, db, authclientbackfill.Options{OrganizationID: organizationID, Apply: false, PageSize: 0, TypedOnly: enforced})
 	if err != nil {
 		return fmt.Errorf("check typed auth clients: %w", err)
 	}
