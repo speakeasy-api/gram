@@ -4762,5 +4762,6 @@ func TestHooksVersionPolicy(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, hooksBinaryVersion, policy.Latest.String())
 	require.NotNil(t, policy.Minimum)
+	require.Equal(t, "0.3.0", policy.Minimum.String())
 	require.False(t, policy.Latest.LessThan(policy.Minimum), "the minimum supported hooks version must not be newer than the shipped release")
 }
