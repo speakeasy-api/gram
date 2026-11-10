@@ -1052,8 +1052,9 @@ type GetRiskPolicyBypassRequestTargetResponseBody struct {
 	// URL of the blocked server without credentials, query, or fragment, when it
 	// was reached over HTTP.
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
-	// Launch command or identifier of the blocked server, when it has no URL.
-	ServerCommand *string `form:"server_command,omitempty" json:"server_command,omitempty" xml:"server_command,omitempty"`
+	// How the agent identified the blocked server when it has no URL: its
+	// configured name for Claude Code and Codex, or its launch command for Cursor.
+	ServerIdentifier *string `form:"server_identifier,omitempty" json:"server_identifier,omitempty" xml:"server_identifier,omitempty"`
 	// The tool the agent tried to call, when known.
 	ToolName *string `form:"tool_name,omitempty" json:"tool_name,omitempty" xml:"tool_name,omitempty"`
 	// When the request link expires.
@@ -18833,11 +18834,11 @@ func NewCreateRiskPolicyBypassRequestGatewayError(body *CreateRiskPolicyBypassRe
 // "getRiskPolicyBypassRequestTarget" endpoint result from a HTTP "OK" response.
 func NewGetRiskPolicyBypassRequestTargetResultOK(body *GetRiskPolicyBypassRequestTargetResponseBody) *risk.GetRiskPolicyBypassRequestTargetResult {
 	v := &risk.GetRiskPolicyBypassRequestTargetResult{
-		ServerName:    body.ServerName,
-		ServerURL:     body.ServerURL,
-		ServerCommand: body.ServerCommand,
-		ToolName:      body.ToolName,
-		ExpiresAt:     *body.ExpiresAt,
+		ServerName:       body.ServerName,
+		ServerURL:        body.ServerURL,
+		ServerIdentifier: body.ServerIdentifier,
+		ToolName:         body.ToolName,
+		ExpiresAt:        *body.ExpiresAt,
 	}
 
 	return v

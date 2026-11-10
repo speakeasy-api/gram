@@ -113,7 +113,9 @@ func (s *Service) GetRiskPolicyBypassRequestTarget(ctx context.Context, payload 
 // policyBypassRequestTargetView reduces the token's evidence to what the
 // request page shows. The URL goes through the inventory canonicalization so
 // credentials, query strings, and fragments the agent observed never reach the
-// page; the launch command is only shown for servers without a URL.
+// page. The agent's identifier is only shown for servers without a URL; it is
+// the configured server name for Claude Code and Codex and the launch command
+// for Cursor, so it is not labeled as either.
 func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRiskPolicyBypassRequestTargetResult {
 	evidence := shadowmcp.NormalizeAccessEvidence(shadowmcp.AccessEvidence{
 		FullURL:        conv.PtrValOr(claims.ObservedFullURL, ""),
@@ -121,9 +123,9 @@ func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRi
 		ServerIdentity: conv.PtrValOr(claims.ObservedServerIdentity, ""),
 	})
 	serverURL := normalizedShadowMCPServerURL(evidence.FullURL)
-	serverCommand := ""
+	serverIdentifier := ""
 	if serverURL == "" && evidence.URLHost == "" {
-		serverCommand = evidence.ServerIdentity
+		serverIdentifier = evidence.ServerIdentity
 	}
 
 	expiresAt := ""
@@ -132,11 +134,11 @@ func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRi
 	}
 
 	return &gen.GetRiskPolicyBypassRequestTargetResult{
-		ServerName:    conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))),
-		ServerURL:     conv.PtrEmpty(serverURL),
-		ServerCommand: conv.PtrEmpty(serverCommand),
-		ToolName:      conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ToolName, ""))),
-		ExpiresAt:     expiresAt,
+		ServerName:       conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ObservedName, ""))),
+		ServerURL:        conv.PtrEmpty(serverURL),
+		ServerIdentifier: conv.PtrEmpty(serverIdentifier),
+		ToolName:         conv.PtrEmpty(strings.TrimSpace(conv.PtrValOr(claims.ToolName, ""))),
+		ExpiresAt:        expiresAt,
 	}
 }
 

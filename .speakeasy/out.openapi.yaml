@@ -100719,9 +100719,9 @@ components:
           type: string
           description: When the request link expires.
           format: date-time
-        server_command:
+        server_identifier:
           type: string
-          description: Launch command or identifier of the blocked server, when it has no URL.
+          description: 'How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.'
         server_name:
           type: string
           description: Display name of the blocked server, when known.

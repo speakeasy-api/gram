@@ -631,8 +631,9 @@ type GetRiskPolicyBypassRequestTargetResult struct {
 	// URL of the blocked server without credentials, query, or fragment, when it
 	// was reached over HTTP.
 	ServerURL *string
-	// Launch command or identifier of the blocked server, when it has no URL.
-	ServerCommand *string
+	// How the agent identified the blocked server when it has no URL: its
+	// configured name for Claude Code and Codex, or its launch command for Cursor.
+	ServerIdentifier *string
 	// The tool the agent tried to call, when known.
 	ToolName *string
 	// When the request link expires.

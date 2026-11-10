@@ -42,7 +42,7 @@ type SubmissionResult = "idle" | "submitting" | "complete" | "error";
 type RequestTarget = {
   serverName?: string | undefined;
   serverUrl?: string | undefined;
-  serverCommand?: string | undefined;
+  serverIdentifier?: string | undefined;
   toolName?: string | undefined;
 };
 
@@ -54,8 +54,10 @@ export function ShadowMCPRequestAccessContent(): JSX.Element {
   const [note, setNote] = useState("");
   const { mutateAsync: createApprovalRequest } =
     useRiskCreatePolicyBypassRequestMutation();
+  // A failed lookup only hides the details, so it opts out of the global
+  // "Request failed" toast.
   const { mutateAsync: fetchTarget } =
-    useRiskGetPolicyBypassRequestTargetMutation();
+    useRiskGetPolicyBypassRequestTargetMutation({ onError: () => {} });
   const [target, setTarget] = useState<RequestTarget | null>(null);
 
   // The request token is a bearer credential delivered in the URL fragment
@@ -338,7 +340,7 @@ function RequestTargetDetails({ target }: { target: RequestTarget }) {
   const rows = [
     { label: "Server", value: target.serverName, code: false },
     { label: "URL", value: target.serverUrl, code: true },
-    { label: "Command", value: target.serverCommand, code: true },
+    { label: "Identifier", value: target.serverIdentifier, code: true },
     { label: "Tool", value: target.toolName, code: true },
   ].filter((row) => !!row.value);
   if (rows.length === 0) return null;

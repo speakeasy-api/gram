@@ -14,9 +14,9 @@ export type GetRiskPolicyBypassRequestTargetResponseBody = {
    */
   expiresAt: Date;
   /**
-   * Launch command or identifier of the blocked server, when it has no URL.
+   * How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.
    */
-  serverCommand?: string | undefined;
+  serverIdentifier?: string | undefined;
   /**
    * Display name of the blocked server, when known.
    */
@@ -39,7 +39,7 @@ export const GetRiskPolicyBypassRequestTargetResponseBody$inboundSchema:
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
-      server_command: z.optional(z.string()),
+      server_identifier: z.optional(z.string()),
       server_name: z.optional(z.string()),
       server_url: z.optional(z.string()),
       tool_name: z.optional(z.string()),
@@ -47,7 +47,7 @@ export const GetRiskPolicyBypassRequestTargetResponseBody$inboundSchema:
     z.transform((v) => {
       return remap$(v, {
         "expires_at": "expiresAt",
-        "server_command": "serverCommand",
+        "server_identifier": "serverIdentifier",
         "server_name": "serverName",
         "server_url": "serverUrl",
         "tool_name": "toolName",

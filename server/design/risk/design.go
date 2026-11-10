@@ -1029,7 +1029,7 @@ var _ = Service("risk", func() {
 		Result(func() {
 			Attribute("server_name", String, "Display name of the blocked server, when known.")
 			Attribute("server_url", String, "URL of the blocked server without credentials, query, or fragment, when it was reached over HTTP.")
-			Attribute("server_command", String, "Launch command or identifier of the blocked server, when it has no URL.")
+			Attribute("server_identifier", String, "How the agent identified the blocked server when it has no URL: its configured name for Claude Code and Codex, or its launch command for Cursor.")
 			Attribute("tool_name", String, "The tool the agent tried to call, when known.")
 			Attribute("expires_at", String, "When the request link expires.", func() {
 				Format(FormatDateTime)

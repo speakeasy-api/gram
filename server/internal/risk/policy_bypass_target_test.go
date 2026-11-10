@@ -27,7 +27,7 @@ func mintRequestTargetToken(t *testing.T, ti *testInstance, authCtx *contextvalu
 }
 
 // The request page names what the link asks for. A URL loses its credentials,
-// query, and fragment, and no launch command is shown for a server with a URL.
+// query, and fragment, and no identifier is shown for a server with a URL.
 func TestGetRiskPolicyBypassRequestTarget_NamesURLServerAndTool(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
@@ -46,13 +46,15 @@ func TestGetRiskPolicyBypassRequestTarget_NamesURLServerAndTool(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "mcp.team-notes.example.com", *target.ServerName)
 	require.Equal(t, "https://mcp.team-notes.example.com/mcp", *target.ServerURL)
-	require.Nil(t, target.ServerCommand)
+	require.Nil(t, target.ServerIdentifier)
 	require.Equal(t, "search_notes", *target.ToolName)
 	require.NotEmpty(t, target.ExpiresAt)
 }
 
-// A server with no URL is identified by its launch command.
-func TestGetRiskPolicyBypassRequestTarget_ShowsCommandWithoutURL(t *testing.T) {
+// A server with no URL is identified by what the agent called it. For Claude
+// Code and Codex that is the configured server name, not a launch command, so
+// it is returned as an identifier rather than a command.
+func TestGetRiskPolicyBypassRequestTarget_ShowsIdentifierWithoutURL(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -60,13 +62,15 @@ func TestGetRiskPolicyBypassRequestTarget_ShowsCommandWithoutURL(t *testing.T) {
 
 	token := mintRequestTargetToken(t, ti, authCtx, risk.PolicyBypassRequestTokenInput{
 		RequesterUserID:        authCtx.UserID,
-		ObservedServerIdentity: new("npx local-files-mcp"),
+		ObservedName:           new("Local Files"),
+		ObservedServerIdentity: new("local-files"),
 	})
 
 	target, err := ti.service.GetRiskPolicyBypassRequestTarget(ctx, &gen.GetRiskPolicyBypassRequestTargetPayload{RequestToken: token})
 	require.NoError(t, err)
 	require.Nil(t, target.ServerURL)
-	require.Equal(t, "npx local-files-mcp", *target.ServerCommand)
+	require.Equal(t, "Local Files", *target.ServerName)
+	require.Equal(t, "local-files", *target.ServerIdentifier)
 }
 
 // Reading a link is bound to the caller like filing it: another user cannot

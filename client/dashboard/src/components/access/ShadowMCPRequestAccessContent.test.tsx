@@ -256,7 +256,7 @@ describe("ShadowMCPRequestAccessContent", () => {
       screen.getByText("https://mcp.team-notes.example.com/mcp"),
     ).toBeTruthy();
     expect(screen.getByText("search_notes")).toBeTruthy();
-    expect(screen.queryByText("Command")).toBeNull();
+    expect(screen.queryByText("Identifier")).toBeNull();
     expect(mocks.fetchTarget).toHaveBeenCalledTimes(1);
     expect(mocks.fetchTarget).toHaveBeenCalledWith({
       request: {
@@ -269,7 +269,7 @@ describe("ShadowMCPRequestAccessContent", () => {
     expect(mocks.createApprovalRequest).not.toHaveBeenCalled();
   });
 
-  it("shows the launch command for a server without a URL", async () => {
+  it("shows the agent's identifier for a server without a URL", async () => {
     sessionStorage.setItem(
       "riskPolicyBypassRequestToken",
       "rpbr2.stored-token",
@@ -277,14 +277,14 @@ describe("ShadowMCPRequestAccessContent", () => {
     mocks.useSession.mockReturnValue({ session: "session_123" });
     mocks.fetchTarget.mockResolvedValue({
       serverName: "Local Files",
-      serverCommand: "npx local-files-mcp",
+      serverIdentifier: "local-files",
       expiresAt: new Date(),
     });
 
     renderPage("/risk-policy-bypass/request");
 
-    expect(await screen.findByText("npx local-files-mcp")).toBeTruthy();
-    expect(screen.getByText("Command")).toBeTruthy();
+    expect(await screen.findByText("local-files")).toBeTruthy();
+    expect(screen.getByText("Identifier")).toBeTruthy();
     expect(screen.queryByText("URL")).toBeNull();
   });
 
@@ -299,7 +299,12 @@ describe("ShadowMCPRequestAccessContent", () => {
     renderPage("/risk-policy-bypass/request");
 
     await waitFor(() => expect(mocks.fetchTarget).toHaveBeenCalled());
-    expect(noteField()).toBeTruthy();
+    // Let the rejected lookup settle, then file the request through the page.
+    await expect(mocks.fetchTarget.mock.results[0]?.value).rejects.toThrow(
+      "forbidden",
+    );
+    sendWithNote();
+    await waitFor(() => expect(mocks.createApprovalRequest).toHaveBeenCalled());
     expect(screen.queryByText("Server")).toBeNull();
   });
 
