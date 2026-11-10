@@ -150,6 +150,7 @@
         "typescript/strict-void-return": "off",
         "typescript/unbound-method": "off",
         "typescript/explicit-module-boundary-types": "off",
+        "typescript/consistent-type-imports": "off",
         "react/only-export-components": "off"
       }
     }
