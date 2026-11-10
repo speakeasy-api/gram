@@ -73,6 +73,27 @@ func TestGetRiskPolicyBypassRequestTarget_ShowsIdentifierWithoutURL(t *testing.T
 	require.Equal(t, "local-files", *target.ServerIdentifier)
 }
 
+// A Cursor stdio server is identified by its launch command, which can carry
+// credentials. They never reach the request page.
+func TestGetRiskPolicyBypassRequestTarget_RedactsCommandIdentifier(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	token := mintRequestTargetToken(t, ti, authCtx, risk.PolicyBypassRequestTokenInput{
+		RequesterUserID:        authCtx.UserID,
+		ObservedServerIdentity: new("API_TOKEN=secret-env npx -y local-files-mcp --api-key=secret-flag"),
+	})
+
+	target, err := ti.service.GetRiskPolicyBypassRequestTarget(ctx, &gen.GetRiskPolicyBypassRequestTargetPayload{RequestToken: token})
+	require.NoError(t, err)
+	require.NotNil(t, target.ServerIdentifier)
+	require.Contains(t, *target.ServerIdentifier, "npx -y local-files-mcp")
+	require.NotContains(t, *target.ServerIdentifier, "secret-env")
+	require.NotContains(t, *target.ServerIdentifier, "secret-flag")
+}
+
 // Reading a link is bound to the caller like filing it: another user cannot
 // read what someone else's link asks for.
 func TestGetRiskPolicyBypassRequestTarget_RejectsOtherRequester(t *testing.T) {

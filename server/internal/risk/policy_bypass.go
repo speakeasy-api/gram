@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpapproval/identity"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -115,7 +116,9 @@ func (s *Service) GetRiskPolicyBypassRequestTarget(ctx context.Context, payload 
 // credentials, query strings, and fragments the agent observed never reach the
 // page. The agent's identifier is only shown for servers without a URL; it is
 // the configured server name for Claude Code and Codex and the launch command
-// for Cursor, so it is not labeled as either.
+// for Cursor, so it is not labeled as either. A launch command can carry
+// credentials as flags, env assignments, or URL query strings, so it goes
+// through the same redaction the approval queue applies to stored commands.
 func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRiskPolicyBypassRequestTargetResult {
 	evidence := shadowmcp.NormalizeAccessEvidence(shadowmcp.AccessEvidence{
 		FullURL:        conv.PtrValOr(claims.ObservedFullURL, ""),
@@ -125,7 +128,7 @@ func policyBypassRequestTargetView(claims *policyBypassRequestClaims) *gen.GetRi
 	serverURL := normalizedShadowMCPServerURL(evidence.FullURL)
 	serverIdentifier := ""
 	if serverURL == "" && evidence.URLHost == "" {
-		serverIdentifier = evidence.ServerIdentity
+		serverIdentifier = identity.RedactCommand(evidence.ServerIdentity)
 	}
 
 	expiresAt := ""
