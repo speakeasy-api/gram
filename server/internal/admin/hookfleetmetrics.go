@@ -117,7 +117,12 @@ func summarizeHookVersionMix(rows []telemetry.HookVersionMixRow, policy hookvers
 	for _, row := range rows {
 		mix, ok := out[row.OrganizationID]
 		if !ok {
-			mix = hookOrgMix{Installs: map[hookversions.Status]int64{}, Events: 0, LegacyEvents: 0}
+			mix = hookOrgMix{Installs: map[hookversions.Status]int64{
+				hookversions.StatusCurrent:     0,
+				hookversions.StatusBehind:      0,
+				hookversions.StatusUnsupported: 0,
+				hookversions.StatusUnknown:     0,
+			}, Events: 0, LegacyEvents: 0}
 		}
 		mix.Installs[policy.Classify(row.BinaryVersion, row.EndpointGeneration)] += int64(row.Installs) //nolint:gosec // install counts are far below MaxInt64
 		mix.Events += row.Events
