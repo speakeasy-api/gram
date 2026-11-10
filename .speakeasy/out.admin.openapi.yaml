@@ -562,6 +562,156 @@ paths:
       x-speakeasy-name-override: getHookClients
       x-speakeasy-react-hook:
         name: AdminGetHookClients
+  /admin/mcp.debug:
+    post:
+      description: 'Staff-only MCP debugger: trace a remote MCP server URL step by step from Speakeasy''s network. Reaches the server, reads its authentication challenge, discovers OAuth protected resource and authorization server metadata, detects how a client would register, and, when no sign-in is required, initializes a session and lists its tools, prompts and resources. Sends no credentials and stores nothing.'
+      operationId: adminDebugMcpUrl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminDebugMcpURLRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpDebugReport'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: debugMcpUrl admin
+      tags:
+        - admin
+      x-speakeasy-name-override: debugMcpUrl
+  /admin/mcp.verificationLink:
+    post:
+      description: 'Staff-only: the customer dashboard link for verifying a remote MCP server in Speakeasy''s own project. When that project already has a server for the URL, the link opens its Playground; otherwise it opens the add-server page with the URL filled in. Reads only; nothing is created until staff confirm in the dashboard.'
+      operationId: adminGetMcpVerificationLink
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminGetMcpVerificationLinkRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminMcpVerificationLink'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getMcpVerificationLink admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getMcpVerificationLink
   /admin/mcpAuthGrants.backfill:
     post:
       description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
@@ -9066,6 +9216,15 @@ components:
         - pricing_basis
         - queried_at
         - customers
+    AdminDebugMcpURLRequestBody:
+      type: object
+      properties:
+        url:
+          type: string
+          description: The remote MCP server URL to debug.
+          format: uri
+      required:
+        - url
     AdminDeviceAgentCell:
       type: object
       properties:
@@ -9089,6 +9248,19 @@ components:
         - day
         - version
         - machines
+    AdminGetMcpVerificationLinkRequestBody:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Optional display name to fill in when the server is added.
+          maxLength: 200
+        url:
+          type: string
+          description: The remote MCP server URL to verify.
+          format: uri
+      required:
+        - url
     AdminHookClientOrganization:
       type: object
       properties:
@@ -9430,6 +9602,176 @@ components:
         - total
         - page
         - limit
+    AdminMcpDebugPrompt:
+      type: object
+      properties:
+        arguments:
+          description: Prompt arguments as advertised.
+        description:
+          type: string
+          description: Prompt description.
+        name:
+          type: string
+          description: Prompt name.
+        title:
+          type: string
+          description: Display title, when advertised.
+      description: A prompt advertised by the debugged server.
+      required:
+        - name
+    AdminMcpDebugReport:
+      type: object
+      properties:
+        auth_method:
+          type: string
+          enum:
+            - none
+            - client_id_metadata_document
+            - dynamic_client_registration
+            - pre_registered
+            - non_oauth
+            - unknown
+        duration_ms:
+          type: integer
+          description: Total wall-clock time of the trace.
+          format: int64
+        instructions:
+          type: string
+          description: Server instructions from initialize.
+        outcome:
+          type: string
+          enum:
+            - mcp_available
+            - authentication_required
+            - invalid_mcp_response
+            - unreachable
+        prompts:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpDebugPrompt'
+          description: Prompts advertised by the server. Present only when listed.
+        protocol_version:
+          type: string
+          description: MCP protocol version negotiated at initialize.
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpDebugResource'
+          description: Resources advertised by the server. Present only when listed.
+        server_name:
+          type: string
+          description: Server name from initialize.
+        server_version:
+          type: string
+          description: Server version from initialize.
+        steps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpDebugStep'
+          description: Trace steps in execution order.
+        tools:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpDebugTool'
+          description: Tools advertised by the server. Present only when the server was listed without sign-in.
+        url:
+          type: string
+          description: The URL that was debugged, without credentials, query or fragment.
+      description: Result of an MCP debug trace.
+      required:
+        - url
+        - outcome
+        - duration_ms
+        - steps
+        - auth_method
+    AdminMcpDebugResource:
+      type: object
+      properties:
+        description:
+          type: string
+          description: Resource description.
+        mime_type:
+          type: string
+          description: Resource MIME type.
+        name:
+          type: string
+          description: Resource name.
+        title:
+          type: string
+          description: Display title, when advertised.
+        uri:
+          type: string
+          description: Resource URI.
+      description: A resource advertised by the debugged server.
+      required:
+        - uri
+        - name
+    AdminMcpDebugStep:
+      type: object
+      properties:
+        details:
+          type: object
+          description: Structured data the step observed, such as parsed challenge parameters or metadata documents.
+          additionalProperties: true
+        duration_ms:
+          type: integer
+          description: Wall-clock time the step took. Absent for steps that did no network work.
+          format: int64
+        http_status:
+          type: integer
+          description: HTTP status the step received, when it made an HTTP request.
+          format: int64
+        id:
+          type: string
+          enum:
+            - reach_server
+            - parse_auth_challenge
+            - fetch_protected_resource_metadata
+            - fetch_authorization_server_metadata
+            - detect_auth_method
+            - initialize
+            - list_capabilities
+        request_url:
+          type: string
+          description: The URL the step requested, without credentials, query or fragment.
+        status:
+          type: string
+          enum:
+            - passed
+            - warning
+            - failed
+            - skipped
+        summary:
+          type: string
+          description: One-line explanation of what the step found.
+        title:
+          type: string
+          description: Human-readable step title.
+      description: One step of an MCP debug trace.
+      required:
+        - id
+        - title
+        - status
+        - summary
+    AdminMcpDebugTool:
+      type: object
+      properties:
+        annotations:
+          description: Tool annotation hints as advertised.
+        description:
+          type: string
+          description: Tool description.
+        input_schema:
+          description: JSON Schema for the tool's arguments.
+        name:
+          type: string
+          description: Tool name.
+        title:
+          type: string
+          description: Display title, when advertised.
+      description: A tool advertised by the debugged server.
+      required:
+        - name
     AdminMcpServer:
       type: object
       properties:
@@ -10068,6 +10410,23 @@ components:
       description: 'One MCP server''s tool calls over a window, discriminated on type. logging:disabled carries nothing else: the organization''s logs are off, so calls were never recorded. logging:enabled carries every other field. Outcomes also count hook-observed calls; the daily series counts only calls that reached Speakeasy directly.'
       required:
         - type
+    AdminMcpVerificationLink:
+      type: object
+      properties:
+        existing:
+          type: boolean
+          description: True when Speakeasy's project already has a server for this URL and the link opens its Playground.
+        project_name:
+          type: string
+          description: Name of the Speakeasy project the server is verified in.
+        url:
+          type: string
+          description: Customer dashboard link to open in a new tab.
+      description: Where staff verify a remote MCP server in the customer dashboard.
+      required:
+        - url
+        - existing
+        - project_name
     AdminMdmVendorOption:
       type: object
       properties:

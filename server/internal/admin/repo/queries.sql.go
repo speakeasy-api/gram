@@ -392,6 +392,33 @@ func (q *Queries) AdminEnableOrganization(ctx context.Context, id string) (int64
 	return result.RowsAffected(), nil
 }
 
+const adminFindMcpServerByRemoteURL = `-- name: AdminFindMcpServerByRemoteURL :one
+SELECT m.id
+FROM mcp_servers m
+JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id
+    AND r.project_id = m.project_id
+    AND r.deleted IS FALSE
+WHERE m.project_id = $1
+  AND m.deleted IS FALSE
+  AND r.url = $2
+ORDER BY m.created_at DESC, m.id DESC
+LIMIT 1
+`
+
+type AdminFindMcpServerByRemoteURLParams struct {
+	ProjectID uuid.UUID
+	Url       string
+}
+
+// The newest live MCP server in a project that fronts the remote URL, so a
+// second verification of the same URL reuses the server the first one added.
+func (q *Queries) AdminFindMcpServerByRemoteURL(ctx context.Context, arg AdminFindMcpServerByRemoteURLParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, adminFindMcpServerByRemoteURL, arg.ProjectID, arg.Url)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const adminGetConnectGrantExpiryFixture = `-- name: AdminGetConnectGrantExpiryFixture :one
 SELECT expires_at
 FROM principal_grants
@@ -584,6 +611,38 @@ func (q *Queries) AdminGetMcpServerAuth(ctx context.Context, arg AdminGetMcpServ
 		&i.ToolsetSlug,
 		&i.ToolsetWrapperCount,
 	)
+	return i, err
+}
+
+const adminGetMcpVerificationProject = `-- name: AdminGetMcpVerificationProject :one
+SELECT
+    om.slug AS organization_slug,
+    p.slug AS project_slug,
+    p.name AS project_name
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = $1
+  AND p.organization_id = $2
+  AND p.deleted IS FALSE
+`
+
+type AdminGetMcpVerificationProjectParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+type AdminGetMcpVerificationProjectRow struct {
+	OrganizationSlug string
+	ProjectSlug      string
+	ProjectName      string
+}
+
+// The Speakeasy-owned project staff verify MCP servers in. Matching both ids
+// keeps a misconfigured project id from resolving into another organization.
+func (q *Queries) AdminGetMcpVerificationProject(ctx context.Context, arg AdminGetMcpVerificationProjectParams) (AdminGetMcpVerificationProjectRow, error) {
+	row := q.db.QueryRow(ctx, adminGetMcpVerificationProject, arg.ProjectID, arg.OrganizationID)
+	var i AdminGetMcpVerificationProjectRow
+	err := row.Scan(&i.OrganizationSlug, &i.ProjectSlug, &i.ProjectName)
 	return i, err
 }
 

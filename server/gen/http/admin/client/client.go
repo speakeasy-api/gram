@@ -328,6 +328,14 @@ type Client struct {
 	// the setRegistryEntryPublished endpoint.
 	SetRegistryEntryPublishedDoer goahttp.Doer
 
+	// DebugMcpURL Doer is the HTTP client used to make requests to the debugMcpUrl
+	// endpoint.
+	DebugMcpURLDoer goahttp.Doer
+
+	// GetMcpVerificationLink Doer is the HTTP client used to make requests to the
+	// getMcpVerificationLink endpoint.
+	GetMcpVerificationLinkDoer goahttp.Doer
+
 	// ListOnboardingSteps Doer is the HTTP client used to make requests to the
 	// listOnboardingSteps endpoint.
 	ListOnboardingStepsDoer goahttp.Doer
@@ -546,6 +554,8 @@ func NewClient(
 		CreateRegistryEntryDoer:                     doer,
 		SaveRegistryEntryDoer:                       doer,
 		SetRegistryEntryPublishedDoer:               doer,
+		DebugMcpURLDoer:                             doer,
+		GetMcpVerificationLinkDoer:                  doer,
 		ListOnboardingStepsDoer:                     doer,
 		GetOnboardingStackOptionsDoer:               doer,
 		GetOrganizationOnboardingStackDoer:          doer,
@@ -2456,6 +2466,54 @@ func (c *Client) SetRegistryEntryPublished() goa.Endpoint {
 		resp, err := c.SetRegistryEntryPublishedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setRegistryEntryPublished", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// DebugMcpURL returns an endpoint that makes HTTP requests to the admin
+// service debugMcpUrl server.
+func (c *Client) DebugMcpURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeDebugMcpURLRequest(c.encoder)
+		decodeResponse = DecodeDebugMcpURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildDebugMcpURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.DebugMcpURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "debugMcpUrl", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMcpVerificationLink returns an endpoint that makes HTTP requests to the
+// admin service getMcpVerificationLink server.
+func (c *Client) GetMcpVerificationLink() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMcpVerificationLinkRequest(c.encoder)
+		decodeResponse = DecodeGetMcpVerificationLinkResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMcpVerificationLinkRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMcpVerificationLinkDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getMcpVerificationLink", err)
 		}
 		return decodeResponse(resp)
 	}

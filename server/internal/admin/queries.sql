@@ -1324,3 +1324,30 @@ WHERE organization_id = @organization_id
 -- name: AdminBackdateUserSessionFixture :exec
 -- Test fixture: no writer backdates a session.
 UPDATE user_sessions SET created_at = @created_at WHERE id = @id;
+
+-- name: AdminGetMcpVerificationProject :one
+-- The Speakeasy-owned project staff verify MCP servers in. Matching both ids
+-- keeps a misconfigured project id from resolving into another organization.
+SELECT
+    om.slug AS organization_slug,
+    p.slug AS project_slug,
+    p.name AS project_name
+FROM projects p
+JOIN organization_metadata om ON om.id = p.organization_id
+WHERE p.id = @project_id
+  AND p.organization_id = @organization_id
+  AND p.deleted IS FALSE;
+
+-- name: AdminFindMcpServerByRemoteURL :one
+-- The newest live MCP server in a project that fronts the remote URL, so a
+-- second verification of the same URL reuses the server the first one added.
+SELECT m.id
+FROM mcp_servers m
+JOIN remote_mcp_servers r ON r.id = m.remote_mcp_server_id
+    AND r.project_id = m.project_id
+    AND r.deleted IS FALSE
+WHERE m.project_id = @project_id
+  AND m.deleted IS FALSE
+  AND r.url = @url
+ORDER BY m.created_at DESC, m.id DESC
+LIMIT 1;

@@ -295,6 +295,22 @@ for (const { name, Component, fill, button } of cases) {
     });
   });
 }
+it("fills in the URL and name from the link that opened the page", () => {
+  const query = new URLSearchParams({
+    url: "https://mcp.example.test/mcp",
+    name: "Example",
+  });
+  render(
+    <MemoryRouter initialEntries={[`${START}?${query.toString()}`]}>
+      <CreateRemoteMcp />
+    </MemoryRouter>,
+  );
+  expect(
+    (screen.getByLabelText("MCP server URL") as HTMLInputElement).value,
+  ).toBe("https://mcp.example.test/mcp");
+  expect(state.create).not.toHaveBeenCalled();
+});
+
 it("disables direct connections only in gateway context", () => {
   const view = render(<CreateRemoteMcp />, { wrapper: Router });
   expect(

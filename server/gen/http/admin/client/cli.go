@@ -2885,6 +2885,70 @@ func BuildSetRegistryEntryPublishedPayload(adminSetRegistryEntryPublishedBody st
 	return v, nil
 }
 
+// BuildDebugMcpURLPayload builds the payload for the admin debugMcpUrl
+// endpoint from CLI flags.
+func BuildDebugMcpURLPayload(adminDebugMcpURLBody string, adminDebugMcpURLAdminSessionToken string) (*admin.DebugMcpURLPayload, error) {
+	var err error
+	var body DebugMcpURLRequestBody
+	{
+		err = json.Unmarshal([]byte(adminDebugMcpURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminDebugMcpURLAdminSessionToken != "" {
+			adminSessionToken = &adminDebugMcpURLAdminSessionToken
+		}
+	}
+	v := &admin.DebugMcpURLPayload{
+		URL: body.URL,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMcpVerificationLinkPayload builds the payload for the admin
+// getMcpVerificationLink endpoint from CLI flags.
+func BuildGetMcpVerificationLinkPayload(adminGetMcpVerificationLinkBody string, adminGetMcpVerificationLinkAdminSessionToken string) (*admin.GetMcpVerificationLinkPayload, error) {
+	var err error
+	var body GetMcpVerificationLinkRequestBody
+	{
+		err = json.Unmarshal([]byte(adminGetMcpVerificationLinkBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aaa\",\n      \"url\": \"https://example.com/foo\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", body.URL, goa.FormatURI))
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMcpVerificationLinkAdminSessionToken != "" {
+			adminSessionToken = &adminGetMcpVerificationLinkAdminSessionToken
+		}
+	}
+	v := &admin.GetMcpVerificationLinkPayload{
+		URL:  body.URL,
+		Name: body.Name,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
 // BuildListOnboardingStepsPayload builds the payload for the admin
 // listOnboardingSteps endpoint from CLI flags.
 func BuildListOnboardingStepsPayload(adminListOnboardingStepsAdminSessionToken string) (*admin.ListOnboardingStepsPayload, error) {

@@ -528,6 +528,22 @@ type SetRegistryEntryPublishedRequestBody struct {
 	Published *bool   `form:"published,omitempty" json:"published,omitempty" xml:"published,omitempty"`
 }
 
+// DebugMcpURLRequestBody is the type of the "admin" service "debugMcpUrl"
+// endpoint HTTP request body.
+type DebugMcpURLRequestBody struct {
+	// The remote MCP server URL to debug.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+}
+
+// GetMcpVerificationLinkRequestBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP request body.
+type GetMcpVerificationLinkRequestBody struct {
+	// The remote MCP server URL to verify.
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Optional display name to fill in when the server is added.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+}
+
 // SetOrganizationOnboardingStackRequestBody is the type of the "admin" service
 // "setOrganizationOnboardingStack" endpoint HTTP request body.
 type SetOrganizationOnboardingStackRequestBody struct {
@@ -2625,6 +2641,48 @@ type SetRegistryEntryPublishedResponseBody struct {
 	// Opaque write precondition; echo unchanged
 	UpdatedAt string                            `form:"updated_at" json:"updated_at" xml:"updated_at"`
 	Issues    []*AdminRegistryIssueResponseBody `form:"issues" json:"issues" xml:"issues"`
+}
+
+// DebugMcpURLResponseBody is the type of the "admin" service "debugMcpUrl"
+// endpoint HTTP response body.
+type DebugMcpURLResponseBody struct {
+	// The URL that was debugged, without credentials, query or fragment.
+	URL string `form:"url" json:"url" xml:"url"`
+	// Overall outcome.
+	Outcome string `form:"outcome" json:"outcome" xml:"outcome"`
+	// Total wall-clock time of the trace.
+	DurationMs int64 `form:"duration_ms" json:"duration_ms" xml:"duration_ms"`
+	// Trace steps in execution order.
+	Steps []*AdminMcpDebugStepResponseBody `form:"steps" json:"steps" xml:"steps"`
+	// How a client would obtain credentials.
+	AuthMethod string `form:"auth_method" json:"auth_method" xml:"auth_method"`
+	// MCP protocol version negotiated at initialize.
+	ProtocolVersion *string `form:"protocol_version,omitempty" json:"protocol_version,omitempty" xml:"protocol_version,omitempty"`
+	// Server name from initialize.
+	ServerName *string `form:"server_name,omitempty" json:"server_name,omitempty" xml:"server_name,omitempty"`
+	// Server version from initialize.
+	ServerVersion *string `form:"server_version,omitempty" json:"server_version,omitempty" xml:"server_version,omitempty"`
+	// Server instructions from initialize.
+	Instructions *string `form:"instructions,omitempty" json:"instructions,omitempty" xml:"instructions,omitempty"`
+	// Tools advertised by the server. Present only when the server was listed
+	// without sign-in.
+	Tools []*AdminMcpDebugToolResponseBody `form:"tools,omitempty" json:"tools,omitempty" xml:"tools,omitempty"`
+	// Prompts advertised by the server. Present only when listed.
+	Prompts []*AdminMcpDebugPromptResponseBody `form:"prompts,omitempty" json:"prompts,omitempty" xml:"prompts,omitempty"`
+	// Resources advertised by the server. Present only when listed.
+	Resources []*AdminMcpDebugResourceResponseBody `form:"resources,omitempty" json:"resources,omitempty" xml:"resources,omitempty"`
+}
+
+// GetMcpVerificationLinkResponseBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP response body.
+type GetMcpVerificationLinkResponseBody struct {
+	// Customer dashboard link to open in a new tab.
+	URL string `form:"url" json:"url" xml:"url"`
+	// True when Speakeasy's project already has a server for this URL and the link
+	// opens its Playground.
+	Existing bool `form:"existing" json:"existing" xml:"existing"`
+	// Name of the Speakeasy project the server is verified in.
+	ProjectName string `form:"project_name" json:"project_name" xml:"project_name"`
 }
 
 // ListOnboardingStepsResponseBody is the type of the "admin" service
@@ -18015,6 +18073,376 @@ type SetRegistryEntryPublishedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// DebugMcpURLUnauthorizedResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unauthorized" error.
+type DebugMcpURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLForbiddenResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "forbidden" error.
+type DebugMcpURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLBadRequestResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "bad_request" error.
+type DebugMcpURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLNotFoundResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "not_found" error.
+type DebugMcpURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLConflictResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "conflict" error.
+type DebugMcpURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLUnsupportedMediaResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unsupported_media" error.
+type DebugMcpURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLInvalidResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "invalid" error.
+type DebugMcpURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLInvariantViolationResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "invariant_violation"
+// error.
+type DebugMcpURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLUnexpectedResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "unexpected" error.
+type DebugMcpURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// DebugMcpURLGatewayErrorResponseBody is the type of the "admin" service
+// "debugMcpUrl" endpoint HTTP response body for the "gateway_error" error.
+type DebugMcpURLGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkUnauthorizedResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMcpVerificationLinkUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkForbiddenResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpVerificationLinkForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkBadRequestResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMcpVerificationLinkBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkNotFoundResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpVerificationLinkNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkConflictResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpVerificationLinkConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkUnsupportedMediaResponseBody is the type of the
+// "admin" service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMcpVerificationLinkUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkInvalidResponseBody is the type of the "admin" service
+// "getMcpVerificationLink" endpoint HTTP response body for the "invalid" error.
+type GetMcpVerificationLinkInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkInvariantViolationResponseBody is the type of the
+// "admin" service "getMcpVerificationLink" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMcpVerificationLinkInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkUnexpectedResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMcpVerificationLinkUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpVerificationLinkGatewayErrorResponseBody is the type of the "admin"
+// service "getMcpVerificationLink" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMcpVerificationLinkGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // ListOnboardingStepsUnauthorizedResponseBody is the type of the "admin"
 // service "listOnboardingSteps" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -24818,6 +25246,71 @@ type AdminRegistryIssueResponseBody struct {
 	Message string `form:"message" json:"message" xml:"message"`
 }
 
+// AdminMcpDebugStepResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugStepResponseBody struct {
+	// Stable step identifier.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Human-readable step title.
+	Title string `form:"title" json:"title" xml:"title"`
+	// Step outcome.
+	Status string `form:"status" json:"status" xml:"status"`
+	// One-line explanation of what the step found.
+	Summary string `form:"summary" json:"summary" xml:"summary"`
+	// Wall-clock time the step took. Absent for steps that did no network work.
+	DurationMs *int64 `form:"duration_ms,omitempty" json:"duration_ms,omitempty" xml:"duration_ms,omitempty"`
+	// The URL the step requested, without credentials, query or fragment.
+	RequestURL *string `form:"request_url,omitempty" json:"request_url,omitempty" xml:"request_url,omitempty"`
+	// HTTP status the step received, when it made an HTTP request.
+	HTTPStatus *int `form:"http_status,omitempty" json:"http_status,omitempty" xml:"http_status,omitempty"`
+	// Structured data the step observed, such as parsed challenge parameters or
+	// metadata documents.
+	Details map[string]any `form:"details,omitempty" json:"details,omitempty" xml:"details,omitempty"`
+}
+
+// AdminMcpDebugToolResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugToolResponseBody struct {
+	// Tool name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Tool description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// JSON Schema for the tool's arguments.
+	InputSchema any `form:"input_schema,omitempty" json:"input_schema,omitempty" xml:"input_schema,omitempty"`
+	// Tool annotation hints as advertised.
+	Annotations any `form:"annotations,omitempty" json:"annotations,omitempty" xml:"annotations,omitempty"`
+}
+
+// AdminMcpDebugPromptResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugPromptResponseBody struct {
+	// Prompt name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Prompt description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Prompt arguments as advertised.
+	Arguments any `form:"arguments,omitempty" json:"arguments,omitempty" xml:"arguments,omitempty"`
+}
+
+// AdminMcpDebugResourceResponseBody is used to define fields on response body
+// types.
+type AdminMcpDebugResourceResponseBody struct {
+	// Resource URI.
+	URI string `form:"uri" json:"uri" xml:"uri"`
+	// Resource name.
+	Name string `form:"name" json:"name" xml:"name"`
+	// Display title, when advertised.
+	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
+	// Resource description.
+	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Resource MIME type.
+	MimeType *string `form:"mime_type,omitempty" json:"mime_type,omitempty" xml:"mime_type,omitempty"`
+}
+
 // AdminOnboardingStepResponseBody is used to define fields on response body
 // types.
 type AdminOnboardingStepResponseBody struct {
@@ -27373,6 +27866,75 @@ func NewSetRegistryEntryPublishedResponseBody(res *admin.AdminRegistryEntry) *Se
 		}
 	} else {
 		body.Issues = []*AdminRegistryIssueResponseBody{}
+	}
+	return body
+}
+
+// NewDebugMcpURLResponseBody builds the HTTP response body from the result of
+// the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLResponseBody(res *admin.AdminMcpDebugReport) *DebugMcpURLResponseBody {
+	body := &DebugMcpURLResponseBody{
+		URL:             res.URL,
+		Outcome:         string(res.Outcome),
+		DurationMs:      res.DurationMs,
+		AuthMethod:      string(res.AuthMethod),
+		ProtocolVersion: res.ProtocolVersion,
+		ServerName:      res.ServerName,
+		ServerVersion:   res.ServerVersion,
+		Instructions:    res.Instructions,
+	}
+	if res.Steps != nil {
+		body.Steps = make([]*AdminMcpDebugStepResponseBody, len(res.Steps))
+		for i, val := range res.Steps {
+			if val == nil {
+				body.Steps[i] = nil
+				continue
+			}
+			body.Steps[i] = marshalAdminAdminMcpDebugStepToAdminMcpDebugStepResponseBody(val)
+		}
+	} else {
+		body.Steps = []*AdminMcpDebugStepResponseBody{}
+	}
+	if res.Tools != nil {
+		body.Tools = make([]*AdminMcpDebugToolResponseBody, len(res.Tools))
+		for i, val := range res.Tools {
+			if val == nil {
+				body.Tools[i] = nil
+				continue
+			}
+			body.Tools[i] = marshalAdminAdminMcpDebugToolToAdminMcpDebugToolResponseBody(val)
+		}
+	}
+	if res.Prompts != nil {
+		body.Prompts = make([]*AdminMcpDebugPromptResponseBody, len(res.Prompts))
+		for i, val := range res.Prompts {
+			if val == nil {
+				body.Prompts[i] = nil
+				continue
+			}
+			body.Prompts[i] = marshalAdminAdminMcpDebugPromptToAdminMcpDebugPromptResponseBody(val)
+		}
+	}
+	if res.Resources != nil {
+		body.Resources = make([]*AdminMcpDebugResourceResponseBody, len(res.Resources))
+		for i, val := range res.Resources {
+			if val == nil {
+				body.Resources[i] = nil
+				continue
+			}
+			body.Resources[i] = marshalAdminAdminMcpDebugResourceToAdminMcpDebugResourceResponseBody(val)
+		}
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkResponseBody builds the HTTP response body from the
+// result of the "getMcpVerificationLink" endpoint of the "admin" service.
+func NewGetMcpVerificationLinkResponseBody(res *admin.AdminMcpVerificationLink) *GetMcpVerificationLinkResponseBody {
+	body := &GetMcpVerificationLinkResponseBody{
+		URL:         res.URL,
+		Existing:    res.Existing,
+		ProjectName: res.ProjectName,
 	}
 	return body
 }
@@ -39713,6 +40275,296 @@ func NewSetRegistryEntryPublishedGatewayErrorResponseBody(res *goa.ServiceError)
 	return body
 }
 
+// NewDebugMcpURLUnauthorizedResponseBody builds the HTTP response body from
+// the result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLUnauthorizedResponseBody(res *goa.ServiceError) *DebugMcpURLUnauthorizedResponseBody {
+	body := &DebugMcpURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLForbiddenResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLForbiddenResponseBody(res *goa.ServiceError) *DebugMcpURLForbiddenResponseBody {
+	body := &DebugMcpURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLBadRequestResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLBadRequestResponseBody(res *goa.ServiceError) *DebugMcpURLBadRequestResponseBody {
+	body := &DebugMcpURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLNotFoundResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLNotFoundResponseBody(res *goa.ServiceError) *DebugMcpURLNotFoundResponseBody {
+	body := &DebugMcpURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLConflictResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLConflictResponseBody(res *goa.ServiceError) *DebugMcpURLConflictResponseBody {
+	body := &DebugMcpURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLUnsupportedMediaResponseBody(res *goa.ServiceError) *DebugMcpURLUnsupportedMediaResponseBody {
+	body := &DebugMcpURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLInvalidResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLInvalidResponseBody(res *goa.ServiceError) *DebugMcpURLInvalidResponseBody {
+	body := &DebugMcpURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLInvariantViolationResponseBody(res *goa.ServiceError) *DebugMcpURLInvariantViolationResponseBody {
+	body := &DebugMcpURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLUnexpectedResponseBody builds the HTTP response body from the
+// result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLUnexpectedResponseBody(res *goa.ServiceError) *DebugMcpURLUnexpectedResponseBody {
+	body := &DebugMcpURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewDebugMcpURLGatewayErrorResponseBody builds the HTTP response body from
+// the result of the "debugMcpUrl" endpoint of the "admin" service.
+func NewDebugMcpURLGatewayErrorResponseBody(res *goa.ServiceError) *DebugMcpURLGatewayErrorResponseBody {
+	body := &DebugMcpURLGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkUnauthorizedResponseBody {
+	body := &GetMcpVerificationLinkUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkForbiddenResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkForbiddenResponseBody {
+	body := &GetMcpVerificationLinkForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkBadRequestResponseBody builds the HTTP response
+// body from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkBadRequestResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkBadRequestResponseBody {
+	body := &GetMcpVerificationLinkBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkNotFoundResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkNotFoundResponseBody {
+	body := &GetMcpVerificationLinkNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkConflictResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkConflictResponseBody {
+	body := &GetMcpVerificationLinkConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMcpVerificationLink" endpoint of
+// the "admin" service.
+func NewGetMcpVerificationLinkUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkUnsupportedMediaResponseBody {
+	body := &GetMcpVerificationLinkUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkInvalidResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkInvalidResponseBody {
+	body := &GetMcpVerificationLinkInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpVerificationLink" endpoint of
+// the "admin" service.
+func NewGetMcpVerificationLinkInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkInvariantViolationResponseBody {
+	body := &GetMcpVerificationLinkInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkUnexpectedResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkUnexpectedResponseBody {
+	body := &GetMcpVerificationLinkUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpVerificationLinkGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpVerificationLink" endpoint of the "admin"
+// service.
+func NewGetMcpVerificationLinkGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpVerificationLinkGatewayErrorResponseBody {
+	body := &GetMcpVerificationLinkGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListOnboardingStepsUnauthorizedResponseBody builds the HTTP response body
 // from the result of the "listOnboardingSteps" endpoint of the "admin" service.
 func NewListOnboardingStepsUnauthorizedResponseBody(res *goa.ServiceError) *ListOnboardingStepsUnauthorizedResponseBody {
@@ -45293,6 +46145,28 @@ func NewSetRegistryEntryPublishedPayload(body *SetRegistryEntryPublishedRequestB
 	return v
 }
 
+// NewDebugMcpURLPayload builds a admin service debugMcpUrl endpoint payload.
+func NewDebugMcpURLPayload(body *DebugMcpURLRequestBody, adminSessionToken *string) *admin.DebugMcpURLPayload {
+	v := &admin.DebugMcpURLPayload{
+		URL: *body.URL,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetMcpVerificationLinkPayload builds a admin service
+// getMcpVerificationLink endpoint payload.
+func NewGetMcpVerificationLinkPayload(body *GetMcpVerificationLinkRequestBody, adminSessionToken *string) *admin.GetMcpVerificationLinkPayload {
+	v := &admin.GetMcpVerificationLinkPayload{
+		URL:  *body.URL,
+		Name: body.Name,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // NewListOnboardingStepsPayload builds a admin service listOnboardingSteps
 // endpoint payload.
 func NewListOnboardingStepsPayload(adminSessionToken *string) *admin.ListOnboardingStepsPayload {
@@ -46425,6 +47299,35 @@ func ValidateSetRegistryEntryPublishedRequestBody(body *SetRegistryEntryPublishe
 	}
 	if body.ID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateDebugMcpURLRequestBody runs the validations defined on
+// DebugMcpUrlRequestBody
+func ValidateDebugMcpURLRequestBody(body *DebugMcpURLRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	return
+}
+
+// ValidateGetMcpVerificationLinkRequestBody runs the validations defined on
+// GetMcpVerificationLinkRequestBody
+func ValidateGetMcpVerificationLinkRequestBody(body *GetMcpVerificationLinkRequestBody) (err error) {
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
+	}
+	if body.URL != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.url", *body.URL, goa.FormatURI))
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 200 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 200, false))
+		}
 	}
 	return
 }

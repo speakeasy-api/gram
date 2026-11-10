@@ -95,6 +95,8 @@ type Endpoints struct {
 	CreateRegistryEntry                     goa.Endpoint
 	SaveRegistryEntry                       goa.Endpoint
 	SetRegistryEntryPublished               goa.Endpoint
+	DebugMcpURL                             goa.Endpoint
+	GetMcpVerificationLink                  goa.Endpoint
 	ListOnboardingSteps                     goa.Endpoint
 	GetOnboardingStackOptions               goa.Endpoint
 	GetOrganizationOnboardingStack          goa.Endpoint
@@ -228,6 +230,8 @@ func NewEndpoints(s Service) *Endpoints {
 		CreateRegistryEntry:                     NewCreateRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SaveRegistryEntry:                       NewSaveRegistryEntryEndpoint(s, a.APIKeyAuth),
 		SetRegistryEntryPublished:               NewSetRegistryEntryPublishedEndpoint(s, a.APIKeyAuth),
+		DebugMcpURL:                             NewDebugMcpURLEndpoint(s, a.APIKeyAuth),
+		GetMcpVerificationLink:                  NewGetMcpVerificationLinkEndpoint(s, a.APIKeyAuth),
 		ListOnboardingSteps:                     NewListOnboardingStepsEndpoint(s, a.APIKeyAuth),
 		GetOnboardingStackOptions:               NewGetOnboardingStackOptionsEndpoint(s, a.APIKeyAuth),
 		GetOrganizationOnboardingStack:          NewGetOrganizationOnboardingStackEndpoint(s, a.APIKeyAuth),
@@ -341,6 +345,8 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateRegistryEntry = m(e.CreateRegistryEntry)
 	e.SaveRegistryEntry = m(e.SaveRegistryEntry)
 	e.SetRegistryEntryPublished = m(e.SetRegistryEntryPublished)
+	e.DebugMcpURL = m(e.DebugMcpURL)
+	e.GetMcpVerificationLink = m(e.GetMcpVerificationLink)
 	e.ListOnboardingSteps = m(e.ListOnboardingSteps)
 	e.GetOnboardingStackOptions = m(e.GetOnboardingStackOptions)
 	e.GetOrganizationOnboardingStack = m(e.GetOrganizationOnboardingStack)
@@ -2130,6 +2136,52 @@ func NewSetRegistryEntryPublishedEndpoint(s Service, authAPIKeyFn security.AuthA
 			return nil, err
 		}
 		return s.SetRegistryEntryPublished(ctx, p)
+	}
+}
+
+// NewDebugMcpURLEndpoint returns an endpoint function that calls the method
+// "debugMcpUrl" of service "admin".
+func NewDebugMcpURLEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*DebugMcpURLPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.DebugMcpURL(ctx, p)
+	}
+}
+
+// NewGetMcpVerificationLinkEndpoint returns an endpoint function that calls
+// the method "getMcpVerificationLink" of service "admin".
+func NewGetMcpVerificationLinkEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpVerificationLinkPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpVerificationLink(ctx, p)
 	}
 }
 

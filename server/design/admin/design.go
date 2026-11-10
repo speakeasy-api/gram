@@ -1422,6 +1422,7 @@ var _ = Service("admin", func() {
 	mcpServerHealthMethods()
 	hookClientsMethods()
 	registryDesign()
+	mcpDebugMethods()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
 	signupOfferMethods()

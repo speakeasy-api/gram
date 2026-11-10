@@ -30,6 +30,7 @@ import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdOrSlugRouteImport } from './routes/projects.$idOrSlug'
 import { Route as RegistryIndexRouteImport } from './routes/registry.index'
 import { Route as RegistryEntryIdRouteImport } from './routes/registry.$entryId'
+import { Route as RegistryDebugRouteImport } from './routes/registry.debug'
 import { Route as RegistryNewRouteImport } from './routes/registry.new'
 import { Route as RemoteSessionIssuersIndexRouteImport } from './routes/remote-session-issuers.index'
 import { Route as RemoteSessionIssuersIssuerIdRouteImport } from './routes/remote-session-issuers.$issuerId'
@@ -153,6 +154,11 @@ const RegistryIndexRoute = RegistryIndexRouteImport.update({
 const RegistryEntryIdRoute = RegistryEntryIdRouteImport.update({
   id: '/$entryId',
   path: '/$entryId',
+  getParentRoute: () => RegistryRoute,
+} as any)
+const RegistryDebugRoute = RegistryDebugRouteImport.update({
+  id: '/debug',
+  path: '/debug',
   getParentRoute: () => RegistryRoute,
 } as any)
 const RegistryNewRoute = RegistryNewRouteImport.update({
@@ -287,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/debug': typeof RegistryDebugRoute
   '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/debug': typeof RegistryDebugRoute
   '/registry/new': typeof RegistryNewRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
@@ -364,6 +372,7 @@ export interface FileRoutesById {
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
   '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/debug': typeof RegistryDebugRoute
   '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
@@ -408,6 +417,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
+    | '/registry/debug'
     | '/registry/new'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
@@ -444,6 +454,7 @@ export interface FileRouteTypes {
     | '/upstream-oauth-migration'
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
+    | '/registry/debug'
     | '/registry/new'
     | '/organizations'
     | '/projects'
@@ -484,6 +495,7 @@ export interface FileRouteTypes {
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
     | '/registry/$entryId'
+    | '/registry/debug'
     | '/registry/new'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
@@ -673,6 +685,13 @@ declare module '@tanstack/react-router' {
       path: '/$entryId'
       fullPath: '/registry/$entryId'
       preLoaderRoute: typeof RegistryEntryIdRouteImport
+      parentRoute: typeof RegistryRoute
+    }
+    '/registry/debug': {
+      id: '/registry/debug'
+      path: '/debug'
+      fullPath: '/registry/debug'
+      preLoaderRoute: typeof RegistryDebugRouteImport
       parentRoute: typeof RegistryRoute
     }
     '/registry/new': {
@@ -893,12 +912,14 @@ const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
 
 interface RegistryRouteChildren {
   RegistryEntryIdRoute: typeof RegistryEntryIdRoute
+  RegistryDebugRoute: typeof RegistryDebugRoute
   RegistryNewRoute: typeof RegistryNewRoute
   RegistryIndexRoute: typeof RegistryIndexRoute
 }
 
 const RegistryRouteChildren: RegistryRouteChildren = {
   RegistryEntryIdRoute: RegistryEntryIdRoute,
+  RegistryDebugRoute: RegistryDebugRoute,
   RegistryNewRoute: RegistryNewRoute,
   RegistryIndexRoute: RegistryIndexRoute,
 }

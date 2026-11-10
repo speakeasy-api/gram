@@ -21,6 +21,22 @@ fixed HTTPS tunnel so that the OAuth provider can send redirects to the server.
    ngrok http --url=<NGROK_DOMAIN> https://localhost:8080
    ```
 
+Point the tunnel at the port your local server listens on. A worktree stack
+uses its own port rather than 8080.
+
+### Client ID Metadata Documents
+
+Providers that use Client ID Metadata Documents (CIMD), such as Linear, fetch
+Speakeasy's client document from the server URL. Without a public address they
+can't reach it, and sign-in fails with `CIMD fetch failed … HTTP 403`. The
+staff MCP debugger in the admin dashboard warns about this on the "Detect
+authentication method" step.
+
+A CIMD client ID is a URL that includes the server address, fixed when the
+client is created. Clients created before you set `GRAM_SERVER_URL` keep the
+old address, so add the server again, or set up its sign-in again, after
+starting the tunnel.
+
 To use an IDE debugger, start the debugger and run
 `pitchfork start dashboard` in a separate terminal.
 

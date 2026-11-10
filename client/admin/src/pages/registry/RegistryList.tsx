@@ -86,11 +86,16 @@ export function RegistryList(): JSX.Element {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">MCP Registry</h1>
-        <Button asChild>
-          <Link to="/registry/new" search={(previous) => previous}>
-            New entry
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" asChild>
+            <Link to="/registry/debug">Debug a URL</Link>
+          </Button>
+          <Button asChild>
+            <Link to="/registry/new" search={(previous) => previous}>
+              New entry
+            </Link>
+          </Button>
+        </div>
       </div>
       <p className="text-muted-foreground text-sm">{CATALOG_NOTICE}</p>
       <div className="flex flex-wrap items-center gap-2">
@@ -191,7 +196,16 @@ export function RegistryList(): JSX.Element {
                         : "Valid"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="space-x-2 text-right">
+                    <Button variant="ghost" size="sm" asChild>
+                      <Link
+                        to="/registry/debug"
+                        search={{ entry: entry.id }}
+                        aria-label={`Debug ${entry.name}`}
+                      >
+                        Debug
+                      </Link>
+                    </Button>
                     <Button variant="outline" size="sm" asChild>
                       <Link
                         to="/registry/$entryId"

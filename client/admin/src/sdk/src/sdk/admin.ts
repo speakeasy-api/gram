@@ -16,6 +16,7 @@ import { adminCreateOrganization } from "../funcs/adminCreateOrganization.js";
 import { adminCreateRegistryEntry } from "../funcs/adminCreateRegistryEntry.js";
 import { adminCreateSignupOffer } from "../funcs/adminCreateSignupOffer.js";
 import { adminCurateRegistryPromotionCandidate } from "../funcs/adminCurateRegistryPromotionCandidate.js";
+import { adminDebugMcpUrl } from "../funcs/adminDebugMcpUrl.js";
 import { adminDeleteGlobalIssuer } from "../funcs/adminDeleteGlobalIssuer.js";
 import { adminDeleteOnboardingPlaybook } from "../funcs/adminDeleteOnboardingPlaybook.js";
 import { adminDeleteOnboardingUseCase } from "../funcs/adminDeleteOnboardingUseCase.js";
@@ -33,6 +34,7 @@ import { adminGetHookClients } from "../funcs/adminGetHookClients.js";
 import { adminGetInferenceKeys } from "../funcs/adminGetInferenceKeys.js";
 import { adminGetInferenceSpendHistory } from "../funcs/adminGetInferenceSpendHistory.js";
 import { adminGetMcpServerToolCalls } from "../funcs/adminGetMcpServerToolCalls.js";
+import { adminGetMcpVerificationLink } from "../funcs/adminGetMcpVerificationLink.js";
 import { adminGetMeterUsage } from "../funcs/adminGetMeterUsage.js";
 import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStackOptions.js";
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
@@ -114,6 +116,8 @@ import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulk
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
 import { AdminCustomerUsageResponse } from "../models/components/admincustomerusageresponse.js";
+import { AdminDebugMcpURLRequestBody } from "../models/components/admindebugmcpurlrequestbody.js";
+import { AdminGetMcpVerificationLinkRequestBody } from "../models/components/admingetmcpverificationlinkrequestbody.js";
 import { AdminHookClientsResult } from "../models/components/adminhookclientsresult.js";
 import { AdminInferenceKey } from "../models/components/admininferencekey.js";
 import { AdminInferenceKeyLimit } from "../models/components/admininferencekeylimit.js";
@@ -124,9 +128,11 @@ import { AdminListOrganizationProjectsResult } from "../models/components/adminl
 import { AdminListProjectMcpServersResult } from "../models/components/adminlistprojectmcpserversresult.js";
 import { AdminListUserOrganizationsResult } from "../models/components/adminlistuserorganizationsresult.js";
 import { AdminListUsersResult } from "../models/components/adminlistusersresult.js";
+import { AdminMcpDebugReport } from "../models/components/adminmcpdebugreport.js";
 import { AdminMcpServerHealth } from "../models/components/adminmcpserverhealth.js";
 import { AdminMcpServerResourceScopes } from "../models/components/adminmcpserverresourcescopes.js";
 import { AdminMcpServerToolCalls } from "../models/components/adminmcpservertoolcalls.js";
+import { AdminMcpVerificationLink } from "../models/components/adminmcpverificationlink.js";
 import { AdminMeterUsageResponse } from "../models/components/adminmeterusageresponse.js";
 import { AdminOnboardingPlaybook } from "../models/components/adminonboardingplaybook.js";
 import { AdminOnboardingPlaybookList } from "../models/components/adminonboardingplaybooklist.js";
@@ -338,6 +344,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminHookClientsResult> {
     return unwrapAsync(adminGetHookClients(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * debugMcpUrl admin
+   *
+   * @remarks
+   * Staff-only MCP debugger: trace a remote MCP server URL step by step from Speakeasy's network. Reaches the server, reads its authentication challenge, discovers OAuth protected resource and authorization server metadata, detects how a client would register, and, when no sign-in is required, initializes a session and lists its tools, prompts and resources. Sends no credentials and stores nothing.
+   */
+  async debugMcpUrl(
+    request: AdminDebugMcpURLRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMcpDebugReport> {
+    return unwrapAsync(adminDebugMcpUrl(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getMcpVerificationLink admin
+   *
+   * @remarks
+   * Staff-only: the customer dashboard link for verifying a remote MCP server in Speakeasy's own project. When that project already has a server for the URL, the link opens its Playground; otherwise it opens the add-server page with the URL filled in. Reads only; nothing is created until staff confirm in the dashboard.
+   */
+  async getMcpVerificationLink(
+    request: AdminGetMcpVerificationLinkRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminMcpVerificationLink> {
+    return unwrapAsync(adminGetMcpVerificationLink(
       this,
       request,
       options,
