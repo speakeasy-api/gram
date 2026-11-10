@@ -67,9 +67,13 @@ const (
 	// for writerJoinMargin, so a short budget still drains a healthy backlog.
 	minDrainWindow = 500 * time.Millisecond
 
-	// writerJoinGrace is added to the insert timeout for the wait on a cancelled writer. A
-	// cancelled insert returns at once; this bounds a driver that ignores cancellation.
+	// writerJoinGrace is added to the writer's longest operation for the wait on a cancelled
+	// writer. A cancelled insert returns at once; this bounds a driver that ignores cancellation.
 	writerJoinGrace = time.Second
+
+	// logsCheckLockRelease is what releasing the feature cache lock can add to a logs check on
+	// the writer. The release is detached from cancellation, so the join must outlast it.
+	logsCheckLockRelease = 5 * time.Second
 
 	// defaultRepeatsInterval is how long a burst that stopped waits before its count is written.
 	defaultRepeatsInterval = time.Minute
@@ -77,7 +81,7 @@ const (
 	// dropLogInterval limits logging per reason during an outage.
 	dropLogInterval = time.Minute
 
-	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add up to 5s on the writer.
+	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add logsCheckLockRelease on the writer.
 	defaultLogsCheckTimeout = 500 * time.Millisecond
 
 	// referenceLogsTimeout is how long a failure waits for its logs answer; a slower one shows no reference.
@@ -852,7 +856,7 @@ func (r *Recorder) Shutdown(ctx context.Context) error {
 
 // ShutdownAndWait drains until shortly before ctx ends, then cancels in-flight I/O,
 // counts the backlog as dropped for shutdown, and joins the writer so its datastore can
-// close. The join outlasts ctx, bounded by the insert timeout plus writerJoinGrace. The
+// close. The join outlasts ctx, bounded by writerJoinWait. The
 // logs callback and datastore driver must honor their operation contexts.
 func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	if r == nil || r.stop == nil {
@@ -867,7 +871,7 @@ func (r *Recorder) ShutdownAndWait(ctx context.Context) error {
 	first, before, err := r.stopAndDrain(drainCtx)
 	r.cancelWriter()
 	// The caller closes ClickHouse next, so wait for the writer even past ctx.
-	grace := r.cfg.insertTimeout + writerJoinGrace
+	grace := writerJoinWait(r.cfg.insertTimeout, r.cfg.logsCheckTimeout)
 	select {
 	case <-r.done:
 	case <-time.After(grace):
@@ -889,9 +893,15 @@ func drainWindow(remaining time.Duration) time.Duration {
 	return max(remaining-writerJoinMargin, min(remaining, minDrainWindow))
 }
 
+// writerJoinWait bounds the wait on a cancelled writer: its longest single operation, an
+// insert or a logs check with its lock release, plus writerJoinGrace.
+func writerJoinWait(insertTimeout, logsCheckTimeout time.Duration) time.Duration {
+	return max(insertTimeout, logsCheckTimeout+logsCheckLockRelease) + writerJoinGrace
+}
+
 // MaxShutdownOverrun is the longest ShutdownAndWait can run past its ctx deadline with the
-// default insert timeout: the writer join plus both bounded shutdown logs.
-const MaxShutdownOverrun = defaultInsertTimeout + writerJoinGrace + 2*drainLogWait
+// default timeouts: the writer join plus both bounded shutdown logs.
+const MaxShutdownOverrun = max(defaultInsertTimeout, defaultLogsCheckTimeout+logsCheckLockRelease) + writerJoinGrace + 2*drainLogWait
 
 // stopAndDrain stops admission once and waits for the writer to drain until ctx ends.
 // first is true for the call that stopped it, with the drop totals from that moment.
