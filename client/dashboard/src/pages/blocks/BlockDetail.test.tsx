@@ -160,6 +160,16 @@ describe("BlockPage", () => {
     expect(screen.getByText(sampleBlock.reason)).toBeTruthy();
   });
 
+  it("labels a block from the bare claude hook slug as Claude Code", () => {
+    // Every block comes from a hook, and Claude Chat Desktop has no hooks.
+    mockLoadedBlock({ ...sampleBlock, provider: "claude" });
+
+    renderPage();
+
+    expect(screen.getByText(/via Claude Code/)).toBeTruthy();
+    expect(screen.queryByText(/Claude Chat Desktop/)).toBeNull();
+  });
+
   it("falls back to spend-rule framing when the block has no policy name", () => {
     // Spend-gate blocks carry no risk policy, so policyName is empty; the
     // headline must not render `Blocked by policy ""`.

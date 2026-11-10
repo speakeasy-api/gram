@@ -832,6 +832,7 @@ func (s *Service) appendCanonicalBlockURL(ctx context.Context, authCtx *contextv
 		RiskResultID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		ChatID:         chatIDForBlock(canonicalSessionID(payload)),
 		ChatMessageID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		SessionID:      canonicalSessionID(payload),
 	})
 	if bURL == "" {
 		return userReason
@@ -955,6 +956,7 @@ func (s *Service) evaluateCanonicalShadowMCP(ctx context.Context, authCtx *conte
 				// Linking needs the chat row guaranteed first (DNO-767).
 				ChatID:        uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 				ChatMessageID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				SessionID:     canonicalSessionID(payload),
 			}); bURL != "" {
 				userReason = appendBlockURL(userReason, bURL)
 				setBlockEffectBlockURL(ctx, bURL)
