@@ -3281,7 +3281,6 @@ func marshalTypesMcpServerToMcpServerResponseBody(v *types.McpServer) *McpServer
 		ToolsetID:             v.ToolsetID,
 		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
-		BuiltinBackend:        v.BuiltinBackend,
 		Visibility:            string(v.Visibility),
 		NetworkAccessMode:     string(v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,

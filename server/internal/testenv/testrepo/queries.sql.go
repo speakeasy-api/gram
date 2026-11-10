@@ -3719,6 +3719,25 @@ func (q *Queries) InsertRetainedLegacyCatalogSourceFixture(ctx context.Context, 
 	return err
 }
 
+const insertRetiredApprovalsServerFixture = `-- name: InsertRetiredApprovalsServerFixture :exec
+INSERT INTO mcp_servers (id, project_id, name, slug, builtin_backend, visibility)
+VALUES ($1, $2, 'Speakeasy Approvals', $3, 'approvals', 'private')
+`
+
+type InsertRetiredApprovalsServerFixtureParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	Slug      pgtype.Text
+}
+
+// A project's approvals server as Speakeasy created it before the server was
+// retired. Such rows stay until a cleanup migration deletes them, and every
+// read path must treat them as gone.
+func (q *Queries) InsertRetiredApprovalsServerFixture(ctx context.Context, arg InsertRetiredApprovalsServerFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertRetiredApprovalsServerFixture, arg.ID, arg.ProjectID, arg.Slug)
+	return err
+}
+
 const insertToolsetVersionFixture = `-- name: InsertToolsetVersionFixture :exec
 INSERT INTO toolset_versions (toolset_id, version, tool_urns)
 SELECT t.id, $1, $2::TEXT[]
