@@ -31,7 +31,7 @@ export function AgentAPIKeys({
    * authenticate.
    */
   federated?: boolean | "unknown";
-  onCreate?: () => void;
+  onCreate: () => void;
 }): JSX.Element {
   const organization = useOrganization();
   // Revocation state belongs to one authorizer, and the signed-in user can
@@ -76,7 +76,7 @@ function AgentAPIKeysContent({
   agent: ManagedAgent;
   organizationId: string;
   federated?: boolean | "unknown";
-  onCreate?: () => void;
+  onCreate: () => void;
 }) {
   const queryClient = useQueryClient();
   const mounted = useRef(true);
@@ -139,7 +139,7 @@ function AgentAPIKeysContent({
             variant={knownKeys?.length ? "secondary" : "primary"}
             disabled={!canIssue}
             onClick={() => {
-              onCreate?.();
+              onCreate();
             }}
           >
             Issue a key
