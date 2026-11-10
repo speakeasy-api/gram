@@ -538,7 +538,7 @@ func newAdminCommand() *cli.Command {
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
 			hooksVersionPolicy, err := plugins.HooksVersionPolicy()
 			if err != nil {
-				return err
+				return fmt.Errorf("hooks version policy: %w", err)
 			}
 			adminService.SetHookFleet(telemetry.NewHookFleet(chDB), hooksVersionPolicy)
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
