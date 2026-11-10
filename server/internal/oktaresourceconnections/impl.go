@@ -431,7 +431,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 			}
 			asks = append(asks, remotesessions.ResourceOwnerQuery{ServerID: sv.ID, ProjectID: sv.ProjectID, UserSessionIssuerID: sv.UserSessionIssuerID.UUID, Upstream: sv.RemoteUrl.String})
 		}
-		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks)
+		owners, err := remotesessions.ResourceOwnersForServers(ctx, s.db, organizationID, asks, feature.UpstreamIssuerFromAssociations(ctx, s.features, organizationID))
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "decide protected resource ownership").LogError(ctx, logger)
 		}
